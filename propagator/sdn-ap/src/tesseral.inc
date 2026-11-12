@@ -927,9 +927,9 @@ inline int sp_comb_bound(int degree, bool wide, int extra = 0) {
 /// kShallowSelect bands at the epoch is a band lane: written whole (weight 1) at the top of `out` and `raw_out`, downward from
 /// out[band_cap - 1] and raw_out[raw_cap - 1] (the two ends of one table: the main entries and the lanes are distinct terms
 /// of the bound's), its count in *band_count_out and *band_raw_count_out, and cut on its own size at its rate or at 0.9 bands,
-/// the least rate at which it is held here. sp_band_six takes 1 minus the band taper of a lane at the rate of the state it is
-/// evaluated at, the partner of the rates' share (shallow_weight), so the two carry each band term once at every state, before
-/// the epoch or after, at any decay. A group outside kShallowSelect bands at the epoch is held whole; the bakes fade one the
+/// the least rate at which it is held here. The lanes are the table cache's segment E: the evaluator takes 1 minus the band
+/// taper of a lane at the rate of the state it is evaluated at (sp_band_weights), the partner of the rates' share
+/// (shallow_weight), so the two carry each band term once at every state, before the epoch or after, at any decay. A group outside kShallowSelect bands at the epoch is held whole; the bakes fade one the
 /// drag brings into the band (sp_band_fade).
 inline int sp_terms(int degree, int near_degree, int cls, bool low, bool wide, double n0, double i0, double e0, SpCombCoef* out,
                     SpCoef* raw_out = nullptr, int* raw_count_out = nullptr, const ShallowTerms* slow_held = nullptr,
@@ -1464,6 +1464,10 @@ struct SpEvalCache {
   uint16_t* blk_term = nullptr;  ///< the term (index into F) of each lane
   bool compact = false;          ///< a set's cache: exactly its blocks, no blk_c
   bool band_fade = false;        ///< the low table's fast side: the bakes fade a lane inside the band (sp_band_fade)
+  /// the band lanes (stack #555): F[count .. count + band_count), dense in blocks b_band .. total_blks after segment D, each
+  /// lane weighted where it is evaluated (sp_band_weights); their bakes take the rate at no less than 0.9 bands
+  int band_count = 0, b_band = 0;
+  static constexpr int kMaxBandLanes = 256;
 };
 
 /// SPEC 16.1 (stack #555): on the low table's fast side a group outside kShallowSelect bands at the epoch is the main table's
@@ -1481,6 +1485,26 @@ inline void sp_band_fade(int l, double psidot, double n, float* hot, float* p, f
   }
   for (int k = 0; k < 4; ++k) e[4 * k + l] = wt == 0.0f ? 0.0f : e[4 * k + l] * wt;
 }
+
+/// The output table's share of a band lane (m, w, j) at the J2 secular rates of the state (argp, mdot, node; rad/min) and its
+/// mean motion n (stack #555): 1 minus the rates' share in shallow_weight's own form, so the two carry the term once at every
+/// state.
+inline double band_lane_share(double argp, double mdot, double node, int j, int m, double n, int w) {
+  const double psidot = w == j ? j * (mdot + argp) + m * (node - kOmegaE) : w * argp + j * mdot + m * (node - kOmegaE);
+  return 1.0 - band_taper(std::fabs(psidot) / (kShallowBand * n));
+}
+
+/// A band lane's rate as the bakes take it (stack #555): its sign, its size at no less than 0.9 bands (`floor`). The
+/// evaluator holds none of a lane below 0.9 bands, so the floor only keeps the baked values finite where its rate passes zero.
+inline double sp_band_rate_floor(double psidot, double floor) {
+  return std::fabs(psidot) >= floor ? psidot : (psidot < 0.0 ? -floor : floor);
+}
+#ifdef __wasm_simd128__
+inline v128_t sp_band_rate_floor(v128_t psidot, v128_t floor) {
+  return wasm_v128_or(wasm_v128_and(psidot, wasm_i32x4_splat(static_cast<int32_t>(0x80000000u))),
+                      wasm_f32x4_max(wasm_f32x4_abs(psidot), floor));
+}
+#endif
 
 /// Lays the block arrays out in one zeroed 64-byte-aligned allocation for `blks` blocks and `rows` rows, with blk_c
 /// when `with_c`. False out of memory (the cache keeps no storage).
@@ -1639,11 +1663,12 @@ inline void sp_split16_f32(double x, float& hi, float& lo) {
 }
 
 [[gnu::noinline]] inline void sp_rebuild_cache(SpEvalCache& sc, const SpCombCoef* F, int count, uint32_t tag,
-                                               double a0, double e0, double ci, bool band_fade) {
+                                               double a0, double e0, double ci, bool band_fade, int band_count) {
   sc.F = F;
   sc.count = count;
   sc.table_tag = tag;
   sc.band_fade = band_fade;
+  sc.band_count = band_count;
   sc.a0 = a0;
   sc.e0 = e0;
   sc.f0_uc = F[0].uc0;
@@ -1654,10 +1679,11 @@ inline void sp_split16_f32(double x, float& hi, float& lo) {
   sc.grouped_ok = false;
   sc.res_overflow = false;
   sc.n_res_blks = 0;
-  if (count > 2600) return;
+  if (count > 2600 || band_count > SpEvalCache::kMaxBandLanes) return;
   int max_m = 0, max_aw = 0;
   bool ok = true;
-  for (int idx = 0; idx < count; ++idx) {
+  // the trig the evaluator fills reaches every order and |w| of the main entries and the band lanes alike
+  for (int idx = 0; idx < count + band_count; ++idx) {
     const SpCombCoef& f = F[idx];
     const int m = f.m, w = f.w, q = f.j - f.w;
     if (m < 1 || m > 70 || w < -17 || w > 17 || q < -1 || q > 1) { ok = false; break; }
@@ -1869,6 +1895,17 @@ inline void sp_split16_f32(double x, float& hi, float& lo) {
       sc.blk_is_pe[bi] = 1u;
     }
   }
+  // Segment E (stack #555): the band lanes, 4 per block in their order, every block a pe block (their rates are slow, their
+  // terms large)
+  sc.b_band = cur_blk;
+  for (int r = 0; r < band_count && ok; r += 4) {
+    const int lim = (r + 4 <= band_count) ? 4 : (band_count - r);
+    const int bi = alloc_blk(0xffu, 20u, 0.0f, 0.0f, lim == 4);
+    if (bi < 0) break;
+    for (int l = 0; l < lim; ++l) store_lane(bi * 4 + l, static_cast<uint16_t>(count + r + l));
+    sc.pe_blk[sc.n_pe_blks++] = static_cast<uint16_t>(bi);
+    sc.blk_is_pe[bi] = 1u;
+  }
   if (ok && cur_blk > 0) {
     sc.max_m = max_m;
     sc.max_aw = max_aw;
@@ -1966,17 +2003,19 @@ inline void sp_split16_f32(double x, float& hi, float& lo) {
   const v128_t v_beta_L = wasm_f32x4_splat(static_cast<float>(beta_L));
   const v128_t v_dbeta_L = wasm_f32x4_splat(static_cast<float>(dbeta_ddda));
   const v128_t v_band_lim = wasm_f32x4_splat(static_cast<float>(1.1 * kShallowBand * n));
-  const int nblks = sc.total_blks;
+  const v128_t v_band_floor = wasm_f32x4_splat(static_cast<float>(0.9 * kShallowBand * n));
+  const int nblks = sc.total_blks, b_band = sc.b_band;
   for (int bi = 0; bi < nblks; ++bi) {
     const int lane_off = bi * 4;
     const v128_t v_active = wasm_v128_load(sc.blk_active + lane_off);
     const v128_t v_mf = wasm_v128_load(sc.blk_mf + lane_off);
     const v128_t v_wf = wasm_v128_load(sc.blk_w + lane_off);
     const v128_t v_jf = wasm_f32x4_add(v_wf, wasm_v128_load(sc.blk_q + lane_off));
-    const v128_t v_psidot = wasm_f32x4_add(
+    v128_t v_psidot = wasm_f32x4_add(
         wasm_f32x4_add(wasm_f32x4_mul(v_jf, v_mdot_hi), wasm_f32x4_mul(v_mf, v_bdot_hi)),
         wasm_f32x4_add(wasm_f32x4_add(wasm_f32x4_mul(v_jf, v_mdot_lo), wasm_f32x4_mul(v_mf, v_bdot_lo)),
                        wasm_f32x4_mul(v_wf, v_wdot_f)));
+    if (bi >= b_band) v_psidot = sp_band_rate_floor(v_psidot, v_band_floor);  // a band lane: never divided below 0.9 bands
     const v128_t v_ip = wasm_v128_and(wasm_f32x4_div(v_one_f, v_psidot), v_active);
     const v128_t v_dpr = wasm_f32x4_mul(
         wasm_f32x4_add(wasm_f32x4_add(wasm_f32x4_mul(v_wf, v_dwdot_f), wasm_f32x4_mul(v_jf, v_dmdot_f)),
@@ -1989,7 +2028,7 @@ inline void sp_split16_f32(double x, float& hi, float& lo) {
       sc.res_blk[sc.n_res_blks++] = static_cast<uint16_t>(bi);
       sc.blk_is_res[bi] = 1u;
     }
-    const bool fade = sc.band_fade &&
+    const bool fade = sc.band_fade && bi < b_band &&
                       wasm_v128_any_true(wasm_v128_and(wasm_f32x4_lt(wasm_f32x4_abs(v_psidot), v_band_lim), v_active));
     const float* const pc = sc.blk_c + bi * 64;
     float* const pp = sc.blk_p + bi * 32;
@@ -2086,7 +2125,9 @@ inline void sp_split16_f32(double x, float& hi, float& lo) {
       }
       const double mv = sc.blk_mf[lane_off + l];
       const double wv = sc.blk_w[lane_off + l], j = wv + sc.blk_q[lane_off + l];
-      const double inv_psidot = 1.0 / (wv * wdot + j * mdot + mv * beta_dot);
+      const double psidot_l = wv * wdot + j * mdot + mv * beta_dot;
+      const double inv_psidot =
+          1.0 / (bi >= sc.b_band ? sp_band_rate_floor(psidot_l, 0.9 * kShallowBand * n) : psidot_l);
       const double inv_psidot2 = inv_psidot * inv_psidot;
       const double dpsidot_rel = (wv * dwdot_ddda + j * dmdot_ddda + mv * dnoder_ddda) * inv_psidot;
       if (std::fabs(dpsidot_rel) > 6.0 || std::fabs(inv_psidot) > 250.0) is_res = true;
@@ -2131,8 +2172,8 @@ inline void sp_split16_f32(double x, float& hi, float& lo) {
       pe[4 + l] = static_cast<float>(ise * inv_psidot);
       pe[8 + l] = static_cast<float>((-alpha_A * eca - beta_L * j * ec_ip) * inv_psidot);
       pe[12 + l] = static_cast<float>((-alpha_A * esa - beta_L * j * es_ip) * inv_psidot);
-      const double psidot = wv * wdot + j * mdot + mv * beta_dot;
-      if (sc.band_fade && std::fabs(psidot) < 1.1 * kShallowBand * n) sp_band_fade(l, psidot, n, pec, pp, pa, pe);
+      if (sc.band_fade && bi < sc.b_band && std::fabs(psidot_l) < 1.1 * kShallowBand * n)
+        sp_band_fade(l, psidot_l, n, pec, pp, pa, pe);
     }
     if (is_res) {
       sc.res_blk[sc.n_res_blks++] = static_cast<uint16_t>(bi);
@@ -2179,16 +2220,19 @@ inline void sp_split16_f32(double x, float& hi, float& lo) {
   double sM = 0, sW = 0, sO = 0, sE = 0, sI = 0, sL = 0;
   double dsM = 0, dsW = 0, dsO = 0, dsE = 0, dsI = 0, dsL = 0;
   double d2sM = 0, d2sW = 0, d2sO = 0, d2sE = 0, d2sI = 0, d2sL = 0;
-  for (int idx = 0; idx < count; ++idx) {
+  for (int idx = 0; idx < count + sc.band_count; ++idx) {
     const SpCombCoef& f = F[idx];
     const int m = f.m, w = f.w, j = f.j, qv = j - w;
     const double c0 = cu[w], s0 = su[w];
     const double cwjq = qv == 0 ? c0 : (qv > 0 ? c0 * cM1 - s0 * sM1 : c0 * cM1 + s0 * sM1);
     const double swjq = qv == 0 ? s0 : (qv > 0 ? s0 * cM1 + c0 * sM1 : s0 * cM1 - c0 * sM1);
     const double cp = cwjq * cm[m] - swjq * sm[m], sp = swjq * cm[m] + cwjq * sm[m];
-    const double psidot = w * wdot + m * beta_dot + j * mdot;
+    double psidot = w * wdot + m * beta_dot + j * mdot;
     double wt = 1.0;  // the fast side's fade of a group the drag brought inside the band (sp_band_fade)
-    if (sc.band_fade && std::fabs(psidot) < 1.1 * kShallowBand * n) {
+    if (idx >= count) {  // a band lane: its share at the state's rate, none below 0.9 bands
+      wt = band_lane_share(wdot, mdot, node_rate, j, m, n, w);
+      if (!(wt > 0.0)) continue;
+    } else if (sc.band_fade && std::fabs(psidot) < 1.1 * kShallowBand * n) {
       const double x = std::fabs(psidot) / (kShallowBand * n);
       if (x <= 0.9) continue;
       wt = 1.0 - band_taper(x);
@@ -2331,6 +2375,7 @@ inline void sp_split16_f32(double x, float& hi, float& lo) {
   const v128_t v_nalpha = wasm_f32x4_splat(static_cast<float>(-alpha_A));
   const v128_t v_beta_L = wasm_f32x4_splat(static_cast<float>(beta_L));
   const v128_t v_band_lim = wasm_f32x4_splat(static_cast<float>(1.1 * kShallowBand * n));
+  const v128_t v_band_floor = wasm_f32x4_splat(static_cast<float>(0.9 * kShallowBand * n));
   for (int rk = 0; rk < sc.n_res_blks; ++rk) {
     const int bi = sc.res_blk[rk];
     const int lane_off = bi * 4;
@@ -2339,10 +2384,11 @@ inline void sp_split16_f32(double x, float& hi, float& lo) {
     const v128_t v_wf = wasm_v128_load(sc.blk_w + lane_off);
     const v128_t v_jf = wasm_f32x4_add(v_wf, wasm_v128_load(sc.blk_q + lane_off));
     const v128_t v_bj = wasm_f32x4_mul(v_beta_L, v_jf);
-    const v128_t v_psidot = wasm_f32x4_add(
+    v128_t v_psidot = wasm_f32x4_add(
         wasm_f32x4_add(wasm_f32x4_mul(v_jf, v_mdot_hi), wasm_f32x4_mul(v_mf, v_bdot_hi)),
         wasm_f32x4_add(wasm_f32x4_add(wasm_f32x4_mul(v_jf, v_mdot_lo), wasm_f32x4_mul(v_mf, v_bdot_lo)),
                        wasm_f32x4_mul(v_wf, v_wdot_f)));
+    if (bi >= sc.b_band) v_psidot = sp_band_rate_floor(v_psidot, v_band_floor);
     const v128_t v_ip = wasm_v128_and(wasm_f32x4_div(v_one_f, v_psidot), v_active);
     const float* const pc = sc.blk_c + bi * 64;
     float* const pec = sc.blk_hot + bi * 32;
@@ -2391,7 +2437,7 @@ inline void sp_split16_f32(double x, float& hi, float& lo) {
     wasm_v128_store(pe + 4, pe4);
     wasm_v128_store(pe + 8, pe8);
     wasm_v128_store(pe + 12, pe12);
-    if (__builtin_expect(sc.band_fade, 0) &&
+    if (__builtin_expect(sc.band_fade, 0) && bi < sc.b_band &&
         wasm_v128_any_true(wasm_v128_and(wasm_f32x4_lt(wasm_f32x4_abs(v_psidot), v_band_lim), v_active))) {
       for (int l = 0; l < 4; ++l) {
         if (sc.blk_active[lane_off + l] == 0u) continue;
@@ -2414,7 +2460,9 @@ inline void sp_split16_f32(double x, float& hi, float& lo) {
       if (sc.blk_active[lane_off + l] == 0u) continue;
       const double mv = sc.blk_mf[lane_off + l];
       const double wv = sc.blk_w[lane_off + l], j = wv + sc.blk_q[lane_off + l];
-      const double inv_psidot = 1.0 / (wv * wdot + j * mdot + mv * beta_dot);
+      const double psidot_l = wv * wdot + j * mdot + mv * beta_dot;
+      const double inv_psidot =
+          1.0 / (bi >= sc.b_band ? sp_band_rate_floor(psidot_l, 0.9 * kShallowBand * n) : psidot_l);
       const double inv_psidot2 = inv_psidot * inv_psidot;
       const double ec = pc[24 + l] + pc[32 + l] * da, es = pc[28 + l] + pc[36 + l] * da;
       const double uc_base = pc[0 + l] + (-pc[8 + l] - 0.5 * pc[16 + l] * da) * da;
@@ -2435,8 +2483,8 @@ inline void sp_split16_f32(double x, float& hi, float& lo) {
       pu[12 + l] = static_cast<float>((pc[44 + l] + pc[52 + l] * da + pc[60 + l] * de_bake) * inv_psidot) + pe[4 + l] * dpe;
       pu[16 + l] = static_cast<float>(alpha_A * dc_b * inv_psidot - beta_L * j * uc_b * inv_psidot2) + pe[8 + l] * dpe;
       pu[20 + l] = static_cast<float>(alpha_A * ds_b * inv_psidot - beta_L * j * us_b * inv_psidot2) + pe[12 + l] * dpe;
-      const double psidot = wv * wdot + j * mdot + mv * beta_dot;
-      if (sc.band_fade && std::fabs(psidot) < 1.1 * kShallowBand * n) sp_band_fade(l, psidot, n, pec, nullptr, nullptr, pe);
+      if (sc.band_fade && bi < sc.b_band && std::fabs(psidot_l) < 1.1 * kShallowBand * n)
+        sp_band_fade(l, psidot_l, n, pec, nullptr, nullptr, pe);
     }
   }
 #endif
@@ -2447,8 +2495,10 @@ template <bool kNeedD2>
                                                 double eta, double eta_m1, double ci_p0, double sin_i, double ci,
                                                 double ia, double inv_1peta, const float* cswq_c, const float* cswq_s,
                                                 const float* cm_f32, const float* sm_f32,
-                                                double* six, double* dsix_dlam, double* d2six_dlam2) {
-  const int nblks = sc.total_blks, b_contig_end = sc.b_contig_end;
+                                                double* six, double* dsix_dlam, double* d2six_dlam2,
+                                                const float* band_wts) {
+  // segment E (the band lanes, sc.b_band on) only when a lane's share is above 0 (band_wts: by lane of segment E)
+  const int nblks = band_wts != nullptr ? sc.total_blks : sc.b_band, b_contig_end = sc.b_contig_end, b_band = sc.b_band;
   double sM = 0.0, s1_num = 0.0, s2_num = 0.0, sE = 0.0, sI = 0.0, sL = 0.0;
   double dsM = 0.0, ds1_num = 0.0, ds2_num = 0.0, dsE = 0.0, dsI = 0.0, dsL = 0.0;
   double d2sM = 0.0, d2s1_num = 0.0, d2s2_num = 0.0, d2sE = 0.0, d2sI = 0.0, d2sL = 0.0;
@@ -2546,13 +2596,20 @@ template <bool kNeedD2>
     const v128_t v_sm  = wasm_f32x4_make(sm_f32[mp[0]],  sm_f32[mp[1]],  sm_f32[mp[2]],  sm_f32[mp[3]]);
     const v128_t v_cp = wasm_f32x4_sub(wasm_f32x4_mul(v_cwj, v_cm), wasm_f32x4_mul(v_swj, v_sm));
     const v128_t v_sp = wasm_f32x4_add(wasm_f32x4_mul(v_swj, v_cm), wasm_f32x4_mul(v_cwj, v_sm));
-    const v128_t v_ec = vhot[0], v_es = vhot[1];
-    const v128_t v_uc = wasm_f32x4_add(vhot[2], wasm_f32x4_mul(v_ec, v_de));
-    const v128_t v_us = wasm_f32x4_add(vhot[3], wasm_f32x4_mul(v_es, v_de));
-    const v128_t v_ic = wasm_f32x4_add(vhot[4], wasm_f32x4_mul(vpe[0], v_de));
-    const v128_t v_is = wasm_f32x4_add(vhot[5], wasm_f32x4_mul(vpe[1], v_de));
-    const v128_t v_lc = wasm_f32x4_add(vhot[6], wasm_f32x4_mul(vpe[2], v_de));
-    const v128_t v_ls = wasm_f32x4_add(vhot[7], wasm_f32x4_mul(vpe[3], v_de));
+    v128_t v_ec = vhot[0], v_es = vhot[1];
+    v128_t v_uc = wasm_f32x4_add(vhot[2], wasm_f32x4_mul(v_ec, v_de));
+    v128_t v_us = wasm_f32x4_add(vhot[3], wasm_f32x4_mul(v_es, v_de));
+    v128_t v_ic = wasm_f32x4_add(vhot[4], wasm_f32x4_mul(vpe[0], v_de));
+    v128_t v_is = wasm_f32x4_add(vhot[5], wasm_f32x4_mul(vpe[1], v_de));
+    v128_t v_lc = wasm_f32x4_add(vhot[6], wasm_f32x4_mul(vpe[2], v_de));
+    v128_t v_ls = wasm_f32x4_add(vhot[7], wasm_f32x4_mul(vpe[3], v_de));
+    if (bi >= b_band) {  // a band lane's share at the state's rate
+      const v128_t v_wt = wasm_v128_load(band_wts + 4 * (bi - b_band));
+      v_ec = wasm_f32x4_mul(v_ec, v_wt); v_es = wasm_f32x4_mul(v_es, v_wt);
+      v_uc = wasm_f32x4_mul(v_uc, v_wt); v_us = wasm_f32x4_mul(v_us, v_wt);
+      v_ic = wasm_f32x4_mul(v_ic, v_wt); v_is = wasm_f32x4_mul(v_is, v_wt);
+      v_lc = wasm_f32x4_mul(v_lc, v_wt); v_ls = wasm_f32x4_mul(v_ls, v_wt);
+    }
     const v128_t v_wf = wasm_v128_load(sc.blk_w + lo);
     const v128_t v_qf = wasm_v128_load(sc.blk_q + lo);
     const v128_t v_jf = wasm_f32x4_add(v_wf, v_qf);
@@ -2621,8 +2678,9 @@ template <bool kNeedD2>
       const int wq_idx = sc.blk_wq[lane_off + l];
       const float cmv = cm_f32[m_idx], smv = sm_f32[m_idx];
       const float cs0 = cswq_c[wq_idx], cs1 = cswq_s[wq_idx];
-      const float cp = cs0 * cmv - cs1 * smv;
-      const float sp = cs1 * cmv + cs0 * smv;
+      const float wtl = bi >= b_band ? band_wts[4 * (bi - b_band) + l] : 1.0f;  // a band lane's share
+      const float cp = (cs0 * cmv - cs1 * smv) * wtl;
+      const float sp = (cs1 * cmv + cs0 * smv) * wtl;
       const float ec = pec[0 + l], es = pec[4 + l];
       const float uc = pu[0 + l] + ec * de_f32, us = pu[4 + l] + es * de_f32;
       const float ic = pu[8 + l] + pe[0 + l] * de_f32, is = pu[12 + l] + pe[4 + l] * de_f32;
@@ -2700,20 +2758,45 @@ inline void sp_six_deriv(const SpEvalCache& sc, float de_f32, double a, double e
                          double eta, double eta_m1, double ci_p0, double sin_i, double ci,
                          double ia, double inv_1peta, const float* cswq_c, const float* cswq_s,
                          const float* cm_f32, const float* sm_f32,
-                         double* six, double* dsix_dlam, double* d2six_dlam2) {
+                         double* six, double* dsix_dlam, double* d2six_dlam2, const float* band_wts) {
   if (d2six_dlam2 != nullptr) {
     sp_six_deriv_impl<true>(sc, de_f32, a, e, n, eta, eta_m1, ci_p0, sin_i, ci, ia, inv_1peta,
-                            cswq_c, cswq_s, cm_f32, sm_f32, six, dsix_dlam, d2six_dlam2);
+                            cswq_c, cswq_s, cm_f32, sm_f32, six, dsix_dlam, d2six_dlam2, band_wts);
   } else {
     sp_six_deriv_impl<false>(sc, de_f32, a, e, n, eta, eta_m1, ci_p0, sin_i, ci, ia, inv_1peta,
-                             cswq_c, cswq_s, cm_f32, sm_f32, six, dsix_dlam, nullptr);
+                             cswq_c, cswq_s, cm_f32, sm_f32, six, dsix_dlam, nullptr, band_wts);
   }
 }
 
+/// The band lanes' shares at the state (stack #555), by lane of segment E, in wts (on the caller's stack): 1 minus the rates'
+/// at the state's own J2 secular rates, from its mean a, n, eta and cos i as shallow_six takes them. Returns wts, or nullptr
+/// when the set has no lane or every share is 0 (the evaluator then stops before segment E).
+inline const float* sp_band_weights(const SpEvalCache& sc, double a, double n, double eta, double ci, float* wts) {
+  const int lanes = (sc.total_blks - sc.b_band) * 4;
+  if (lanes <= 0) return nullptr;
+  const double p_sl = a * eta * eta, j2 = 1.5 * kJ2 / (p_sl * p_sl);
+  const double node = -j2 * n * ci, argp = 0.5 * j2 * n * (5.0 * ci * ci - 1.0), mdot = n + 0.5 * j2 * n * eta * (3.0 * ci * ci - 1.0);
+  bool any = false;
+  for (int k = 0; k < lanes; ++k) {
+    const int lane = sc.b_band * 4 + k;
+    float wt = 0.0f;
+    if (sc.blk_active[lane] != 0u) {
+      const int m = static_cast<int>(sc.blk_mf[lane]), w = static_cast<int>(sc.blk_w[lane]);
+      const int j = w + static_cast<int>(sc.blk_q[lane]);
+      wt = static_cast<float>(band_lane_share(argp, mdot, node, j, m, n, w));
+      any = any || wt > 0.0f;
+    }
+    wts[k] = wt;
+  }
+  return any ? wts : nullptr;
+}
+
 /// Whether sc holds F's terms grouped (the set they belong to: its table, its epoch a and e).
-inline bool sp_matches(const SpEvalCache& sc, const SpCombCoef* F, int count, uint32_t tag, double a0, double e0) {
+inline bool sp_matches(const SpEvalCache& sc, const SpCombCoef* F, int count, uint32_t tag, double a0, double e0,
+                       int band_count = -1) {
   return sc.F == F && sc.count == count && sc.table_tag == tag && sc.a0 == a0 && sc.e0 == e0 && sc.grouped_ok &&
-         sc.f0_uc == F[0].uc0 && sc.f0_ic == F[0].ic0 && sc.fn_uc == F[count - 1].uc0;
+         sc.f0_uc == F[0].uc0 && sc.f0_ic == F[0].ic0 && sc.fn_uc == F[count - 1].uc0 &&
+         (band_count < 0 || sc.band_count == band_count);
 }
 
 /// The cache to evaluate F with once the thread's cache `th` holds it grouped: the set's own (a copy of th, from the
@@ -2733,10 +2816,11 @@ inline bool sp_matches(const SpEvalCache& sc, const SpCombCoef* F, int count, ui
     SpEvalCache& sc, const SpCombCoef* F, int count, uint32_t tag, double a0, double e0, double t,
     const Kepler& kp, double a, double e, double n, double eta, double sin_i, double ci, double ia, double ci_build,
     double theta_g0, const double* sb_in, const double* cb_in, const double* su1_in, const double* cu1_in,
-    const double* sM1_in, const double* cM1_in, double* six, double* dsix_dlam, double* d2six_dlam2, bool band_fade) {
+    const double* sM1_in, const double* cM1_in, double* six, double* dsix_dlam, double* d2six_dlam2, bool band_fade,
+    int band_count) {
   if (sc.F != F || sc.count != count || sc.table_tag != tag || sc.a0 != a0 || sc.e0 != e0 ||
-      sc.f0_uc != F[0].uc0 || sc.f0_ic != F[0].ic0 || sc.fn_uc != F[count - 1].uc0) {
-    sp_rebuild_cache(sc, F, count, tag, a0, e0, ci_build, band_fade);
+      sc.f0_uc != F[0].uc0 || sc.f0_ic != F[0].ic0 || sc.fn_uc != F[count - 1].uc0 || sc.band_count != band_count) {
+    sp_rebuild_cache(sc, F, count, tag, a0, e0, ci_build, band_fade, band_count);
   }
   if (!sc.grouped_ok || t == 0.0) {
     double sb, cb, su1, cu1, sM1, cM1;
@@ -2756,10 +2840,10 @@ inline bool sp_matches(const SpEvalCache& sc, const SpCombCoef* F, int count, ui
 [[gnu::noinline]] inline bool sp_init_or_fallback_val(
     SpEvalCache& sc, const SpCombCoef* F, int count, uint32_t tag, double a0, double e0, double t,
     double a, double e, double n, double eta, double sin_i, double ci, double ia, double ci_build,
-    double sb, double cb, double su1, double cu1, double sM1, double cM1, double* six, bool band_fade) {
+    double sb, double cb, double su1, double cu1, double sM1, double cM1, double* six, bool band_fade, int band_count) {
   if (sc.F != F || sc.count != count || sc.table_tag != tag || sc.a0 != a0 || sc.e0 != e0 ||
-      sc.f0_uc != F[0].uc0 || sc.f0_ic != F[0].ic0 || sc.fn_uc != F[count - 1].uc0) {
-    sp_rebuild_cache(sc, F, count, tag, a0, e0, ci_build, band_fade);
+      sc.f0_uc != F[0].uc0 || sc.f0_ic != F[0].ic0 || sc.fn_uc != F[count - 1].uc0 || sc.band_count != band_count) {
+    sp_rebuild_cache(sc, F, count, tag, a0, e0, ci_build, band_fade, band_count);
   }
   if (!sc.grouped_ok || t == 0.0) {
     sp_six_fallback(sc, F, count, a0, e0, a, e, n, eta, sin_i, ci, ia, sb, cb, su1, cu1, sM1, cM1,
@@ -2986,7 +3070,8 @@ constexpr int64_t kSpPeAtBake = INT64_MIN;  ///< the pe cell of a derivative pas
 }
 
 #ifdef __wasm_simd128__
-[[gnu::always_inline]] inline void sp_eval_simd_kernel(const SpEvalCache& sc, float de_f32, double out6[6]) {
+[[gnu::always_inline]] inline void sp_eval_simd_kernel(const SpEvalCache& sc, float de_f32, double out6[6],
+                                                       const float* band_wts) {
   auto hsum_f32x4 = [](v128_t v) -> double {
     const v128_t d = wasm_f64x2_add(wasm_f64x2_promote_low_f32x4(v),
                                     wasm_f64x2_promote_low_f32x4(wasm_i64x2_shuffle(v, v, 1, 0)));
@@ -3007,7 +3092,7 @@ constexpr int64_t kSpPeAtBake = INT64_MIN;  ///< the pe cell of a derivative pas
 
   int bi = 0;
   const int nrows = sc.n_rows;
-  const int nblks = sc.total_blks;
+  const int nblks = band_wts != nullptr ? sc.total_blks : sc.b_band;  // segment E only when a lane's share is above 0
   const v128_t* vhot = reinterpret_cast<const v128_t*>(sc.blk_hot);
 
   for (int ri = 0; ri < nrows; ++ri) {
@@ -3038,6 +3123,7 @@ constexpr int64_t kSpPeAtBake = INT64_MIN;  ///< the pe cell of a derivative pas
     vg_q = wasm_f32x4_add(vg_q, wasm_f32x4_mul(wasm_v128_load32_splat(&row.qf), vr_idS));
   }
 
+  const int b_band = sc.b_band;
   for (; bi < nblks; ++bi, vhot += 8) {
     const int lo = bi * 4;
     const uint8_t* wqp = sc.blk_wq + lo;
@@ -3046,8 +3132,13 @@ constexpr int64_t kSpPeAtBake = INT64_MIN;  ///< the pe cell of a derivative pas
     const v128_t v_swj = wasm_f32x4_make(cswq_s[wqp[0]], cswq_s[wqp[1]], cswq_s[wqp[2]], cswq_s[wqp[3]]);
     const v128_t v_cm  = wasm_f32x4_make(cm_f32[mp[0]],  cm_f32[mp[1]],  cm_f32[mp[2]],  cm_f32[mp[3]]);
     const v128_t v_sm  = wasm_f32x4_make(sm_f32[mp[0]],  sm_f32[mp[1]],  sm_f32[mp[2]],  sm_f32[mp[3]]);
-    const v128_t v_cp = wasm_f32x4_sub(wasm_f32x4_mul(v_cwj, v_cm), wasm_f32x4_mul(v_swj, v_sm));
-    const v128_t v_sp = wasm_f32x4_add(wasm_f32x4_mul(v_swj, v_cm), wasm_f32x4_mul(v_cwj, v_sm));
+    v128_t v_cp = wasm_f32x4_sub(wasm_f32x4_mul(v_cwj, v_cm), wasm_f32x4_mul(v_swj, v_sm));
+    v128_t v_sp = wasm_f32x4_add(wasm_f32x4_mul(v_swj, v_cm), wasm_f32x4_mul(v_cwj, v_sm));
+    if (bi >= b_band) {  // a band lane's share at the state's rate: every term of a lane is linear in its angle's cos and sin
+      const v128_t v_wt = wasm_v128_load(band_wts + 4 * (bi - b_band));
+      v_cp = wasm_f32x4_mul(v_cp, v_wt);
+      v_sp = wasm_f32x4_mul(v_sp, v_wt);
+    }
     const v128_t v_ec = vhot[0], v_es = vhot[1];
     const v128_t v_uc = wasm_f32x4_add(vhot[2], wasm_f32x4_mul(v_ec, v_de));
     const v128_t v_us = wasm_f32x4_add(vhot[3], wasm_f32x4_mul(v_es, v_de));
@@ -3075,7 +3166,7 @@ constexpr int64_t kSpPeAtBake = INT64_MIN;  ///< the pe cell of a derivative pas
     float* cm_f32_io = nullptr, float* sm_f32_io = nullptr, int cm_in_count = 0,
     double cm_last = 1.0, double sm_last = 0.0,
     const double* su1_in = nullptr, const double* cu1_in = nullptr,
-    const double* sM1_in = nullptr, const double* cM1_in = nullptr, bool band_fade = false) {
+    const double* sM1_in = nullptr, const double* cM1_in = nullptr, bool band_fade = false, int band_count = 0) {
   if (count <= 0) return;
   const double a = kp.a, e = kp.e < 1e-12 ? 1e-12 : kp.e;
   const double sin_i = std::fabs(si) < 1e-12 ? (si < 0.0 ? -1e-12 : 1e-12) : si;
@@ -3098,16 +3189,19 @@ constexpr int64_t kSpPeAtBake = INT64_MIN;  ///< the pe cell of a derivative pas
   }
   SpSetSlot* const slot = g_sp_set_slot;
   SpEvalCache* scp = (slot != nullptr && slot->cache != nullptr) ? slot->cache : &sp_thread_cache();
-  if (__builtin_expect(t == 0.0 || !sp_matches(*scp, F, count, tag, a0, e0), 0)) {
+  if (__builtin_expect(t == 0.0 || !sp_matches(*scp, F, count, tag, a0, e0, band_count), 0)) {
     SpEvalCache& th = sp_thread_cache();
     if (!sp_init_or_fallback(th, F, count, tag, a0, e0, t, kp, a, e, n, eta, sin_i, ci, ia, ci_build,
-                             theta_g0, sb_in, cb_in, su1_in, cu1_in, sM1_in, cM1_in, six, dsix_dlam, d2six_dlam2, band_fade)) {
+                             theta_g0, sb_in, cb_in, su1_in, cu1_in, sM1_in, cM1_in, six, dsix_dlam, d2six_dlam2, band_fade,
+                             band_count)) {
       return;
     }
     scp = sp_claim(slot, th, F, count, tag, a0, e0);
   }
   SpEvalCache& sc = *scp;
   sp_sync(sc, a0, e0, a, e, ci, t, true);
+  float band_wts_buf[SpEvalCache::kMaxBandLanes + 4];
+  const float* const band_wts = sp_band_weights(sc, a, n, eta, ci, band_wts_buf);
   double sb, cb, su1, cu1, sM1, cM1;
   if (sb_in != nullptr && cb_in != nullptr && su1_in != nullptr && cu1_in != nullptr && sM1_in != nullptr && cM1_in != nullptr) {
     sb = *sb_in; cb = *cb_in;
@@ -3141,7 +3235,7 @@ constexpr int64_t kSpPeAtBake = INT64_MIN;  ///< the pe cell of a derivative pas
 #ifdef __wasm_simd128__
   if (__builtin_expect(dsix_dlam == nullptr && d2six_dlam2 == nullptr && cm_f32_io == nullptr, 0)) {
     double out6[6];
-    sp_eval_simd_kernel(sc, de_f32, out6);
+    sp_eval_simd_kernel(sc, de_f32, out6, band_wts);
     const double sum_w = out6[0], sum_q = out6[1], sum_m = out6[2];
     const double sE = out6[3], sI = out6[4], sL = out6[5];
     const double na2 = n * a * a;
@@ -3163,7 +3257,7 @@ constexpr int64_t kSpPeAtBake = INT64_MIN;  ///< the pe cell of a derivative pas
   }
 #endif
   sp_six_deriv(sc, de_f32, a, e, n, eta, eta_m1, ci_p0, sin_i, ci, ia, inv_1peta,
-               sc.cswq_c, sc.cswq_s, cm_f32, sm_f32, six, dsix_dlam, d2six_dlam2);
+               sc.cswq_c, sc.cswq_s, cm_f32, sm_f32, six, dsix_dlam, d2six_dlam2, band_wts);
 }
 
 /// The displacements in the six-component set (n, e, i, e varpi, sin i Omega, lambda), value-only hot path.
@@ -3171,7 +3265,7 @@ constexpr int64_t kSpPeAtBake = INT64_MIN;  ///< the pe cell of a derivative pas
     const SpCombCoef* F, int count, double a0, double e0, double t, double kp_a, double kp_e, double n, double eta,
     double si, double ci, double ci_build, double* six,
     double sb, double cb, double su1, double cu1, double sM1, double cM1,
-    int cm_in_count, double cm_last, double sm_last, bool has_ext_cm, bool band_fade = false) {
+    int cm_in_count, double cm_last, double sm_last, bool has_ext_cm, bool band_fade = false, int band_count = 0) {
   if (count <= 0) return;
   const double a = kp_a, e = kp_e < 1e-12 ? 1e-12 : kp_e;
   const double sin_i = std::fabs(si) < 1e-12 ? (si < 0.0 ? -1e-12 : 1e-12) : si;
@@ -3195,16 +3289,18 @@ constexpr int64_t kSpPeAtBake = INT64_MIN;  ///< the pe cell of a derivative pas
   }
   SpSetSlot* const slot = g_sp_set_slot;
   SpEvalCache* scp = (slot != nullptr && slot->cache != nullptr) ? slot->cache : &sp_thread_cache();
-  if (__builtin_expect(t == 0.0 || !sp_matches(*scp, F, count, tag, a0, e0), 0)) {
+  if (__builtin_expect(t == 0.0 || !sp_matches(*scp, F, count, tag, a0, e0, band_count), 0)) {
     SpEvalCache& th = sp_thread_cache();
     if (!sp_init_or_fallback_val(th, F, count, tag, a0, e0, t, a, e, n, eta, sin_i, ci, ia, ci_build,
-                                 sb, cb, su1, cu1, sM1, cM1, six, band_fade)) {
+                                 sb, cb, su1, cu1, sM1, cM1, six, band_fade, band_count)) {
       return;
     }
     scp = sp_claim(slot, th, F, count, tag, a0, e0);
   }
   SpEvalCache& sc = *scp;
   sp_sync(sc, a0, e0, a, e, ci, t, false);
+  float band_wts_buf[SpEvalCache::kMaxBandLanes + 4];
+  const float* const band_wts = sp_band_weights(sc, a, n, eta, ci, band_wts_buf);
 
   float* const cm_f32 = sp_trig_cm();
   float* const sm_f32 = sp_trig_sm();
@@ -3214,7 +3310,7 @@ constexpr int64_t kSpPeAtBake = INT64_MIN;  ///< the pe cell of a derivative pas
 
 #ifdef __wasm_simd128__
   double out6[6];
-  sp_eval_simd_kernel(sc, de_f32, out6);
+  sp_eval_simd_kernel(sc, de_f32, out6, band_wts);
   const double sum_w = out6[0], sum_q = out6[1], sum_m = out6[2];
   const double sE = out6[3], sI = out6[4], sL = out6[5];
   const double na2 = n * a * a;
@@ -3241,7 +3337,7 @@ constexpr int64_t kSpPeAtBake = INT64_MIN;  ///< the pe cell of a derivative pas
 #else
   const float* const cswq_c = sc.cswq_c;
   const float* const cswq_s = sc.cswq_s;
-  const int nblks = sc.total_blks;
+  const int nblks = band_wts != nullptr ? sc.total_blks : sc.b_band, b_band = sc.b_band;
   double sM = 0.0, s1_num = 0.0, s2_num = 0.0, sE = 0.0, sI = 0.0, sL = 0.0;
   const double eta_m1 = -(kp_e * kp_e) * inv_1peta;
   const double ci_p0 = (ci >= 0.0 ? -(si * si) / (1.0 + ci) : (ci - 1.0)) + 1.0;
@@ -3257,8 +3353,9 @@ constexpr int64_t kSpPeAtBake = INT64_MIN;  ///< the pe cell of a derivative pas
       const int wq_idx = sc.blk_wq[lane_off + l];
       const float cmv = cm_f32[m_idx], smv = sm_f32[m_idx];
       const float cs0 = cswq_c[wq_idx], cs1 = cswq_s[wq_idx];
-      const float cp = cs0 * cmv - cs1 * smv;
-      const float sp = cs1 * cmv + cs0 * smv;
+      const float wtl = bi >= b_band ? band_wts[4 * (bi - b_band) + l] : 1.0f;  // a band lane's share
+      const float cp = (cs0 * cmv - cs1 * smv) * wtl;
+      const float sp = (cs1 * cmv + cs0 * smv) * wtl;
       const float ec = pec[0 + l], es = pec[4 + l];
       const float idS = (pu[0 + l] + ec * de_f32) * cp + (pu[4 + l] + es * de_f32) * sp;
       sum_w += static_cast<double>(sc.blk_w[lane_off + l]) * idS;
@@ -4444,85 +4541,10 @@ inline double shallow_weight(const SecularRates& sr, int k, int m, double n, int
 }
 inline double shallow_weight(const SecularRates& sr, int k, int m, double n) { return shallow_weight(sr, k, m, n, k); }
 
-/// The J2 secular rates at a state as the rates take them (shallow_six): mean a, n, eta and cos i.
-inline SecularRates secular_rates_at(double a, double n, double eta, double ci) {
-  const double p_sl = a * eta * eta, j2 = 1.5 * kJ2 / (p_sl * p_sl);
-  return {-j2 * n * ci, 0.5 * j2 * n * (5.0 * ci * ci - 1.0), n + 0.5 * j2 * n * eta * (3.0 * ci * ci - 1.0)};
-}
-/// The output table's share of a band lane (m, w, j) at the state's rates: 1 minus the rates' (shallow_weight), so the two
-/// carry the term once at every state.
-inline double band_lane_weight(const SecularRates& sr, int j, int m, double n, int w) { return 1.0 - shallow_weight(sr, j, m, n, w); }
-
-/// SPEC 16.1 (stack #555): the band lanes of the low table's fast side (sp_terms' band list), each at its share at the
-/// state's own rate (band_lane_weight) and its rate at the state: none below 0.9 bands, so a lane whose rate passes zero
-/// is never divided by it. The same terms as the main table (SpCombCoef: about the epoch a0 and e0), in double, from the state's
-/// angles: sin and cos of the node less the Greenwich angle (sb, cb), of argp + M (su1, cu1) and of M (sM1, cM1). Adds to six
-/// and, when not null, to its first and second derivatives in lambda. What it writes is on the stack and in six.
-inline void sp_band_six(const SpCombCoef* F, int count, double a0, double e0, double a, double e_in, double n, double eta,
-                        double si, double ci, double sb, double cb, double su1, double cu1, double sM1, double cM1,
-                        double* six, double* dsix_dlam, double* d2six_dlam2) {
-  if (count <= 0) return;
-  const double e = e_in < 1e-12 ? 1e-12 : e_in;
-  const double sin_i = std::fabs(si) < 1e-12 ? (si < 0.0 ? -1e-12 : 1e-12) : si;
-  const SecularRates sr = secular_rates_at(a, n, eta, ci);
-  const double beta_dot = sr.node - kOmegaE;
-  const double ia = 1.0 / a, da = a0 * ia - 1.0, de = e_in - e0;
-  const double alpha_A = -2.0 * ia / (n * a), beta_L = 3.0 * ia * ia;
-  double sM = 0, sW = 0, sO = 0, sE = 0, sI = 0, sL = 0;
-  double dsM = 0, dsW = 0, dsO = 0, dsE = 0, dsI = 0, dsL = 0;
-  double d2sM = 0, d2sW = 0, d2sO = 0, d2sE = 0, d2sI = 0, d2sL = 0;
-  bool any = false;
-  for (int idx = 0; idx < count; ++idx) {
-    const SpCombCoef& f = F[idx];
-    const int m = f.m, w = f.w, j = f.j, qv = j - w;
-    const double wt = band_lane_weight(sr, j, m, n, w);
-    if (!(wt > 0.0)) continue;  // below 0.9 bands: the rates hold all of it, and the lane costs its share only
-    any = true;
-    const double psidot = w * sr.argp + j * sr.mdot + m * beta_dot;
-    // the lane's own multiples of the angles (most lanes sit below 0.9 bands, so no table of every order is made)
-    double cmm, smm, c0, s0;
-    complex_pow(cb, sb, m, cmm, smm);
-    complex_pow(cu1, su1, w < 0 ? -w : w, c0, s0);
-    if (w < 0) s0 = -s0;
-    const double cm_m = cmm, sm_m = smm;
-    const double cwjq = qv == 0 ? c0 : (qv > 0 ? c0 * cM1 - s0 * sM1 : c0 * cM1 + s0 * sM1);
-    const double swjq = qv == 0 ? s0 : (qv > 0 ? s0 * cM1 + c0 * sM1 : s0 * cM1 - c0 * sM1);
-    const double cp = cwjq * cm_m - swjq * sm_m, sp = swjq * cm_m + cwjq * sm_m;
-    const double ip1 = 1.0 / psidot, inv_p = wt * ip1;
-    const double uc = (f.uc0 + (-f.dc0 - 0.5 * f.dca * da) * da + (f.ec0 + f.eca * da) * de) * inv_p;
-    const double us = (f.us0 + (-f.ds0 - 0.5 * f.dsa * da) * da + (f.es0 + f.esa * da) * de) * inv_p;
-    const double ec = (f.ec0 + f.eca * da) * inv_p, es = (f.es0 + f.esa * da) * inv_p;
-    const double ic = (f.ic0 + f.ica * da + f.ice * de) * inv_p, is = (f.is0 + f.isa * da + f.ise * de) * inv_p;
-    const double dc = f.dc0 + (f.dc0 + f.dca) * da - f.eca * de, ds = f.ds0 + (f.ds0 + f.dsa) * da - f.esa * de;
-    const double lc = alpha_A * (dc * inv_p) - beta_L * (j * uc * ip1), ls = alpha_A * (ds * inv_p) - beta_L * (j * us * ip1);
-    const double idS = uc * cp + us * sp, tE = ec * sp - es * cp, tI = ic * sp - is * cp, tL = lc * sp - ls * cp;
-    sM += j * idS; sW += w * idS; sO += m * idS; sE += tE; sI += tI; sL += tL;
-    if (dsix_dlam != nullptr) {
-      const double didS = j * (-uc * sp + us * cp);
-      dsM += j * didS; dsW += w * didS; dsO += m * didS;
-      dsE += j * (ec * cp + es * sp); dsI += j * (ic * cp + is * sp); dsL += j * (lc * cp + ls * sp);
-      if (d2six_dlam2 != nullptr) {
-        const double nj2 = -static_cast<double>(j * j);
-        d2sM += nj2 * j * idS; d2sW += nj2 * w * idS; d2sO += nj2 * m * idS;
-        d2sE += nj2 * tE; d2sI += nj2 * tI; d2sL += nj2 * tL;
-      }
-    }
-  }
-  if (!any) return;
-  const double na2 = n * a * a, tanhalf = sin_i / (1.0 + ci);
-  const double eta_m1 = -(e_in * e_in) / (1.0 + eta);  // eta - 1, without the cancellation
-  const auto put = [&](double* dst, double vM, double vW, double vO, double vE, double vI, double vL) {
-    const double vQ = vM - vW;  // the q part: sum of q idS
-    dst[0] += -3.0 * ia * ia * vM;
-    dst[1] += eta * (eta * vQ + eta_m1 * vW) / (na2 * e);
-    dst[2] += (ci * vW - vO) / (na2 * eta * sin_i);
-    dst[3] += (eta / na2) * vE + e * tanhalf / (na2 * eta) * vI;
-    dst[4] += vI / (na2 * eta);
-    dst[5] += vL + (eta * e / (na2 * (1.0 + eta))) * vE + (tanhalf / (na2 * eta)) * vI;
-  };
-  put(six, sM, sW, sO, sE, sI, sL);
-  if (dsix_dlam != nullptr) put(dsix_dlam, dsM, dsW, dsO, dsE, dsI, dsL);
-  if (d2six_dlam2 != nullptr) put(d2six_dlam2, d2sM, d2sW, d2sO, d2sE, d2sI, d2sL);
+/// The output table's share of a band lane (m, w, j) at secular rates sr (the census's form of band_lane_share): 1 minus the
+/// rates' (shallow_weight), so the two carry the term once at every state.
+inline double band_lane_weight(const SecularRates& sr, int j, int m, double n, int w) {
+  return band_lane_share(sr.argp, sr.mdot, sr.node, j, m, n, w);
 }
 
 struct ShallowGroupPoly {

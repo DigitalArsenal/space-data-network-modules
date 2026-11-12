@@ -1844,7 +1844,7 @@ struct RateContext {
   const tess::SpCombCoef* sp_comb;    ///< AP: combined (l, m, k) first-order tesseral terms for fast SIMD evaluation
   int32_t sp_comb_count;
   double sp_ci0;                      ///< cos i of the set whose epoch built sp_comb: the cos i its grouping uses
-  const tess::SpCombCoef* sp_band;    ///< AP, the low table's fast side: the band lanes (tess::sp_band_six; owned with sp_comb)
+  const tess::SpCombCoef* sp_band;    ///< AP, the low table's fast side: the band lanes, sp_comb[sp_comb_count ..] (segment E of the table's cache)
   int32_t sp_band_count;
   const tess::SpCoef* sp_band_raw;    ///< the band lanes' terms one by one (the census reads them)
   int32_t sp_band_raw_count;
@@ -4935,9 +4935,8 @@ inline int32_t output_impl(const RateContext& ctx, double t, const double* ym, d
   double Ewarm = kCov ? E_osc_in : std::numeric_limits<double>::quiet_NaN();
   double sEwarm = kCov ? sE_osc_in : 0.0, cEwarm = kCov ? cE_osc_in : 1.0;
   const bool fast_ang = (t != 0.0) || !ctx.long_period || ctx.i0 > 0.02;
-  const bool has_sp_orig = (ctx.sp_comb != nullptr) && (ctx.sp_comb_count > 0 || ctx.sp_band_count > 0) &&
-                           (ctx.sp == ctx.sp_orig) && (ctx.sp_count == ctx.sp_orig_count);
-  const bool has_band = has_sp_orig && ctx.sp_band_count > 0;
+  const bool has_sp_orig =
+      (ctx.sp_comb != nullptr) && (ctx.sp_comb_count > 0) && (ctx.sp == ctx.sp_orig) && (ctx.sp_count == ctx.sp_orig_count);
   const bool has_sp_custom =
       (ctx.sp != ctx.sp_orig || ctx.sp_count != ctx.sp_orig_count) && (ctx.sp != nullptr) && (ctx.sp_count > 0);
   const bool has_sp_any = has_sp_orig || has_sp_custom;
@@ -5195,10 +5194,7 @@ inline int32_t output_impl(const RateContext& ctx, double t, const double* ym, d
                                   six_sp, dsix_sp, d2_sp_dlam2_out != nullptr ? d2six_sp : nullptr,
                                   &sb_t, &cb_t,
                                   has_md ? cm_f32_buf : nullptr, has_md ? sm_f32_buf : nullptr, cm_cnt, cm_last, sm_last,
-                                  &su1_pre, &cu1_pre, &sM1_pre, &cM1_pre, ctx.sp_fast != 0);
-          if (has_band)
-            tess::sp_band_six(ctx.sp_band, ctx.sp_band_count, ctx.a0, ctx.e0, km.a, km.e, ym[kN], etam, agm.si, agm.ci, sb_t, cb_t,
-                              su1_pre, cu1_pre, sM1_pre, cM1_pre, six_sp, dsix_sp, d2_sp_dlam2_out != nullptr ? d2six_sp : nullptr);
+                                  &su1_pre, &cu1_pre, &sM1_pre, &cM1_pre, ctx.sp_fast != 0, ctx.sp_band_count);
         } else if (has_sp_custom) {
           tess::sp_six(ctx.sp, ctx.sp_count, t, km, ym[kN], etam, agm.si, agm.ci, ctx.theta_g0, six_sp);
         }
@@ -5244,13 +5240,11 @@ inline int32_t output_impl(const RateContext& ctx, double t, const double* ym, d
                            has_sp ? cm_f32_buf : nullptr, has_sp ? sm_f32_buf : nullptr,
                            has_sp ? &cm_cnt : nullptr, has_sp ? &cm_last : nullptr, has_sp ? &sm_last : nullptr,
                            &sb_pre, &cb_pre, mdt_id);
-        if (has_sp) {
+        if (has_sp)
           tess::sp_six_val(ctx.sp_comb, ctx.sp_comb_count, ctx.a0, ctx.e0, t, km.a, km.e, ym[kN], etam, agm.si, agm.ci, ctx.sp_ci0, six,
-                           sb_t, cb_t, su1_pre, cu1_pre, sM1_pre, cM1_pre, cm_cnt, cm_last, sm_last, has_md, ctx.sp_fast != 0);
-          if (has_band)
-            tess::sp_band_six(ctx.sp_band, ctx.sp_band_count, ctx.a0, ctx.e0, km.a, km.e, ym[kN], etam, agm.si, agm.ci, sb_t, cb_t,
-                              su1_pre, cu1_pre, sM1_pre, cM1_pre, six, nullptr, nullptr);
-        } else if (has_sp_custom)
+                           sb_t, cb_t, su1_pre, cu1_pre, sM1_pre, cM1_pre, cm_cnt, cm_last, sm_last, has_md, ctx.sp_fast != 0,
+                           ctx.sp_band_count);
+        else if (has_sp_custom)
           tess::sp_six(ctx.sp, ctx.sp_count, t, km, ym[kN], etam, agm.si, agm.ci, ctx.theta_g0, six);
         if (ctx.wide != nullptr) {
           if (ctx.wide_next != nullptr && ctx.wide_blend > 0.0) {
@@ -5282,13 +5276,11 @@ inline int32_t output_impl(const RateContext& ctx, double t, const double* ym, d
                          has_sp ? cm_f32_buf : nullptr, has_sp ? sm_f32_buf : nullptr,
                          has_sp ? &cm_cnt : nullptr, has_sp ? &cm_last : nullptr, has_sp ? &sm_last : nullptr,
                          &sb_pre, &cb_pre, mdt_id);
-      if (has_sp) {
+      if (has_sp)
         tess::sp_six_val(ctx.sp_comb, ctx.sp_comb_count, ctx.a0, ctx.e0, t, km.a, km.e, ym[kN], etam, agm.si, agm.ci, ctx.sp_ci0, six,
-                         sb_t, cb_t, su1_pre, cu1_pre, sM1_pre, cM1_pre, cm_cnt, cm_last, sm_last, has_md, ctx.sp_fast != 0);
-        if (has_band)
-          tess::sp_band_six(ctx.sp_band, ctx.sp_band_count, ctx.a0, ctx.e0, km.a, km.e, ym[kN], etam, agm.si, agm.ci, sb_t, cb_t,
-                            su1_pre, cu1_pre, sM1_pre, cM1_pre, six, nullptr, nullptr);
-      } else if (has_sp_custom)
+                         sb_t, cb_t, su1_pre, cu1_pre, sM1_pre, cM1_pre, cm_cnt, cm_last, sm_last, has_md, ctx.sp_fast != 0,
+                         ctx.sp_band_count);
+      else if (has_sp_custom)
         tess::sp_six(ctx.sp, ctx.sp_count, t, km, ym[kN], etam, agm.si, agm.ci, ctx.theta_g0, six);
       if (ctx.wide != nullptr) {
         if (ctx.wide_next != nullptr && ctx.wide_blend > 0.0) {
