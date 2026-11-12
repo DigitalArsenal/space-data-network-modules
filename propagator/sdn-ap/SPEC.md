@@ -1894,8 +1894,8 @@ the fitted set's regime (12.5: its perigee height against 2,500 km, above which 
   its written sigma in the estimate as in the covariance *[stack #489, #39]*.
 - DRAG, a shorter arc, or a set above e 0.3 on any arc. The cost keeps sigma_d = 1 km, as in every version before, and
   the covariance divides by s^2: there the estimate and the covariance do not use one weighting, and each prior acts in
-  the estimate as if its sigma were sigma_d / s times its written one (about 100 times, at s of 10 m) while the
-  covariance states it at its written sigma. This is a stated limit, not the design (stack #489 stays open for these
+  the estimate as if its sigma were s / sigma_d times its written one (about a hundredth of it, at s of 10 m: the prior
+  acts some 100 times narrower than written) while the covariance states it at its written sigma. This is a stated limit, not the design (stack #489 stays open for these
   sets). On a short arc, weighed at its bare scatter, a 24 h arc lets BTERM and AGOM absorb the theory's own error, which
   under drag is correlated along the arc, not noise (below), and the band priors of 12.8 hold the term there only at
   1 km. Above e 0.3 the rule was measured on no real eccentric rows; on a first look, model truth, the data's own sigma
