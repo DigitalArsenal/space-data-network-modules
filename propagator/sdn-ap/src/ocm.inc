@@ -105,6 +105,25 @@ constexpr const char* kSlowGravityModel = "EGM2008; slow tesseral terms to degre
 /// AP set with both gravity degrees 0, are not checked: their fields are the theory's own (SPEC 1.3, 6.2).
 constexpr const char* kApGravityModel = "EGM2008";
 
+/// SPEC 16.22: PERTURBATIONS.SOLAR_RAD_PRESSURE of an AP set whose radiation pressure goes through the output map (the
+/// long-period regime above e 0.3, an area-to-mass above 0), and of such a set with the radiation term Y0 beside it. A
+/// flight reads this text: such a set without it is refused by name (a record fitted before the change flew SPEC 4's
+/// radiation there, kilometers apart), a set outside the regime with it is refused too, and so is the Y0 text without the
+/// record's ECOM2_Y0 entry or that entry under the plain text. Any other text outside the regime is not read.
+constexpr const char* kLpRadiationModel = "SPHERE (AGOM) THROUGH THE OUTPUT MAP, CYLINDRICAL SHADOW OVER THE STEP";
+constexpr const char* kLpY0RadiationModel =
+    "SPHERE (AGOM) THROUGH THE OUTPUT MAP, CYLINDRICAL SHADOW OVER THE STEP, AND ECOM2 Y0 (ARNOLD ET AL. 2015)";
+
+/// SPEC 16.22: whether a set's radiation pressure goes through the output map, from what its record states: AP with gravity
+/// terms, its epoch elements in the long-period regime above e 0.3 (xpt::branch_of, as a flight takes its branch), an
+/// area-to-mass above 0.
+inline bool lp_radiation_record(const ElementRow& row, const Forces& f) {
+  if (!epoch_frame(f) || !(row.agom > 0.0)) return false;
+  const Elements e = elements_of(row);
+  const xpt::Branch b = xpt::branch_of(e.xno, e.eo, true);
+  return b.long_period && b.wide_e;
+}
+
 /// SPEC 17.3: the refusal of a covariance about to be written, or nullptr. Its rows are the state block and the solved
 /// parameters in the fixed order (cov::kParameters), each named, each a prwDynamicParameter of the five, COV_UNITS
 /// COV_SIZE entries (km, km/s, then the parameters' units) and COV_SIZE 6 plus the solved count; anything else is
@@ -197,13 +216,15 @@ inline flatbuffers::Offset<flatbuffers::Vector<flatbuffers::Offset<SPW>>> rows_o
 /// kSlowGravityModel). Then the atmosphere as a direct map of the forces, the caps, the source; the rows
 /// with SW_DATA_SOURCE, SW_DATA_EPOCH and SW_INTERP_METHOD under RECORDS; the nodes and the $DCL CID under DCA_COMMON_MODE.
 inline flatbuffers::Offset<Perturbations> perturbations_of(flatbuffers::FlatBufferBuilder& fbb, int32_t row_theory, const Forces& f, const Weather* w,
-                                                           bool ecom2 = false) {
+                                                           bool ecom2 = false, bool lp_radiation = false) {
   const bool sgp4 = row_theory == kTheorySgp4;
   const auto s_gravity = fbb.CreateString(sgp4                                  ? "WGS-72"
                                           : f.slow && epoch_frame(f)              ? kSlowGravityModel
                                           : (f.tesseral > 0 || f.zonal > 0)       ? kApGravityModel
                                                                                   : "EGM-96");
-  const auto s_srp = ecom2 ? fbb.CreateString(kY0RadiationModel) : flatbuffers::Offset<flatbuffers::String>(0);
+  const auto s_srp = lp_radiation ? fbb.CreateString(ecom2 ? kLpY0RadiationModel : kLpRadiationModel)
+                     : ecom2      ? fbb.CreateString(kY0RadiationModel)
+                                  : flatbuffers::Offset<flatbuffers::String>(0);
   const auto s_tides = !sgp4 && f.solid_tides ? fbb.CreateString(kSolidTidesModel) : flatbuffers::Offset<flatbuffers::String>(0);
   flatbuffers::Offset<ATM> atmosphere = 0;
   if (!sgp4) atmosphere = CreateATM(fbb, f.msis ? AtmosphericModelFamily_NRLMSIS00E : AtmosphericModelFamily_JXX, f.msis ? 2000 : 1970);
@@ -272,7 +293,7 @@ inline void build(flatbuffers::FlatBufferBuilder& fbb, const ElementRow& row, co
     me.add_AGOM(row.agom);
   }
   const auto mean = me.Finish();
-  const auto perturbations = perturbations_of(fbb, row.theory, f, w, x.ecom2);
+  const auto perturbations = perturbations_of(fbb, row.theory, f, w, x.ecom2, lp_radiation_record(row, f));
   // HEADER and METADATA
   const auto s_version = fbb.CreateString("3.0");
   const auto s_originator = fbb.CreateString(id.originator.empty() ? "SDN" : id.originator);
@@ -449,6 +470,15 @@ inline int radiation_of(const OCM* o, Set& s) {
   return 0;
 }
 
+/// SPEC 16.22: whether ORBIT_DETERMINATION.OD_DYNAMIC_PARAMETERS carries an ECOM2_Y0 entry (radiation_of reads its value).
+inline bool states_y0(const OCM* o) {
+  const OrbitDetermination* od = o->ORBIT_DETERMINATION();
+  if (od == nullptr || od->OD_DYNAMIC_PARAMETERS() == nullptr) return false;
+  for (const OCMDynamicParameter* p : *od->OD_DYNAMIC_PARAMETERS())
+    if (p != nullptr && p->PARAMETER() == prwDynamicParameter_ECOM2_Y0) return true;
+  return false;
+}
+
 /// Decodes one $OCM element set (plain or size-prefixed): 0 with `s` filled, or 3 with the named refusal set.
 inline int decode_view(const OCM* o, Set& s);
 inline int decode(const uint8_t* p, uint32_t n, Set& s) {
@@ -585,6 +615,23 @@ inline int decode_view(const OCM* o, Set& s) {
     return refuse("gravity-model-mismatch",
                   "An AP set with gravity terms states PERTURBATIONS.GRAVITY_MODEL EGM2008, the embedded field (\"EGM2008; slow tesseral terms to degree 70\" with the slow set); a record of another field is fitted again.");
   if (const int rc = radiation_of(o, s)) return rc;
+  // SPEC 16.22: the radiation model the record states against the one this build flies for its elements, and the text's Y0
+  // suffix against the record's ECOM2_Y0 entry (the writer states the one exactly when it writes the other)
+  {
+    const flatbuffers::String* sr = pt != nullptr ? pt->SOLAR_RAD_PRESSURE() : nullptr;
+    const bool y0_text = sr != nullptr && oem::same_text(sr->c_str(), kLpY0RadiationModel);
+    const bool lp_text = y0_text || (sr != nullptr && oem::same_text(sr->c_str(), kLpRadiationModel));
+    const bool lp = !sgp4 && s.theory == meanElementSource_AP && lp_radiation_record(s.row, f);
+    if (lp && !lp_text)
+      return refuse("radiation-model-superseded",
+                    "An AP set above e 0.3 in the long-period regime with an area-to-mass flies radiation pressure through the output map (SPEC 16.22), and this record states another model in PERTURBATIONS.SOLAR_RAD_PRESSURE: fit it again.");
+    if (!lp && lp_text)
+      return refuse("radiation-model-mismatch",
+                    "PERTURBATIONS.SOLAR_RAD_PRESSURE names radiation pressure through the output map, which only an AP set above e 0.3 in the long-period regime with an area-to-mass above 0 flies.");
+    if (lp && y0_text != states_y0(o))
+      return refuse("radiation-model-mismatch",
+                    "PERTURBATIONS.SOLAR_RAD_PRESSURE states ECOM2 Y0 exactly when ORBIT_DETERMINATION.OD_DYNAMIC_PARAMETERS carries ECOM2_Y0 (SPEC 16.22): this record states one without the other.");
+  }
   // the frame pairing: TEMEOFDATE, or TEMEOFEPOCH at the set's epoch for AP with gravity terms
   const int frame = frame_kind(o->TRAJ_REF_FRAME());
   const bool want_epoch = !sgp4 && epoch_frame(f);

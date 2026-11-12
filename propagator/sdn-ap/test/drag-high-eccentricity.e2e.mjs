@@ -61,7 +61,7 @@ const FIXTURES = {
 // (-0.6 to +0.3 % of the seeded flights; the drag-off fit +3.24 / +0.79 m). The field EGM2008 on both sides (0.6.36, SPEC
 // 16.2) moves them to 1211.59 / 845.02, 8966.05 / 6049.00, 8709.93 / 5704.46 and 53.83 / 24.54 (the seeded Molniya +3.0 / +5.0
 // m, the others 1.9 to 5.5 m lower; the drag-off fit -3.15 / -3.40 m). The zonal theory's constant radial term (0.6.43,
-// SPEC 16.22, at the same osculating energy) moves them to 1211.59 / 845.01, 8967.37 / 6049.09, 8711.17 / 5704.51 and
+// SPEC 16.23, at the same osculating energy) moves them to 1211.59 / 845.01, 8967.37 / 6049.09, 8711.17 / 5704.51 and
 // 53.82 / 24.53 (the seeded GTO and GTO-500 +1.32 / +0.09 and +1.24 / +0.05 m, 0.015 %; the seeded Molniya and the
 // drag-off fit under 0.01 m). The seeded flights start the truth from AP's own output state, so they measure that state's
 // energy against AP's mean motion; at the same angular rate the term would have moved the GTO and GTO-500 flights to

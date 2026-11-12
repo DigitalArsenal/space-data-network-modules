@@ -95,7 +95,7 @@ const AP_DRAG = { s_e: 1.8579913326733934e-7, s_i: 1.12761105007012e-6, s_l: 7.6
 /// elements bit for bit, its COVARIANCE_DATA's state block carrying the floor at the two-body state), and its flight is
 /// held against 0.6.36's flight of 0.6.36's fit, which it equals to rounding (a set's own flight is as it was); 0.6.36's fit
 /// flies its states as 0.6.36 flew them, its covariance refused by name.
-/// 0.6.43 (the zonal theory's constant radial term at the same osculating energy, SPEC 16.22) moves the stored record's
+/// 0.6.43 (the zonal theory's constant radial term at the same osculating energy, SPEC 16.23) moves the stored record's
 /// numbers by 2,151.657 mm and a covariance of 1.55e-6 of a time's largest entry, and records them from itself
 /// (ap-fit-0.6.39-0.6.43.cov; the 0.6.36 file went), the bounds kept: the record carries its epoch floor at the
 /// two-body state of its mean elements (SPEC 12.4), so its covariance moves with the states (on a record written before

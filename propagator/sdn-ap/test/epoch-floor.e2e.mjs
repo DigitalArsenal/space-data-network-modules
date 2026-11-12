@@ -14,7 +14,7 @@
 // - A set's own flight is as it was: this build's record flown by this build against SELF_BASE's record flown by
 //   SELF_BASE, sdnap_covariance_at hourly to 48 h, within SELF (SELF_BASE: 0.6.38 at 0.6.39; from 0.6.43 the zonal
 //   theory's constant radial term's first build on 0.6.39, git 36ebd1e6, since the term moves a set's own flight, SPEC
-//   16.22).
+//   16.23).
 // - Across a theory change (from 0.6.43, the case that found stack #551): 0.6.39's record flown by this build against
 //   0.6.39's flight of it, sdnap_covariance_at hourly to 48 h, within ACROSS (measured with the radial term on this
 //   test's cases: up to 1.6e-5 of a time's largest entry and 1.4e-5 in along-track variance, 0 at caps 0, which carry no

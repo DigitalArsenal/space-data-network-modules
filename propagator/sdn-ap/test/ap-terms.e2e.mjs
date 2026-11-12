@@ -108,7 +108,7 @@ const { ap, xp, rows } = await fixtureSets(h);
 // elements bit for bit, its COVARIANCE_DATA's state block carrying the floor at the two-body state), and its flight is
 // held against 0.6.36's flight of 0.6.36's fit, which it equals to rounding (a set's own flight is as it was); 0.6.36's fit
 // flies its states as 0.6.36 flew them, its covariance refused by name.
-// 0.6.43 (the zonal theory's constant radial term at the same osculating energy, SPEC 16.22) moves the stored record's
+// 0.6.43 (the zonal theory's constant radial term at the same osculating energy, SPEC 16.23) moves the stored record's
 // flight by 2,151.657 mm, 2,360.664 um/s and a covariance of 8.40e-7 of a line's largest entry, and records it from
 // itself (ap-fit-0.6.39-0.6.43.oem; the 0.6.36 file went), the bounds kept. The covariance moves with the states: the
 // record carries its epoch floor at the two-body state of its mean elements (SPEC 12.4), so the term does not move what

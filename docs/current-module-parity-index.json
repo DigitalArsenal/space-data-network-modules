@@ -1,5 +1,5 @@
 {
-  "generatedAt": "2026-11-12T04:09:30.864Z",
+  "generatedAt": "2026-11-12T04:53:21.775Z",
   "moduleCount": 160,
   "parityScopeModuleCount": 60,
   "isomorphicWasmCount": 154,
@@ -7502,7 +7502,7 @@
       "pluginId": "com.spacedatanetwork.sdn-ap-propagator",
       "name": "SDN-AP Propagator",
       "pluginFamily": "propagator",
-      "version": "0.6.39",
+      "version": "0.6.41",
       "methodIds": [
         "export_omm",
         "fit",
@@ -7525,7 +7525,7 @@
       ],
       "cxxSourceFileCount": 1,
       "cSourceFileCount": 0,
-      "testFileCount": 189,
+      "testFileCount": 190,
       "parityScope": true,
       "action": "review-before-parity-use",
       "sourceFiles": [
@@ -7637,6 +7637,7 @@
         "test/lib/tle.mjs",
         "test/long-period-moon-output.e2e.mjs",
         "test/long-period-perigee-step.e2e.mjs",
+        "test/long-period-radiation.e2e.mjs",
         "test/maneuver.e2e.mjs",
         "test/molniya-7day-drag-sigma.e2e.mjs",
         "test/one-day-moon-floor.e2e.mjs",

@@ -141,7 +141,7 @@ for (const c of REGIMES) {
   // the forecast's held-out hours after the stop B's largest distance to the forecast is under a lone A's; at
   // geosynchronous altitude the two are alike (the theory holds over the span).
   // History. Through 0.6.36 the check was B's step at the stop under a lone A's step there, one instant. 0.6.43 (the
-  // zonal theory's constant radial term, SPEC 16.22) takes the theory's mean radial bias (about +9 m at 500 km and i
+  // zonal theory's constant radial term, SPEC 16.23) takes the theory's mean radial bias (about +9 m at 500 km and i
   // 97.4) off both: in low orbit B's step goes from 15.1 to 17.0 m and a lone A's from 22.3 to 15.8 m, so the
   // one-instant check failed although B still carries the hand-over better. Over the forecast's 18 held-out hours after
   // the stop (2,161 states, 30 s), measured on both builds (the term's positions are the same at either velocity form):

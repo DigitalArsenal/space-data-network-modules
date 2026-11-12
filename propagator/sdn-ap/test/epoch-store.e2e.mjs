@@ -304,7 +304,7 @@ for (const [label, cfg] of [["NEAREST, SMOOTHSTEP", {}], ["NEAREST, HERMITE", { 
   // This build's fit: against the stored record's flight until 0.6.21; from 0.6.22 against this build's propagate_epochs
   // of 0.6.22's own fit (ap-fit-0.6.22.ocm), the bounds kept. AP's own Sun and Moon move the fit: 117.72 mm and 130.37
   // um/s from the 0.6.21 file and, both flown by 0.6.22, 92.33 mm and 101.49 um/s from the stored record's flight.
-  // 0.6.43 (the zonal theory's constant radial term at the same osculating energy, SPEC 16.22) moves the stored
+  // 0.6.43 (the zonal theory's constant radial term at the same osculating energy, SPEC 16.23) moves the stored
   // record's flight by 2,151.657 mm, 2,360.664 um/s and a covariance of 1.55e-6 of a line's largest entry, and records
   // it from itself (ap-fit-0.6.39.epochs-0.6.43.oem; the 0.6.36 file went), the bounds kept; 0.6.36's fit is held
   // against the same flight (its mean elements are 0.6.39's bit for bit).
@@ -328,7 +328,7 @@ for (const [label, cfg] of [["NEAREST, SMOOTHSTEP", {}], ["NEAREST, HERMITE", { 
   // elements bit for bit, its COVARIANCE_DATA's state block carrying the floor at the two-body state), and its flight is
   // held against 0.6.36's flight of 0.6.36's fit, which it equals to rounding (a set's own flight is as it was); 0.6.36's fit
   // flies its states as 0.6.36 flew them, its covariance refused by name.
-  // 0.6.43 (the zonal theory's constant radial term, SPEC 16.22) moves the fit: 1,312.70 mm and 1,442.69 um/s on the grid
+  // 0.6.43 (the zonal theory's constant radial term, SPEC 16.23) moves the fit: 1,312.70 mm and 1,442.69 um/s on the grid
   // from 0.6.39's fit (both flown by 0.6.43), FIT_RMS 40.125 against 40.153 m. So the own fit is 0.6.43's
   // (ap-fit-0.6.43.ocm); the stored record stays 0.6.39's fit.
   const storedRecord = new Uint8Array(fs.readFileSync(new URL("fixtures/ap-fit-0.6.39.ocm", import.meta.url)));

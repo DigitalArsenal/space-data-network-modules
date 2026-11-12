@@ -115,7 +115,7 @@ const cases = [
 // elements bit for bit, its COVARIANCE_DATA's state block carrying the floor at the two-body state), and its flight is
 // held against 0.6.36's flight of 0.6.36's fit, which it equals to rounding (a set's own flight is as it was); 0.6.36's fit
 // flies its states as 0.6.36 flew them, its covariance refused by name.
-// 0.6.43 (the zonal theory's constant radial term at the same osculating energy, SPEC 16.22) moves the stored record's
+// 0.6.43 (the zonal theory's constant radial term at the same osculating energy, SPEC 16.23) moves the stored record's
 // flight: sdnap_covariance_at 2,151.657 mm, covariance 1.55e-6; propagate EME2000 and TEME over 7 days 2,151.682 mm,
 // 2,360.655 um/s, covariance 6.74e-7 (the record carries its epoch floor at the two-body state of its mean elements,
 // SPEC 12.4, so its covariance moves with the states); it records it from itself (ap-fit-0.6.39-0.6.43.cov,

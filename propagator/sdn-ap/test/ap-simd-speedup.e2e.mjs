@@ -144,7 +144,7 @@ try {
   // flown by STATE_BASE (which reads EGM2008 records) and by this build. STATE_BASE is older than SPEC 12.4's epoch floor:
   // it flies this build's record for its states only; that record's covariance on that base is not meaningful (an earlier
   // build takes the floor off at its own theory state, stack #562), so the covariance is held below against 0.6.36's
-  // numbers, flown by this build. The zonal theory's constant radial term (0.6.43, SPEC 16.22) moves it from 7ebc98e4's
+  // numbers, flown by this build. The zonal theory's constant radial term (0.6.43, SPEC 16.23) moves it from 7ebc98e4's
   // by 2.152 m in EME2000 and TEME, so from 0.6.43 the baseline is the term's first build on 0.6.39 (git 36ebd1e6), the
   // bound kept; that base carries SPEC 12.4's epoch floor.
   const hState = await createStandaloneHarness("browser", stateBasePath, { surface: "direct" });
@@ -176,7 +176,7 @@ try {
   // Why: the record's correlations between AGOM and the state are 0.6.4's fit's, and 16.16 moves its along-track response
   // to AGOM at 48 h from 1380.7 to 823.7 m per m^2/kg; a fit made and flown by 0.6.21 flies to 0.6.4's numbers within
   // 7.1e-5 (covariance.e2e.mjs). From 0.6.36 they are this build's numbers of the stored record, its own fit (the 0.6.22
-  // file went). 0.6.43 (the zonal theory's constant radial term, SPEC 16.22) records them from itself (the 0.6.36 file
+  // file went). 0.6.43 (the zonal theory's constant radial term, SPEC 16.23) records them from itself (the 0.6.36 file
   // went): 1.55e-6 of a time's largest entry from 0.6.36's, the bound kept.
   // The 0.6.4 dist still flies its own fit for the timing line, this build the stored record (two fits of the same arc).
   assert.ok(Buffer.from(ocmBaseBytes).equals(fs.readFileSync(path.join(here, "fixtures/ap-fit-0.6.4.ocm"))), "the 0.6.4 dist's fit is not ap-fit-0.6.4.ocm");

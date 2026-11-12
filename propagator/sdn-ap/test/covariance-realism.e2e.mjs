@@ -62,7 +62,7 @@ const FLOOR_RELATIVE = 2e-3, MEDIAN_RELATIVE = 5e-5;
 // 1.476 times 0.6.0's, FLOOR_WW_KM2 1.462 to 1.451 times. The held-out cells move by at most 0.0021 in median |z| (S1 24 h R
 // 0.6474 to 0.6454): of the 11 that move past the bound, 5 move toward 0.674 and 6 away, and none crosses the band's edge.
 // So the floors and medians are pinned to 0.6.36's, the bounds kept.
-// 0.6.43 (the zonal theory's constant radial term, SPEC 16.22) moves it again: its 12 h error 322.7 to 320.8 m, FLOOR_VV_KM2
+// 0.6.43 (the zonal theory's constant radial term, SPEC 16.23) moves it again: its 12 h error 322.7 to 320.8 m, FLOOR_VV_KM2
 // 1.476 to 1.474 times 0.6.0's, FLOOR_UU_KM2 1.399 to 1.418 times, FLOOR_WW_KM2 1.451 times. The held-out cells move by at
 // most 0.0006 in median |z| (S1 24 h R 0.6454 to 0.6459): of the 11 that move past the bound, 6 move toward 0.674 and 5
 // away, and none crosses the band's edge. So the floors and medians are pinned to 0.6.43's, the bounds kept.

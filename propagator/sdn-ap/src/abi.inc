@@ -466,8 +466,8 @@ int32_t sdnap_init_error(uint32_t index) {
 /// parameter-not-modeled:<NAME>, SPEC 17.2; 1 byte of padding follows), double AGOM prior mean and
 /// sigma, int32 drag_log, int32 agom_log (1: the term is estimated as its
 /// natural log, its prior mean and sigma those of the log; the row's term must
-/// then start > 0). `stats` (4 doubles): status (-5: the least-squares set lies on a switch, SPEC 16.7), iterations,
-/// rms km, max km.
+/// then start > 0). `stats` (4 doubles): status (-5: the least-squares set lies on a limit in n, SPEC 16.7; at an
+/// eccentricity switch the set is held there, status 0 or 1), iterations, rms km, max km.
 /// Returns 0 or a negative code.
 SDNAP_EXPORT("sdnap_fit")
 int32_t sdnap_fit(sdnap::ElementRow* row, const double* minutes, const double* positions, uint32_t count,
@@ -556,7 +556,8 @@ int32_t sdnap_slow_terms(const double* in, double* rows, int32_t max_rows) {
 }
 
 /// The field's census (SPEC 16.20; stack #503): in = mean motion (rev/day), e, i (deg), the record's tesseral degree, the size
-/// cut (m); every tesseral term of the embedded field at or above the cut, with the carriers a set of these elements builds
+/// cut (m); every tesseral term of the embedded field at or above the cut, and radiation pressure's one row (l -1, m 0; SPEC
+/// 16.22), with the carriers a set of these elements builds
 /// (xpt::census_rows: rows of 10 doubles, l, m, p, q, psi-dot / n, the code, the rates' weight, all carriers' weight, the size
 /// in m, the term's period in days), at most max_rows. Returns the count of all rows, or -1 for elements it refuses. A diagnostic: no flight reads it.
 SDNAP_EXPORT("sdnap_field_census")

@@ -55,8 +55,11 @@ const BASE_VERSION = '0.6.43', BASE = '36ebd1e67', BASE_SHA256 = 'f0e7bd7d8c222b
 // that build's own version string), every AP set under the one bound, 15 mm. From 0.6.36
 // a record stating another field is refused (SPEC 16.2): the fitted set until then, analysis/catalog-composer's fixture
 // (ap-fit-sdn-ap-0.5.1.ocm, GRAVITY_MODEL EGM-96), is asserted refused, and the fitted set is 0.6.36's own fit of the
-// 550 km arc (test/fixtures/ap-fit-0.6.36.ocm), which the baseline flies too.
-// The zonal theory's constant radial term (0.6.43, SPEC 16.22) moves them from 7ebc98e4: LEO 2,029.97, geostationary 183.49,
+// 550 km arc (test/fixtures/ap-fit-0.6.36.ocm), which the baseline flies too. From 0.6.40 (the fit at a switch, stack #504) an AP set at
+// exactly e 0.3 is the below side's: the class's term from the polynomial, not the series about e0, and the covariance
+// class below HEO. The e 0.3 seed (2.4 rev/day, the half-day class) moves from the baseline by 5.1e-6 mm (velocity 8.3e-7
+// um/s, its covariance unchanged); every other set is byte-identical.
+// The zonal theory's constant radial term (0.6.43, SPEC 16.23) moves them from 7ebc98e4: LEO 2,029.97, geostationary 183.49,
 // Etalon 14.37, GPS 37.90, e 0.25 462.26 and e 0.3 462.26 mm (velocity 2.23 to 2,227.31 um/s), and the fitted set (this
 // build's flight of 0.6.39's fit against 7ebc98e4's of 0.6.36's, the same mean elements) by 2,151.66 mm, its covariance by
 // 8.40e-7 of a line's largest entry (both records carry their floor where their reader takes it off, SPEC 12.4):
