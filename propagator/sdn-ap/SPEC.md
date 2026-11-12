@@ -2200,10 +2200,12 @@ RMS to 0.71 of what it was and the floor's sigma to 0.90 radially, 0.61 in-track
   0.60 at day 1 and 0.08 to 0.26 from day 3 (0.6.42). The sizes s_i are set on records at zonal degree 20 (stack #531).
 - The DRAG row's s_i at zonal degree 70 (from 0.6.45, stack #531). An AP record in the DRAG regime whose stated zonal degree
   (PERTURBATIONS.MAXIMUM_ZONAL_DEGREE, the fit's FORCES.MAXIMUM_DEGREE) is 70 writes s_i times kSiZonal70, exp(-2.2) =
-  0.1108: 1.2494e-7 per day against 1.1276e-6. Every other field of the row is the row's, and a record at any other zonal
-  degree writes the row as it is, bit for bit. A record at a zonal degree from 21 to 69 keeps the full s_i on purpose: the
-  factor was fitted on records at 70 alone, and a record below 70 still leaves out the drift of the zonal degrees above
-  its own. The record states the s_i it was fitted with, so a record written before this rule flies as it was.
+  0.1108: 1.2494e-7 per day against 1.1276e-6. The row's s_e and s_l are the row's, and a record at any other zonal
+  degree writes the row's s_i as it is, bit for bit (its drag share is the next rule's). A record at a zonal degree from
+  21 to 69 keeps the full s_i on purpose: the factor was fitted on records at 70 alone, and a record below 70 still leaves
+  out the drift of the zonal degrees above its own. The record states the s_i it was fitted with, so a record written
+  before this rule flies as it was. The factor acts on every AP record in the DRAG regime at zonal degree 70 and is fitted
+  and judged on the low table's records only: an eccentric record with its perigee under 2,500 km takes it unjudged.
   - The factor is the maximum-likelihood fit of the cross-track |z| (days 1, 2, 3, 5 and 7) on the split rule's 326 choice
     windows of 0.6.42's own flights of records at 31/70 (strong drag 2025, laser spheres, altimetry), on a grid of 0.005 in
     its logarithm. It is judged on the other 422 (strong drag 2026 and near 700 km entirely, laser spheres and altimetry).
@@ -2214,13 +2216,14 @@ RMS to 0.71 of what it was and the floor's sigma to 0.90 radially, 0.61 in-track
 - The DRAG row's drag share on strong drag (from 0.6.45, stack #568). An AP set in the DRAG regime of the low table's fast side
   (a record at a tesseral degree above 12) writes the share c times 1 + (kDragShareStrong - 1) S(|r|), kDragShareStrong =
   exp(0.150) = 1.1618, with r its own stated drag rate (COV_PROPAGATION.NON_GRAVITATIONAL_RATE_PER_DAY, the fit's n-dot / n
-  from its drag term at the epoch's weather). S is a cos^2 step in log10 |r| centred on 1.35e-6 per day with a half-width of
-  0.25 decade: 0 at or below 7.6e-7, 1 at or above 2.4e-6. The record states the share it was written with
+  from its drag term at the epoch's weather). S is a cos^2 step in log10 |r| centered on 1.35e-6 per day with a half-width of
+  0.25 decade: 0 at or below 7.59e-7, 1 at or above 2.41e-6. The record states the share it was written with
   (NON_GRAVITATIONAL_SHARE), so a reader takes it from the record and a record written before this rule flies as it was.
   - The key and the step were fixed from the keys alone, before any fit. Over the registered 748 windows the weak-drag
     records (laser spheres, altimetry, near 700 km) state at most 6.94e-7 per day and the strong-drag records at least
-    2.61e-6. The step's midpoint is the gap's geometric centre and its slope lies inside the gap, so no window of the set is
-    on it and no weak-drag record changes. Between 7.6e-7 and 2.4e-6 the share is an interpolation no window has measured.
+    2.61e-6. The step's midpoint is the gap's geometric center and its slope lies inside the gap, so no window of the set is
+    on it and no weak-drag record of the set changes. Between 7.59e-7 and 2.41e-6 the share is an interpolation no window
+    has measured.
   - The factor is the maximum-likelihood fit of the radial and in-track |z| (days 1, 2, 3, 5 and 7) on the 236 strong-drag
     2025 choice windows of 0.6.43's own flights of records at 31/70, with s_i times kSiZonal70, on a grid of 0.005 in its
     logarithm. It is judged on strong drag 2026. No factor was moved after the judged cells were read.
@@ -2234,17 +2237,19 @@ RMS to 0.71 of what it was and the floor's sigma to 0.90 radially, 0.61 in-track
     floor, and on its own choice windows makes day 1 0.478. A share keyed on the record's own weather (the Ap of the day
     before the cutoff its $SPW rows state, a cos^2 step from 12 to 18; 1.094 quiet and 1.228 in storms) fits 2025 better
     (the log-likelihood by 277 with the floor factor) and beats the single factor on no judged cell of 2026.
-  - The weak-drag side keeps today's radial floor factor, exp(0.095), though the cells it leaves too wide (laser spheres and
-    altimetry at day 1, altimetry at day 7, near 700 km at day 1) ask for about 0.8: at that factor near 700 km's radial at
+  - The weak-drag side keeps the radial floor factor exp(0.095), though the cells that left the band on the wide side with
+    0.6.43 (laser spheres and altimetry at day 1, altimetry at day 7, near 700 km at day 1) ask for a factor of about 0.8
+    on the floor's sigma: at that factor near 700 km's radial at
     days 2 and 3 leaves the band on the narrow side (0.850 and 0.919), the fault of its 24-hour fits, whose error grows 1.5 m
     a day against the 0.5 m a day they state (stack #568).
 - In-track takes no factor of its own: the floor is not what sets it.
-- Cells outside the band at the factors, by cause (`test/covariance-realism.e2e.mjs` names each): strong drag 2026 radial at
-  days 5 and 7 and in-track at every day, too narrow (the drag share c, 0.1121, against the 2026 storms, and the density
-  forecast; stacks #531, #527); the laser spheres' radial at days 3 to 7 and altimetry's at days 3 and 5, too wide (one
-  floor factor serves them with near 700 km and strong drag 2026); in-track of the laser spheres, altimetry and near 700 km
-  at every day, too wide (the sizes are set on strong drag); cross-track of strong drag 2026 at day 1 and of the laser
-  spheres and altimetry at days 5 and 7, too wide (one s_i factor serves every low row).
+- Cells outside the band at the factors, by cause (`test/covariance-realism.e2e.mjs` names each; 28 of the 42 it holds, 14
+  inside): strong drag 2026 in-track at every day, too narrow (the drag share against the 2026 storms, and the density
+  forecast; stacks #568, #527); radial of the laser spheres and altimetry at every day and of near 700 km at day 1, too
+  wide (one radial floor factor serves them with strong drag; the weak-drag factor waits on the 24-hour fits' drag term,
+  stacks #568, #489); in-track of the laser spheres, altimetry and near 700 km at every day, too wide (the sizes are set
+  on strong drag); cross-track of strong drag 2026 at day 1 and of the laser spheres and altimetry at days 5 and 7, too
+  wide (one s_i factor serves every low row).
 
 Above the drag, by class *[2026-11-11, stack #433; experiments headline-loop, sdn-ap 0.6.15]*. Measured on every
 first-pass window whose fitted set is above the drag (923 window-arcs per theory), the ABOVE row is too wide on
@@ -2963,7 +2968,7 @@ from the Fourier coefficients of the normalized Legendre recurrence, stable to d
 | near-resonant | j = 1 above that degree, at orders whose angle drifts slower than 0.2 n: q = 0 with w = 1 outside the shallow band, q = +1 with w = 0, q = -1 with w = 2 | 31 | at output time; class 0 with a period under 1,100 minutes only (the resonance classes and the long-period regime carry none) |
 | half-day resonant tail | l = 6..d, every even m <= l, p = 0..l, k = m/2, q = k - l + 2p; 5,291 additional terms at degree 31 | 31 | in the rates of the half-day class; excluded from the output-time table |
 | one-day resonant tail | l = 5..d, every m from 1 to 16, p = 0..l, k = m, q = m - l + 2p (below e 0.05 only \|q\| <= 8) | 31 | in the rates of the one-day class at epoch e at or below 0.3; excluded from the output-time table |
-| shallow resonances | k = 1, q = 0, l = 1 mod 2, m from 2, angle drifting slower than 0.045 n | 31 | in the rates, each (k, m) tapered by its current distance from commensurability; orbits outside the classes of section 6 only |
+| shallow resonances | k = 1, q = 0, l = 1 mod 2, m from 2, angle drifting slower than 0.045 n | 31 | in the rates, each (k, m) tapered by its current distance from commensurability; class 0 with a period under 1,100 minutes only (the resonance classes and the long-period regime carry none) |
 | slow set (from 0.6.25) | j = 1 to 6, \|q\| up to 4 (from 0.6.27; q = 0 in 0.6.25), every order and degree whose own angle drifts within 1.3 x 0.045 n at the epoch and whose size reaches 0.5 m (through the mean motion, or from 0.6.27 through the eccentricity vector), the shallow set's own terms aside | 70 | in the rates of a fitted set in the low table, each term tapered by its own current rate; the output table holds the rest of a tapered term (16.18) |
 
 A first-order or near-resonant term is left out when section 6's class or the shallow set carries it in the rates (the shallow set
@@ -5118,8 +5123,9 @@ differences, blends or interpolates two records of one object must do the same.
 MAXIMUM_TESSERAL_DEGREE is a cap on families, not the degree of a field (16.1). In the low table, with tesseral cap d above
 12 the short-period terms are complete to first order to degree min(d, 70), with |l - 2p| up to 17, the table's own 0.5 m
 size cut, and 16.1's band rule and band guard (a term inside the slow band is the table's at most 1 - w). On every other
-branch they are complete to min(d, 12),
-and degrees 13 to min(d, 31) contribute their j = 1 near-resonant terms and the half-day tail only. Off the low table at
+branch the first-order terms and the m-daily family stop at min(d, 12), and 16.1 lists what carries anything of degrees 13
+to min(d, 31): class 0 with a period under 1,100 minutes its j = 1 near-resonant terms and the shallow set, the half-day
+class its tail, the one-day class at e 0.3 or below its tail; everywhere else nothing. Off the low table at
 800 km, the terms of degree 13 to 31 not carried are 14 m RMS (18.9 m in all against a 31 x 31 field).
 
 An AP mean set and the state AP gives for it agree to first order only: integrated numerically that state leaves the AP
