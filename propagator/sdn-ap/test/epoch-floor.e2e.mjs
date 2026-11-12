@@ -2,13 +2,13 @@
 // E2E (SPEC 12.4, stack #551): an AP set's epoch floor is put on by the writer and taken off by the reader at the two-body
 // state of the set's own mean elements, so no change to a theory's epoch state moves what a reader takes off; an AP record
 // written before that has its covariance refused by name and its states fly.
-// Per case, an AP set (caps 31 and 20, NRLMSISE-00 on the fixture rows) is flown 24 h at 600 s in GCRF by 0.6.36 (git
-// c8b0972b, its SHA-256 checked), and that arc fitted by 0.6.36 and by this build:
-// - this build's record flown by this build against 0.6.36's record flown by 0.6.36, sdnap_covariance_at hourly to 48 h: the
+// Per case, an AP set (caps 31 and 20, NRLMSISE-00 on the fixture rows) is flown 24 h at 600 s in GCRF by 0.6.37 (git
+// dbcb3173, the release before this one, its SHA-256 checked), and that arc fitted by 0.6.37 and by this build:
+// - this build's record flown by this build against 0.6.37's record flown by 0.6.37, sdnap_covariance_at hourly to 48 h: the
 //   covariance within SELF.ofLargest of a time's largest entry and the along-track variance within SELF.along relative
 //   (the same mean elements, so a set's own flight is as it was);
-// - 0.6.36's record on this build: sdnap_covariance_at -7; propagate status 0, no
-//   covariance lines, the block's COMMENT naming cov-floor-at-theory-state, its states within STATES_M of 0.6.36's flight of it
+// - 0.6.37's record on this build: sdnap_covariance_at -7; propagate status 0, no
+//   covariance lines, the block's COMMENT naming cov-floor-at-theory-state, its states within STATES_M of 0.6.37's flight of it
 //   (a flight without covariance takes the state path, one with it the covariance's nominal: they part by about 0.3 mm).
 // Cases: 300 km at i 5 and 1,200 km at i 0.5 (where 0.6.36's records read by a later theory came out narrowest, or with a
 // negative along-track variance: stack #551), 550 km at i 52.9 (the fixture's orbit, where they came out wider).
@@ -31,7 +31,7 @@ import {T, seedOcm, flight, rowsThrough} from './lib/ocm.mjs';
 import {scratchTemp} from './lib/scratch.mjs';
 
 ensureBuilt();
-const BASE = {version: '0.6.36', commit: 'c8b0972b0674ce041995048b78f39263b751596a', sha256: 'bf1b58989b128d7b9e3a3c6b05e8228fe9224cbb565a55a72124011bf70b5315'};
+const BASE = {version: '0.6.37', commit: 'dbcb31733ae463d12ccb44442949366fa8c513ed', sha256: 'ab2534f3c0fff66012962717a92b9799d17c782b42706c1d5e1a5ead74d91da1'};
 const SELF = {ofLargest: 1e-9, along: 1e-8}, STATES_M = 0.001;
 const modules = fileURLToPath(new URL('../../../', import.meta.url));
 const baseBytes = execFileSync('git', ['-C', modules, 'show', `${BASE.commit}:propagator/sdn-ap/dist/isomorphic/module.wasm`], {maxBuffer: 1 << 26});

@@ -317,10 +317,10 @@ for (const [name, s] of Object.entries(SEEDS)) {
 // a fitted AP set (0.6.36's own fit of the 550 km arc, LEO), flown on the same output grid; the catalog-composer fixture
 // (sdn-ap 0.5.1's fit, GRAVITY_MODEL EGM-96 with gravity terms) refused by this build
 {
-  // from 0.6.39 (SPEC 12.4) each build flies its own fit of the arc: 0.6.39's (ap-fit-0.6.39.ocm) here, 0.6.36's on the base, the
+  // from 0.6.38 (SPEC 12.4) each build flies its own fit of the arc: 0.6.38's (ap-fit-0.6.38.ocm) here, 0.6.36's on the base, the
   // same mean elements; 0.6.36's fit flies its states here with its covariance refused by name
   const payload = new Uint8Array(fs.readFileSync(path.join(packageRoot, 'test/fixtures/ap-fit-0.6.36.ocm')));
-  const own = new Uint8Array(fs.readFileSync(path.join(packageRoot, 'test/fixtures/ap-fit-0.6.39.ocm')));
+  const own = new Uint8Array(fs.readFileSync(path.join(packageRoot, 'test/fixtures/ap-fit-0.6.38.ocm')));
   compare('fitted AP set (each build\'s own fit)', await fly(wasmPath, own), await fly(basePath, payload));
   const pre = oemDistance(await fly(wasmPath, payload), await fly(basePath, payload));
   console.log(JSON.stringify({preFloorRecord: '0.6.36\'s fit', positionMm: 1000 * pre.posM, covarianceLines: pre.covLines}));
