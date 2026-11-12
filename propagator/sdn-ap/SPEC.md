@@ -5187,11 +5187,9 @@ keeps its own.
   covariance started is run to the call's furthest epoch on each side, so the name does not depend on the order or the list of
   the epochs asked (two calls on one record name the same crossing when the crossing lies at or before the furthest epoch of
   both); a call that refuses no epoch runs nothing more, since an epoch answered with its covariance lies before every set's
-  crossing. In a call with covariance, a Hermite blend's two probes at its window's end ask no covariance of their own. The earlier set's probe follows
-  that set's own epoch, which started its covariance, so it names that record's earliest crossing. The later set's probe names
-  its record's earliest crossing only when an earlier epoch of the call already started that set's covariance; on a fresh
-  store it names the later set's nominal crossing (as 0.6.47 did), so the name for the later set depends on the call's earlier
-  epochs. `propagate_epochs` refuses an epoch past a moved set's crossing as `propagate` does, and, for a record
+  crossing. A Hermite blend's two probes at its window's end hand the call's covariance request on, so each set's covariance
+  exists at its probe and the probe names the record's earliest crossing, whichever epoch of the call is asked first.
+  `propagate_epochs` refuses an epoch past a moved set's crossing as `propagate` does, and, for a record
   that carries no forecast, never writes the block without its covariance. An AP record whose epoch already meets the rule and carries a covariance is refused
   `decayed:<epoch>` in `propagate` and `propagate_epochs`, and `sdnap_covariance_at` and `sdnap_covariance_full_at` give 42 (or
   the full width of) NaN at every time and return 4.

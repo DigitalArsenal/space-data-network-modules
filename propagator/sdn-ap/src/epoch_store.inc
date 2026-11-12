@@ -684,9 +684,12 @@ inline int32_t at(Store& st, Series& s, double t, double* r, double* v, double* 
     // so the state leaves set a with its position and velocity and arrives on set b with its own, following the orbit
     double r1a[3], v1a[3], r1b[3], v1b[3];
     bool hd;
+    // the probes at the window's end hand the call's covariance request on (a scratch matrix of their own): the later set's bank is
+    // then built at its probe, so a crossing of one of its moved sets is the record's earliest whichever epoch is asked first
+    double Pprobe[36];
     if (const int32_t e = state_of(st, s, static_cast<uint32_t>(c.a), t, ra, va, P != nullptr ? Pa : nullptr, ha, jd)) return e;
-    if (const int32_t e = state_of(st, s, static_cast<uint32_t>(c.a), c.t1, r1a, v1a, nullptr, hd)) return e;
-    if (const int32_t e = state_of(st, s, static_cast<uint32_t>(c.b), c.t1, r1b, v1b, nullptr, hd)) return e;
+    if (const int32_t e = state_of(st, s, static_cast<uint32_t>(c.a), c.t1, r1a, v1a, P != nullptr ? Pprobe : nullptr, hd)) return e;
+    if (const int32_t e = state_of(st, s, static_cast<uint32_t>(c.b), c.t1, r1b, v1b, P != nullptr ? Pprobe : nullptr, hd)) return e;
     const double T = (c.t1 - c.t0) * 60.0, uu = sfrac;  // seconds
     const double h01 = uu * uu * (3.0 - 2.0 * uu), h11 = uu * uu * (uu - 1.0);
     const double d01 = 6.0 * uu * (1.0 - uu) / T, d11 = uu * (3.0 * uu - 2.0);

@@ -217,6 +217,28 @@ for (const c of [{ name: 'perigee 500 km, e 0.001, BTERM 0.01', hp: 500, e: 0.00
       const rbl = await now.invoke({ methodId: 'propagate_epochs', inputs: flight([moved, later], { epochStore: { BLEND_SHAPE: 1, BLEND_WINDOW_SECONDS: 48 * 3600 }, output: { EPOCHS: [new Date(base0 + 2.25 * 86400e3).toISOString().replace('Z', '')], FRAME: pcfOutputFrame.GCRF } }) });
       check(rbl.statusCode !== 0 && `${rbl.errorCode}`.includes(`decayed:${cm[1]}`), `a Hermite blend's probe past the nominal's crossing names ${rbl.errorCode ?? 'a block'}, the record's crossing ${cm[1]}`);
     }
+    // the LATER set decaying inside the blend window: the probes at the window's end hand the covariance request on, so its bank exists at
+    // its probe and a moved set's crossing (before the nominal's) is the one named, whichever epoch is asked first. A stable set from
+    // day 0 and this record from day 7, SELECTION LATEST_BEFORE, BLEND_SHAPE 1, a 7 day window about the later set's epoch (half-width
+    // 3.5 days): an epoch at day 9 lies in the window and before both crossings, its probe at the window's end (day 10.5) is past
+    // the later set's crossing; an epoch at day 11 is past the window (that set alone)
+    {
+      const base0 = Date.parse('2026-10-01T00:00:00Z');
+      const stable = repackOcm(bytes, (o) => {
+        o.MEAN_ELEMENTS.MEAN_MOTION = nOf(500, 0.001);
+        o.MEAN_ELEMENTS.ECCENTRICITY = 0.001;
+        o.MEAN_ELEMENTS.BTERM = 0.01;
+        const cp = o.COV_PROPAGATION;
+        cp.NOISE_NON_GRAVITATIONAL_RAD_DAY2 = cp.NON_GRAVITATIONAL_SHARE * Math.abs(cp.NON_GRAVITATIONAL_RATE_PER_DAY) * o.MEAN_ELEMENTS.MEAN_MOTION * 2 * Math.PI;
+      });
+      const laterDecay = repackOcm(moved, (o) => { o.MEAN_ELEMENTS.EPOCH = '2026-10-08T00:00:00.000000'; o.TRAJ_FRAME_EPOCH = '2026-10-08T00:00:00.000000'; });
+      const at = (days) => new Date(base0 + days * 86400e3).toISOString().replace('Z', '');
+      const nameOf = (r) => /decayed:(\d{4}-\d\d-\d\dT\d\d:\d\d:\d\d(?:\.\d+)?)/.exec(`${r.errorCode ?? ''}`)?.[1];
+      const alone = await now.invoke({ methodId: 'propagate', inputs: flight([laterDecay], { output: { EPOCHS: [at(11.5)], FRAME: pcfOutputFrame.GCRF } }) });
+      const ask = (day) => now.invoke({ methodId: 'propagate_epochs', inputs: flight([stable, laterDecay], { epochStore: { SELECTION: 1, BLEND_SHAPE: 1, BLEND_WINDOW_SECONDS: 7 * 86400 }, output: { EPOCHS: [at(day)], FRAME: pcfOutputFrame.GCRF } }) });
+      const inWindow = nameOf(await ask(9)), afterWindow = nameOf(await ask(11)), own = nameOf(alone);
+      check(!!own && inWindow === own && afterWindow === own, `the later set's crossing: alone ${own}, named from an epoch in the window ${inWindow}, from one after it ${afterWindow}`);
+    }
     console.log(`the moved record decays at ${cm[1]}; sdnap_covariance_at status ${status}`);
   }
   // a wide record (e 0.4 to 0.7) with covariance whose crossing falls in the last fifth of a 48 h interval (searched over perigee, e and
