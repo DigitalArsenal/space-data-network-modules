@@ -68,7 +68,11 @@ function closed(l,k,e){
  for(let j=0;2*j+k<=l-1;j++){const m=2*j+k,c=choose(l-1,m)*choose(m,j)/2**m;s+=c*e**m;if(m)d+=c*m*e**(m-1);}
  const f=(1-e*e)**-(l-0.5);return [f*s,f*(d+(2*l-1)*e*s/(1-e*e))];
 }
-function quadrature(l,k,e){let s=0;const N=1024,eta=Math.sqrt(1-e*e);for(let j=0;j<N;j++){const E=2*Math.PI*j/N,ar=1/(1-e*Math.cos(E)),f=Math.atan2(eta*Math.sin(E),Math.cos(E)-e);s+=ar**l*Math.cos(k*f);}return s/N;}
+// The integrand is even in E. Pair +/-E before compensated summation to reduce cancellation of small harmonics.
+function quadrature(l,k,e){let s=0,c=0;const N=1024,eta=Math.sqrt(1-e*e);for(let j=0;j<=N/2;j++){
+ const E=2*Math.PI*j/N,ar=1/(1-e*Math.cos(E)),f=Math.atan2(eta*Math.sin(E),Math.cos(E)-e);
+ const v=ar**l*Math.cos(k*f)*(j===0||j===N/2?1:2),y=v-c,t=s+y;c=(t-s)-y;s=t;
+}return s/N;}
 let formError=0,quadError=0,zero=0;
 const report=[];
 for(const e0 of [0,0.0005,0.01,0.05,0.3]){
