@@ -1,5 +1,5 @@
 {
-  "generatedAt": "2026-11-12T16:08:25.937Z",
+  "generatedAt": "2026-11-12T16:56:09.384Z",
   "moduleCount": 160,
   "parityScopeModuleCount": 60,
   "isomorphicWasmCount": 154,
@@ -7525,7 +7525,7 @@
       ],
       "cxxSourceFileCount": 1,
       "cSourceFileCount": 0,
-      "testFileCount": 198,
+      "testFileCount": 199,
       "parityScope": true,
       "action": "review-before-parity-use",
       "sourceFiles": [
@@ -7554,6 +7554,7 @@
         "test/covariance-realism.mjs",
         "test/covariance.e2e.mjs",
         "test/decay-fit.e2e.mjs",
+        "test/decay-wide.e2e.mjs",
         "test/decay.e2e.mjs",
         "test/docs-version.e2e.mjs",
         "test/drag-cost.mjs",
