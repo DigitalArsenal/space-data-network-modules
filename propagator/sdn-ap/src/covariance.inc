@@ -299,7 +299,11 @@ struct Bank {
   fit::Options o{};
   xpt::XpSat* sats = nullptr;  ///< [0] the set, then the moved sets
   int count = 0;
+  /// the slots init started: a one-sided parameter (an AGOM at or under its step) leaves its minus slot as a zeroed XpSat that count
+  /// still spans; nothing may fly such a slot
+  bool live[1 + 2 * fit::kMaxParams] = {};
 };
+inline bool live_slot(const Bank& b, int q) { return q >= 0 && q < b.count && b.live[q]; }
 
 inline void release(Bank& b) {
   for (int i = 0; b.sats != nullptr && i < b.count; ++i) xpt::xp_release(b.sats[i]);
@@ -324,12 +328,14 @@ inline bool init(const ElementRow& row, const fit::Options& o, Bank& b, xpt::XpS
     fit::row_of(x, o, r);
     const bool ok = xpt::xp_init(elements_of(r), b.sats[slot]) == kPropOk;
     if (slot + 1 > b.count) b.count = slot + 1;
+    b.live[slot] = true;
     return ok;
   };
   if (nominal != nullptr && xpt::is_ap_ctx(nominal->ctx)) {
     b.sats[0] = *nominal;
     *nominal = xpt::XpSat{};
     b.count = 1;
+    b.live[0] = true;
     if (b.sats[0].init_error != 0) return false;
   } else {
     if (!start(b.x, 0)) return false;

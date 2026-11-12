@@ -75,6 +75,12 @@ inline void run_row(const Job& j, uint32_t i) {
   double r[3] = {0, 0, 0}, v[3] = {0, 0, 0};
   const int32_t e = row_propagate(row, t, r, v, shared);
   if (j.status != nullptr) j.status[i] = e;
+  // SPEC 16.25 (stack #564): an AP row past its decay crossing has status 4 and no state: its planes are not numbers
+  if (e == kPropDecayed) {
+    const Store& st = store();
+    if (row < st.count && st.kind[row] == 1 && xpt::is_ap_ctx(st.xps[st.slot[row]].ctx))
+      for (int q = 0; q < 3; ++q) r[q] = v[q] = __builtin_nan("");
+  }
   if (e == kPropOk && j.kind == kJobJd && j.frame == ORBPRO_FRAME_ECEF) {
     double ro[3], vo[3];
     teme_to_ecef_m(j.theta, r, v, ro, vo);
@@ -467,7 +473,8 @@ int32_t sdnap_init_error(uint32_t index) {
 /// sigma, int32 drag_log, int32 agom_log (1: the term is estimated as its
 /// natural log, its prior mean and sigma those of the log; the row's term must
 /// then start > 0). `stats` (4 doubles): status (-5: the least-squares set lies on a limit in n, SPEC 16.7; at an
-/// eccentricity switch the set is held there, status 0 or 1), iterations, rms km, max km.
+/// eccentricity switch the set is held there, status 0 or 1; 2: a pass stopped because a column of its Jacobian could not be
+/// differenced in either direction, both sets decaying inside the arc, SPEC 16.25), iterations, rms km, max km.
 /// Returns 0 or a negative code.
 SDNAP_EXPORT("sdnap_fit")
 int32_t sdnap_fit(sdnap::ElementRow* row, const double* minutes, const double* positions, uint32_t count,
