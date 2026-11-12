@@ -592,10 +592,11 @@ inline bool of_fit(const ElementRow& row, const fit::Options& fitted, const doub
   s.ng_rate = ng_rate;
   for (double& f : floor) f = f / static_cast<double>(count) * floor_scale;
   // the low table's fast side (SPEC 12.5, 16.1): the radial floor's sigma times kFloorRadialFastSide, D F D with
-  // D = diag(f, 1, 1) in UVW (UU by f^2, VU and WU by f)
+  // D = diag(f, 1, 1) in UVW (UU by f^2, VU and WU by f), in the DRAG regime (perigee below kDragRegimeKm), where the
+  // factor is fitted and judged
   {
     const xpt::Branch br = xpt::branch_of(row.mean_motion_rev_day * kTwoPi / kMinutesPerDay, row.eccentricity, true);
-    if (xpt::tess::active().tesseral > xpt::tess::kSpCap && br.resonance == 0 && !br.long_period && br.wide_tess == 0) {
+    if (s.regime == 0 && xpt::tess::active().tesseral > xpt::tess::kSpCap && br.resonance == 0 && !br.long_period && br.wide_tess == 0) {
       const double f = kFloorRadialFastSide;
       floor[0] *= f * f;
       floor[1] *= f;
