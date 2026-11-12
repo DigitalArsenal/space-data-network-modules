@@ -92,6 +92,17 @@ extern "C" int propagate(void) {
         // SPEC 12.4: an AP record whose floor is at its writer's theory state flies its states, its covariance refused
         if (cr == -4) width_note = cov::kFloorRefusalNote;
         if ((cr < 0 && cr != -4) || pr != 0) {
+          // SPEC 16.25: an AP record whose epoch already meets the rule is decayed at every time, its moved sets with it: named so
+          // (the covariance's bank took the nominal over from xs: it is the bank's first set that carries the decay)
+          const xpt::XpSat* nominal_set = cprop.b.count > 0 ? &cprop.b.sats[0] : xs;
+          if (xpt::is_ap_ctx(nominal_set->ctx) && xpt::decay_at_epoch(*nominal_set, 0.0)) {
+            char epoch_text[48], name[80], why_text[160];
+            oem::iso_text(e.epoch_jd_whole, e.epoch_jd_frac, 0.0, epoch_text, sizeof epoch_text);
+            std::snprintf(name, sizeof name, "decayed:%s", epoch_text);
+            std::snprintf(why_text, sizeof why_text, "NORAD %u meets the decay rule at its epoch %s (SPEC 16.25): every requested epoch is past it.", e.norad, epoch_text);
+            xpt::xp_release(*xs);
+            return ocm::refuse(name, why_text);
+          }
           xpt::xp_release(*xs);
           return ocm::refuse(cr == -2 ? "cov-parameter-kind-unspecified" : cr == -3 ? "cov-propagation-invariant" : "invalid-covariance",
                              cr < 0 ? "The set's COVARIANCE_DATA, COV_PARAMETER_KINDS or COV_PROPAGATION are malformed."
@@ -162,6 +173,22 @@ extern "C" int propagate(void) {
         crossed = true;
         return true;
       };
+      // SPEC 16.25: the crossing a covariance's call names is the record's: every set (the nominal and each moved one) is run to the
+      // call's furthest epoch on each side first, so every crossing at or before it is found whatever order the epochs come in
+      if (ap_set && with_cov && xs == nullptr && tw.size() > 1) {
+        double tmax = 0.0, tmin = 0.0;
+        for (size_t k = 0; k < tw.size(); ++k) {
+          const double t = ((tw[k] - e.epoch_jd_whole) + (tf[k] - e.epoch_jd_frac)) * kMinutesPerDay;
+          tmax = std::fmax(tmax, t);
+          tmin = std::fmin(tmin, t);
+        }
+        auto reach = [&](xpt::XpSat& q) {
+          double rr[3], vv[3];
+          if (tmax > 0.0) xpt::xp_propagate(q, tmax, rr, vv);
+          if (tmin < 0.0) xpt::xp_propagate(q, tmin, rr, vv);
+        };
+        for (int q = 0; q < cprop.b.count; ++q) reach(cprop.b.sats[q]);
+      }
       for (size_t k = 0; k < tw.size(); ++k) {
         const double t = ((tw[k] - e.epoch_jd_whole) + (tf[k] - e.epoch_jd_frac)) * kMinutesPerDay;
         double r[3], v[3], P[36];

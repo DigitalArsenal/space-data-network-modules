@@ -7242,14 +7242,23 @@ inline int32_t xp_propagate_impl(XpSat& s, double t, double r[3], double v[3], c
     tess::WideGrid* g0 = nullptr;
     tess::WideGrid* g1 = nullptr;
     bool h0 = false, h1 = false;
-    if (!wide_node(s, j, g0, h0) || (blend > 0.0 && !wide_node(s, next, g1, h1))) {
+    double blend_use = blend;
+    bool nodes_ok = wide_node(s, j, g0, h0);
+    if (nodes_ok && blend_use > 0.0 && !wide_node(s, next, g1, h1)) {
+      // SPEC 16.25: the next schedule node lies past the set's decay crossing (asking for it is what ran the grid there and found
+      // the crossing, so this holds in any call order): the state is answered from this node's grid alone, never refused
+      double tc = 0.0;
+      if (is_ap_ctx(s.ctx) && decay_crossing(s, next * tess::kGridEvery, tc)) { g1 = nullptr; blend_use = 0.0; }
+      else nodes_ok = false;
+    }
+    if (!nodes_ok) {
       if (h0) tess::wide_grid_drop(g0);
       return kPropRefused;
     }
     RateContext c = s.ctx;
     c.wide = g0;
     c.wide_next = g1;
-    c.wide_blend = blend;
+    c.wide_blend = blend_use;
     status = output(c, t, y, r, v, shared);
     if (h0) tess::wide_grid_drop(g0);
     if (h1) tess::wide_grid_drop(g1);
@@ -7659,7 +7668,14 @@ inline bool xp_propagate_cov_at(XpSat* sats, int np, const int* slot, const bool
     tess::WideGrid* g0 = nullptr;
     tess::WideGrid* g1 = nullptr;
     bool h0 = false, h1 = false;
-    if (!wide_node(s0, jn, g0, h0) || (blend > 0.0 && !wide_node(s0, next, g1, h1))) {
+    double blend_use = blend;
+    bool nodes_ok = wide_node(s0, jn, g0, h0);
+    if (nodes_ok && blend_use > 0.0 && !wide_node(s0, next, g1, h1)) {
+      double tc = 0.0;  // SPEC 16.25, as xp_propagate_impl: the next node past the crossing, the state from this node's grid alone
+      if (is_ap_ctx(s0.ctx) && decay_crossing(s0, next * tess::kGridEvery, tc)) { g1 = nullptr; blend_use = 0.0; }
+      else nodes_ok = false;
+    }
+    if (!nodes_ok) {
       if (h0) tess::wide_grid_drop(g0);
       if (nom_status != nullptr) *nom_status = kPropRefused;
       return false;
@@ -7667,7 +7683,7 @@ inline bool xp_propagate_cov_at(XpSat* sats, int np, const int* slot, const bool
     RateContext c = s0.ctx;
     c.wide = g0;
     c.wide_next = g1;
-    c.wide_blend = blend;
+    c.wide_blend = blend_use;
     st0 = output(c, t, ym0, r, v, &shared, can_share_3b ? d_3b0 : nullptr, can_share_3b ? dd_3b_dlam : nullptr,
                  can_share_sp ? d_sp0 : nullptr, can_share_sp ? dd_sp_dlam : nullptr,
                  nullptr, nullptr, nullptr, nullptr, 0.0,

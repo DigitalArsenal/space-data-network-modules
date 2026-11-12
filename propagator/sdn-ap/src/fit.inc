@@ -431,14 +431,19 @@ inline Result run_free(ElementRow& row, const double* t, const double* r, int co
       const NominalSat nominal(work);
       xpt::GridShareScope share(nominal.s);  // SPEC 16.11: the column's copy reads the iteration's nominal grids
       bool decayed = false;
-      double sign = 1.0;
+      double sign = 1.0, used = step;
       bool column_ok = residuals(bumped, t, r, count, trial, &decayed);
       if (!column_ok && decayed) {
-        // SPEC 16.25: the bump lies past the decay rule: the difference below the iterate is the same column (the force is linear
-        // in AGOM, so the set below, whose AGOM is negative where the term is under the step, gives the same column)
-        bumped.agom = work.agom - step;
-        sign = -1.0;
-        column_ok = residuals(bumped, t, r, count, trial);
+        // SPEC 16.25: the bump lies past the decay rule: the difference below the iterate is the same column where the set below is
+        // on the iterate's curve: an AGOM at or under 0 switches the radiation off (not a point of the same curve), so the step
+        // below is at most half the iterate's AGOM and there is none where the iterate's AGOM is not positive
+        const double below = work.agom > 0.0 ? std::fmin(step, 0.5 * work.agom) : 0.0;
+        if (below > 0.0) {
+          bumped.agom = work.agom - below;
+          sign = -1.0;
+          used = below;
+          column_ok = residuals(bumped, t, r, count, trial);
+        }
         if (!column_ok) {
           column_refused = true;
           for (int i = 0; i < nres; ++i) jac[i * kMaxParams + agom_index] = 0.0;
@@ -446,9 +451,9 @@ inline Result run_free(ElementRow& row, const double* t, const double* r, int co
       }
       if (column_ok) {
         if (o.agom_log)  // per unit ln AGOM: AGOM times the column per unit AGOM
-          for (int i = 0; i < nres; ++i) jac[i * kMaxParams + agom_index] = work.agom * ((trial[i] - res[i]) / (sign * step));
+          for (int i = 0; i < nres; ++i) jac[i * kMaxParams + agom_index] = work.agom * ((trial[i] - res[i]) / (sign * used));
         else
-          for (int i = 0; i < nres; ++i) jac[i * kMaxParams + agom_index] = (trial[i] - res[i]) / (sign * step);
+          for (int i = 0; i < nres; ++i) jac[i * kMaxParams + agom_index] = (trial[i] - res[i]) / (sign * used);
       }
     }
     if (o.fit_y0 && y0_index < np) {
@@ -575,6 +580,8 @@ inline Result run_free(ElementRow& row, const double* t, const double* r, int co
       }
     }
     // SPEC 16.25: a pass that could not difference a column in either direction tested no step: it is not at a minimum
+    // an iteration with a column refused on both sides cannot declare convergence (its small step was taken on a Jacobian without that column)
+    if (converged && column_refused) { converged = false; stopped_on_column = true; ++it; break; }
     if (!improved && column_refused) { stopped_on_column = true; ++it; break; }  // the pass made this iteration: counted as a converged pass counts its last
     if (!improved) converged = true;  // no step lowers the cost: at the minimum
   }

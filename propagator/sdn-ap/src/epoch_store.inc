@@ -510,6 +510,33 @@ inline int32_t state_of(Store& st, Series& s, uint32_t k, double t, double* r, d
   if (P != nullptr && q.cp != nullptr) {
     double rr[3], vv[3];
     have_p = cov::eval(*q.cp, dt, rr, vv, P);
+    // SPEC 16.25: a moved set of the covariance past its decay crossing where the nominal still flies: the epoch is past the record's
+    // crossing (the earliest of the nominal's and every moved set's), refused as propagate refuses it, not written without covariance
+    if (!have_p && q.xp != nullptr && xpt::is_ap_ctx(q.xp->ctx)) {
+      bool any = false;
+      double first = 0.0;
+      // every moved set is run to this epoch first (the covariance's own evaluation stops at the first set it refuses), so the
+      // earliest crossing named is the record's whatever epochs were asked before
+      for (int k = 0; k < q.cp->b.count; ++k) {
+        double r2[3], v2[3];
+        xpt::xp_propagate(q.cp->b.sats[k], dt, r2, v2);
+      }
+      for (int k = 0; k < q.cp->b.count; ++k) {
+        double tc = 0.0;
+        if (!xpt::decay_crossing(q.cp->b.sats[k], dt, tc)) continue;
+        const double sd = dt >= 0.0 ? 1.0 : -1.0;
+        if (!any || sd * tc < sd * first) first = tc;
+        any = true;
+      }
+      if (any) {
+        const double c = first / kMinutesPerDay + en.row.epoch_jd_frac;
+        g_decay_jd[0] = en.row.epoch_jd_whole + std::floor(c);
+        g_decay_jd[1] = c - std::floor(c);
+        g_decay_back = dt < 0.0;
+        g_decay_seen = true;
+        return kPropDecayed;
+      }
+    }
   }
   return kPropOk;
 }

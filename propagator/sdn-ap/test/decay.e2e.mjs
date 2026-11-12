@@ -172,7 +172,47 @@ for (const c of [{ name: 'perigee 500 km, e 0.001, BTERM 0.01', hp: 500, e: 0.00
       if (t > crossMin) check(row.every(Number.isNaN), `sdnap_covariance_at at ${t.toFixed(1)} min, past the crossing at ${crossMin.toFixed(1)}: not NaN`);
       else check(row.every(Number.isFinite), `sdnap_covariance_at at ${t.toFixed(1)} min, before the crossing at ${crossMin.toFixed(1)}: not filled`);
     });
+    // sdnap_covariance_full_at gives the same codes: 4 across the crossing, every value of a time past it NaN
+    {
+      const fo = x.sdnap_alloc(moved.length), fm = x.sdnap_alloc(8 * minutes.length), fout = x.sdnap_alloc(8 * 200 * minutes.length);
+      new Uint8Array(now.memory.buffer, fo, moved.length).set(moved);
+      new Float64Array(now.memory.buffer, fm, minutes.length).set(minutes);
+      const fstatus = x.sdnap_covariance_full_at(fo, moved.length, fm, minutes.length, fout);
+      const fgot = Array.from(new Float64Array(now.memory.buffer, fout, 200 * minutes.length));
+      x.sdnap_free(fo); x.sdnap_free(fm); x.sdnap_free(fout);
+      check(fstatus === 4, `sdnap_covariance_full_at across the crossing returns ${fstatus}, not 4`);
+      check(fgot.slice(0, 6).every(Number.isFinite), 'sdnap_covariance_full_at: the state before the crossing is not filled');
+    }
+    // the crossing a call with covariance names is the record's: another epoch list names the same one (SPEC 16.25)
+    {
+      const base0 = Date.parse('2026-10-01T00:00:00Z');
+      const times = [30, crossMin - 2000, crossMin - 100, crossMin + 7, crossMin + 30000].map((m) => new Date(base0 + m * 60000).toISOString().replace('Z', ''));
+      const r2 = await now.invoke({ methodId: 'propagate', inputs: flight([moved], { output: { EPOCHS: times, FRAME: pcfOutputFrame.GCRF } }) });
+      const blk2 = r2.statusCode === 0 ? OEM.getRootAsOEM(new fb.ByteBuffer(r2.outputs.find((o) => o.portId === 'ephemeris').payload)).unpack().EPHEMERIS_DATA_BLOCK[0] : null;
+      const cm2 = /^decayed:(\S+);/.exec(blk2?.COMMENT ?? '');
+      check(!!cm2 && cm2[1] === cm[1], `a call with other epochs names the crossing ${cm2?.[1]}, the first call ${cm[1]}`);
+    }
     console.log(`the moved record decays at ${cm[1]}; sdnap_covariance_at status ${status}`);
+  }
+  // a record with covariance whose epoch already meets the rule is decayed at every time, named so
+  {
+    const dead = repackOcm(bytes, (o) => {
+      o.MEAN_ELEMENTS.MEAN_MOTION = nOf(40, 0.001);
+      o.MEAN_ELEMENTS.ECCENTRICITY = 0.001;
+      o.MEAN_ELEMENTS.BTERM = 0.01;
+      const cp = o.COV_PROPAGATION;
+      cp.NOISE_NON_GRAVITATIONAL_RAD_DAY2 = cp.NON_GRAVITATIONAL_SHARE * Math.abs(cp.NON_GRAVITATIONAL_RATE_PER_DAY) * o.MEAN_ELEMENTS.MEAN_MOTION * 2 * Math.PI;
+    });
+    const rd = await now.invoke({ methodId: 'propagate', inputs: flight([dead], { output: { EPOCHS: ['2026-10-01T06:00:00.000', '2026-10-02T00:00:00.000'], FRAME: pcfOutputFrame.GCRF } }) });
+    check(rd.statusCode !== 0 && /^decayed:/.test(rd.errorCode ?? ''), `an epoch-decayed record with covariance: ${rd.statusCode === 0 ? 'answered' : rd.errorCode}, not decayed:<epoch>`);
+    const x = now.instance.exports;
+    const qo = x.sdnap_alloc(dead.length), qm = x.sdnap_alloc(16), qout = x.sdnap_alloc(8 * 42 * 2);
+    new Uint8Array(now.memory.buffer, qo, dead.length).set(dead);
+    new Float64Array(now.memory.buffer, qm, 2).set([60, 1440]);
+    const st = x.sdnap_covariance_at(qo, dead.length, qm, 2, qout);
+    const vals = Array.from(new Float64Array(now.memory.buffer, qout, 84));
+    x.sdnap_free(qo); x.sdnap_free(qm); x.sdnap_free(qout);
+    check(st === 4 && vals.every(Number.isNaN), `sdnap_covariance_at of an epoch-decayed record returns ${st} (4 expected) with NaN`);
   }
 }
 

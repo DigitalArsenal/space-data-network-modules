@@ -220,7 +220,15 @@ int32_t sdnap_covariance_at(const uint8_t* ocm, uint32_t length, const double* m
   ocm::atmosphere_of(set, a);
   ocm::Bind bind(set.forces, &a);
   cov::Propagator p;
-  if (const int pr = cov::prepare(cs, p)) return pr;
+  if (const int pr = cov::prepare(cs, p)) {
+    // SPEC 16.25: an AP record whose epoch already meets the rule is decayed at every time (its moved sets cannot start)
+    if (count > 0 && p.b.count > 0 && xpt::is_ap_ctx(p.b.sats[0].ctx) && xpt::decay_at_epoch(p.b.sats[0], 0.0)) {
+      for (uint32_t k = 0; k < count; ++k)
+        for (int j = 0; j < 42; ++j) out[42u * k + j] = __builtin_nan("");
+      return 4;
+    }
+    return pr;
+  }
   // SPEC 16.25 (stack #564): a time past the decay crossing of the nominal or of any moved set (no difference can be formed once
   // one has crossed) gets 42 NaN, and the call returns 4 (decayed) with every other time filled
   bool past = false;
@@ -299,18 +307,35 @@ int32_t sdnap_covariance_full_at(const uint8_t* ocm, uint32_t length, const doub
   ocm::atmosphere_of(set, a);
   ocm::Bind bind(set.forces, &a);
   cov::Propagator p;
-  if (const int pr = cov::prepare(cs, p)) return pr;
   const int np = cs.np;
   const uint32_t stride = 6u + static_cast<uint32_t>(np * (np + 1) / 2);
+  // SPEC 16.25 (stack #564), as sdnap_covariance_at: an AP record whose epoch already meets the rule is decayed at every time (its moved
+  // sets cannot start), and a time past the crossing of the nominal or of a moved set gets NaN and the call returns 4, every other time filled
+  if (const int pr = cov::prepare(cs, p)) {
+    if (count > 0 && p.b.count > 0 && xpt::is_ap_ctx(p.b.sats[0].ctx) && xpt::decay_at_epoch(p.b.sats[0], 0.0)) {
+      for (uint32_t k = 0; k < count; ++k)
+        for (uint32_t j = 0; j < stride; ++j) out[stride * k + j] = __builtin_nan("");
+      return 4;
+    }
+    return pr;
+  }
   double P[cov::kMaxAug * cov::kMaxAug];
+  bool past = false;
   for (uint32_t k = 0; k < count; ++k) {
     double* o = out + stride * k;
-    if (!cov::eval_full(p, minutes[k], o, o + 3, P)) return -3;
+    if (!cov::eval_full(p, minutes[k], o, o + 3, P)) {
+      bool decayed = false;
+      for (int q = 0; q < p.b.count && !decayed; ++q) decayed = xpt::is_ap_ctx(p.b.sats[q].ctx) && xpt::decay_past(p.b.sats[q], minutes[k]);
+      if (!decayed) return -3;
+      for (uint32_t j = 0; j < stride; ++j) o[j] = __builtin_nan("");
+      past = true;
+      continue;
+    }
     uint32_t q = 6;
     for (int i = 0; i < np; ++i)
       for (int j = 0; j <= i; ++j) o[q++] = P[i * np + j];
   }
-  return 0;
+  return past ? 4 : 0;
 }
 
 /// The refusal of fit options (fit::Options, 56 bytes, as sdnap_fit takes them): a NUL-terminated code in the module's

@@ -1,6 +1,6 @@
 # sdn-ap-propagator
 
-Version 0.6.47 (dist e95cdca3).
+Version 0.6.47 (dist 59456db9).
 
 General-perturbations propagation of whole catalogs in one isomorphic WASM module (browser and WasmEdge), with two
 theories and AP, an advanced propagator that builds on the entire history of astrodynamics ($PCF FORCES selects its drag
@@ -258,10 +258,12 @@ its mean perigee falls under 100 km. That time is the record's, the same in any 
 - Past it, a state has status 4 (ORBPRO_STATE_DECAYED).
 - `propagate` and `propagate_epochs` answer the epochs before it, the block stating "decayed:<time>; <n> epochs after it
   refused", and refuse a call with none before it as `decayed:<time>`.
-- `fit` refuses a set that decays inside its arc (`decayed-in-arc:<time>`) and notes "decays at <time>" for one that decays
-  within 7 days.
+- `fit` refuses a set that decays inside its arc (`decayed-in-arc:<time>`) and, for an AP set whose mean perigee is under
+  400 km, notes "decays at <time>" in the record's OD COMMENT when the set decays within 7 days of its epoch.
 - Before this rule, #564's two seeds flew on to 31,250 km and 14.5 km of jump and under the surface. They now stop at
-  136.7 km and 160.7 km, every state before that unchanged to the bit (`test/decay.e2e.mjs`).
+  136.7 km and 160.7 km, every state before that unchanged to the bit for a set at or below e 0.3 (`test/decay.e2e.mjs`);
+  above e 0.3, the states in the last fifth of a 48 h interval whose next node lies past the crossing are answered from the
+  interval's own grid (SPEC 16.25).
 
 Above e 0.3 with drag, each perigee pass changes the osculating elements smoothly over the pass, at the pass's own width
 in the mean anomaly (SPEC 16.12). Through 0.6.11 they changed in one step at perigee, so the output jumped there: by 42

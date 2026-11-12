@@ -1075,11 +1075,21 @@ static int fit_blocks() {
       double held_rms = 0.0, held_max = 0.0, held_stop = fit_end_min;
       std::vector<double> day_ss;
       std::vector<uint32_t> day_n;
+      // SPEC 16.25: the held-out states past the written set's decay crossing are not scored (the set has no state there); the
+      // statistics are of the held-out states before it, and their count is stated (HELD_OUT_STATES), or none when there is none
+      size_t held_n = t_out.size();
       if (!t_out.empty()) {
+        double crossing_min = 0.0;
+        if (fitoem::decay_in_arc(row, t_out, crossing_min)) {
+          held_n = 0;
+          while (held_n < t_out.size() && t_out[held_n] <= crossing_min) ++held_n;
+        }
+      }
+      if (held_n > 0) {
         std::vector<double> rr(r_out.size());
-        if (fit::residuals(row, t_out.data(), r_out.data(), static_cast<int>(t_out.size()), rr.data())) {
+        if (fit::residuals(row, t_out.data(), r_out.data(), static_cast<int>(held_n), rr.data())) {
           double ss = 0.0;
-          for (size_t k = 0; k < t_out.size(); ++k) {
+          for (size_t k = 0; k < held_n; ++k) {
             const double e2 = rr[3 * k] * rr[3 * k] + rr[3 * k + 1] * rr[3 * k + 1] + rr[3 * k + 2] * rr[3 * k + 2];
             ss += e2;
             held_max = std::fmax(held_max, std::sqrt(e2));
@@ -1089,7 +1099,7 @@ static int fit_blocks() {
             day_ss[day - 1] += e2;
             ++day_n[day - 1];
           }
-          held_rms = std::sqrt(ss / static_cast<double>(t_out.size()));
+          held_rms = std::sqrt(ss / static_cast<double>(held_n));
         }
       }
       if (!(res.rms_km <= po.implausible_rms_km)) {
@@ -1201,7 +1211,7 @@ static int fit_blocks() {
       const auto s_pcf_cid = fbb.CreateString(fitoem::configuration_cid());
       const auto s_fit_start = fbb.CreateString(start_text);
       const auto s_fit_stop = fbb.CreateString(stop_text);
-      const auto s_held_stop = t_out.empty() ? 0 : fbb.CreateString(held_text);
+      const auto s_held_stop = held_n == 0 ? 0 : fbb.CreateString(held_text);
       OCMFitStatisticsBuilder fs(fbb);
       fs.add_FIT_STATES(static_cast<uint32_t>(t_fit.size()));
       fs.add_FIT_RMS_KM(res.rms_km);
@@ -1211,9 +1221,9 @@ static int fit_blocks() {
       fs.add_FIT_CROSS_TRACK_RMS_KM(std::sqrt(uvw_ss[2] / fitted));
       fs.add_ITERATIONS(static_cast<uint32_t>(iterations));
       fs.add_CONVERGED(res.status == 0);
-      if (!t_out.empty()) {
+      if (held_n > 0) {
         fs.add_HELD_OUT_STOP(s_held_stop);
-        fs.add_HELD_OUT_STATES(static_cast<uint32_t>(t_out.size()));
+        fs.add_HELD_OUT_STATES(static_cast<uint32_t>(held_n));
         fs.add_HELD_OUT_RMS_KM(held_rms);
         fs.add_HELD_OUT_MAX_KM(held_max);
         if (!s_held_days.IsNull()) fs.add_HELD_OUT_DAYS(s_held_days);
