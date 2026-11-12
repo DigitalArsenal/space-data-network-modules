@@ -2999,7 +2999,8 @@ and 3,682 m on 0.6.5; at the epoch unchanged, 67, 90, 18, 28 and 24 m). The modu
   at 2.4 rev/day, moves by 5.1e-6 mm). Measured on model truth (experiments synthetic-orbits, FFM 2.2.0; every case of
   the seeded set within 0.01 of a switch in e, 212 of 965), the fit at a switch on the 0.6.36 base (wasm 08e7125e: this
   rule and the series switch strictly above 0.3, without the covariance class's change at 0.3, which moves no fit)
-  against 0.6.36 (wasm bf1b5898); REFLY_LINE:
+  against 0.6.36 (wasm bf1b5898); seven of its cases (the six of a kilometer or more below and e 0.3 at 1,000 km, i 55),
+  re-flown on the 0.6.37 base, are bit for bit on both fits:
   - the 72 h fit before the cutoff, refused fit-at-branch-limit on 8 cases (seven at 0.3, one at the 0.05 switch of class
     0), gives a record on each, its largest distance to the truth over 0 to 120 h 16, 144, 1,079, 1,183, 1,545, 1,551,
     2,239 and 4,739 m (the six of a kilometer or more: the e 0.3 orbits with a perigee of 300 to 650 km, and the e 0.05
