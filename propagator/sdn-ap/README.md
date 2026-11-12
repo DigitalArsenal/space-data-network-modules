@@ -193,7 +193,8 @@ Build: `npm run build` (module SDK compiler lane, clang `wasm32-wasip1-threads`,
 
 `FORCES.HAS_MAXIMUM_TESSERAL_DEGREE` and `MAXIMUM_TESSERAL_DEGREE` add tesseral gravity (in the low table with a degree above
 12, from 0.6.42, the first-order terms with |l - 2p| up to 17 and the m-daily terms to the degree asked, up to 70, each above
-the table's size cut of 0.5 m, and none inside the slow band at more than 1 - w of its epoch rate: SPEC 16.1's band rule and
+the table's size cut of 0.5 m, a line cut whole or kept whole from 0.6.49 (a kept term keeps the terms of its line, its
+(l, m) at j - 1, j and j + 1, down to 0.05 m), and none inside the slow band at more than 1 - w of its epoch rate: SPEC 16.1's band rule and
 band guard; on every other branch m-daily
 and the other first-order terms to 12; in class 0 with a period under 1,100 minutes near-resonant terms and shallow
 resonances to 31; the half-day and one-day resonant tails to 31 (the one-day tail at e 0.3 or below); each to the degree

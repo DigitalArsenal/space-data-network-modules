@@ -14,6 +14,10 @@
 // - the sets are built with BTERM 0, so the band guard of SPEC 16.1 does not act here (SPEC 16.20 gives what it leaves
 //   carried nowhere on sets with drag);
 // - the low table's sets at a record of 70: no term above any carrier's degree, and every term left nowhere in a hole;
+// - a line is cut whole or kept whole (SPEC 16.1, stack #572): in the low table no term of the output table's own (|q| up to
+//   1, on the table's side of the band) under its size cut (code 23) shares a line with a term that reaches the cut (carried,
+//   codes 3 and 11, at 1 m or more on the census's measure): the same (l, m) at element frequency j = l - 2p + q within 1,
+//   which reach the same position line through the eccentricity vector;
 // - the census of a set is the same twice (no state carried between calls) and returns -1 for elements it refuses;
 // - beside the field, radiation pressure's one row (l -1, m 0; SPEC 16.22) is carried once: through the output map (code 4)
 //   in the long-period regime above e 0.3, by SPEC 4's averaged rates and periodic output terms (13) elsewhere, the sweep
@@ -88,7 +92,7 @@ SETS.push({ band: 'one-day', name: '1.0027 rev/day, e 0.82, i 10', n: 1.0027, e:
 for (const n of [1.30, 1.32, 0.7]) SETS.push({ band: 'class 0, period near 1,100 min', name: `${n} rev/day, e 0.01, i 55`, n, e: 0.01, i: 55 });
 
 const seen = new Map(HOLES.map((h) => [h, 0]));
-const unknown = [], worst = {}, record = { terms: 0, largestM: 0 }, radiationCodes = {};
+const unknown = [], worst = {}, record = { terms: 0, largestM: 0 }, radiationCodes = {}, lineRule = { sets: 0, checked: 0 };
 let rowsTotal = 0;
 const t0 = performance.now();
 for (const s of SETS) {
@@ -103,6 +107,21 @@ for (const s of SETS) {
   const through = b.longPeriod && s.e > 0.3;
   assert.equal(radiation[0].code, through ? 4 : 13, `${s.name}: radiation carried once, ${through ? 'through the output map' : "by SPEC 4's rates and output terms"} (code ${radiation[0].code})`);
   radiationCodes[radiation[0].code] = (radiationCodes[radiation[0].code] ?? 0) + 1;
+  // a line cut whole or kept whole (stack #572): a term that reaches the output table's cut keeps every term of its line above the
+  // census's cut. The census's size counts the eccentricity vector's part twice where the table's counts it once, so a carried
+  // term of 2 x CUT or more reaches the table's cut, and a term of CUT or more under it is above the partners' floor (0.05 m)
+  if (b.lowTable) {
+    const jOf = (t) => t.l - 2 * t.p + t.q, kept = new Set();
+    for (const t of rows) if (t.l >= 2 && (t.code === 3 || t.code === 11) && t.size >= 2 * CUT) kept.add(`${t.l}|${t.m}|${jOf(t)}`);
+    for (const t of rows) {
+      // the output table's own terms: |q| up to 1, on the table's side of the band (a slow term's cut is the slow set's)
+      if (t.l < 2 || t.code !== 23 || Math.abs(t.q) > 1 || !tableSide(t)) continue;
+      const j = jOf(t), split = [j - 1, j, j + 1].some((k) => kept.has(`${t.l}|${t.m}|${k}`));
+      assert.ok(!split, `${s.name}: (${t.l}, ${t.m}, ${t.p}, ${t.q}), ${t.size.toPrecision(3)} m, is under the output table's cut while a term of its line is carried`);
+      lineRule.checked += 1;
+    }
+    lineRule.sets += 1;
+  }
   for (const t of rows) {
     assert.ok(t.wr >= 0 && t.total >= 0 && t.total <= 1.001 || t.code === 30, `${s.name}: weights in range`);
     assert.notEqual(t.code, 30, `${s.name}: (${t.l}, ${t.m}, ${t.p}, ${t.q}) is carried twice (weights sum ${t.total})`);
@@ -141,7 +160,7 @@ for (const [band, list] of Object.entries(worst)) {
   console.log(JSON.stringify({ band, nowhere: list.length, largest: list.slice(0, 10) }));
 }
 assert.ok(radiationCodes[4] > 0 && radiationCodes[13] > 0, `the sweep holds sets on both sides of radiation's switch: ${JSON.stringify(radiationCodes)}`);
-console.log(JSON.stringify({ sets: SETS.length, rows: rowsTotal, ms: Math.round(ms), radiationCodes,
+console.log(JSON.stringify({ sets: SETS.length, rows: rowsTotal, ms: Math.round(ms), radiationCodes, lineRule,
   aboveTheRecord: { degree: RECORD, terms: record.terms, largestM: +record.largestM.toPrecision(3) }, lowTableAtRecord70InHoles: record70, holes: HOLES.map((h) => ({ issue: h.issue, what: h.what, terms: seen.get(h), largestM: +(h.largestM ?? 0).toPrecision(3) })) }));
 unknown.sort((a, b) => b.size - a.size);
 const groups = {};

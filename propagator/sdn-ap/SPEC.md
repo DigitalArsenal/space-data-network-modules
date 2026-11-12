@@ -2840,7 +2840,14 @@ MAXIMUM_TESSERAL_DEGREE is a cap on families, not the degree of a field.
   300 km (0.503 rev/day, i 20) a record at d 31 and one at d 70 carry the same terms, all of degree 2 to 12; 3,898 terms
   of degree 13 to 31 are carried nowhere, the largest 279 m over five days, and 1,144 of degree 32 to 70, the largest 15 m.
 - **In the low table** (class 0 at or below the 0.05 switch; from 0.6.42, stack #477), with tesseral cap d above 12 the short-period terms are
-  complete to first order to degree min(d, 70). |l - 2p| goes to 17, and the table's own size cut is 0.5 m. Above degree
+  complete to first order to degree min(d, 70). |l - 2p| goes to 17, and the table's own size cut is 0.5 m, a line cut
+  whole or kept whole (from 0.6.49, stack #572): where a term of (l, m) at element frequency j = l - 2p + q reaches the cut,
+  every term of the same (l, m) at j - 1, j and j + 1, which reach the same position line through the eccentricity vector
+  (its q +- 1 partners and the neighbouring p), is kept down to 0.05 m. Cut one by one, the partners under 0.5 m left the
+  kept term's line uncancelled: against a 12 x 12 truth with the same degrees on both sides, 1.1 to 1.6 m of opposite phase
+  on lines of 0.05 to 0.3 m, which the rule takes to 0.9 to 1.1 m RSS in all above 2.5 per revolution (6.0 to 7.9 m
+  before). The rule is the table's wherever it is built: outside the low table it moves the class tables' sets by 3 m at
+  most (medium Earth orbit 2.8 m, inclined geosynchronous 0.75 m, over 30 days). Above degree
   12 the table also holds the m-daily terms. No term is carried there inside the slow band at more than 1 - w of its
   epoch rate (w the band taper of 16.18): a first-order term is the theory only away from commensurability, so a band
   term the rates do not hold (under their size cut) is carried nowhere. At 300 km, i 70, d 70, where the 47:3 family
@@ -2964,7 +2971,7 @@ from the Fourier coefficients of the normalized Legendre recurrence, stable to d
 | Family | Terms | Cap | Where |
 | --- | --- | --- | --- |
 | m-daily | Kaula's q = 0, l = 2p, even l, every m | 12 (in the low table above 12, the first-order table's to d) | at output time, first order at the mean elements |
-| first-order | every other q in {-1, 0, 1} with \|j\| <= l + 1: the q = +-1 terms are O(e) in G and O(1) in the eccentricity vector, so they carry the radial m-daily signal and, for odd l with j = 0, a line amplified by n / psi-dot | 12; in the low table d to 70, \|l - 2p\| <= 17, by the 0.5 m size cut | at output time, first order at the mean elements |
+| first-order | every other q in {-1, 0, 1} with \|j\| <= l + 1: the q = +-1 terms are O(e) in G and O(1) in the eccentricity vector, so they carry the radial m-daily signal and, for odd l with j = 0, a line amplified by n / psi-dot | 12; in the low table d to 70, \|l - 2p\| <= 17, by the 0.5 m size cut, a line kept whole to 0.05 m | at output time, first order at the mean elements |
 | near-resonant | j = 1 above that degree, at orders whose angle drifts slower than 0.2 n: q = 0 with w = 1 outside the shallow band, q = +1 with w = 0, q = -1 with w = 2 | 31 | at output time; class 0 with a period under 1,100 minutes only (the resonance classes and the long-period regime carry none) |
 | half-day resonant tail | l = 6..d, every even m <= l, p = 0..l, k = m/2, q = k - l + 2p; 5,291 additional terms at degree 31 | 31 | in the rates of the half-day class; excluded from the output-time table |
 | one-day resonant tail | l = 5..d, every m from 1 to 16, p = 0..l, k = m, q = m - l + 2p (below e 0.05 only \|q\| <= 8) | 31 | in the rates of the one-day class at epoch e at or below 0.3; excluded from the output-time table |
@@ -4742,7 +4749,10 @@ long-period regime with the Sun and Moon, at the epoch's mean motion, 16.19).
 
 The test fails on any term carried twice, and on any term carried nowhere that is outside the known holes. Each known hole is
 named with the issue that closes it. A hole that no set of the sweep shows any more also fails the test, so it is removed when
-its fix lands.
+its fix lands. From 0.6.49 it also fails on a split line in the low table (16.1): a term of the output table's own (|q| up to
+1, on the table's side of the band) under its cut beside a term of its line (the same (l, m), j within 1) that reaches the cut
+(carried, at 1 m or more on the census's measure, which counts the eccentricity vector's part twice where the table's counts it
+once). On 0.6.45 the first low-table set fails it; on 0.6.49 none of the 45 low-table sets does (973 terms under the cut checked).
 
 In the low table the output table follows the record's degree to 70 (16.1, stack #477); the slow set takes degree 70
 whatever the record states (16.18). A term above the record's degree is outside what the record asks for, so the test
@@ -4760,7 +4770,7 @@ carried nowhere (stack #477, closed by the fast side):
 | Hole | Issue | Terms | Largest |
 | --- | --- | ---: | ---: |
 | The low table: terms of \|q\| 2 or more on the output table's side, fast or the taper's complement (1 - w) of a slow one (the output table holds \|q\| up to 1) | stack #503 | 2,942 | 15 |
-| A carrier's own size cut measures the term, or the share it leaves out, below the census (the output table counts the eccentricity vector's part radially; under 1 m) | stack #503 | 6,077 | 1 |
+| A carrier's own size cut measures the term, or the share it leaves out, below the census (the output table counts the eccentricity vector's part radially; under 1 m). From 0.6.49 a term of a kept line is not in it (16.1: a line cut whole or kept whole) | stack #503 | 1,686 (6,077 on 0.6.32) | 1 |
 | The low table: the slow set's cut misses a term's part through the inclination (dF/di); the output table holds only its band share | stack #503 | 92 | 2.6 |
 | The one-day class above its switch: under its floor, or above the grid's degree | stack #474 | 459 | 73 |
 | Above the switch, every class: terms above the grid's degree 12 | stack #497 | 190,164 | 3,910 |
