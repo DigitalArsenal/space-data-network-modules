@@ -26,12 +26,27 @@
 //   not.
 // A control corpus of SGP4 (type 0) sets checks the public base against the
 // same library.
+// Perigee passages (stack #550): the corpus's 8 random times per set land in a
+// window of a few milliseconds at a perigee passage only by chance. A fixed set
+// of type-4 records across the eccentric regime (e 0.02 to 0.9, several mean
+// motions, the 4:1 record of SGP4-XP's 72 h fit of synthetic case
+// grid-hp2000-e0.5-i70 among them) is flown on both sides every 1 ms for 3 s
+// either side of each record's first perigee passages, five for the records at
+// e 0.5 and above (where a passage can be clean and a later one not: e 0.82
+// departs at one passage of five) and two for the rest (the reference's own
+// radius minima on a 10 s flight, refined by a parabola), and every sample is
+// held to conformance's 1 m (acceptance perigeePassages). Its result is kept
+// apart from the corpus's digests. Why 3 s either side holds the window: it lies
+// where the osculating and the mean anomaly straddle 0, that is within the
+// anomaly's short-period correction divided by the mean motion at the passage,
+// milliseconds on these records; the largest offset seen from the passage is
+// -549 ms, on the 4:1 record. --perigee-only runs this part alone.
 //
 // The module is asked for the times in a shuffled order, the oracle in
 // ascending order; the module's answers must not depend on the order (the
 // same bytes again in a second shuffled order).
 //
-//   node test/conformance.e2e.mjs [--sets N] [--seed S] [--report-only] [--json FILE] [--reproduce FILE] [--digest-only]
+//   node test/conformance.e2e.mjs [--sets N] [--seed S] [--report-only] [--json FILE] [--reproduce FILE] [--digest-only] [--perigee-only]
 //
 // --reproduce FILE: the run must equal a stored summary (FILE, as --json writes it) in every statistic, digest and
 // acceptance flag (the oracle's name aside); the exit code is that comparison's (a tree moved or rebuilt reproduces
@@ -56,6 +71,7 @@ const REPORT_ONLY = process.argv.includes("--report-only");
 const JSON_OUT = arg("--json", null);
 const REPRODUCE = arg("--reproduce", null);
 const DIGEST_ONLY = process.argv.includes("--digest-only");
+const PERIGEE_ONLY = process.argv.includes("--perigee-only");
 const WORST = Number(arg("--worst", 0));  // print the N largest position differences per regime
 const SPAN_MIN = 7 * 1440;
 const TIMES = 8;
@@ -85,6 +101,63 @@ const REGIMES = {
   VDS: () => ({ mm: between(0.07, 0.9), ecc: between(0.1, 0.8), inc: between(0, 90) }),
 };
 const NAMES = Object.keys(REGIMES);
+
+// The perigee-passage records (stack #550): mean motion (rev/day), eccentricity, inclination, node, argument of perigee
+// and mean anomaly (deg), BTERM and AGOM (m^2/kg), all at epoch 2026 day 72.0; passages, the perigee passages flown (2 unless
+// stated).
+const PERIGEE_RECORDS = [
+  { name: "e 0.02, 14 rev/day", mm: 14.0, ecc: 0.02, inc: 98.0, raan: 40, argp: 120, ma: 10, bterm: 0.01, agom: 0.01 },
+  { name: "e 0.05, 14 rev/day", mm: 14.0, ecc: 0.05, inc: 63.4, raan: 80, argp: 270, ma: 200, bterm: 0.005, agom: 0.01 },
+  { name: "e 0.1, 8 rev/day", mm: 8.0, ecc: 0.1, inc: 55.0, raan: 120, argp: 30, ma: 300, bterm: 0.005, agom: 0.01 },
+  { name: "e 0.3, 6 rev/day", mm: 6.0, ecc: 0.3, inc: 30.0, raan: 160, argp: 60, ma: 90, bterm: 0.005, agom: 0.01 },
+  { name: "e 0.3, 1 rev/day", mm: 1.0027, ecc: 0.3, inc: 30.0, raan: 200, argp: 150, ma: 45, bterm: 0.002, agom: 0.01 },
+  { name: "e 0.5, 4 rev/day (the 4:1 record)", mm: 4.0025623, ecc: 0.4999943, inc: 70.0003, raan: 199.9006, argp: 225.8973, ma: 75.3961, bterm: 0.010109, agom: 0.019276, passages: 5 },
+  { name: "e 0.74, 2 rev/day (Molniya-like)", mm: 2.0055, ecc: 0.74, inc: 63.4, raan: 240, argp: 270, ma: 180, bterm: 0.002, agom: 0.01, passages: 5 },
+  { name: "e 0.73, 2.25 rev/day (transfer-like)", mm: 2.25, ecc: 0.73, inc: 27.0, raan: 280, argp: 180, ma: 0, bterm: 0.005, agom: 0.01, passages: 5 },
+  { name: "e 0.82, 1 rev/day", mm: 1.0027, ecc: 0.82, inc: 10.0, raan: 320, argp: 0, ma: 270, bterm: 0.002, agom: 0.01, passages: 5 },
+  { name: "e 0.9, 0.5 rev/day", mm: 0.5, ecc: 0.9, inc: 37.0, raan: 10, argp: 90, ma: 120, bterm: 0.002, agom: 0.01, passages: 5 },
+];
+// five passages for the five records at e 0.5 and above (the 4:1 record's e is 0.4999943), two for the rest
+const PERIGEE_HALF_MS = 3000, passagesOf = (x) => x.passages ?? 2;
+
+/** Each record's first passagesOf(record) perigee passages, both sides every 1 ms for 3 s either side; samples over 1 m listed. */
+async function perigeePassages(oracle, module) {
+  const started = performance.now();
+  const records = [];
+  for (const [k, x] of PERIGEE_RECORDS.entries()) {
+    const lines = tleLines({ satnum: 99400 + k, year: 26, day: 72, type: 4, bterm: x.bterm, agom: x.agom, inc: x.inc, raan: x.raan, ecc: x.ecc, argp: x.argp, ma: x.ma, mm: x.mm, rev: 0 });
+    const periodMin = 1440 / x.mm, PERIGEE_PASSAGES = passagesOf(x);
+    const coarse = Array.from({ length: Math.ceil(((PERIGEE_PASSAGES + 0.5) * periodMin * 60) / 10) }, (_, j) => (j * 10) / 60);
+    const cs = await oracle.propagate(lines, coarse);
+    const r = cs ? cs.map((s) => (s ? Math.hypot(...s.r) : NaN)) : [];
+    const passages = [];
+    for (let j = 1; j + 1 < r.length && passages.length < PERIGEE_PASSAGES; j += 1) {
+      if (!(r[j] < r[j - 1] && r[j] <= r[j + 1])) continue;
+      const den = r[j - 1] - 2 * r[j] + r[j + 1];
+      passages.push(coarse[j] + (den > 0 ? ((10 / 60) * (r[j - 1] - r[j + 1])) / (2 * den) : 0));
+    }
+    module.init([elementsOf(lines)]);
+    const rows = [];
+    for (const tp of passages) {
+      const minutes = Array.from({ length: 2 * PERIGEE_HALF_MS + 1 }, (_, j) => tp + (j - PERIGEE_HALF_MS) / 60000);
+      const ref = await oracle.propagate(lines, minutes);
+      const over = [];
+      let maxM = 0, missing = 0;
+      for (const [j, m] of minutes.entries()) {
+        const p = module.atMinutes([m]);
+        if (!ref || !ref[j] || p.status[0] !== 0) { missing += 1; continue; }
+        const d = 1000 * Math.hypot(p.x[0] - ref[j].r[0], p.y[0] - ref[j].r[1], p.z[0] - ref[j].r[2]);
+        if (d > maxM) maxM = d;
+        if (d > 1.0) over.push({ ms: j - PERIGEE_HALF_MS, m: +d.toPrecision(6) });
+      }
+      rows.push({ passageMin: +tp.toFixed(6), samples: minutes.length - missing, missing, maxM, over });
+    }
+    records.push({ name: x.name, lines, passages: rows });
+  }
+  const all = records.flatMap((x) => x.passages);
+  return { records, passages: all.length, samples: all.reduce((s, x) => s + x.samples, 0), missing: all.reduce((s, x) => s + x.missing, 0),
+    overOneMeter: all.reduce((s, x) => s + x.over.length, 0), maxM: Math.max(0, ...all.map((x) => x.maxM)), ms: Math.round(performance.now() - started) };
+}
 
 function corpus(count, type, firstSatnum) {
   const sets = [];
@@ -318,6 +391,28 @@ if (DIGEST_ONLY) {
   process.exit(same ? 0 : 1);
 }
 
+function printPerigee(perigee) {
+  console.log(`\nperigee passages: ${PERIGEE_RECORDS.length} records, ${perigee.passages} passages, ${perigee.samples} samples at 1 ms (${perigee.missing} not served); over 1 m: ${perigee.overOneMeter}; max ${perigee.maxM.toExponential(3)} m; ${(perigee.ms / 1000).toFixed(1)} s`);
+  for (const x of perigee.records) for (const [i, p] of x.passages.entries()) {
+    const runs = [];
+    for (const o of p.over) { const last = runs.at(-1); if (last && o.ms === last.to + 1) { last.to = o.ms; last.m = Math.max(last.m, o.m); } else runs.push({ from: o.ms, to: o.ms, m: o.m }); }
+    console.log(`  ${x.name}, passage ${i + 1} (${p.passageMin.toFixed(4)} min): ${p.over.length ? `FAIL ${p.over.length} ms over 1 m: ${runs.map((w) => `${w.from} to ${w.to} ms up to ${w.m.toExponential(3)} m`).join("; ")}` : `max ${p.maxM.toExponential(3)} m`}`);
+  }
+}
+
+if (PERIGEE_ONLY) {
+  // the perigee-passage part alone, against the oracle
+  const oracle = await openReference(), module = await openModule();
+  console.log(`oracle: ${oracle.name}; the perigee-passage part alone`);
+  const perigee = await perigeePassages(oracle, module);
+  printPerigee(perigee);
+  const ok = perigee.missing === 0 && perigee.overOneMeter === 0;
+  console.log(`\nacceptance ${JSON.stringify({ perigeePassages: ok })} -> ${ok ? "PASS" : "FAIL"}`);
+  module.destroy();
+  await oracle.close();
+  process.exit(ok ? 0 : 1);
+}
+
 const oracle = await openReference();
 const second = await openReference({ version: process.env.SDN_AP_ORACLE_SECOND || "9.1.1.0" });
 const module = await openModule();
@@ -364,6 +459,10 @@ let hansenWorst = 0;
 for (const e of [0.1, 0.2]) for (const [l, p, q] of hansenRows) hansenWorst = Math.max(hansenWorst, Math.abs(module.hansen(l, p, q, e, 1) - module.hansen(l, p, q, e, 0)));
 console.log(`\nSPEC 6 eccentricity series: ${hansenRows.length} G_lpq, max |series - exact| ${hansenWorst.toExponential(2)} at e <= 0.2`);
 
+// Perigee passages (stack #550): every sample within 1 m of the oracle.
+const perigee = await perigeePassages(oracle, module);
+printPerigee(perigee);
+
 const acceptance = {
   xpSets: xp.overall.sets >= 10000,
   xpMaxNonInherent: xp.overall.maxFailedM <= 1.0,
@@ -373,19 +472,23 @@ const acceptance = {
   orderIndependent: xp.orderDependent === 0 && control.orderDependent === 0,
   spec6Eccentricity: hansenRows.length === 56 && hansenWorst <= 1e-12,
 };
-const pass = Object.values(acceptance).every(Boolean);
+// the perigee part's own flag, kept beside the corpus's so that a stored run of the corpus alone still compares
+const perigeeAcceptance = { perigeePassages: perigee.missing === 0 && perigee.overOneMeter === 0 };
+const pass = Object.values(acceptance).every(Boolean) && perigeeAcceptance.perigeePassages;
 const summary = { task: "sdn-ap-sgp4xp-conformance-tail-20261025", oracle: oracle.name, second: second.name, seed: SEED, control, xp,
-  equatorNode: { cases: eqCases.length, differ: eqDiffer.length, fixedByFlip: eqFixed.length }, spec6Eccentricity: { terms: hansenRows.length, maxSeriesMinusExact: hansenWorst }, acceptance, pass };
+  equatorNode: { cases: eqCases.length, differ: eqDiffer.length, fixedByFlip: eqFixed.length }, spec6Eccentricity: { terms: hansenRows.length, maxSeriesMinusExact: hansenWorst },
+  perigeePassages: { ...perigee, ms: undefined }, acceptance, perigeeAcceptance, pass };
 // Full-precision statistics are kept (exactMaxM, exactMedianM) so that a change can be held to a stated bound.
 for (const result of [control, xp]) for (const t of result.table) { t.exactMaxM = t.maxM; t.exactMedianM = t.medianM; t.maxM = +t.maxM.toPrecision(4); t.medianM = +t.medianM.toPrecision(4); t.maxMmPerS = +t.maxMmPerS.toPrecision(4); t.medianMmPerS = +t.medianMmPerS.toPrecision(4); }
 if (JSON_OUT) fs.writeFileSync(JSON_OUT, `${JSON.stringify(summary, null, 1)}\n`);
-console.log(`\nacceptance ${JSON.stringify(acceptance)} -> ${pass ? "PASS" : "FAIL"}`);
+console.log(`\nacceptance ${JSON.stringify({ ...acceptance, ...perigeeAcceptance })} -> ${pass ? "PASS" : "FAIL"}`);
 let reproduced = null;
 if (REPRODUCE) {
   const stored = JSON.parse(fs.readFileSync(REPRODUCE, "utf8"));
-  // every statistic, digest and flag; not the oracle's wall-clock time
+  // every statistic, digest and flag; not the oracle's wall-clock time (a stored run from before the perigee part is compared
+  // on the corpus's fields alone)
   const comparable = (x) => JSON.stringify(x, (k, v) => (k === "oracleMs" ? undefined : v));
-  const fields = ["seed", "control", "xp", "equatorNode", "spec6Eccentricity", "acceptance", "pass"];
+  const fields = ["seed", "control", "xp", "equatorNode", "spec6Eccentricity", "acceptance", ...(stored.perigeePassages ? ["perigeePassages", "perigeeAcceptance", "pass"] : [])];
   const differing = fields.filter((f) => comparable({ v: summary[f] }) !== comparable({ v: stored[f] }));
   reproduced = differing.length === 0;
   console.log(`reproduces ${REPRODUCE}: ${reproduced ? "identical (XP digest " + summary.xp.digest.slice(0, 12) + ", control " + summary.control.digest.slice(0, 12) + ")" : "differs in " + differing.join(", ")}; the stored run: ${stored.pass ? "PASS" : "FAIL"}`);
