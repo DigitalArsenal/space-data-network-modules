@@ -89,7 +89,9 @@ extern "C" int propagate(void) {
         cov::Set cs;
         const int cr = cov::read(set.record, set.row, cs);
         const int pr = cr == 1 ? cov::prepare(cs, cprop, xs) : 0;
-        if (cr < 0 || pr != 0) {
+        // SPEC 12.4: an AP record whose floor is at its writer's theory state flies its states, its covariance refused
+        if (cr == -4) width_note = cov::kFloorRefusalNote;
+        if ((cr < 0 && cr != -4) || pr != 0) {
           xpt::xp_release(*xs);
           return ocm::refuse(cr == -2 ? "cov-parameter-kind-unspecified" : cr == -3 ? "cov-propagation-invariant" : "invalid-covariance",
                              cr < 0 ? "The set's COVARIANCE_DATA, COV_PARAMETER_KINDS or COV_PROPAGATION are malformed."

@@ -4570,7 +4570,7 @@ inline bool next_node(const RateContext& ctx, const Node& a, int dir, Node& out)
 /// the long-period regime's output Jacobian), read and reset by sdnap_kepler_unconverged:
 /// [0] AP's (output_impl) whose Newton ended its 30 steps with a last step of 1e-12 or more (far from the root), which then
 ///     take the bisection;
-/// [1] section 8's (output_j2_osc) that ended so, counted only (its arithmetic unchanged);
+/// [1] section 8's (output_j2_osc) that ended so, which then take the bisection;
 /// [2] AP's whose Newton ended its 30 steps within 1e-12 of the root (the tolerance meeting rounding), solved, their sine and
 ///     cosine taken from that E.
 inline uint32_t g_kepler_unconverged[3] = {0, 0, 0};
@@ -4601,7 +4601,22 @@ inline uint32_t g_kepler_unconverged[3] = {0, 0, 0};
       break;
     }
   }
-  if (!met && std::fabs(last) >= 1e-12) __atomic_fetch_add(&g_kepler_unconverged[1], 1u, __ATOMIC_RELAXED);
+  if (!met && std::fabs(last) >= 1e-12) {
+    // stack #550, SPEC 16.21: Newton ended its 30 steps with its last step 1e-12 or more (for the milliseconds of a perigee passage in which
+    // the warm start's anomaly and k.m lie either side of 0 it starts a turn from k.m and, unless its step 2 pi / (1 - e cos E)
+    // is a whole number of turns, never converges): counted, and E taken by bisection on [k.m - e, k.m + e], where
+    // E - e sin E - k.m, increasing, changes sign. Every solve that converges is 0.6.37's bit for bit (one that converges a
+    // turn from k.m has the same sine and cosine), and an ending within rounding of the root stands, its sine and cosine
+    // taken below.
+    __atomic_fetch_add(&g_kepler_unconverged[1], 1u, __ATOMIC_RELAXED);
+    double lo = k.m - e, hi = k.m + e;
+    for (int b = 0; b < 128 && hi - lo > 1e-15 * (1.0 + std::fabs(k.m)); ++b) {
+      const double mid = 0.5 * (lo + hi);
+      if (mid - e * std::sin(mid) - k.m < 0.0) lo = mid;
+      else hi = mid;
+    }
+    E = 0.5 * (lo + hi);
+  }
   const double eta = std::sqrt(1.0 - e * e);
   double sE, cE;
   fm::sincos(E, sE, cE);

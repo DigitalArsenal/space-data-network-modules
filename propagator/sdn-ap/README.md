@@ -1,6 +1,6 @@
 # sdn-ap-propagator
 
-Version 0.6.37 (dist de3f0b87).
+Version 0.6.39 (dist 41230eb6).
 
 General-perturbations propagation of whole catalogs in one isomorphic WASM module (browser and WasmEdge), with two
 theories and AP, an advanced propagator that builds on the entire history of astrodynamics ($PCF FORCES selects its drag
@@ -44,9 +44,10 @@ Build: `npm run build` (module SDK compiler lane, clang `wasm32-wasip1-threads`,
   `sdnap_mean_elements_at` (a round trip within 1e-12 relative from LEO to GEO); `sdnap_frame_to_uvw(r, v, vec, out)` a
   vector's radial, in-track and cross-track components and `sdnap_uvw_to_frame` its mirror.
 - The osculating Kepler solve (SPEC 16.21; `test/perigee-kepler-branch.e2e.mjs`): `sdnap_kepler_unconverged(reset, which)`
-  counts the solves, every caller's, whose Newton ended its 30 steps without meeting its tolerance: `which` 0 AP's ending
-  far from the root (then solved by bisection), 1 section 8's ending far from it (counted only), 2 AP's ending within 1e-12
-  of it (solved); `reset` non-zero reads and clears it in one step.
+  counts solves, every caller's, whose Newton ended its 30 steps without meeting its tolerance: `which` 0 AP's whose last
+  step was 1e-12 or more (then solved by bisection), 1 section 8's whose last step was 1e-12 or more (then solved by
+  bisection), 2 AP's whose last step was under 1e-12 (solved; section 8's such endings are in no count); `reset` non-zero
+  reads and clears it in one step.
 - Covariance (SPEC 12; `test/covariance.e2e.mjs`): `fit` writes, for its SGP4XP sets, the fit's covariance at its epoch
   as COVARIANCE (TEME, 21 values) with USER_DEFINED_SDNAP_COV_x rows (the BTERM and AGOM parameters' covariances, the
   theory floor, the process noise); `sdnap_covariance_at(omm, length, minutes, count, out)` gives, per time, the TEME
@@ -619,11 +620,14 @@ where the decisions go in mixed directions); 4 samples where the reference's 9.1
 module and 9.9 is not; the equator node (29 of 29 within 1 m flipped); the refusal epochs (164 of 164 within 1 %
 of the lifetime). No corpus sample is open. The corpus's times are random, so a window of a few milliseconds at a
 perigee passage is met only by chance; a perigee-passage part (ten eccentric records, e 0.02 to 0.9, flown every 1 ms for
-3 s either side of their first perigee passages, five at e 0.5 and above and two below, every sample held to 1 m) fails on
-this build: 53 of its 210,035 samples, in 10 of 35 passages of three records (e 0.5 at 4 rev/day: all five passages,
-7 to 8 ms about 0.55 s before perigee, up to 5.3 km; e 0.82 at 1 rev/day: one of five, 1 ms, 16,000 km; e 0.9 at
-0.5 rev/day: four of five, 1 to 6 ms just after perigee, up to 134,000 km), where the library's states are smooth (stack
-#550). So the E2E fails; `test/known-defects.json` lists it. `test/results/open-outliers.md` names the tail's causes
+3 s either side of their first perigee passages, five at e 0.5 and above and two below, every sample held to 1 m) passes
+on this build: 0 of its 210,035 samples over 1 m, the largest 5.2e-5 m. Through 0.6.37 it failed at 53 of them, in 10 of 35
+passages of three records (e 0.5 at 4 rev/day: all five passages, 7 to 8 ms about 0.55 s before perigee, up to 5.3 km;
+e 0.82 at 1 rev/day: one of five, 1 ms, 16,000 km; e 0.9 at 0.5 rev/day: four of five, 1 to 6 ms just after perigee, up to
+134,000 km), where the library's states are smooth: section 8's Kepler solve ended there far from its root (SPEC 16.21,
+stack #550). From 0.6.38 those solves take the bisection, and they are the only samples that differ from 0.6.37: 54 of the
+part's 210,035 (the 53 and one of 1.8 cm), each closer to the library, and none of the corpus's 81,600 states, whose digest
+is unchanged. `test/results/open-outliers.md` names the tail's causes
 and the decisions that reproduce 9.9. The corpus is
 synthetic (seeded). The E2E prints the sha256 of every module output; `--worst N` lists the largest differences
 per regime; `--reproduce test/results/conformance.json` checks that a moved or rebuilt tree gives this run bit for
@@ -658,12 +662,14 @@ built by `test/lib/spw-constant.mjs` (`FFM_SPW_FIXTURE` names another file of su
   over 7 days against the black-box oracle; per-regime maximum and median position difference; and the perigee-passage
   part: ten eccentric records flown every 1 ms for 3 s either side of each one's first perigee passages, five at e 0.5
   and above and two below (the oracle's own radius minima), every sample within 1 m (acceptance `perigeePassages`, kept
-  apart from the corpus's digests; `--perigee-only` runs it alone). The oracle (the
+  apart from the corpus's digests; `--perigee-only` runs it alone, and `--corpus-only` leaves it out for a change that
+  cannot reach SGP4XP's output solve, saying so in its output and summary). The oracle (the
   unmodified US Space Force Sgp4Prop library behind a black-box harness) is not in this repository:
   `SDN_AP_ORACLE_ROOT` names its directory (`SDN_AP_ORACLE_VERSION` its leg, 9.9 by default;
   `SDN_AP_ORACLE_SECOND` the other build for the reference-split class, 9.1.1.0 by default), and the E2E and
   `spec-vectors/verify.mjs` refuse without it. `--digest-only` checks the module's side of the stored run alone (the
-  SGP4XP corpus's and the SGP4 control's output digests), no oracle. The other E2Es end with that digest check
+  SGP4XP corpus's and the SGP4 control's output digests), no oracle; with `--dump FILE` it also writes the SGP4XP
+  corpus's sets and every output state and status, so two builds can be compared state by state. The other E2Es end with that digest check
   (`test/lib/conformance-step.mjs`, about 9 s); the oracle comparison is this E2E's alone.
 - `test/run-suite.mjs`: every E2E in parallel (14 at a time by default), a table of exit code and time per test at
   the end, logs under the scratch root; its KNOWN_DEFECTS list names tests that fail for an open issue.
