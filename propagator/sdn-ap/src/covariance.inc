@@ -21,7 +21,9 @@
 //   AP DRAG: SPEC 12.5's per-axis re-fit, with a scale of the floor).
 // - Theory floor: the fit's residual covariance in UVW (COV_PROPAGATION FLOOR_UU_KM2 .. FLOOR_WW_KM2), added at every
 //   time in the state's own UVW axes (velocity: the same scaled by the orbit's angular rate squared). The process noise
-//   is COV_PROPAGATION's NOISE_* fields, with the share c and the rate it is a share of.
+//   is COV_PROPAGATION's NOISE_* fields, with the share c and the rate it is a share of. The floor the epoch covariance
+//   carries is put on by the writer and taken off by the reader at one state: an AP set's at the two-body state of its own
+//   mean elements (epoch_floor_state, SPEC 12.4), an SGP4XP set's at its theory's epoch state, which is frozen.
 // -----------------------------------------------------------------------------
 
 namespace sdnap {
@@ -39,6 +41,43 @@ constexpr Noise kNoiseAP[2] = {
     {1.8579913326733934e-07, 1.12761105007012e-06, 7.647194501793458e-07, 0.112126311682426, 1.5127596877626373},
     {9.696153866117182e-07, 8.153112791954473e-07, 4.753573962018311e-06, 0, 1.0}};
 constexpr double kDragRegimeKm = 2500.0;  ///< the noise regimes' split: perigee height
+
+/// SPEC 12.4 (stack #551): the first release whose AP records carry their epoch floor at the two-body state of their
+/// mean elements. An AP record another producer, or this module before it, wrote carries its floor at its writer's
+/// theory state: its covariance is refused by name (kFloorRefusal), its states fly.
+constexpr int kEpochFloorSince[3] = {0, 6, 39};
+constexpr const char* kFloorRefusal = "cov-floor-at-theory-state";
+constexpr const char* kFloorRefusalNote =
+    "cov-floor-at-theory-state: the covariance is refused and the states fly. The record's epoch covariance carries its "
+    "floor at its writer's theory state (an AP record written before SPEC 12.4's epoch floor at the two-body state of "
+    "its mean elements, sdn-ap 0.6.39); fitted again, the set carries its covariance.";
+
+/// SPEC 12.4: the state an AP set's epoch floor is put on and taken off at: the two-body state of the set's own mean
+/// elements (TEME, km and km/s; SPEC 1.3's k_e and radius, a = (k_e / n)^(2/3), no recovery), a fixed formula on the
+/// record's written numbers, so that the writer and every reader take the same floor whatever their theory's epoch state.
+inline bool epoch_floor_state(const ElementRow& row, double r[3], double v[3]) {
+  const double n = row.mean_motion_rev_day * (2.0 * kPi) / kMinutesPerDay;  // rad/min
+  if (!(n > 0.0)) return false;
+  const double mu_km = xpt::kMu * xpt::kRe * xpt::kRe * xpt::kRe / 3600.0;  // km^3/s^2
+  const double el[6] = {std::cbrt(xpt::kMu / (n * n)) * xpt::kRe, row.eccentricity, row.inclination_deg * kDeg,
+                        row.raan_deg * kDeg, row.arg_pericenter_deg * kDeg, row.mean_anomaly_deg * kDeg};
+  return twobody::state_of(mu_km, el, r, v);
+}
+
+/// SPEC 12.4: whether an AP record's epoch covariance carries its floor at the two-body state of its mean elements: its
+/// PROVENANCE.PRODUCER is this module at kEpochFloorSince or later.
+inline bool floor_at_mean_elements(const OCM* o) {
+  const PVN* pv = o->PROVENANCE();
+  const flatbuffers::String* pr = pv == nullptr ? nullptr : pv->PRODUCER();
+  static constexpr char kPrefix[] = "com.spacedatanetwork.sdn-ap-propagator ";
+  constexpr size_t n = sizeof kPrefix - 1;
+  if (pr == nullptr || pr->size() <= n || std::strncmp(pr->c_str(), kPrefix, n) != 0) return false;
+  int v[3] = {0, 0, 0};
+  if (std::sscanf(pr->c_str() + n, "%d.%d.%d", &v[0], &v[1], &v[2]) != 3) return false;
+  for (int k = 0; k < 3; ++k)
+    if (v[k] != kEpochFloorSince[k]) return v[k] > kEpochFloorSince[k];
+  return true;
+}
 
 /// The regime of a set: 0 (DRAG) its perigee height below kDragRegimeKm, 1 (ABOVE) at or above it, where the theory's
 /// density is 1e-20 kg/m^3 at every point of the orbit (SPEC 3.3) and drag does not act. One function for the regime
@@ -534,7 +573,12 @@ inline bool of_fit(const ElementRow& row, const fit::Options& fitted, const doub
         for (int c = 0; c < np; ++c) v += J[i * np + a] * Pp[a * np + c] * J[j * np + c];
       S6[i * 6 + j] = v;
     }
-  add_floor(floor, r0, v0, S6);
+  // SPEC 12.4: an AP set's epoch floor at the two-body state of the mean elements it writes, the state every reader
+  // takes it off at
+  const bool ap = xpt::is_ap_ctx(b.sats[0].ctx);
+  double rf[3], vf[3];
+  if (ap && !epoch_floor_state(row, rf, vf)) return false;
+  add_floor(floor, ap ? rf : r0, ap ? vf : v0, S6);
   for (int i = 0; i < 6; ++i)
     for (int j = 0; j < 6; ++j) s.C[i * np + j] = 0.5 * (S6[i * 6 + j] + S6[j * 6 + i]);
   for (int a = 6; a < np; ++a)
@@ -575,8 +619,10 @@ inline bool noise_invariant(const ElementRow& row, const Set& s) {
 /// CARTPV, COV_ORDERING other than LTM, COV_SIZE not 6 plus the kinds, a kind outside the five of SPEC 17.1, out of
 /// their fixed order or not solved for, values other than N(N+1)/2, no COV_PROPAGATION), -2 a kind UNSPECIFIED, -3
 /// NOISE_NON_GRAVITATIONAL_RAD_DAY2 not NON_GRAVITATIONAL_SHARE x |NON_GRAVITATIONAL_RATE_PER_DAY| x n within 1e-12
-/// relative. A row the theories have no sensitivity to (DRAG_AREA_OVER_MASS_RATE, IN_TRACK_ACCELERATION,
-/// OUTGASSING_ACCELERATION) is read as a constant parameter.
+/// relative, -4 an AP record whose epoch floor is not at its mean elements' two-body state (written before
+/// kEpochFloorSince or by another producer, SPEC 12.4: its covariance refused by name, kFloorRefusal, its states flown).
+/// A row the theories have no sensitivity to (DRAG_AREA_OVER_MASS_RATE, IN_TRACK_ACCELERATION, OUTGASSING_ACCELERATION)
+/// is read as a constant parameter.
 inline int read(const OCM* o, const ElementRow& row, Set& s) {
   s = Set{};
   s.row = row;
@@ -684,6 +730,9 @@ inline int read(const OCM* o, const ElementRow& row, Set& s) {
       if (why != nullptr) std::snprintf(s.width_note, sizeof s.width_note, "covariance: %s: mapped as stated (%s)", id, why);
       break;
     }
+  // SPEC 12.4: an AP record's floor at its writer's theory state cannot be taken off at this build's
+  const OCMMeanElements* me = o->MEAN_ELEMENTS();
+  if (me != nullptr && me->MEAN_ELEMENT_THEORY() == meanElementSource_AP && !floor_at_mean_elements(o)) return -4;
   return 1;
 }
 
@@ -695,7 +744,9 @@ struct Propagator {
   ~Propagator() { release(b); }
 };
 
-/// 0 ready; -3 the theory refuses the set or a moved one; -5 the epoch columns are singular.
+/// 0 ready; -3 the theory refuses the set or a moved one; -5 the epoch columns are singular. The floor comes off the
+/// epoch covariance at the state the writer put it on at (SPEC 12.4: an AP set's at the two-body state of its mean
+/// elements); the floor at every time (eval) is the flown state's.
 inline int prepare(const Set& s, Propagator& p, xpt::XpSat* nominal = nullptr) {
   p.s = s;
   if (!init(s.row, s.o, p.b, nominal)) return -3;
@@ -706,7 +757,10 @@ inline int prepare(const Set& s, Propagator& p, xpt::XpSat* nominal = nullptr) {
   double C[kMaxAug * kMaxAug];
   for (int q = 0; q < np * np; ++q) C[q] = s.C[q];
   double F[36] = {};
-  add_floor(s.floor, r0, v0, F);
+  const bool ap = xpt::is_ap_ctx(p.b.sats[0].ctx);
+  double rf[3], vf[3];
+  if (ap && !epoch_floor_state(s.row, rf, vf)) return -3;
+  add_floor(s.floor, ap ? rf : r0, ap ? vf : v0, F);
   for (int i = 0; i < 6; ++i)
     for (int j = 0; j < 6; ++j) C[i * np + j] -= F[i * 6 + j];
   // T: parameters from (epoch state, consider): the inverse of the epoch element columns

@@ -197,7 +197,7 @@ void sdnap_frame_to_uvw(const double* r, const double* v, const double* vec, dou
 /// `count` times (`minutes` from its epoch) `out` gets 42 doubles: the TEME state (km, km/s), then the 6 x 6 covariance
 /// row-major (km^2, km^2/s, km^2/s^2). 0, or -1 not a flyable Earth set, -2 no COVARIANCE_DATA, -3 the theory refuses
 /// the set or does not reach a time (its rows included), -4 an SGP4 set, -5 singular epoch columns, -6 a malformed
-/// covariance.
+/// covariance, -7 an AP record whose epoch floor is at its writer's theory state (SPEC 12.4, cov-floor-at-theory-state).
 SDNAP_EXPORT("sdnap_covariance_at")
 int32_t sdnap_covariance_at(const uint8_t* ocm, uint32_t length, const double* minutes, uint32_t count, double* out) {
   using namespace sdnap;
@@ -208,6 +208,7 @@ int32_t sdnap_covariance_at(const uint8_t* ocm, uint32_t length, const double* m
   cov::Set cs;
   const int rc = cov::read(set.record, set.row, cs);
   if (rc == 0) return -2;
+  if (rc == -4) return -7;
   if (rc < 0) return -6;
   if (count > 0) {
     double lo = 0.0, hi = 0.0;
@@ -243,6 +244,7 @@ int32_t sdnap_covariance_full_at(const uint8_t* ocm, uint32_t length, const doub
   cov::Set cs;
   const int rc = cov::read(set.record, set.row, cs);
   if (rc == 0) return -2;
+  if (rc == -4) return -7;
   if (rc < 0) return -6;
   if (count > 0) {
     double lo = 0.0, hi = 0.0;
