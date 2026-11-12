@@ -774,7 +774,7 @@ static int fit_blocks() {
         const bool short_drag = !long_rule && row.eccentricity <= xpt::tess::kWideE;
         if (long_rule || short_drag) {
           double weighted = fit::kUnitSigmaKm;
-          constexpr int kDiagDesign = 2;
+          constexpr int kDiagDesign = 3;
           double scale = 1.0;
           P.axis[0] = P.axis[1] = P.axis[2] = 1.0;
           if (short_drag) {
