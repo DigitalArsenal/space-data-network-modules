@@ -5123,7 +5123,7 @@ keeps its own.
   from that node (next_node's), a function of the set alone, so the crossing is the record's and the same in any call order.
   The crossing therefore depends on the grid's step rule and moves if that rule ever changes: a version that changes the
   step states the crossing times that move. It refuses up to a step earlier than the per-revolution reading would: #564's
-  two seeds are flown to 136.7 km (perigee 200 km, e 0.001, BTERM 0.01) and 160.7 km (perigee 220 km, e 0.01, BTERM 0.1).
+  two seeds are flown to 136.5 km (perigee 200 km, e 0.001, BTERM 0.01; 136.7 km through 0.6.48) and 160.7 km (perigee 220 km, e 0.01, BTERM 0.1).
 - What the rule reads, and why. Drag at a perigee passage lowers the semi-major axis and the eccentricity together, so its own
   part of the perigee radius's rate, da/dt (1 - e) - a de/dt, is about 0 on a highly eccentric orbit; the Sun and the Moon move
   the mean perigee of such an orbit by more than a scale height a revolution, rising or falling, and that is not decay. A first
@@ -5212,7 +5212,7 @@ keeps its own.
   the orbit has left, or the numerical propagator's own crossing as the yardstick.
 - What gets worse: a decaying set loses its states from the crossing to the surface, its last revolutions, which the theory
   does not describe (they were up to 31,250 km off).
-- `test/decay.e2e.mjs`: the two seeds decay at 70.133 h and 47.064 h, every state before the crossing 0.6.45's bit for bit
+- `test/decay.e2e.mjs`: the two seeds decay at 70.140 h and 47.063 h (70.133 h and 47.064 h through 0.6.48: the rule reads drag's part of the perigee's rate, which moves the crossing by 0.01 %), every state before the crossing 0.6.45's bit for bit
   and the jump detector at most 2.88 m over them; the epoch store gives the same states before the crossing and status 4
   after it in time order, reversed and shuffled; sets at a 500 km perigee and at a 300 km perigee with e 0.3 fly 7 days
   bit for bit; `sdnap_covariance_at` returns 4 past a record's crossing.
