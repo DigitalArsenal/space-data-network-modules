@@ -94,6 +94,9 @@ assert.ok(sa.ITERATIONS >= 0.9 * sb.ITERATIONS, `the passes iterate: ${sa.ITERAT
 const odLines = A.ORBIT_DETERMINATION.COMMENT ?? [];
 assert.ok(sa.CONVERGED === true || odLines.some((l) => l.includes('could not be differenced')), `CONVERGED ${sa.CONVERGED}: a pass that tested no step names why`);
 assert.ok(odLines.some((l) => l.startsWith('decays at ')), 'the record states where the set decays');
+// the covariance of this decaying set is stated (every set moved for it flies the arc), and a record that cannot state one says so
+assert.ok(A.COV_SIZE > 0 && A.COVARIANCE_DATA?.length > 0 && Array.from(A.COVARIANCE_DATA).every(Number.isFinite), 'the record states a finite covariance');
+assert.ok(!odLines.some((l) => l.startsWith('covariance: not stated')), 'and no line says otherwise');
 // the same fit on a second instance of this build: the same record to the bit (no column is read from memory a pass did not write)
 const again = await createStandaloneHarness('browser', wasmPath, { surface: 'command' });
 const A2 = await fitOn(again);

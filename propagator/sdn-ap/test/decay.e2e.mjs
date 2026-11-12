@@ -118,6 +118,18 @@ for (const c of SEEDS) {
       else check(q.rc === 0 && sameBits(q.s, ref.s), `${c.name} (${o}): ${iso(s)} before the crossing gives status ${q.rc}${q.rc === 0 ? ', another state than in time order' : ''}`);
     }
   }
+  // propagate_epochs (the epoch store's block): a crossing after the epoch with nothing answered after it is the block's usable stop,
+  // never its usable start, and its COMMENT names the refused run; the states before it are the call's own
+  {
+    const pe = await now.invoke({ methodId: 'propagate_epochs', inputs: flight([seed], { output: { EPOCHS: grid.map(iso), FRAME: pcfOutputFrame.GCRF } }) });
+    check(pe.statusCode === 0, `${c.name}: propagate_epochs ${pe.errorCode}`);
+    if (pe.statusCode === 0) {
+      const b = OEM.getRootAsOEM(new fb.ByteBuffer(pe.outputs.find((o) => o.portId === 'ephemeris').payload)).unpack().EPHEMERIS_DATA_BLOCK[0];
+      check(b.USEABLE_STOP_TIME === cross, `${c.name}: propagate_epochs USEABLE_STOP_TIME ${b.USEABLE_STOP_TIME}, the crossing ${cross}`);
+      check(!b.USEABLE_START_TIME, `${c.name}: propagate_epochs USEABLE_START_TIME ${b.USEABLE_START_TIME}, none expected`);
+      check(String(b.COMMENT ?? '').includes(`decayed:${cross}`), `${c.name}: propagate_epochs COMMENT ${b.COMMENT}`);
+    }
+  }
   console.log(`${c.name}: decayed at ${cross} (${((crossMs - t0) / 3600e3).toFixed(3)} h), ${f.lines.length} states answered and ${m[2]} refused; jump detector ${worst.toFixed(3)} m; lowest ${(Math.min(...f.lines.map((l) => Math.hypot(...l.s.slice(0, 3)))) - RE).toFixed(1)} km`);
 }
 

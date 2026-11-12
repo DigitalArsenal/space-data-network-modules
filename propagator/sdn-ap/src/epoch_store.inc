@@ -464,6 +464,7 @@ inline double span_seconds(const Entry& e, double t, const double* jd) {
 /// thread: propagate_epochs names it in its refusal and its block.
 inline thread_local double g_decay_jd[2] = {0.0, 0.0};
 inline thread_local bool g_decay_seen = false;
+inline thread_local bool g_decay_back = false;  ///< the crossing g_decay_jd names lies before the epoch (the refused time dt < 0)
 
 /// Set k of series s at t (minutes from J2000): TEME state, and the covariance when `P` is given (false: none). `jd` (the
 /// split Julian date of t, when the caller has it) times a carried forecast to the microsecond's fraction.
@@ -497,10 +498,12 @@ inline int32_t state_of(Store& st, Series& s, uint32_t k, double t, double* r, d
                         : t - en.epoch;
   const int32_t e = q.xp != nullptr ? xpt::xp_propagate(*q.xp, dt, r, v) : sat_propagate(*q.sat, q.nodes, dt, r, v);
   // SPEC 16.25 (stack #564): an AP set past its decay crossing; the crossing's split Julian date for the call's refusal by name
-  if (e == kPropDecayed && q.xp != nullptr && xpt::is_ap_ctx(q.xp->ctx) && xpt::decay_past(*q.xp, dt)) {
-    const double c = q.xp->decay_t[dt >= 0.0 ? 0 : 1] / kMinutesPerDay + en.row.epoch_jd_frac;
+  double crossing_min = 0.0;
+  if (e == kPropDecayed && q.xp != nullptr && xpt::is_ap_ctx(q.xp->ctx) && xpt::decay_crossing(*q.xp, dt, crossing_min)) {  // under the set's lock: shared
+    const double c = crossing_min / kMinutesPerDay + en.row.epoch_jd_frac;
     g_decay_jd[0] = en.row.epoch_jd_whole + std::floor(c);
     g_decay_jd[1] = c - std::floor(c);
+    g_decay_back = dt < 0.0;
     g_decay_seen = true;
   }
   if (e != kPropOk) return e;
@@ -756,6 +759,7 @@ extern "C" int propagate_epochs(void) {
       std::vector<double> kw, kf;
       size_t past_n = 0;
       double cross_jd[2] = {0.0, 0.0};
+      bool cross_back = false;
       for (size_t k = 0; k < tw.size(); ++k) {
         double r[3], v[3], P[36], ub[2];
         bool have_p = false;
@@ -766,6 +770,7 @@ extern "C" int propagate_epochs(void) {
           if (past_n == 0) {  // the first epoch past a crossing names it (the epochs ascend)
             cross_jd[0] = epochs::g_decay_jd[0];
             cross_jd[1] = epochs::g_decay_jd[1];
+            cross_back = epochs::g_decay_back;
           }
           ++past_n;
           continue;
@@ -864,14 +869,21 @@ extern "C" int propagate_epochs(void) {
         comment = comment.empty() ? carried::sources_comment(src, tw, tf) : carried::sources_comment(src, tw, tf) + ". " + comment;
       }
       // SPEC 16.25: a block that stops at a set's decay names it, counts the epochs refused after it, and takes it as its usable limit
-      const bool cross_after = past_n > 0 && ((cross_jd[0] - tw.back()) + (cross_jd[1] - tf.back())) >= 0.0;
+      // a crossing before the epoch is the block's usable start; a crossing after it, its usable stop when no epoch is answered after it
+      // (a later set of the series may answer epochs past an earlier set's crossing: the block then states neither limit and its
+      // COMMENT names the refused run)
+      bool answered_after = false;
+      if (past_n > 0 && !cross_back)
+        for (size_t q = 0; q < kw.size() && !answered_after; ++q) answered_after = ((kw[q] - cross_jd[0]) + (kf[q] - cross_jd[1])) > 0.0;
+      const char* limit_start = past_n > 0 && cross_back ? cross_text : nullptr;
+      const char* limit_stop = past_n > 0 && !cross_back && !answered_after ? cross_text : nullptr;
       if (past_n > 0) {
         char note[120];
         std::snprintf(note, sizeof note, "decayed:%s; %zu epochs after it refused", cross_text, past_n);
         comment = comment.empty() ? std::string(note) : comment + ". " + note;
       }
       blocks.push_back(CreateephemerisDataBlockDirect(fbb, comment.empty() ? nullptr : comment.c_str(), object, "EARTH", frame, nullptr, cov_frame, timingStandard_UTC, start,
-                                                      past_n > 0 && !cross_after ? cross_text : nullptr, cross_after ? cross_text : nullptr,
+                                                      limit_start, limit_stop,
                                                       stop, nullptr, 0, g.explicit_times ? 0.0 : g.step, 6, nullptr, &lines, with_cov ? &cov_lines : nullptr));
     }
     const auto root = CreateOEMDirect(fbb, nullptr, 3.0, nullptr, s.originator.empty() ? "SDN" : s.originator.c_str(), &blocks);

@@ -6777,6 +6777,18 @@ inline bool decay_past(const XpSat& s, double t) {
   const int di = t >= 0.0 ? 0 : 1, dir = t >= 0.0 ? 1 : -1;
   return s.decay_found[di] == 2 || (s.decay_found[di] && dir * t > dir * s.decay_t[di]);
 }
+/// SPEC 16.25: the epoch-decayed set (decay_found 2, written in xp_init before the set is shared): the only state of the crossing a
+/// thread may read without the set's lock, since decay_t and decay_found of a found crossing are stored by whichever worker's
+/// node run reaches it, under the lock.
+inline bool decay_at_epoch(const XpSat& s, double t) { return s.decay_found[t >= 0.0 ? 0 : 1] == 2; }
+/// decay_past and the crossing's minute, read under the set's lock (a shared set: the epoch store's, a batch's).
+inline bool decay_crossing(XpSat& s, double t, double& tc) {
+  lock(&s.lock);
+  const bool past = decay_past(s, t);
+  tc = s.decay_t[t >= 0.0 ? 0 : 1];
+  unlock(&s.lock);
+  return past;
+}
 /// SPEC 16.25: an AP set whose epoch already meets the rule is decayed at every time, its epoch too (decay_found 2).
 inline void decay_epoch(XpSat& s) {
   if (!is_ap_ctx(s.ctx) || !decayed(decay_q(s.ctx, s.epoch, false))) return;
@@ -6990,7 +7002,7 @@ inline bool mean_at_local(XpSat& s, double t, double* y) {
 
 /// Mean equinoctial state at t (minutes from epoch).
 inline bool mean_at(XpSat& s, double t, double* y) {
-  if (decay_past(s, t)) return false;  // SPEC 16.25
+  if (decay_at_epoch(s, t)) return false;  // SPEC 16.25: a crossing found by a node run is tested under the lock below
   if (t == 0.0) {
     tess::g_sp_anchor.valid = false;  // stack #491, as mean_at_local
     for (int j = 0; j < 6; ++j) y[j] = s.epoch.y[j];
@@ -7011,7 +7023,7 @@ inline bool mean_at(XpSat& s, double t, double* y) {
 /// that time's output reads (the window, the third-body bracket, the tesseral anchor) are left as they were, so the
 /// output does not depend on whether the grid had to be built.
 inline bool mean_at_aside(XpSat& s, double t, double* y) {
-  if (decay_past(s, t)) return false;  // SPEC 16.25
+  if (decay_at_epoch(s, t)) return false;  // SPEC 16.25, as mean_at
   if (t == 0.0) {
     for (int j = 0; j < 6; ++j) y[j] = s.epoch.y[j];
     return true;
@@ -7203,7 +7215,13 @@ inline int32_t xp_propagate_impl(XpSat& s, double t, double r[3], double v[3], c
   } anchor_scope;
   double y[6];
   // SPEC 16.25: a time past an AP set's decay crossing is refused as decayed (status 4)
-  if (!(local_sat ? mean_at_local(s, t, y) : mean_at(s, t, y))) return decay_past(s, t) ? kPropDecayed : kPropMeanMotion;
+  if (!(local_sat ? mean_at_local(s, t, y) : mean_at(s, t, y))) {
+    // a caller-private set is read directly; a shared one under its lock (a crossing found by another worker after this
+    // call's own refusal is then read whole: decay_t is stored before decay_found, both under that lock)
+    double tc;
+    const bool past = local_sat ? decay_past(s, t) : decay_crossing(s, t, tc);
+    return past ? kPropDecayed : kPropMeanMotion;
+  }
   // AP above e 0.3: the drag rates output_drag_pass adds, from the state's segment; a fit (inside its tess::FitGridScope)
   // keeps drag_part at each of its states, so the sets it writes do not depend on the segments
   DragPassRates pass_rates;

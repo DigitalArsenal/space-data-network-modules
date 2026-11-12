@@ -434,7 +434,8 @@ inline Result run_free(ElementRow& row, const double* t, const double* r, int co
       double sign = 1.0;
       bool column_ok = residuals(bumped, t, r, count, trial, &decayed);
       if (!column_ok && decayed) {
-        // SPEC 16.25: the bump lies past the decay rule: the difference below the iterate is the same column
+        // SPEC 16.25: the bump lies past the decay rule: the difference below the iterate is the same column (the force is linear
+        // in AGOM, so the set below, whose AGOM is negative where the term is under the step, gives the same column)
         bumped.agom = work.agom - step;
         sign = -1.0;
         column_ok = residuals(bumped, t, r, count, trial);
@@ -574,7 +575,7 @@ inline Result run_free(ElementRow& row, const double* t, const double* r, int co
       }
     }
     // SPEC 16.25: a pass that could not difference a column in either direction tested no step: it is not at a minimum
-    if (!improved && column_refused) { stopped_on_column = true; break; }
+    if (!improved && column_refused) { stopped_on_column = true; ++it; break; }  // the pass made this iteration: counted as a converged pass counts its last
     if (!improved) converged = true;  // no step lowers the cost: at the minimum
   }
   double ss = 0.0, mx = 0.0;

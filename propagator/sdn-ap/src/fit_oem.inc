@@ -1247,6 +1247,9 @@ static int fit_blocks() {
                           "the data at their own sigma), no fall-back");
       if (lattice) comment.push_back("elements at the two-line text's digits");
       if (decays_ahead) comment.push_back(std::string("decays at ") + decay_text);  // SPEC 16.25
+      // SPEC 16.25: a set that decays within the forecast and whose covariance could not be formed says so (a set moved for it may
+      // be refused where the set itself is not); no other record gains the line
+      if (decays_ahead && !have_cov) comment.push_back(std::string("covariance: not stated for this set, which decays at ") + decay_text);
       // SPEC 16.7 (stack #504): a fit whose two branches' least-squares sets lie across an eccentricity switch ends on one side
       if (res.held_at_switch)
         comment.push_back("fit: held at the eccentricity switch on its own branch; the least-squares sets of both branches lie across it");
@@ -1428,7 +1431,9 @@ static int fit_blocks() {
         const auto s_content = rb.CreateString(ocm_cid);
         ODRBuilder ob(rb);
         ob.add_RUN_ID(s_run);
-        ob.add_CONVERGENCE_REASON(res.status == 0 ? odrConvergenceReason_CONVERGED : odrConvergenceReason_MAXIMUM_ITERATIONS);
+        // status 2 (SPEC 16.25: a pass that could not difference a column) is no ceiling: the OD COMMENT names it
+        ob.add_CONVERGENCE_REASON(res.status == 0 ? odrConvergenceReason_CONVERGED
+                                  : res.status == fit::kColumnRefused ? odrConvergenceReason_UNSPECIFIED : odrConvergenceReason_MAXIMUM_ITERATIONS);
         ob.add_EDITED_OBSERVATIONS(s_edited);
         ob.add_OCM_CONTENT_ID(s_content);
         FinishODRBuffer(rb, ob.Finish());

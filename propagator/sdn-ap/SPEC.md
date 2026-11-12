@@ -1,6 +1,6 @@
 # SGP4-XP: mathematical specification (clean room, side A)
 
-Version 0.6.47 (dist 2dd21625).
+Version 0.6.47 (dist e95cdca3).
 
 **License note.** The US Space Force Sgp4Prop library is used under the USSF open source agreement
 (`space-data-network-modules/propagator/sgp4-xp/third_party/ussf-sgp4/AGREEMENT.txt`; the 9.9 package carries the
@@ -5143,7 +5143,9 @@ carried by the state columns (`P(t) = J(t) P_p J(t)^T`, the parameter block of `
 | NORMALIZED_RESIDUAL | (observed - computed) / sigma |
 | PERTURBATION_MODEL_CODE | SGP4XP or AP, the set's theory |
 
-The residual is OBSERVED_VALUE minus COMPUTED_VALUE. A fit whose inputs have no per-observation form writes no rows,
+The residual is OBSERVED_VALUE minus COMPUTED_VALUE. A state of the block past the written set's decay crossing and outside
+the fit's arc (SPEC 16.25) is written not accepted, REASON DECAYED, WEIGHT 0, its COMPUTED_VALUE and NORMALIZED_RESIDUAL
+not-a-number (no value: an unset field would read as 0); a reader of the residuals takes the accepted rows. A fit whose inputs have no per-observation form writes no rows,
 and P9 is then refused downstream.
 
 ### 17.5 Covariance per epoch
