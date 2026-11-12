@@ -10,8 +10,8 @@
 //    upper bootstrap bound at days 1, 3 and 7 at or below 1.05.
 // 2. No harm at e 0.3 and below: AP (31, 20) seeded sets (LEO, geostationary, Etalon-like, GPS-like, e 0.25, e 0.3) and a
 //    fitted AP set (0.6.36's fit, test/fixtures/ap-fit-0.6.36.ocm) flown 2 days at 600 s give ephemerides within NO_HARM
-//    (below) on this build and on BASE (the field change's first build, git 7ebc98e4, SHA-256 checked, its own version string
-//    0.6.33; sdn-ap 0.6.2 until 0.6.20, 0.6.21 at 0.6.21, 0.6.22 to 0.6.34, history at NO_HARM); the SGP4XP seed byte-identical; analysis/catalog-composer's AP fixture (sdn-ap 0.5.1's
+//    (below) on this build and on BASE (the low table's fast side's first build, git 73331c6a, SHA-256 checked, its own version
+//    string 0.6.36; the field change's first build, git 7ebc98e4, its version string 0.6.33, from 0.6.36; sdn-ap 0.6.2 until 0.6.20, 0.6.21 at 0.6.21, 0.6.22 to 0.6.34, history at NO_HARM); the SGP4XP seed byte-identical; analysis/catalog-composer's AP fixture (sdn-ap 0.5.1's
 //    fit, GRAVITY_MODEL EGM-96) refused (gravity-model-mismatch, SPEC 16.2).
 import assert from 'node:assert/strict';
 import {requireTruth} from './lib/ffm-truth.mjs';
@@ -28,7 +28,7 @@ import {seedOcm, flight, T} from './lib/ocm.mjs';
 import {oemDistance} from './lib/oem-distance.mjs';
 import {configuration} from './lib/pcf.mjs';
 
-const BASE_VERSION = '0.6.33', BASE = '7ebc98e4e', BASE_SHA256 = '0bd00d280330ff62e8e06ac74745520d39920c887902e3968c7a6e4991e63410';
+const BASE_VERSION = '0.6.36', BASE = '73331c6a9', BASE_SHA256 = 'f1b29efffc0706d0f675712af6b77507d5ab2d3522c0ce7fc1ffe6cbceaef3de';
 // 2's bound on the AP seeds (fixed elements, 48 h at 600 s). Against sdn-ap 0.6.2 (modules c82160de7, SHA-256 84d50dca...)
 // until 0.6.20: byte-identical until 0.6.5, whose speed changes move a flight of fixed elements by millimeters (SPEC 16.8);
 // measured 2026-11-10 on 0.6.8, per seed: LEO 3.10, GEO 0.41, Etalon 3.62, GPS 5.01, e 0.25 9.11 and e 0.3 10.66 mm
@@ -54,7 +54,13 @@ const BASE_VERSION = '0.6.33', BASE = '7ebc98e4e', BASE_SHA256 = '0bd00d280330ff
 // that build's own version string), every AP set under the one bound, 15 mm. From 0.6.36
 // a record stating another field is refused (SPEC 16.2): the fitted set until then, analysis/catalog-composer's fixture
 // (ap-fit-sdn-ap-0.5.1.ocm, GRAVITY_MODEL EGM-96), is asserted refused, and the fitted set is 0.6.36's own fit of the
-// 550 km arc (test/fixtures/ap-fit-0.6.36.ocm), which the baseline flies too.
+// 550 km arc (test/fixtures/ap-fit-0.6.36.ocm), which the baseline flies too. The low table's fast side (stack #477, SPEC
+// 16.1: the output table to the record's tesseral degree) moves from 7ebc98e4 the LEO seed by 95,893.02 mm (velocity
+// 66,912.77 um/s) and the fitted 550 km set by 59,929.89 mm (velocity 47,483.28 um/s; covariance 0.374 of a line's largest
+// entry, the floor that follows the fit's residual, SPEC 12.5): both are in the low table at tesseral degree 31. The
+// geostationary, Etalon-like, GPS-like, e 0.25 and e 0.3 seeds are outside it and byte-identical, and SGP4XP byte-identical.
+// From the fast side the baseline is its first build (git 73331c6a, not a release; BASE_VERSION is that build's own version
+// string), every AP set under the one bound, 15 mm.
 const NO_HARM = {posM: 0.015, velMmS: 0.01, covOfLargest: 1e-3};
 const modules = fileURLToPath(new URL('../../../', import.meta.url)), packageRoot = path.join(modules, 'propagator/sdn-ap');
 // a scratch outside the package: the test build copies the package's sources, which cannot hold its own destination
