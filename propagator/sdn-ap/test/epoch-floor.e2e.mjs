@@ -23,7 +23,8 @@
 //   same bit for bit; and on both, at minute 0, P(0) less the floor at the flown state equals that remainder within
 //   IDENTITY of P(0)'s largest entry.
 // - A set's own flight is as it was: this build's record flown by this build against another build's record of the same
-//   arc flown by that build, sdnap_covariance_at hourly to 48 h, within SELF.
+//   arc flown by that build, sdnap_covariance_at hourly to 48 h, within SELF; from 0.6.45 the other build's record carries
+//   this build's drag share and s_d (restated: 0.6.45 multiplies a strong-drag record's share, SPEC 12.5, stack #568).
 //   - The cure's property (a pre-cure build's own flight equals the cured build's) is held where this change moves neither
 //     the theory nor the floor: the case at caps 0 (no gravity terms, so no radial term) against BASE. Through 0.6.42 the
 //     case at caps 12 and 12 (no fast side, no radial floor factor) was held against MAIN, main's own pre-cure release
@@ -203,7 +204,15 @@ for (const c of CASES) {
   // a set's own flight is as it was, against the case's `own` build (and against BASE, printed)
   const ownH = c.own === 'main' ? mainH : c.own === 'base' ? base : selfH;
   const ownName = c.own === 'main' ? `${MAIN.version} (${MAIN.commit.slice(0, 8)})` : c.own === 'base' ? `${BASE.version} (${BASE.commit.slice(0, 8)})` : `${SELF_BASE.version} (${SELF_BASE.commit.slice(0, 8)})`;
-  const [ob, os, mc] = [covAt(base, old), covAt(ownH, c.own === 'base' ? old : await fitBy(ownH)), covAt(cur, mine)];
+  // 0.6.45 (SPEC 12.5, stack #568) states another drag share on a strong-drag record of the fast side, the same fit: the own
+  // build's record with its share and s_d restated as this build's record states them, so the identity is of the fit, the
+  // floor and the flight
+  const restated = (bytes) => repackOcm(bytes, (u) => {
+    const f = ocmOf(mine).COV_PROPAGATION;
+    u.COV_PROPAGATION.NON_GRAVITATIONAL_SHARE = f.NON_GRAVITATIONAL_SHARE;
+    u.COV_PROPAGATION.NOISE_NON_GRAVITATIONAL_RAD_DAY2 = f.NOISE_NON_GRAVITATIONAL_RAD_DAY2;
+  });
+  const [ob, os, mc] = [covAt(base, old), covAt(ownH, c.own === 'base' ? old : restated(await fitBy(ownH))), covAt(cur, mine)];
   const self = os.status === 0 && mc.status === 0 ? apart(os.out, mc.out) : null;
   row.self = {against: ownName, ...self};
   row.selfAgainstBase = ob.status === 0 && mc.status === 0 ? apart(ob.out, mc.out) : null;

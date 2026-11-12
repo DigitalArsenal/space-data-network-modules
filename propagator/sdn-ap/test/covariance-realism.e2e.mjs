@@ -26,9 +26,10 @@
 //   the record's own stated drag rate r (P(t) is linear in each squared size, SPEC 12.5).
 //   Per regime, day and axis over the judged windows (the split rule's other set): the median |z|, pooled over every
 //   sample of the day, and the shares within 1 and 3 sigma.
-// Asserts: the DRAG row and the floors as above; the factor; every judged cell equals the registered cell
-// (test/fixtures/covariance-judged-31-70.json, MEDIAN_RELATIVE); the cells outside the band [0.603, 0.754] are exactly the
-// registered ones, each named with its cause. Realism is not met: 3 of the 42 judged cells are inside the band (8 on 0.6.42). JS moves
+// Asserts: the DRAG row and the floors as above; the factor and the share's step; the rows' s_i is the DRAG row's; every
+// judged cell equals the registered cell (test/fixtures/covariance-judged-31-70.json, MEDIAN_RELATIVE); the cells outside the
+// band [0.603, 0.754] are exactly the registered ones, each named with its cause. Realism is not met: 14 of the 42 judged
+// cells are inside the band (3 on 0.6.43, 8 on 0.6.42). JS moves
 // bytes, rotates the module's covariance onto the truth's axes and takes medians; every state and covariance is the module's.
 // Until 0.6.42 the test judged 0.6.0's flights of held-out windows re-weighted with the build's variances. On 0.6.42 (git
 // b7a7191e, wasm f771420f; main 0.6.41's test, git afdd1568, run on it), whose floors follow its closer fit, those cells read
@@ -121,6 +122,15 @@ const FLOOR_RELATIVE = 2e-3, MEDIAN_RELATIVE = 5e-5;
 // longer cancelled in part by the bias (stack #565). The factor by regime is stack #568. The ISS sample's fit moves: its 12 h
 // error 265.1 to 263.3 m, FLOOR_UU_KM2 2.0 % larger, FLOOR_VV_KM2 0.9 % smaller, FLOOR_WW_KM2 as it was; FLOORS_PINNED is
 // this build's.
+// 0.6.45 (stacks #531, #568) changes no fit and no floor: the DRAG row's s_i times exp(-2.2) at zonal degree 70 and the drag
+// share times exp(0.150) on strong drag, by the step on the record's own drag rate. The registered rows are 0.6.43's own
+// flights with each sample's s_i and drag terms apart (rows-31-70-si-drag-terms.jsonl, the same flights as 0.6.43's
+// registered rows: without the factors they give 0.6.43's 42 cells to 2e-16 relative), and the cells are registered at the
+// factors. Against 0.6.42: in the band 8 to 14 (3 on 0.6.43). The four weak-drag radial cells 0.6.43 takes out of the band on
+// the wide side stay out (near 700 km, altimetry and the laser spheres at day 1, 0.545, 0.535, 0.536; altimetry at day 7,
+// 0.545): the weak-drag side keeps exp(0.095) (stack #568). Strong drag 2026's in-track stays too narrow at every lead, less
+// than on 0.6.42 (0.864, 0.896, 0.906, 0.894 to 0.831, 0.797, 0.792, 0.774 at days 1, 3, 5, 7), and its day-3 radial is 0.754
+// against 0.6.42's 0.748, inside the band. Every strong drag 2026 radial cell is inside (0.666, 0.754, 0.754, 0.712).
 const FLOORS_PINNED = { FLOOR_UU_KM2: 0.00009222349489320216, FLOOR_VU_KM2: -0.0000031370232835827193, FLOOR_VV_KM2: 0.00043417978537513166,
   FLOOR_WU_KM2: -0.000010709838259212625, FLOOR_WV_KM2: 0.000004215804512073688, FLOOR_WW_KM2: 0.00006200777184276415 };
 const ISS = { path: "analysis/od/tests/data/supgp-reference/iss/ISS.OEM_J2K_EPH.trimmed.txt", sha256: "fbda48d1584bee1f38ea562625280ecfe4e6643f67c417e91f2fc245ee48311f" };
