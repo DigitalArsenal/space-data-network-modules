@@ -1,1 +1,897 @@
-{"what":"sdn-ap stated covariance against its own errors on the judged windows, records at 31/70 (tesseral/zonal)","build":{"commit":"41d7b9009a47a76a1c8c70e05d8b029ccf2e8940","wasmSha256":"d36bac74be6defa33d2aaddad74fe1aab7d81b2113586a15f49d59e2cbe8716c","version":"0.6.36"},"pcf":["AP_TIDES at 31/70"],"rows":{"file":"rows-31-70.jsonl","sha256":"04875c914f74b3695295d182951380da9c71b39f3e26f51c9b4c099a65bbbaa3","windows":748,"choice":326,"judged":422,"byRegime":{"T":{"choice":236,"judged":0},"P":{"choice":0,"judged":306},"LS":{"choice":43,"judged":28},"DO":{"choice":47,"judged":40},"S1":{"choice":0,"judged":48}}},"splitRule":{"file":"size-split-rule.json","sha256":"d3177de7fe71ad9ef048ec7e1c2d9d2e9d9748b7fa4320349897d06ee15642a0"},"factorFit":{"what":"f on the floor sigma per axis, maximum likelihood over the choice windows, days 1, 2, 3, 5, 7","grid":"exp(-1.5 to 2.5 by 0.02)","R":1.1051709180756493,"I":1.2214027581601716,"C":0.5827482523739902,"samples":74495},"registered":{"R":1.1051709180756493,"I":1,"C":1,"note":"radial only, fitted on records at 31/70, the degrees the catalog's records take from this version; cross-track gets no factor; in-track has no floor to speak of (stack #477)"},"band":[0.603,0.754],"halfNormalMedian":0.6744897501960817,"judged":[{"regime":"P","name":"strong drag 2026","day":1,"axis":"R","windows":306,"samples":14688,"atOne":{"medianAbsZ":0.7213246771722392,"within1":0.6787173202614379,"within3":0.9863834422657952},"registered":{"medianAbsZ":0.6565797689265434,"within1":0.7294389978213508,"within3":0.9900599128540305},"floorShareMedian":0.9590601490681823},{"regime":"P","name":"strong drag 2026","day":1,"axis":"I","windows":306,"samples":14688,"atOne":{"medianAbsZ":0.8641048354170433,"within1":0.5569852941176471,"within3":0.9102668845315904},"registered":{"medianAbsZ":0.8641048354170433,"within1":0.5569852941176471,"within3":0.9102668845315904},"floorShareMedian":0.016524752905278155,"outsideBand":"too narrow: the drag share; the record writes c = 0.1121 (the 0.1345 ruled on stack #531 is not in this build) and the 2026 storms are beyond it (stack #531); the same in 0.6.36"},{"regime":"P","name":"strong drag 2026","day":1,"axis":"C","windows":306,"samples":14688,"atOne":{"medianAbsZ":0.3963297039371986,"within1":0.8873229847494554,"within3":1},"registered":{"medianAbsZ":0.3963297039371986,"within1":0.8873229847494554,"within3":1},"floorShareMedian":0.49414466356932313,"outsideBand":"too wide: the low rows' sizes (s_e, s_i, s_l, c) are set on strong drag and are too wide outside it (stack #531 calibration table; the size study)"},{"regime":"P","name":"strong drag 2026","day":3,"axis":"R","windows":306,"samples":14688,"atOne":{"medianAbsZ":0.7877745094193307,"within1":0.6034177559912854,"within3":0.9425381263616558},"registered":{"medianAbsZ":0.7457020596300534,"within1":0.6253404139433552,"within3":0.9482570806100218},"floorShareMedian":0.5119301281866682},{"regime":"P","name":"strong drag 2026","day":3,"axis":"I","windows":306,"samples":14688,"atOne":{"medianAbsZ":0.8953907469704327,"within1":0.5381944444444444,"within3":0.9044798474945533},"registered":{"medianAbsZ":0.8953907469704327,"within1":0.5381944444444444,"within3":0.9044798474945533},"floorShareMedian":0.00009227150669409898,"outsideBand":"too narrow: the drag share; the record writes c = 0.1121 (the 0.1345 ruled on stack #531 is not in this build) and the 2026 storms are beyond it (stack #531); the same in 0.6.36"},{"regime":"P","name":"strong drag 2026","day":3,"axis":"C","windows":306,"samples":14688,"atOne":{"medianAbsZ":0.15904999341360293,"within1":0.9995915032679739,"within3":1},"registered":{"medianAbsZ":0.15904999341360293,"within1":0.9995915032679739,"within3":1},"floorShareMedian":0.04346506265991203,"outsideBand":"too wide: the low rows' sizes (s_e, s_i, s_l, c) are set on strong drag and are too wide outside it (stack #531 calibration table; the size study)"},{"regime":"P","name":"strong drag 2026","day":5,"axis":"R","windows":306,"samples":14688,"atOne":{"medianAbsZ":0.8107667727512149,"within1":0.5976307189542484,"within3":0.9319852941176471},"registered":{"medianAbsZ":0.7873908250187979,"within1":0.6117919389978214,"within3":0.9377723311546841},"floorShareMedian":0.25609601049601444,"outsideBand":"too narrow: the drag share; the record writes c = 0.1121 (the 0.1345 ruled on stack #531 is not in this build) and the 2026 storms are beyond it (stack #531); the same in 0.6.36"},{"regime":"P","name":"strong drag 2026","day":5,"axis":"I","windows":306,"samples":14688,"atOne":{"medianAbsZ":0.9063607764313808,"within1":0.53125,"within3":0.8858932461873639},"registered":{"medianAbsZ":0.9063607764313808,"within1":0.53125,"within3":0.8858932461873639},"floorShareMedian":0.00001095614053446222,"outsideBand":"too narrow: the drag share; the record writes c = 0.1121 (the 0.1345 ruled on stack #531 is not in this build) and the 2026 storms are beyond it (stack #531); the same in 0.6.36"},{"regime":"P","name":"strong drag 2026","day":5,"axis":"C","windows":306,"samples":14688,"atOne":{"medianAbsZ":0.12708347523468716,"within1":1,"within3":1},"registered":{"medianAbsZ":0.12708347523468716,"within1":1,"within3":1},"floorShareMedian":0.01171272796444869,"outsideBand":"too wide: the low rows' sizes (s_e, s_i, s_l, c) are set on strong drag and are too wide outside it (stack #531 calibration table; the size study)"},{"regime":"P","name":"strong drag 2026","day":7,"axis":"R","windows":306,"samples":14688,"atOne":{"medianAbsZ":0.7793794084654477,"within1":0.6191448801742919,"within3":0.9480528322440087},"registered":{"medianAbsZ":0.7697827489467985,"within1":0.6268382352941176,"within3":0.9505038126361656},"floorShareMedian":0.06423561198725602,"outsideBand":"too narrow: the drag share; the record writes c = 0.1121 (the 0.1345 ruled on stack #531 is not in this build) and the 2026 storms are beyond it (stack #531); the same in 0.6.36"},{"regime":"P","name":"strong drag 2026","day":7,"axis":"I","windows":306,"samples":14688,"atOne":{"medianAbsZ":0.8936420927217286,"within1":0.5322031590413944,"within3":0.8578431372549019},"registered":{"medianAbsZ":0.8936420927217286,"within1":0.5322031590413944,"within3":0.8578431372549019},"floorShareMedian":0.0000026804242193291744,"outsideBand":"too narrow: the drag share; the record writes c = 0.1121 (the 0.1345 ruled on stack #531 is not in this build) and the 2026 storms are beyond it (stack #531); the same in 0.6.36"},{"regime":"P","name":"strong drag 2026","day":7,"axis":"C","windows":306,"samples":14688,"atOne":{"medianAbsZ":0.12077904174307871,"within1":1,"within3":1},"registered":{"medianAbsZ":0.12077904174307871,"within1":1,"within3":1},"floorShareMedian":0.004631102580151686,"outsideBand":"too wide: the low rows' sizes (s_e, s_i, s_l, c) are set on strong drag and are too wide outside it (stack #531 calibration table; the size study)"},{"regime":"LS","name":"laser spheres","day":1,"axis":"R","windows":28,"samples":1080,"atOne":{"medianAbsZ":0.7023679094540496,"within1":0.7296296296296296,"within3":1},"registered":{"medianAbsZ":0.6377504799927032,"within1":0.7796296296296297,"within3":1},"floorShareMedian":0.9896029976351852},{"regime":"LS","name":"laser spheres","day":1,"axis":"I","windows":28,"samples":1080,"atOne":{"medianAbsZ":0.04568329488598035,"within1":0.9972222222222222,"within3":1},"registered":{"medianAbsZ":0.04568329488598035,"within1":0.9972222222222222,"within3":1},"floorShareMedian":0.0015406165937712477,"outsideBand":"too wide: the low rows' sizes (s_e, s_i, s_l, c) are set on strong drag and are too wide outside it (stack #531 calibration table; the size study)"},{"regime":"LS","name":"laser spheres","day":1,"axis":"C","windows":28,"samples":1080,"atOne":{"medianAbsZ":0.5490034514323927,"within1":0.85,"within3":1},"registered":{"medianAbsZ":0.5490034514323927,"within1":0.85,"within3":1},"floorShareMedian":0.7504212449904054,"outsideBand":"too wide: the low rows' sizes (s_e, s_i, s_l, c) are set on strong drag and are too wide outside it (stack #531 calibration table; the size study)"},{"regime":"LS","name":"laser spheres","day":3,"axis":"R","windows":28,"samples":817,"atOne":{"medianAbsZ":0.60966884378395,"within1":0.784577723378213,"within3":1},"registered":{"medianAbsZ":0.5635720459849544,"within1":0.8298653610771114,"within3":1},"floorShareMedian":0.8379960662281573,"outsideBand":"too wide: the spheres and altimetry want a smaller radial floor than near 700 km and strong drag 2026, and one factor cannot serve both (stack #477, point 3); past day 1 the sizes carry part of it (stack #531)"},{"regime":"LS","name":"laser spheres","day":3,"axis":"I","windows":28,"samples":817,"atOne":{"medianAbsZ":0.019574583686788823,"within1":1,"within3":1},"registered":{"medianAbsZ":0.019574583686788823,"within1":1,"within3":1},"floorShareMedian":0.00006161309544626223,"outsideBand":"too wide: the low rows' sizes (s_e, s_i, s_l, c) are set on strong drag and are too wide outside it (stack #531 calibration table; the size study)"},{"regime":"LS","name":"laser spheres","day":3,"axis":"C","windows":28,"samples":817,"atOne":{"medianAbsZ":0.19893867645844793,"within1":0.9987760097919217,"within3":1},"registered":{"medianAbsZ":0.19893867645844793,"within1":0.9987760097919217,"within3":1},"floorShareMedian":0.10636710064128364,"outsideBand":"too wide: the low rows' sizes (s_e, s_i, s_l, c) are set on strong drag and are too wide outside it (stack #531 calibration table; the size study)"},{"regime":"LS","name":"laser spheres","day":5,"axis":"R","windows":28,"samples":1080,"atOne":{"medianAbsZ":0.5303772047289914,"within1":0.8435185185185186,"within3":1},"registered":{"medianAbsZ":0.5006318062791599,"within1":0.8796296296296297,"within3":1},"floorShareMedian":0.6878089887556009,"outsideBand":"too wide: the spheres and altimetry want a smaller radial floor than near 700 km and strong drag 2026, and one factor cannot serve both (stack #477, point 3); past day 1 the sizes carry part of it (stack #531)"},{"regime":"LS","name":"laser spheres","day":5,"axis":"I","windows":28,"samples":1080,"atOne":{"medianAbsZ":0.019473064591557433,"within1":1,"within3":1},"registered":{"medianAbsZ":0.019473064591557433,"within1":1,"within3":1},"floorShareMedian":0.000019682439839096218,"outsideBand":"too wide: the low rows' sizes (s_e, s_i, s_l, c) are set on strong drag and are too wide outside it (stack #531 calibration table; the size study)"},{"regime":"LS","name":"laser spheres","day":5,"axis":"C","windows":28,"samples":1080,"atOne":{"medianAbsZ":0.1184062873261266,"within1":1,"within3":1},"registered":{"medianAbsZ":0.1184062873261266,"within1":1,"within3":1},"floorShareMedian":0.03324249259698559,"outsideBand":"too wide: the low rows' sizes (s_e, s_i, s_l, c) are set on strong drag and are too wide outside it (stack #531 calibration table; the size study)"},{"regime":"LS","name":"laser spheres","day":7,"axis":"R","windows":28,"samples":753,"atOne":{"medianAbsZ":0.462029056997636,"within1":0.8738379814077025,"within3":1},"registered":{"medianAbsZ":0.4415344486651075,"within1":0.8937583001328021,"within3":1},"floorShareMedian":0.5183885433482496,"outsideBand":"too wide: the spheres and altimetry want a smaller radial floor than near 700 km and strong drag 2026, and one factor cannot serve both (stack #477, point 3); past day 1 the sizes carry part of it (stack #531)"},{"regime":"LS","name":"laser spheres","day":7,"axis":"I","windows":28,"samples":753,"atOne":{"medianAbsZ":0.01895423314317392,"within1":1,"within3":1},"registered":{"medianAbsZ":0.01895423314317392,"within1":1,"within3":1},"floorShareMedian":0.000009515685796774913,"outsideBand":"too wide: the low rows' sizes (s_e, s_i, s_l, c) are set on strong drag and are too wide outside it (stack #531 calibration table; the size study)"},{"regime":"LS","name":"laser spheres","day":7,"axis":"C","windows":28,"samples":753,"atOne":{"medianAbsZ":0.08242442676994183,"within1":1,"within3":1},"registered":{"medianAbsZ":0.08242442676994183,"within1":1,"within3":1},"floorShareMedian":0.013113851071574732,"outsideBand":"too wide: the low rows' sizes (s_e, s_i, s_l, c) are set on strong drag and are too wide outside it (stack #531 calibration table; the size study)"},{"regime":"DO","name":"altimetry, burn-free","day":1,"axis":"R","windows":40,"samples":1920,"atOne":{"medianAbsZ":0.7138180565513967,"within1":0.709375,"within3":1},"registered":{"medianAbsZ":0.6465138899501081,"within1":0.7703125,"within3":1},"floorShareMedian":0.9914071201533168},{"regime":"DO","name":"altimetry, burn-free","day":1,"axis":"I","windows":40,"samples":1920,"atOne":{"medianAbsZ":0.09482498861516889,"within1":0.9895833333333334,"within3":1},"registered":{"medianAbsZ":0.09482498861516889,"within1":0.9895833333333334,"within3":1},"floorShareMedian":0.0017336558363761452,"outsideBand":"too wide: the low rows' sizes (s_e, s_i, s_l, c) are set on strong drag and are too wide outside it (stack #531 calibration table; the size study)"},{"regime":"DO","name":"altimetry, burn-free","day":1,"axis":"C","windows":40,"samples":1920,"atOne":{"medianAbsZ":0.5849334259149253,"within1":0.8411458333333334,"within3":1},"registered":{"medianAbsZ":0.5849334259149253,"within1":0.8411458333333334,"within3":1},"floorShareMedian":0.7815480965471645,"outsideBand":"too wide: the low rows' sizes (s_e, s_i, s_l, c) are set on strong drag and are too wide outside it (stack #531 calibration table; the size study)"},{"regime":"DO","name":"altimetry, burn-free","day":3,"axis":"R","windows":40,"samples":1920,"atOne":{"medianAbsZ":0.64284050966594,"within1":0.7151041666666667,"within3":0.9958333333333333},"registered":{"medianAbsZ":0.5946267625780637,"within1":0.7536458333333333,"within3":0.9984375},"floorShareMedian":0.8829634288215322,"outsideBand":"too wide: the spheres and altimetry want a smaller radial floor than near 700 km and strong drag 2026, and one factor cannot serve both (stack #477, point 3); past day 1 the sizes carry part of it (stack #531)"},{"regime":"DO","name":"altimetry, burn-free","day":3,"axis":"I","windows":40,"samples":1920,"atOne":{"medianAbsZ":0.0635881544247932,"within1":0.9776041666666667,"within3":1},"registered":{"medianAbsZ":0.0635881544247932,"within1":0.9776041666666667,"within3":1},"floorShareMedian":0.00006898969008634419,"outsideBand":"too wide: the low rows' sizes (s_e, s_i, s_l, c) are set on strong drag and are too wide outside it (stack #531 calibration table; the size study)"},{"regime":"DO","name":"altimetry, burn-free","day":3,"axis":"C","windows":40,"samples":1920,"atOne":{"medianAbsZ":0.23751832735863582,"within1":1,"within3":1},"registered":{"medianAbsZ":0.23751832735863582,"within1":1,"within3":1},"floorShareMedian":0.12832254033064516,"outsideBand":"too wide: the low rows' sizes (s_e, s_i, s_l, c) are set on strong drag and are too wide outside it (stack #531 calibration table; the size study)"},{"regime":"DO","name":"altimetry, burn-free","day":5,"axis":"R","windows":40,"samples":1920,"atOne":{"medianAbsZ":0.6213430668939115,"within1":0.7296875,"within3":0.9786458333333333},"registered":{"medianAbsZ":0.5823730965908389,"within1":0.7552083333333334,"within3":0.9880208333333333},"floorShareMedian":0.7109699727589154,"outsideBand":"too wide: the spheres and altimetry want a smaller radial floor than near 700 km and strong drag 2026, and one factor cannot serve both (stack #477, point 3); past day 1 the sizes carry part of it (stack #531)"},{"regime":"DO","name":"altimetry, burn-free","day":5,"axis":"I","windows":40,"samples":1920,"atOne":{"medianAbsZ":0.0955654384486683,"within1":0.8786458333333333,"within3":1},"registered":{"medianAbsZ":0.0955654384486683,"within1":0.8786458333333333,"within3":1},"floorShareMedian":0.000021020714209150106,"outsideBand":"too wide: the low rows' sizes (s_e, s_i, s_l, c) are set on strong drag and are too wide outside it (stack #531 calibration table; the size study)"},{"regime":"DO","name":"altimetry, burn-free","day":5,"axis":"C","windows":40,"samples":1920,"atOne":{"medianAbsZ":0.1307656472318236,"within1":1,"within3":1},"registered":{"medianAbsZ":0.1307656472318236,"within1":1,"within3":1},"floorShareMedian":0.036992063498806335,"outsideBand":"too wide: the low rows' sizes (s_e, s_i, s_l, c) are set on strong drag and are too wide outside it (stack #531 calibration table; the size study)"},{"regime":"DO","name":"altimetry, burn-free","day":7,"axis":"R","windows":40,"samples":1820,"atOne":{"medianAbsZ":0.6391007872607575,"within1":0.6884615384615385,"within3":0.9362637362637363},"registered":{"medianAbsZ":0.6047343967287205,"within1":0.7142857142857143,"within3":0.945054945054945},"floorShareMedian":0.5493421100430098},{"regime":"DO","name":"altimetry, burn-free","day":7,"axis":"I","windows":40,"samples":1820,"atOne":{"medianAbsZ":0.269525956699409,"within1":0.7675824175824176,"within3":0.9857142857142858},"registered":{"medianAbsZ":0.269525956699409,"within1":0.7675824175824176,"within3":0.9857142857142858},"floorShareMedian":0.000010005365744714008,"outsideBand":"too wide: the low rows' sizes (s_e, s_i, s_l, c) are set on strong drag and are too wide outside it (stack #531 calibration table; the size study)"},{"regime":"DO","name":"altimetry, burn-free","day":7,"axis":"C","windows":40,"samples":1820,"atOne":{"medianAbsZ":0.09826359115104706,"within1":0.9912087912087912,"within3":0.9994505494505495},"registered":{"medianAbsZ":0.09826359115104706,"within1":0.9912087912087912,"within3":0.9994505494505495},"floorShareMedian":0.016164872516244308,"outsideBand":"too wide: the low rows' sizes (s_e, s_i, s_l, c) are set on strong drag and are too wide outside it (stack #531 calibration table; the size study)"},{"regime":"S1","name":"near 700 km, burn-free to day 3","day":1,"axis":"R","windows":48,"samples":2207,"atOne":{"medianAbsZ":0.7542310481502439,"within1":0.6805618486633439,"within3":1},"registered":{"medianAbsZ":0.6831850682898868,"within1":0.7544177616674218,"within3":1},"floorShareMedian":0.9929142195827971},{"regime":"S1","name":"near 700 km, burn-free to day 3","day":1,"axis":"I","windows":48,"samples":2207,"atOne":{"medianAbsZ":0.2186081221708454,"within1":0.9859537834164024,"within3":1},"registered":{"medianAbsZ":0.2186081221708454,"within1":0.9859537834164024,"within3":1},"floorShareMedian":0.002394411497401814,"outsideBand":"too wide: the low rows' sizes (s_e, s_i, s_l, c) are set on strong drag and are too wide outside it (stack #531 calibration table; the size study)"},{"regime":"S1","name":"near 700 km, burn-free to day 3","day":1,"axis":"C","windows":48,"samples":2207,"atOne":{"medianAbsZ":0.6032595920148507,"within1":0.8187584956955143,"within3":1},"registered":{"medianAbsZ":0.6032595920148507,"within1":0.8187584956955143,"within3":1},"floorShareMedian":0.8163515678408952},{"regime":"S1","name":"near 700 km, burn-free to day 3","day":3,"axis":"R","windows":48,"samples":2157,"atOne":{"medianAbsZ":0.7633110176339863,"within1":0.6184515530829856,"within3":1},"registered":{"medianAbsZ":0.6969760910198939,"within1":0.6611033843300881,"within3":1},"floorShareMedian":0.9009312850735236},{"regime":"S1","name":"near 700 km, burn-free to day 3","day":3,"axis":"I","windows":48,"samples":2157,"atOne":{"medianAbsZ":0.3685057739533425,"within1":0.923041261010663,"within3":1},"registered":{"medianAbsZ":0.3685057739533425,"within1":0.923041261010663,"within3":1},"floorShareMedian":0.0000909319193128065,"outsideBand":"too wide: the low rows' sizes (s_e, s_i, s_l, c) are set on strong drag and are too wide outside it (stack #531 calibration table; the size study)"},{"regime":"S1","name":"near 700 km, burn-free to day 3","day":3,"axis":"C","windows":48,"samples":2157,"atOne":{"medianAbsZ":0.2605538567812738,"within1":1,"within3":1},"registered":{"medianAbsZ":0.2605538567812738,"within1":1,"within3":1},"floorShareMedian":0.15558305371868186,"outsideBand":"too wide: the low rows' sizes (s_e, s_i, s_l, c) are set on strong drag and are too wide outside it (stack #531 calibration table; the size study)"}]}
+{
+  "what": "sdn-ap stated covariance against its own errors on the judged windows, records at 31/70/factor/off (tesseral/zonal)",
+  "build": {
+    "commit": "3e4dcbbedc21d07f1443f6bcf1082c9e9569b5a1",
+    "wasmSha256": "1ddff52cf42c6f3e9b1c8dfe470d0d70e22b6afcb187838fbe4b7ceb5c333487",
+    "version": "0.6.42"
+  },
+  "pcf": [
+    "AP_TIDES at 31/70"
+  ],
+  "rows": {
+    "file": "rows-31-70-factor-off.jsonl",
+    "sha256": "dc54dafd6da1816734de29cd7f1319e6f023f783d664240e6090912149881be6",
+    "windows": 748,
+    "choice": 326,
+    "judged": 422,
+    "byRegime": {
+      "T": {
+        "choice": 236,
+        "judged": 0
+      },
+      "P": {
+        "choice": 0,
+        "judged": 306
+      },
+      "LS": {
+        "choice": 43,
+        "judged": 28
+      },
+      "DO": {
+        "choice": 47,
+        "judged": 40
+      },
+      "S1": {
+        "choice": 0,
+        "judged": 48
+      }
+    }
+  },
+  "splitRule": {
+    "file": "size-split-rule.json",
+    "sha256": "d3177de7fe71ad9ef048ec7e1c2d9d2e9d9748b7fa4320349897d06ee15642a0"
+  },
+  "factorFit": {
+    "what": "f on the floor sigma per axis, maximum likelihood over the choice windows, days 1, 2, 3, 5, 7",
+    "grid": "exp(-1.5 to 2.5 by 0.02)",
+    "R": 1.1051709180756493,
+    "I": 1.2214027581601716,
+    "C": 0.5827482523739902,
+    "samples": 74495
+  },
+  "registered": {
+    "R": 1.0996588551261028,
+    "I": 1,
+    "C": 1,
+    "note": "radial only, fitted on 0.6.42's own flights of records at 31/70 with the factor off (exp(0.095), steps of 0.005 in its logarithm), the degrees the low table's records take from 0.6.42; no in-track or cross-track factor (stack #477)"
+  },
+  "band": [
+    0.603,
+    0.754
+  ],
+  "halfNormalMedian": 0.6744897501960817,
+  "judged": [
+    {
+      "regime": "P",
+      "name": "strong drag 2026",
+      "day": 1,
+      "axis": "R",
+      "windows": 306,
+      "samples": 14688,
+      "atOne": {
+        "medianAbsZ": 0.7212887438738732,
+        "within1": 0.6787173202614379,
+        "within3": 0.9863834422657952
+      },
+      "registered": {
+        "medianAbsZ": 0.6597418311547869,
+        "within1": 0.7261710239651417,
+        "within3": 0.9899237472766884
+      },
+      "floorShareMedian": 0.9590599658598743
+    },
+    {
+      "regime": "P",
+      "name": "strong drag 2026",
+      "day": 1,
+      "axis": "I",
+      "windows": 306,
+      "samples": 14688,
+      "atOne": {
+        "medianAbsZ": 0.8642525773128964,
+        "within1": 0.5571895424836601,
+        "within3": 0.9102668845315904
+      },
+      "registered": {
+        "medianAbsZ": 0.8642525773128964,
+        "within1": 0.5571895424836601,
+        "within3": 0.9102668845315904
+      },
+      "floorShareMedian": 0.016524031167971232,
+      "outsideBand": "too narrow: strong drag 2026 in-track, the density forecast's (stack #527); the floor holds 0 to 3 % of in-track, so no floor factor moves it"
+    },
+    {
+      "regime": "P",
+      "name": "strong drag 2026",
+      "day": 1,
+      "axis": "C",
+      "windows": 306,
+      "samples": 14688,
+      "atOne": {
+        "medianAbsZ": 0.39643021645650645,
+        "within1": 0.8872549019607843,
+        "within3": 1
+      },
+      "registered": {
+        "medianAbsZ": 0.39643021645650645,
+        "within1": 0.8872549019607843,
+        "within3": 1
+      },
+      "floorShareMedian": 0.49414464368711164,
+      "outsideBand": "too wide: the cross-track sizes and floor are set on records at zonal degree 20, whose node drift a record at 70 does not have: an over-statement (stack #531)"
+    },
+    {
+      "regime": "P",
+      "name": "strong drag 2026",
+      "day": 3,
+      "axis": "R",
+      "windows": 306,
+      "samples": 14688,
+      "atOne": {
+        "medianAbsZ": 0.7878058761815734,
+        "within1": 0.6034177559912854,
+        "within3": 0.9425381263616558
+      },
+      "registered": {
+        "medianAbsZ": 0.7476043494810198,
+        "within1": 0.6242510893246187,
+        "within3": 0.9480528322440087
+      },
+      "floorShareMedian": 0.5119677566067733
+    },
+    {
+      "regime": "P",
+      "name": "strong drag 2026",
+      "day": 3,
+      "axis": "I",
+      "windows": 306,
+      "samples": 14688,
+      "atOne": {
+        "medianAbsZ": 0.895719278013626,
+        "within1": 0.5381944444444444,
+        "within3": 0.9044798474945533
+      },
+      "registered": {
+        "medianAbsZ": 0.895719278013626,
+        "within1": 0.5381944444444444,
+        "within3": 0.9044798474945533
+      },
+      "floorShareMedian": 0.00009227244100959367,
+      "outsideBand": "too narrow: strong drag 2026 in-track, the density forecast's (stack #527); the floor holds 0 to 3 % of in-track, so no floor factor moves it"
+    },
+    {
+      "regime": "P",
+      "name": "strong drag 2026",
+      "day": 3,
+      "axis": "C",
+      "windows": 306,
+      "samples": 14688,
+      "atOne": {
+        "medianAbsZ": 0.15904090029343426,
+        "within1": 0.9995915032679739,
+        "within3": 1
+      },
+      "registered": {
+        "medianAbsZ": 0.15904090029343426,
+        "within1": 0.9995915032679739,
+        "within3": 1
+      },
+      "floorShareMedian": 0.043465060365598295,
+      "outsideBand": "too wide: the cross-track sizes and floor are set on records at zonal degree 20, whose node drift a record at 70 does not have: an over-statement (stack #531)"
+    },
+    {
+      "regime": "P",
+      "name": "strong drag 2026",
+      "day": 5,
+      "axis": "R",
+      "windows": 306,
+      "samples": 14688,
+      "atOne": {
+        "medianAbsZ": 0.8107384911567779,
+        "within1": 0.5976988017429193,
+        "within3": 0.9319852941176471
+      },
+      "registered": {
+        "medianAbsZ": 0.7884597535986553,
+        "within1": 0.6111791938997821,
+        "within3": 0.9373638344226579
+      },
+      "floorShareMedian": 0.25609616420549675,
+      "outsideBand": "too narrow: strong drag 2026 radial at days 5 and 7, the drag share c against the 2026 storms (stack #531)"
+    },
+    {
+      "regime": "P",
+      "name": "strong drag 2026",
+      "day": 5,
+      "axis": "I",
+      "windows": 306,
+      "samples": 14688,
+      "atOne": {
+        "medianAbsZ": 0.9063403166359021,
+        "within1": 0.53125,
+        "within3": 0.8858932461873639
+      },
+      "registered": {
+        "medianAbsZ": 0.9063403166359021,
+        "within1": 0.53125,
+        "within3": 0.8858932461873639
+      },
+      "floorShareMedian": 0.000010959610811749912,
+      "outsideBand": "too narrow: strong drag 2026 in-track, the density forecast's (stack #527); the floor holds 0 to 3 % of in-track, so no floor factor moves it"
+    },
+    {
+      "regime": "P",
+      "name": "strong drag 2026",
+      "day": 5,
+      "axis": "C",
+      "windows": 306,
+      "samples": 14688,
+      "atOne": {
+        "medianAbsZ": 0.12706139461008575,
+        "within1": 1,
+        "within3": 1
+      },
+      "registered": {
+        "medianAbsZ": 0.12706139461008575,
+        "within1": 1,
+        "within3": 1
+      },
+      "floorShareMedian": 0.011713196695796135,
+      "outsideBand": "too wide: the cross-track sizes and floor are set on records at zonal degree 20, whose node drift a record at 70 does not have: an over-statement (stack #531)"
+    },
+    {
+      "regime": "P",
+      "name": "strong drag 2026",
+      "day": 7,
+      "axis": "R",
+      "windows": 306,
+      "samples": 14688,
+      "atOne": {
+        "medianAbsZ": 0.7792967514781928,
+        "within1": 0.6190767973856209,
+        "within3": 0.9480528322440087
+      },
+      "registered": {
+        "medianAbsZ": 0.7702241469255648,
+        "within1": 0.6262935729847494,
+        "within3": 0.9502995642701525
+      },
+      "floorShareMedian": 0.06417712423347786,
+      "outsideBand": "too narrow: strong drag 2026 radial at days 5 and 7, the drag share c against the 2026 storms (stack #531)"
+    },
+    {
+      "regime": "P",
+      "name": "strong drag 2026",
+      "day": 7,
+      "axis": "I",
+      "windows": 306,
+      "samples": 14688,
+      "atOne": {
+        "medianAbsZ": 0.8936225731553962,
+        "within1": 0.5321350762527233,
+        "within3": 0.8578431372549019
+      },
+      "registered": {
+        "medianAbsZ": 0.8936225731553962,
+        "within1": 0.5321350762527233,
+        "within3": 0.8578431372549019
+      },
+      "floorShareMedian": 0.0000026802637957200916,
+      "outsideBand": "too narrow: strong drag 2026 in-track, the density forecast's (stack #527); the floor holds 0 to 3 % of in-track, so no floor factor moves it"
+    },
+    {
+      "regime": "P",
+      "name": "strong drag 2026",
+      "day": 7,
+      "axis": "C",
+      "windows": 306,
+      "samples": 14688,
+      "atOne": {
+        "medianAbsZ": 0.12073921203330581,
+        "within1": 1,
+        "within3": 1
+      },
+      "registered": {
+        "medianAbsZ": 0.12073921203330581,
+        "within1": 1,
+        "within3": 1
+      },
+      "floorShareMedian": 0.004631124787710502,
+      "outsideBand": "too wide: the cross-track sizes and floor are set on records at zonal degree 20, whose node drift a record at 70 does not have: an over-statement (stack #531)"
+    },
+    {
+      "regime": "LS",
+      "name": "laser spheres",
+      "day": 1,
+      "axis": "R",
+      "windows": 28,
+      "samples": 1080,
+      "atOne": {
+        "medianAbsZ": 0.7023688849884295,
+        "within1": 0.7296296296296296,
+        "within3": 1
+      },
+      "registered": {
+        "medianAbsZ": 0.6404847420536677,
+        "within1": 0.775,
+        "within3": 1
+      },
+      "floorShareMedian": 0.9896040587775417
+    },
+    {
+      "regime": "LS",
+      "name": "laser spheres",
+      "day": 1,
+      "axis": "I",
+      "windows": 28,
+      "samples": 1080,
+      "atOne": {
+        "medianAbsZ": 0.045683294885893996,
+        "within1": 0.9972222222222222,
+        "within3": 1
+      },
+      "registered": {
+        "medianAbsZ": 0.045683294885893996,
+        "within1": 0.9972222222222222,
+        "within3": 1
+      },
+      "floorShareMedian": 0.0015406165937724761,
+      "outsideBand": "too wide: the low rows' sizes (s_e, s_i, s_l, c) are set on strong drag and are too wide outside it (stack #531)"
+    },
+    {
+      "regime": "LS",
+      "name": "laser spheres",
+      "day": 1,
+      "axis": "C",
+      "windows": 28,
+      "samples": 1080,
+      "atOne": {
+        "medianAbsZ": 0.5490035200173478,
+        "within1": 0.85,
+        "within3": 1
+      },
+      "registered": {
+        "medianAbsZ": 0.5490035200173478,
+        "within1": 0.85,
+        "within3": 1
+      },
+      "floorShareMedian": 0.7504211721821243,
+      "outsideBand": "too wide: the low rows' sizes (s_e, s_i, s_l, c) are set on strong drag and are too wide outside it (stack #531)"
+    },
+    {
+      "regime": "LS",
+      "name": "laser spheres",
+      "day": 3,
+      "axis": "R",
+      "windows": 28,
+      "samples": 817,
+      "atOne": {
+        "medianAbsZ": 0.6096688416101382,
+        "within1": 0.784577723378213,
+        "within3": 1
+      },
+      "registered": {
+        "medianAbsZ": 0.5655306930055505,
+        "within1": 0.8274173806609547,
+        "within3": 1
+      },
+      "floorShareMedian": 0.8379959343888039,
+      "outsideBand": "too wide: one radial factor serves the laser spheres and altimetry with strong drag and near 700 km (stack #477); past day 1 the sizes carry part of it (stack #531)"
+    },
+    {
+      "regime": "LS",
+      "name": "laser spheres",
+      "day": 3,
+      "axis": "I",
+      "windows": 28,
+      "samples": 817,
+      "atOne": {
+        "medianAbsZ": 0.019575038962663438,
+        "within1": 1,
+        "within3": 1
+      },
+      "registered": {
+        "medianAbsZ": 0.019575038962663438,
+        "within1": 1,
+        "within3": 1
+      },
+      "floorShareMedian": 0.00006161310334294476,
+      "outsideBand": "too wide: the low rows' sizes (s_e, s_i, s_l, c) are set on strong drag and are too wide outside it (stack #531)"
+    },
+    {
+      "regime": "LS",
+      "name": "laser spheres",
+      "day": 3,
+      "axis": "C",
+      "windows": 28,
+      "samples": 817,
+      "atOne": {
+        "medianAbsZ": 0.1989386745368659,
+        "within1": 0.9987760097919217,
+        "within3": 1
+      },
+      "registered": {
+        "medianAbsZ": 0.1989386745368659,
+        "within1": 0.9987760097919217,
+        "within3": 1
+      },
+      "floorShareMedian": 0.10636709642623937,
+      "outsideBand": "too wide: the low rows' sizes (s_e, s_i, s_l, c) are set on strong drag and are too wide outside it (stack #531)"
+    },
+    {
+      "regime": "LS",
+      "name": "laser spheres",
+      "day": 5,
+      "axis": "R",
+      "windows": 28,
+      "samples": 1080,
+      "atOne": {
+        "medianAbsZ": 0.5303775819815405,
+        "within1": 0.8435185185185186,
+        "within3": 1
+      },
+      "registered": {
+        "medianAbsZ": 0.5018905140781572,
+        "within1": 0.8759259259259259,
+        "within3": 1
+      },
+      "floorShareMedian": 0.6878090205545522,
+      "outsideBand": "too wide: one radial factor serves the laser spheres and altimetry with strong drag and near 700 km (stack #477); past day 1 the sizes carry part of it (stack #531)"
+    },
+    {
+      "regime": "LS",
+      "name": "laser spheres",
+      "day": 5,
+      "axis": "I",
+      "windows": 28,
+      "samples": 1080,
+      "atOne": {
+        "medianAbsZ": 0.019473064591554096,
+        "within1": 1,
+        "within3": 1
+      },
+      "registered": {
+        "medianAbsZ": 0.019473064591554096,
+        "within1": 1,
+        "within3": 1
+      },
+      "floorShareMedian": 0.000019682439839078193,
+      "outsideBand": "too wide: the low rows' sizes (s_e, s_i, s_l, c) are set on strong drag and are too wide outside it (stack #531)"
+    },
+    {
+      "regime": "LS",
+      "name": "laser spheres",
+      "day": 5,
+      "axis": "C",
+      "windows": 28,
+      "samples": 1080,
+      "atOne": {
+        "medianAbsZ": 0.11840628685913834,
+        "within1": 1,
+        "within3": 1
+      },
+      "registered": {
+        "medianAbsZ": 0.11840628685913834,
+        "within1": 1,
+        "within3": 1
+      },
+      "floorShareMedian": 0.03324249265384102,
+      "outsideBand": "too wide: the low rows' sizes (s_e, s_i, s_l, c) are set on strong drag and are too wide outside it (stack #531)"
+    },
+    {
+      "regime": "LS",
+      "name": "laser spheres",
+      "day": 7,
+      "axis": "R",
+      "windows": 28,
+      "samples": 753,
+      "atOne": {
+        "medianAbsZ": 0.46201508109956185,
+        "within1": 0.8738379814077025,
+        "within3": 1
+      },
+      "registered": {
+        "medianAbsZ": 0.4427237715283379,
+        "within1": 0.8924302788844621,
+        "within3": 1
+      },
+      "floorShareMedian": 0.5183885537453231,
+      "outsideBand": "too wide: one radial factor serves the laser spheres and altimetry with strong drag and near 700 km (stack #477); past day 1 the sizes carry part of it (stack #531)"
+    },
+    {
+      "regime": "LS",
+      "name": "laser spheres",
+      "day": 7,
+      "axis": "I",
+      "windows": 28,
+      "samples": 753,
+      "atOne": {
+        "medianAbsZ": 0.01895468991022165,
+        "within1": 1,
+        "within3": 1
+      },
+      "registered": {
+        "medianAbsZ": 0.01895468991022165,
+        "within1": 1,
+        "within3": 1
+      },
+      "floorShareMedian": 0.00000951568579677513,
+      "outsideBand": "too wide: the low rows' sizes (s_e, s_i, s_l, c) are set on strong drag and are too wide outside it (stack #531)"
+    },
+    {
+      "regime": "LS",
+      "name": "laser spheres",
+      "day": 7,
+      "axis": "C",
+      "windows": 28,
+      "samples": 753,
+      "atOne": {
+        "medianAbsZ": 0.08242443119174651,
+        "within1": 1,
+        "within3": 1
+      },
+      "registered": {
+        "medianAbsZ": 0.08242443119174651,
+        "within1": 1,
+        "within3": 1
+      },
+      "floorShareMedian": 0.013113851070844958,
+      "outsideBand": "too wide: the low rows' sizes (s_e, s_i, s_l, c) are set on strong drag and are too wide outside it (stack #531)"
+    },
+    {
+      "regime": "DO",
+      "name": "altimetry, burn-free",
+      "day": 1,
+      "axis": "R",
+      "windows": 40,
+      "samples": 1920,
+      "atOne": {
+        "medianAbsZ": 0.7138111290775169,
+        "within1": 0.709375,
+        "within3": 1
+      },
+      "registered": {
+        "medianAbsZ": 0.6499545466632362,
+        "within1": 0.7661458333333333,
+        "within3": 1
+      },
+      "floorShareMedian": 0.9914071318464022
+    },
+    {
+      "regime": "DO",
+      "name": "altimetry, burn-free",
+      "day": 1,
+      "axis": "I",
+      "windows": 40,
+      "samples": 1920,
+      "atOne": {
+        "medianAbsZ": 0.09453362856372577,
+        "within1": 0.9895833333333334,
+        "within3": 1
+      },
+      "registered": {
+        "medianAbsZ": 0.09453362856372577,
+        "within1": 0.9895833333333334,
+        "within3": 1
+      },
+      "floorShareMedian": 0.001733584142983653,
+      "outsideBand": "too wide: the low rows' sizes (s_e, s_i, s_l, c) are set on strong drag and are too wide outside it (stack #531)"
+    },
+    {
+      "regime": "DO",
+      "name": "altimetry, burn-free",
+      "day": 1,
+      "axis": "C",
+      "windows": 40,
+      "samples": 1920,
+      "atOne": {
+        "medianAbsZ": 0.5849333752184414,
+        "within1": 0.8411458333333334,
+        "within3": 1
+      },
+      "registered": {
+        "medianAbsZ": 0.5849333752184414,
+        "within1": 0.8411458333333334,
+        "within3": 1
+      },
+      "floorShareMedian": 0.7815479874715339,
+      "outsideBand": "too wide: the low rows' sizes (s_e, s_i, s_l, c) are set on strong drag and are too wide outside it (stack #531)"
+    },
+    {
+      "regime": "DO",
+      "name": "altimetry, burn-free",
+      "day": 3,
+      "axis": "R",
+      "windows": 40,
+      "samples": 1920,
+      "atOne": {
+        "medianAbsZ": 0.6428530035253041,
+        "within1": 0.7151041666666667,
+        "within3": 0.9958333333333333
+      },
+      "registered": {
+        "medianAbsZ": 0.597383602426428,
+        "within1": 0.7520833333333333,
+        "within3": 0.9984375
+      },
+      "floorShareMedian": 0.8829620665033182,
+      "outsideBand": "too wide: one radial factor serves the laser spheres and altimetry with strong drag and near 700 km (stack #477); past day 1 the sizes carry part of it (stack #531)"
+    },
+    {
+      "regime": "DO",
+      "name": "altimetry, burn-free",
+      "day": 3,
+      "axis": "I",
+      "windows": 40,
+      "samples": 1920,
+      "atOne": {
+        "medianAbsZ": 0.06344002572664861,
+        "within1": 0.9776041666666667,
+        "within3": 1
+      },
+      "registered": {
+        "medianAbsZ": 0.06344002572664861,
+        "within1": 0.9776041666666667,
+        "within3": 1
+      },
+      "floorShareMedian": 0.00006901052100898954,
+      "outsideBand": "too wide: the low rows' sizes (s_e, s_i, s_l, c) are set on strong drag and are too wide outside it (stack #531)"
+    },
+    {
+      "regime": "DO",
+      "name": "altimetry, burn-free",
+      "day": 3,
+      "axis": "C",
+      "windows": 40,
+      "samples": 1920,
+      "atOne": {
+        "medianAbsZ": 0.23752512252035743,
+        "within1": 1,
+        "within3": 1
+      },
+      "registered": {
+        "medianAbsZ": 0.23752512252035743,
+        "within1": 1,
+        "within3": 1
+      },
+      "floorShareMedian": 0.12832252623303064,
+      "outsideBand": "too wide: the low rows' sizes (s_e, s_i, s_l, c) are set on strong drag and are too wide outside it (stack #531)"
+    },
+    {
+      "regime": "DO",
+      "name": "altimetry, burn-free",
+      "day": 5,
+      "axis": "R",
+      "windows": 40,
+      "samples": 1920,
+      "atOne": {
+        "medianAbsZ": 0.6218989991864964,
+        "within1": 0.7296875,
+        "within3": 0.9786458333333333
+      },
+      "registered": {
+        "medianAbsZ": 0.5833819498880982,
+        "within1": 0.7541666666666667,
+        "within3": 0.9869791666666666
+      },
+      "floorShareMedian": 0.7109701027288693,
+      "outsideBand": "too wide: one radial factor serves the laser spheres and altimetry with strong drag and near 700 km (stack #477); past day 1 the sizes carry part of it (stack #531)"
+    },
+    {
+      "regime": "DO",
+      "name": "altimetry, burn-free",
+      "day": 5,
+      "axis": "I",
+      "windows": 40,
+      "samples": 1920,
+      "atOne": {
+        "medianAbsZ": 0.09556543844870094,
+        "within1": 0.8786458333333333,
+        "within3": 1
+      },
+      "registered": {
+        "medianAbsZ": 0.09556543844870094,
+        "within1": 0.8786458333333333,
+        "within3": 1
+      },
+      "floorShareMedian": 0.000021018613126245658,
+      "outsideBand": "too wide: the low rows' sizes (s_e, s_i, s_l, c) are set on strong drag and are too wide outside it (stack #531)"
+    },
+    {
+      "regime": "DO",
+      "name": "altimetry, burn-free",
+      "day": 5,
+      "axis": "C",
+      "windows": 40,
+      "samples": 1920,
+      "atOne": {
+        "medianAbsZ": 0.13076499519967627,
+        "within1": 1,
+        "within3": 1
+      },
+      "registered": {
+        "medianAbsZ": 0.13076499519967627,
+        "within1": 1,
+        "within3": 1
+      },
+      "floorShareMedian": 0.036992092884429076,
+      "outsideBand": "too wide: the low rows' sizes (s_e, s_i, s_l, c) are set on strong drag and are too wide outside it (stack #531)"
+    },
+    {
+      "regime": "DO",
+      "name": "altimetry, burn-free",
+      "day": 7,
+      "axis": "R",
+      "windows": 40,
+      "samples": 1820,
+      "atOne": {
+        "medianAbsZ": 0.639100837763535,
+        "within1": 0.6884615384615385,
+        "within3": 0.9362637362637363
+      },
+      "registered": {
+        "medianAbsZ": 0.6064350889464475,
+        "within1": 0.7131868131868132,
+        "within3": 0.945054945054945
+      },
+      "floorShareMedian": 0.5493392117381827
+    },
+    {
+      "regime": "DO",
+      "name": "altimetry, burn-free",
+      "day": 7,
+      "axis": "I",
+      "windows": 40,
+      "samples": 1820,
+      "atOne": {
+        "medianAbsZ": 0.26958575902020143,
+        "within1": 0.7675824175824176,
+        "within3": 0.9857142857142858
+      },
+      "registered": {
+        "medianAbsZ": 0.26958575902020143,
+        "within1": 0.7675824175824176,
+        "within3": 0.9857142857142858
+      },
+      "floorShareMedian": 0.00001000510920250133,
+      "outsideBand": "too wide: the low rows' sizes (s_e, s_i, s_l, c) are set on strong drag and are too wide outside it (stack #531)"
+    },
+    {
+      "regime": "DO",
+      "name": "altimetry, burn-free",
+      "day": 7,
+      "axis": "C",
+      "windows": 40,
+      "samples": 1820,
+      "atOne": {
+        "medianAbsZ": 0.09826233374279583,
+        "within1": 0.9912087912087912,
+        "within3": 0.9994505494505495
+      },
+      "registered": {
+        "medianAbsZ": 0.09826233374279583,
+        "within1": 0.9912087912087912,
+        "within3": 0.9994505494505495
+      },
+      "floorShareMedian": 0.0161648625845553,
+      "outsideBand": "too wide: the low rows' sizes (s_e, s_i, s_l, c) are set on strong drag and are too wide outside it (stack #531)"
+    },
+    {
+      "regime": "S1",
+      "name": "near 700 km, burn-free to day 3",
+      "day": 1,
+      "axis": "R",
+      "windows": 48,
+      "samples": 2207,
+      "atOne": {
+        "medianAbsZ": 0.7542310520810468,
+        "within1": 0.6805618486633439,
+        "within3": 1
+      },
+      "registered": {
+        "medianAbsZ": 0.6866028588692044,
+        "within1": 0.7516991391028546,
+        "within3": 1
+      },
+      "floorShareMedian": 0.99291456487702
+    },
+    {
+      "regime": "S1",
+      "name": "near 700 km, burn-free to day 3",
+      "day": 1,
+      "axis": "I",
+      "windows": 48,
+      "samples": 2207,
+      "atOne": {
+        "medianAbsZ": 0.21860812215227804,
+        "within1": 0.9859537834164024,
+        "within3": 1
+      },
+      "registered": {
+        "medianAbsZ": 0.21860812215227804,
+        "within1": 0.9859537834164024,
+        "within3": 1
+      },
+      "floorShareMedian": 0.0023944114972748727,
+      "outsideBand": "too wide: the low rows' sizes (s_e, s_i, s_l, c) are set on strong drag and are too wide outside it (stack #531)"
+    },
+    {
+      "regime": "S1",
+      "name": "near 700 km, burn-free to day 3",
+      "day": 1,
+      "axis": "C",
+      "windows": 48,
+      "samples": 2207,
+      "atOne": {
+        "medianAbsZ": 0.6032595504492696,
+        "within1": 0.8187584956955143,
+        "within3": 1
+      },
+      "registered": {
+        "medianAbsZ": 0.6032595504492696,
+        "within1": 0.8187584956955143,
+        "within3": 1
+      },
+      "floorShareMedian": 0.8163514293420543
+    },
+    {
+      "regime": "S1",
+      "name": "near 700 km, burn-free to day 3",
+      "day": 3,
+      "axis": "R",
+      "windows": 48,
+      "samples": 2157,
+      "atOne": {
+        "medianAbsZ": 0.7633113529663617,
+        "within1": 0.6184515530829856,
+        "within3": 1
+      },
+      "registered": {
+        "medianAbsZ": 0.7001589416575857,
+        "within1": 0.6578581363004172,
+        "within3": 1
+      },
+      "floorShareMedian": 0.9009313390169805
+    },
+    {
+      "regime": "S1",
+      "name": "near 700 km, burn-free to day 3",
+      "day": 3,
+      "axis": "I",
+      "windows": 48,
+      "samples": 2157,
+      "atOne": {
+        "medianAbsZ": 0.3685057739528856,
+        "within1": 0.923041261010663,
+        "within3": 1
+      },
+      "registered": {
+        "medianAbsZ": 0.3685057739528856,
+        "within1": 0.923041261010663,
+        "within3": 1
+      },
+      "floorShareMedian": 0.00009093191930318235,
+      "outsideBand": "too wide: the low rows' sizes (s_e, s_i, s_l, c) are set on strong drag and are too wide outside it (stack #531)"
+    },
+    {
+      "regime": "S1",
+      "name": "near 700 km, burn-free to day 3",
+      "day": 3,
+      "axis": "C",
+      "windows": 48,
+      "samples": 2157,
+      "atOne": {
+        "medianAbsZ": 0.260553852103805,
+        "within1": 1,
+        "within3": 1
+      },
+      "registered": {
+        "medianAbsZ": 0.260553852103805,
+        "within1": 1,
+        "within3": 1
+      },
+      "floorShareMedian": 0.15558304736420175,
+      "outsideBand": "too wide: the low rows' sizes (s_e, s_i, s_l, c) are set on strong drag and are too wide outside it (stack #531)"
+    }
+  ]
+}
