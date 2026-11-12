@@ -1,6 +1,6 @@
 # SGP4-XP: mathematical specification (clean room, side A)
 
-Version 0.6.42 (dist 8bf870fe).
+Version 0.6.43 (dist daf4d27e).
 
 **License note.** The US Space Force Sgp4Prop library is used under the USSF open source agreement
 (`space-data-network-modules/propagator/sgp4-xp/third_party/ussf-sgp4/AGREEMENT.txt`; the 9.9 package carries the
@@ -4779,7 +4779,6 @@ at e 0.5 held a state 1 m or more off (up to 1,304 km), 1 of 5 at e 0.82 (4,342 
 km); none at e 0.3 or e 0.6 to 0.74, where Newton reached the root one turn away. Its dm is SGP4XP's own short-period terms
 (the Sun's, the Moon's, radiation): 2.4e-6 to 6.3e-6 rad at perigee on a 4:1 orbit at e 0.5, a window of 8 to 22 ms.
 
-
 **16.22 Radiation pressure of the long-period regime through the output** (from 0.6.41; stack #479). SPEC 4 carries
 radiation pressure in two parts: rates averaged over the mean orbit with the Sun held fixed, and first-order periodic terms
 in the output. On a TESS-like orbit five days are under half of a 13.7-day revolution. The average then says little about
@@ -4875,6 +4874,87 @@ It also holds the eclipsing set's flight through AP's shadow: an entry and an ex
 boundary in which no position lies off its neighbors' curve (the fourth difference) by more than 1 mm; the largest is 1.2 µm over
 14,401 states. It holds the record's refusals above, and
 the round trip of the module's own fit.
+
+**16.23 The zonal theory's constant radial term** (from 0.6.43; stack #503, #532). Section 2's rates are Brouwer's
+secular and long-period rates to second order, and section 8's output adds the first-order J2 short-period terms. Held
+to the same mean rates as the dynamics (the argument of latitude's and the node's), the theory's mean radius on a
+near-circular orbit then sits above the true one by
+
+  dr = (R_E^4 / a^3) [ J2^2 (199 cos^4 i - 80 cos^2 i + 25) / 32 - J4 (15/64)(35 sin^4 i - 40 sin^2 i + 8) ]
+
+where a is the mean semi-major axis and i the mean inclination. AP's output (every AP set with gravity terms) adds -dr to
+the radius. The velocity: the transverse speed is scaled so that the state's osculating energy (the speed squared over two
+less mu over r) is unchanged, and the radial speed is kept; on a circular orbit that raises the transverse speed by dr
+times the angular rate (1.1 cm/s at 10 m in low orbit). It is not the time derivative of the corrected positions, and
+neither was the velocity before the term: AP's output velocity is not the rate of its output positions (stack #549). At
+500 km and e 0.001 the transverse gap is 53 mm/s at i 27 deg and 8 mm/s at i 98 deg without the term, 13 and 12 mm/s
+with it. Why the energy and not the angular rate: the radius error had been offsetting that gap in energy, so the same
+angular rate would move the energy by about four times dr of semi-major axis, and a numerical flight started from AP's
+output state would drift up to ten times faster along-track (seeded at a 500 km perigee and i 27 deg, the day-7
+along-track RMS is 7.8 km on 0.6.36, 77 km at the same angular rate, 7.8 km at the same energy). The fit's residuals
+are positions only, so the fitted elements are the same either way; the epoch covariance's velocity part moves by about
+1e-6 of itself. A record carries its epoch floor at the two-body state of its mean elements (12.4), so the term does not
+move what a reader takes off. A record written and fitted to zero residual by 0.6.39, flown against 0.6.39's flight of it
+at 300 to 1,200 km and i 0.5 to 97 deg (seven cases), has its along-track variance at 24 h within 1.7e-5 of 0.6.39's with
+the term on 0.6.41 (the term moves the states up to 45 m), and within 1.4e-4 with the term on 0.6.42, whose low table's fast
+side moves them too (0.6.42 alone: 1.5e-4); `test/epoch-floor.e2e.mjs` holds it at 1e-3. The main output path, its
+fallback (where e^2 or tan^2(i/2) is at most 1e-24) and the covariance's sigma-set pairs take the same term, each set at
+its own a and i.
+SGP4XP's output (section 8) is unchanged, bit for bit. J2 and J4 are 1.3's (EGM-96's). The numerical propagator's EGM2008
+J4 differs by 1.7e-4 of itself, which would move the J4 part by at most 3 mm.
+
+*Derivation.*
+- The J4 part is first order. The mean radial equation of a near-circular orbit, r^3 w^2 = mu (1 - 5 J4 (R/r)^4 <P4>),
+  has <P4> = (105 S^2 - 120 S + 24)/64 with S = sin^2 i. It is set against the theory's in-plane rate
+  w = n [1 + (15/32)(-35 S^2 + 40 S - 8) J4 (R/a)^4], which is 2's lambda-dot - Omega-dot + Omega-dot cos i at e = 0,
+  with r = a. Together they give -(15/64)(35 S^2 - 40 S + 8) J4 (R/a)^4 a.
+- The J2^2 part is exact at i = 0. The equatorial circle obeys w^2 r^3 = mu (1 + (3/2) J2 (R/r)^2). The theory's
+  lambda-dot is n [1 + 3 x + 14.625 x^2], with x = J2 (R/a)^2 (Brouwer's own coefficient is 11.25), and its radius is
+  r = a (1 - (3/2) x). Together they give (9/2) x^2 a.
+- At other inclinations the J2^2 polynomial is fitted, not derived. J2 alone was flown by a fixed-step integrator and
+  compared with 2's rates at the same mean rates of the argument of latitude and the node, J2 scaled by 1 and by 0.5 and
+  the result extrapolated to second order; a quadratic in S fitted to that from i 10 to 90 deg, (397.97 S^2 - 635.95 S
+  + 287.99)/64, was rounded to the rationals above.
+  - At i = 0 it meets the exact 9/2.
+  - At i = 90 deg it gives 25/32, where the exact value is 13/16 = 26/32: a polar orbit is planar under J2, and its
+    forced solution in Binet form, matched to the theory at the same mean rates, gives 13/16. The fit is low there by
+    J2^2 R_E^4 / (32 a^3), 0.19 m at 420 km: the leftover at the polar cases of `test/zonal-radius-term.e2e.mjs`
+    (+0.16 and +0.18 m).
+  - Between, its error is not known exactly. The elimination bounds it, together with third order, J3, J5 and the Sun
+    and Moon: the offset left is -0.4 to +0.2 m (below).
+  - Third order is under 1 % in low orbit: -0.8 % near the equator at 400 km, about -0.3 m there.
+- With EGM's J4 / J2^2 = -1.382 the two parts sum to 17.55 (c^2 - 0.494)(c^2 - 0.202), with c = cos i: about +11 m at
+  i 87.5 and 420 km, -2.4 m at i 55, and +42 m near the equator.
+
+*Measured.* AP is fitted to the numerical propagator's forecast over 0 to 5 days, with J2 to J5 and the Sun and Moon on
+both sides.
+- Over 300 to 1,400 km and 7 inclinations (42 near-circular cases), the closed form is within 0.31 m of the offset AP
+  showed before the term (measured on 0.6.36).
+- With the term, the offset left is -0.4 to +0.2 m: -0.4 to -0.1 m at i 5 to 63.4 deg (the largest at 300 km and i
+  5, where third order is about -0.3 m), +0.1 to +0.2 m at i 87.5 and 98 deg (the fit's shortfall at the pole). At i 45
+  and 63.4, where there was none, it leaves -0.1 to -0.3 m.
+- Before the term the offset was -2.6 to +44.7 m: largest near the equator, below the true radius at i 55, about 0 at
+  i 45 and 63.4.
+
+*Eccentricity* (measured, not derived; stack #532). The term is applied at every eccentricity. The offset left after it:
+
+| a - R | e | Largest offset left |
+| --- | --- | --- |
+| 1,200 km | 0.05 or less | 1.3 m (test/zonal-radius-term.e2e.mjs's case at i 28.5) |
+| 1,200 km | 0.1 | 1.8 m |
+| 4,000 km | 0.3 | 9.1 m (21.0 m without it) |
+
+**16.24 Records refused by name.** plugin-manifest.json's "Refused by name" lists for propagate, load_epochs,
+propagate_epochs and maneuver name every refusal the record decoder makes; export_omm's names those an SGP4 or SGP4XP
+record can reach after the method's own checks (an AP set is refused first, theory-not-exportable:AP, and a record whose
+forces are not its theory's, forces-not-exportable, before the decoder reads it). Missing through 0.6.42 (stack #540):
+solid-tides-unsupported (16.14), gravity-model-mismatch (16.2), parameter-repeated:ECOM2_Y0, parameter-invalid:ECOM2_Y0
+and parameter-not-modeled:<name> (16.13), and from 0.6.41 radiation-model-superseded and radiation-model-mismatch
+(16.22; export_omm's list names the second, which an SGP4 or SGP4XP record stating the long-period radiation text
+reaches); export_omm's list also lacked unsupported-center, weather-rows-unselected and the density-correction refusals
+an SGP4XP record reaches, and named three it cannot return (gravity-model-mismatch, parameter-repeated:ECOM2_Y0 and
+parameter-invalid:ECOM2_Y0).
+
 
 ## 17. Products: the producer contract (side B's method, outside the SGP4-XP specification)
 

@@ -89,9 +89,18 @@ const K = 5;
 // truth's 0.044 the fast side is better on every day (days 1 / 3 / 5 / 7: 16.3 / 18.0 / 21.0 / 24.5 m on 0.6.36, 10.3 /
 // 13.1 / 15.8 / 20.8 m with it). The fit's drag term on short arcs near 800 km is stack #541. Bounded at day 5 (33 m, which
 // 0.6.36 and the fast side both meet) and at day 7 (60 m, loosened from 55 m: the fast side's 55.5 m with a small margin).
+// SWOT-like from the zonal theory's constant radial term (0.6.43, SPEC 16.23): against the test's model truth this 72 h fit
+// near 890 km is 16.5 m worse along-track at day 7 with the term (27.0 to 43.6 m on 0.6.42, git 86786933, against the term on
+// it, git 217233ca) and radially better (9.8 to 7.5 m), because the fitted drag term moves from 0.19 % to 0.52 % from the
+// truth. With the drag term held at the truth's 0.044 the term is better or equal along-track and radially on every day
+// (days 1 / 3 / 5 / 7 along-track: 8.93 / 13.95 / 12.92 / 19.26 m on 0.6.42, 8.90 / 13.77 / 12.76 / 19.08 m with it).
+// Sentinel-3-like with the term: day 7 55.5 to 57.4 m, day 5 30.0 to 30.9 m, within their bounds; with the drag term held it
+// is 2 to 10 cm worse along-track on days 1, 3 and 5 (10.27 / 13.12 / 15.78 to 10.37 / 13.18 / 15.80 m) and 1.9 to 3.5 m
+// better radially in the same cells, better in the orbit's plane on every day. The cost is the fit's drag term on short arcs
+// near 800 to 900 km, stack #541, where the bound comes back: SWOT-like's day 7 is bounded at 45 m, loosened from 30 m.
 const BASE_4 = {version: '0.6.22', commit: 'f8af1e2b7'};
 const LOW_BOUND = {'Molniya drag off': 8.5};
-const TRUTH_BOUND = {'e 0.25': {t: 60, r: 15}, 'SWOT-like': {t: 30, r: 15}, 'Sentinel-3-like': {t: 60, r: 20, t5: 33}};
+const TRUTH_BOUND = {'e 0.25': {t: 60, r: 15}, 'SWOT-like': {t: 45, r: 15}, 'Sentinel-3-like': {t: 60, r: 20, t5: 33}};
 // The field EGM2008 on both sides (0.6.36, SPEC 16.2; the truth's field was EGM-96 before, as AP's) takes Molniya's largest
 // day-7 along-track over the arc and its copies from at most 171.5 to 175.39 m (the unperturbed arc 171.30 m): bound 176.0.
 const SEVEN_DAY_BOUND = {Molniya: 176.0, 'GTO-500': 325.5};

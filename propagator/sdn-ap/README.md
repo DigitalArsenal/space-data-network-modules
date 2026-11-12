@@ -1,6 +1,6 @@
 # sdn-ap-propagator
 
-Version 0.6.42 (dist 8bf870fe).
+Version 0.6.43 (dist daf4d27e).
 
 General-perturbations propagation of whole catalogs in one isomorphic WASM module (browser and WasmEdge), with two
 theories and AP, an advanced propagator that builds on the entire history of astrodynamics ($PCF FORCES selects its drag
@@ -218,6 +218,14 @@ has the q != 0 part's measurements (`test/slow-set-partition.e2e.mjs`, `test/slo
 truth cut below degree 70, AP is compared like with like only with `sdnap_slow_degree_cap` set to the truth's degree (a test
 hook; no flight reads it): against a 31 x 31 truth, a record at tesseral 31 flies slow terms of degree 32 to 70 that the
 truth leaves out.
+
+The zonal theory's constant radial term (from 0.6.43; SPEC 16.23). Held to the dynamics' mean rates, the theory's mean
+radius on a near-circular orbit sat (R_E^4 / a^3)[J2^2 (199 c^4 - 80 c^2 + 25) / 32 - J4 (15/64)(35 s^4 - 40 s^2 + 8)]
+above the true one (c and s the cosine and sine of i): about +11 m at i 87.5 and 420 km, -2.4 m at i 55, +42 m near the
+equator. Every AP set with gravity terms takes that off its radius, at the same osculating energy (AP's output velocity
+is not the rate of its positions, stack #549); SGP4XP is unchanged. Against FFM with J2 to J5 and the Sun and Moon,
+fitted over 0 to 5 days, the offset left is -0.4 to +0.2 m on 42 near-circular cases from 300 to 1,400 km, at most 1.3 m
+at e 0.05, 1.8 m at e 0.1 and 9.1 m at e 0.3 (the eccentric terms are stack #532; `test/zonal-radius-term.e2e.mjs`).
 
 The field's census (from 0.6.32; SPEC 16.20) lists, for a set of mean elements, every tesseral term of the field to degree 70
 whose size over a 5-day forecast reaches 0.5 m, with the weight each carrier the set builds holds of it and the term's
