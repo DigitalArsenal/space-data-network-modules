@@ -1866,6 +1866,31 @@ inline bool is_ap_ctx(const RateContext& ctx) {
   return ctx.ap_third_body != 0 || ctx.ap_resonance != 0 || ctx.ap_frame != 0;
 }
 
+/// SPEC 16.21 (stack #503, #532): the constant radial term the zonal theory leaves out, R_E, for the mean semi-major axis a
+/// (R_E) and cos^2 of the mean inclination. Held to the dynamics' mean rates, the theory's mean radius of a near-circular
+/// orbit sits (R_E^4 / a^3) [J2^2 (199 c^4 - 80 c^2 + 25) / 32 - J4 (15/64)(35 s^4 - 40 s^2 + 8)] above the true one (c, s
+/// the cosine and sine of i; J2 and J4 of 1.3): the J4 part first order, the J2^2 part exact at i = 0 (9/2) and from the
+/// dynamics' second order elsewhere (25/32 at i = 90 deg). AP's output adds its negative, at the same angular rate, at
+/// every eccentricity (its eccentric terms are stack #532).
+inline double zonal_radius_term(double a, double c2) {
+  const double s2 = 1.0 - c2, ia = 1.0 / a;
+  return -(ia * ia * ia) * (kJ2 * kJ2 * (199.0 * c2 * c2 - 80.0 * c2 + 25.0) * (1.0 / 32.0) -
+                            kJ4 * (15.0 / 64.0) * (35.0 * s2 * s2 - 40.0 * s2 + 8.0));
+}
+
+/// SPEC 16.21: a Cartesian state (km, km/s) moved radially by d km at the same angular rate: the position along r-hat by d,
+/// the transverse velocity by d times the angular rate, the radial velocity kept.
+inline void radial_shift(double r[3], double v[3], double d) {
+  const double rn = std::sqrt(r[0] * r[0] + r[1] * r[1] + r[2] * r[2]);
+  if (!(rn > 0.0)) return;
+  const double k = d / rn, vr = (r[0] * v[0] + r[1] * v[1] + r[2] * v[2]) / rn;
+  for (int j = 0; j < 3; ++j) {
+    const double rh = r[j] / rn, vt = v[j] - vr * rh;
+    r[j] += d * rh;
+    v[j] += k * vt;
+  }
+}
+
 /// SPEC 9 (amendment 6): the tests every rate evaluation applies to the state it is given (k2, k3, k4 and the new
 /// node's): an eccentricity above 1 (code 4), a mean motion zero or negative (9), and with drag 1 - e^2 at or below
 /// 1e-12 (10); comparisons, so a NaN passes. 0 when the state passes.
@@ -5399,7 +5424,9 @@ inline int32_t output_impl(const RateContext& ctx, double t, const double* ym, d
                                 c * n_a * e * snu * (3.0 * th2 - 1.0) * (aor2 * inv_1peta + inv_eta * inv_eta * inv_eta));
     const double drfdot = eta * (-n_a * aor2 * dr +
                                  n_a * (a * aor) * d * si * si * (3.0 * c2u + e * (3.0 * cw1 + cw3)));
-    const double rk = r + dr, rdotk = rdot0 + drdot, rfdotk = rfdot0 + drfdot;
+    // SPEC 16.21: the zonal theory's constant radial term, at the same angular rate (the transverse speed moves with it)
+    const double dr2 = zonal_radius_term(a, th * th);
+    const double rk = r + dr + dr2, rdotk = rdot0 + drdot, rfdotk = (rfdot0 + drfdot) * (1.0 + dr2 / (r + dr));
     const double cu0 = cw * cnu - sw * snu, su0 = sw * cnu + cw * snu;
     double sinsu, cossu, snod, cnod, sini, cosi;
     if (__builtin_expect(std::fabs(du) < 0.02 && std::fabs(dnode) < 0.02 && std::fabs(di) < 0.02, 1)) {
@@ -5476,7 +5503,13 @@ inline int32_t output_impl(const RateContext& ctx, double t, const double* ym, d
 #endif
     return kPropOk;
   }
-  return output_j2_osc(y, Ewarm, r_out, v_out);
+  const int32_t rc = output_j2_osc(y, Ewarm, r_out, v_out);
+  if (rc == kPropOk) {
+    // SPEC 16.21: the constant radial term on this path too (e or i exactly 0, or the corrections above 0.02 rad)
+    const double t2f = y[kChi] * y[kChi] + y[kPsi] * y[kPsi], thf = (1.0 - t2f) / (1.0 + t2f);
+    radial_shift(r_out, v_out, zonal_radius_term(fast_a_from_n(y[kN]), thf * thf) * kRe);
+  }
+  return rc;
 }
 
 inline int32_t output(const RateContext& ctx, double t, const double* ym, double r_out[3], double v_out[3],
@@ -7204,10 +7237,15 @@ inline int32_t xp_propagate_local(XpSat& s, double t, double r[3], double v[3], 
                      wasm_f64x2_mul(wasm_f64x2_mul(wasm_f64x2_mul(vna, vaor), wasm_f64x2_mul(vd_j2, wasm_f64x2_mul(vsi, vsi))),
                                     vc_sum)));
 
-  const v128_t vrk_re = wasm_f64x2_mul(wasm_f64x2_add(vr, vdr), wasm_f64x2_splat(kRe));
+  // SPEC 16.21: the sigma sets take the nominal's constant radial term, each at its own a and inclination
+  const v128_t vdr2 = wasm_f64x2_make(zonal_radius_term(wasm_f64x2_extract_lane(va, 0), wasm_f64x2_extract_lane(vth2, 0)),
+                                     zonal_radius_term(wasm_f64x2_extract_lane(va, 1), wasm_f64x2_extract_lane(vth2, 1)));
+  const v128_t vrk0 = wasm_f64x2_add(vr, vdr);
+  const v128_t vrk_re = wasm_f64x2_mul(wasm_f64x2_add(vrk0, vdr2), wasm_f64x2_splat(kRe));
   const v128_t vvs = wasm_f64x2_splat(kRe / 60.0);
   const v128_t vrdk_vs = wasm_f64x2_mul(wasm_f64x2_add(vrdot0, vdrdot), vvs);
-  const v128_t vrfdk_vs = wasm_f64x2_mul(wasm_f64x2_add(vrfdot0, vdrfdot), vvs);
+  const v128_t vrfdk_vs = wasm_f64x2_mul(wasm_f64x2_mul(wasm_f64x2_add(vrfdot0, vdrfdot),
+                                                       wasm_f64x2_add(vone, wasm_f64x2_div(vdr2, vrk0))), vvs);
 
   const v128_t vcu0 = wasm_f64x2_sub(wasm_f64x2_mul(vcw, vcnu), wasm_f64x2_mul(vsw, vsnu));
   const v128_t vsu0 = wasm_f64x2_add(wasm_f64x2_mul(vsw, vcnu), wasm_f64x2_mul(vcw, vsnu));

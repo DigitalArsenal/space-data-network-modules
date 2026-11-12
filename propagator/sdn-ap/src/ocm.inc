@@ -19,7 +19,7 @@ namespace sdnap {
 namespace ocm {
 
 constexpr const char* kModuleId = "com.spacedatanetwork.sdn-ap-propagator";
-constexpr const char* kModuleVersion = "0.6.36";
+constexpr const char* kModuleVersion = "0.6.38";
 constexpr const char* kWeatherInterpolation =
     "DAILY: F10.7 OF THE PREVIOUS DAY, 81-DAY CENTERED MEAN AND DAILY AP OF THE DAY, NO INTERPOLATION";
 
@@ -78,8 +78,9 @@ constexpr const char* kSolidTidesModel = "IERS 2010";
 constexpr const char* kSlowGravityModel = "EGM2008; slow tesseral terms to degree 70";
 /// SPEC 16.2 (from 0.6.36): PERTURBATIONS.GRAVITY_MODEL of an AP set with gravity terms (a tesseral or zonal degree): the
 /// embedded field its tesserals and zonal tail read, EGM2008 to 70 x 70. An AP set with gravity terms that states any text
-/// but this or kSlowGravityModel (a record fitted on another field, as every record before 0.6.36) is refused,
-/// gravity-model-mismatch: no record flies on a field it does not state.
+/// but this or kSlowGravityModel (a record fitted on another field, as every such record before 0.6.36) is refused,
+/// gravity-model-mismatch: no AP record with gravity terms flies on a field it does not state. SGP4 and SGP4XP sets, and an
+/// AP set with both gravity degrees 0, are not checked: their fields are the theory's own (SPEC 1.3, 6.2).
 constexpr const char* kApGravityModel = "EGM2008";
 
 /// SPEC 17.3: the refusal of a covariance about to be written, or nullptr. Its rows are the state block and the solved
@@ -556,7 +557,8 @@ inline int decode_view(const OCM* o, Set& s) {
   if (s.theory == meanElementSource_SGP4XP && !f.stock()) return refuse("elements-other-theory", "An SGP4XP set states AP's forces (MEAN_ELEMENT_THEORY AP).");
   if (s.theory == meanElementSource_AP && f.stock()) return refuse("elements-other-theory", "An AP set states SGP4XP's own forces (MEAN_ELEMENT_THEORY SGP4XP).");
   // SPEC 16.2: an AP set with gravity terms states the embedded field (kApGravityModel, or kSlowGravityModel with the slow
-  // set); any other text, or none, is a record of another field and is refused, never flown on this one
+  // set); any other text, or none, is a record of another field and is refused, never flown on this one (SGP4, SGP4XP and
+  // an AP set with both degrees 0 fly the theory's own field and are not checked)
   if (!sgp4 && epoch_frame(f) && !slow_text && !(gm != nullptr && oem::same_text(gm->c_str(), kApGravityModel)))
     return refuse("gravity-model-mismatch",
                   "An AP set with gravity terms states PERTURBATIONS.GRAVITY_MODEL EGM2008, the embedded field (\"EGM2008; slow tesseral terms to degree 70\" with the slow set); a record of another field is fitted again.");
