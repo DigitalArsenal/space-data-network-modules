@@ -4,14 +4,14 @@
 // solves one; a record whose fit ended at its ceiling states CONVERGED false and says so in its OD COMMENT, and
 // sdnap_fit_ceiling_met counts the pass. Each case's truth is FFM (named below by its SHA-256) flown from AP's own seeded
 // GCRF state, EGM2008 70 x 70; AP is fitted to the truth's states every 300 s over 120 h (72 to 192 h after the seed, the
-// catalog's span) on this build and on 0.6.42 (git, modules 86786933, its SHA-256 checked), and the two records compared:
+// catalog's span) on this build and on 0.6.43 (git, modules 5f55f314, its SHA-256 checked), and the two records compared:
 // - above the drag (e 0.9, perigee 10,000 km, i 55; the Sun and Moon on both sides; the drag term solved under the default
 //   prior, radiation held at 0): converged on both builds; MEAN_ELEMENTS, FIT_STATISTICS and the OD COMMENT field for field
 //   the same (only the producer's version differs); no ceiling line; both counters 0;
 // - under the drag, a drag term solved (800 km, e 0, i 55; a drag truth, NRLMSISE-00 at constant weather, B 0.005, with an
-//   in-track impulse of 0.5 m/s at 96 h, inside the span, that no set follows; 137 iterations in all over its passes on
-//   0.6.42): MEAN_ELEMENTS, FIT_STATISTICS and the OD COMMENT field for field 0.6.42's (a drag fit keeps 40). Three of its
-//   earlier passes end at 40 and the counter reads them (which 1: 3); its last pass converges, so the record states
+//   in-track impulse of 0.5 m/s at 96 h, inside the span, that no set follows; 176 iterations in all over its passes on
+//   0.6.43): MEAN_ELEMENTS, FIT_STATISTICS and the OD COMMENT field for field 0.6.43's (a drag fit keeps 40). Four of its
+//   earlier passes end at 40 and the counter reads them (which 1: 4); its last pass converges, so the record states
 //   CONVERGED true and carries no ceiling line;
 // - the counter: a raw fit (sdnap_fit) stopped by its caller's own ceiling of 2 iterations is counted once under "any other
 //   ceiling" (which 1); at the default ceiling the same fit converges and is not counted. The counter is the instance's
@@ -51,15 +51,15 @@ import { seedOcm, rowsThrough, flight, spwStream, ocmOf } from './lib/ocm.mjs';
 import { configuration, prior, pcfPriorForm } from './lib/pcf.mjs';
 import { spwConstantText } from './lib/spw-constant.mjs';
 requireTruth('ea4576901f9e8dc21af2c24feb7887645706ef934488cb9756a0b5c21ab47934'); // FFM 2.3.0 (modules 48a00fd6)
-const BEFORE = { version: '0.6.42', commit: '86786933e33415d306ac4eca8e7ab31939da6321', sha256: '3c389abfd8ce2ea1767f4d3040449e6ca9097f2edc31321d78cf6ca5f300e2df' };
+const BEFORE = { version: '0.6.43', commit: '5f55f314b484483998d3f0fc6744f6f9b9101457', sha256: 'f33e071fc77ccca6198ed7641c348957a947606460276fc9e8a926892a991935' };
 const CASES = [
-  // above the drag: on 0.6.42 converged in 11 iterations, no pass at a ceiling
+  // above the drag: on 0.6.43 converged in 11 iterations, no pass at a ceiling
   { name: 'above the drag: e 0.9, perigee 10,000 km, i 55, the Sun and Moon', epoch: '2026-02-20T00:00:00.000', n: 0.1309803096, e: 0.9, i: 55, raan: 39.8, argp: 61.2, ma: 150.9,
     bodies: true, truthB: 0, burnKms: 0, met: [0, 0] },
-  // under the drag, across an impulse: on 0.6.42 137 iterations in all over its passes; three earlier passes end at 40,
+  // under the drag, across an impulse: on 0.6.43 176 iterations in all over its passes; four earlier passes end at 40,
   // the last converges
   { name: 'under the drag: 800 km, e 0, i 55, an in-track impulse of 0.5 m/s inside the span', epoch: '2026-04-21T00:00:00.000', n: 14.2752968371, e: 0, i: 55, raan: 123, argp: 190.5, ma: 85.9,
-    bodies: false, truthB: 0.005, burnKms: 0.0005, met: [0, 3] },
+    bodies: false, truthB: 0.005, burnKms: 0.0005, met: [0, 4] },
 ];
 const DAY = 864e5, iso = (ms) => new Date(ms).toISOString().replace('Z', '');
 const kernel = fs.readFileSync(new URL('../../../files/orbit-products/tests/fixtures/de440/de440-2026.bsp', import.meta.url));
@@ -117,10 +117,10 @@ for (const c of CASES) {
   const row = { case: c.name, iterations: [sa.ITERATIONS, sb.ITERATIONS], converged: [sa.CONVERGED, sb.CONVERGED], ceilingMet: met, comment: ca };
   results.push(row);
   console.log(JSON.stringify({ fitCeiling: row }));
-  assert.equal(JSON.stringify(a.MEAN_ELEMENTS), JSON.stringify(b.MEAN_ELEMENTS), `${c.name}: the elements field for field 0.6.42's`);
-  assert.equal(JSON.stringify(sa), JSON.stringify(sb), `${c.name}: FIT_STATISTICS field for field 0.6.42's`);
+  assert.equal(JSON.stringify(a.MEAN_ELEMENTS), JSON.stringify(b.MEAN_ELEMENTS), `${c.name}: the elements field for field 0.6.43's`);
+  assert.equal(JSON.stringify(sa), JSON.stringify(sb), `${c.name}: FIT_STATISTICS field for field 0.6.43's`);
   assert.equal(sa.CONVERGED, true, `${c.name}: CONVERGED ${sa.CONVERGED}`);
-  assert.deepEqual(ca, cb, `${c.name}: the OD COMMENT 0.6.42's`);
+  assert.deepEqual(ca, cb, `${c.name}: the OD COMMENT 0.6.43's`);
   assert.ok(!ca.some((l) => l.startsWith('fit: not converged')), `${c.name}: no ceiling line`);
   assert.deepEqual(met, c.met, `${c.name}: the passes at a ceiling (at 1,000; at any other) ${JSON.stringify(c.met)}`);
 }

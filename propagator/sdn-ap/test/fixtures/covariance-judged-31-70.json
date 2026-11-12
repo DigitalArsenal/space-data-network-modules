@@ -1,16 +1,16 @@
 {
   "what": "sdn-ap stated covariance against its own errors on the judged windows, records at 31/70/factor/off (tesseral/zonal)",
   "build": {
-    "commit": "3e4dcbbedc21d07f1443f6bcf1082c9e9569b5a1",
-    "wasmSha256": "1ddff52cf42c6f3e9b1c8dfe470d0d70e22b6afcb187838fbe4b7ceb5c333487",
-    "version": "0.6.42"
+    "commit": "217233cab56052072297fa15223be0fcd821e20d",
+    "wasmSha256": "f33e071fc77ccca6198ed7641c348957a947606460276fc9e8a926892a991935",
+    "version": "0.6.43"
   },
   "pcf": [
     "AP_TIDES at 31/70"
   ],
   "rows": {
     "file": "rows-31-70-factor-off.jsonl",
-    "sha256": "dc54dafd6da1816734de29cd7f1319e6f023f783d664240e6090912149881be6",
+    "sha256": "be09363f9b7cf0382fcc5e09db3792df17acd825562c9ecce998bf2ba686f80c",
     "windows": 748,
     "choice": 326,
     "judged": 422,
@@ -44,22 +44,37 @@
   "factorFit": {
     "what": "f on the floor sigma per axis, maximum likelihood over the choice windows, days 1, 2, 3, 5, 7",
     "grid": "exp(-1.5 to 2.5 by 0.02)",
-    "R": 1.1051709180756493,
-    "I": 1.2214027581601716,
-    "C": 0.5827482523739902,
+    "R": 1.150273798857229,
+    "I": 1.2460767305873828,
+    "C": 0.5945205479701948,
     "samples": 74495
   },
+  "factorOff": 1.0996588551261028,
   "registered": {
     "R": 1.0996588551261028,
-    "I": 1,
-    "C": 1,
-    "note": "radial only, fitted on 0.6.42's own flights of records at 31/70 with the factor off (exp(0.095), steps of 0.005 in its logarithm), the degrees the low table's records take from 0.6.42; no in-track or cross-track factor (stack #477)"
+    "I": 1.0,
+    "C": 1.0,
+    "note": "the radial factor given (--registered); in-track and cross-track at 1"
   },
   "band": [
     0.603,
     0.754
   ],
   "halfNormalMedian": 0.6744897501960817,
+  "counts": {
+    "windows": 748,
+    "rows": 748,
+    "errorRows": 0,
+    "withoutRow": 0,
+    "notInWindowSet": 0,
+    "note": "error rows are left out and not flown again on resume; rows of windows outside windows.txt are left out"
+  },
+  "nonpositiveVariances": {
+    "R": 0,
+    "T": 0,
+    "N": 0,
+    "note": "kept at 1e-14 km^2"
+  },
   "judged": [
     {
       "regime": "P",
@@ -69,16 +84,16 @@
       "windows": 306,
       "samples": 14688,
       "atOne": {
-        "medianAbsZ": 0.7212887438738732,
-        "within1": 0.6787173202614379,
-        "within3": 0.9863834422657952
+        "medianAbsZ": 0.7354439173464409,
+        "within1": 0.6378676470588235,
+        "within3": 0.9810729847494554
       },
       "registered": {
-        "medianAbsZ": 0.6597418311547869,
-        "within1": 0.7261710239651417,
-        "within3": 0.9899237472766884
+        "medianAbsZ": 0.6773839984241351,
+        "within1": 0.6783769063180828,
+        "within3": 0.9845452069716776
       },
-      "floorShareMedian": 0.9590599658598743
+      "floorShareMedian": 0.8975176724711462
     },
     {
       "regime": "P",
@@ -88,16 +103,16 @@
       "windows": 306,
       "samples": 14688,
       "atOne": {
-        "medianAbsZ": 0.8642525773128964,
-        "within1": 0.5571895424836601,
-        "within3": 0.9102668845315904
+        "medianAbsZ": 0.8622856718894727,
+        "within1": 0.5592320261437909,
+        "within3": 0.9100626361655774
       },
       "registered": {
-        "medianAbsZ": 0.8642525773128964,
-        "within1": 0.5571895424836601,
-        "within3": 0.9102668845315904
+        "medianAbsZ": 0.8622856718894727,
+        "within1": 0.5592320261437909,
+        "within3": 0.9100626361655774
       },
-      "floorShareMedian": 0.016524031167971232,
+      "floorShareMedian": 0.016539476680574337,
       "outsideBand": "too narrow: strong drag 2026 in-track, the density forecast's (stack #527); the floor holds 0 to 3 % of in-track, so no floor factor moves it"
     },
     {
@@ -108,16 +123,16 @@
       "windows": 306,
       "samples": 14688,
       "atOne": {
-        "medianAbsZ": 0.39643021645650645,
-        "within1": 0.8872549019607843,
-        "within3": 1
+        "medianAbsZ": 0.3973204352406874,
+        "within1": 0.886437908496732,
+        "within3": 1.0
       },
       "registered": {
-        "medianAbsZ": 0.39643021645650645,
-        "within1": 0.8872549019607843,
-        "within3": 1
+        "medianAbsZ": 0.3973204352406874,
+        "within1": 0.886437908496732,
+        "within3": 1.0
       },
-      "floorShareMedian": 0.49414464368711164,
+      "floorShareMedian": 0.49590438559425454,
       "outsideBand": "too wide: the cross-track sizes and floor are set on records at zonal degree 20, whose node drift a record at 70 does not have: an over-statement (stack #531)"
     },
     {
@@ -128,135 +143,136 @@
       "windows": 306,
       "samples": 14688,
       "atOne": {
-        "medianAbsZ": 0.7878058761815734,
-        "within1": 0.6034177559912854,
+        "medianAbsZ": 0.8542563902047463,
+        "within1": 0.5657679738562091,
+        "within3": 0.9333469498910676
+      },
+      "registered": {
+        "medianAbsZ": 0.8279782191905898,
+        "within1": 0.5789079520697168,
+        "within3": 0.9370234204793029
+      },
+      "floorShareMedian": 0.28185084763905555,
+      "outsideBand": "too narrow: strong drag 2026 radial, the drag-driven radial excursion of the forecast's later days, which the removed +10 m bias no longer cancels in part (stack #565); the floor's factor is stack #568"
+    },
+    {
+      "regime": "P",
+      "name": "strong drag 2026",
+      "day": 3,
+      "axis": "I",
+      "windows": 306,
+      "samples": 14688,
+      "atOne": {
+        "medianAbsZ": 0.9022069309349634,
+        "within1": 0.5366966230936819,
+        "within3": 0.9046160130718954
+      },
+      "registered": {
+        "medianAbsZ": 0.9022069309349634,
+        "within1": 0.5366966230936819,
+        "within3": 0.9046160130718954
+      },
+      "floorShareMedian": 9.236163914378562e-05,
+      "outsideBand": "too narrow: strong drag 2026 in-track, the density forecast's (stack #527); the floor holds 0 to 3 % of in-track, so no floor factor moves it"
+    },
+    {
+      "regime": "P",
+      "name": "strong drag 2026",
+      "day": 3,
+      "axis": "C",
+      "windows": 306,
+      "samples": 14688,
+      "atOne": {
+        "medianAbsZ": 0.15918469907395316,
+        "within1": 0.9995915032679739,
+        "within3": 1.0
+      },
+      "registered": {
+        "medianAbsZ": 0.15918469907395316,
+        "within1": 0.9995915032679739,
+        "within3": 1.0
+      },
+      "floorShareMedian": 0.04348234014319342,
+      "outsideBand": "too wide: the cross-track sizes and floor are set on records at zonal degree 20, whose node drift a record at 70 does not have: an over-statement (stack #531)"
+    },
+    {
+      "regime": "P",
+      "name": "strong drag 2026",
+      "day": 5,
+      "axis": "R",
+      "windows": 306,
+      "samples": 14688,
+      "atOne": {
+        "medianAbsZ": 0.8573175474104724,
+        "within1": 0.5671977124183006,
+        "within3": 0.9259940087145969
+      },
+      "registered": {
+        "medianAbsZ": 0.8451052352080938,
+        "within1": 0.5734613289760349,
+        "within3": 0.9287854030501089
+      },
+      "floorShareMedian": 0.11232956590909857,
+      "outsideBand": "too narrow: strong drag 2026 radial at days 5 and 7, the drag share c against the 2026 storms (stack #531)"
+    },
+    {
+      "regime": "P",
+      "name": "strong drag 2026",
+      "day": 5,
+      "axis": "I",
+      "windows": 306,
+      "samples": 14688,
+      "atOne": {
+        "medianAbsZ": 0.9075295878589433,
+        "within1": 0.5300925925925926,
+        "within3": 0.8862336601307189
+      },
+      "registered": {
+        "medianAbsZ": 0.9075295878589433,
+        "within1": 0.5300925925925926,
+        "within3": 0.8862336601307189
+      },
+      "floorShareMedian": 1.099280971362894e-05,
+      "outsideBand": "too narrow: strong drag 2026 in-track, the density forecast's (stack #527); the floor holds 0 to 3 % of in-track, so no floor factor moves it"
+    },
+    {
+      "regime": "P",
+      "name": "strong drag 2026",
+      "day": 5,
+      "axis": "C",
+      "windows": 306,
+      "samples": 14688,
+      "atOne": {
+        "medianAbsZ": 0.1271793653994583,
+        "within1": 1.0,
+        "within3": 1.0
+      },
+      "registered": {
+        "medianAbsZ": 0.1271793653994583,
+        "within1": 1.0,
+        "within3": 1.0
+      },
+      "floorShareMedian": 0.011719875674026386,
+      "outsideBand": "too wide: the cross-track sizes and floor are set on records at zonal degree 20, whose node drift a record at 70 does not have: an over-statement (stack #531)"
+    },
+    {
+      "regime": "P",
+      "name": "strong drag 2026",
+      "day": 7,
+      "axis": "R",
+      "windows": 306,
+      "samples": 14688,
+      "atOne": {
+        "medianAbsZ": 0.811716552514296,
+        "within1": 0.599400871459695,
         "within3": 0.9425381263616558
       },
       "registered": {
-        "medianAbsZ": 0.7476043494810198,
-        "within1": 0.6242510893246187,
-        "within3": 0.9480528322440087
+        "medianAbsZ": 0.8057765996065783,
+        "within1": 0.6026688453159041,
+        "within3": 0.9444444444444444
       },
-      "floorShareMedian": 0.5119677566067733
-    },
-    {
-      "regime": "P",
-      "name": "strong drag 2026",
-      "day": 3,
-      "axis": "I",
-      "windows": 306,
-      "samples": 14688,
-      "atOne": {
-        "medianAbsZ": 0.895719278013626,
-        "within1": 0.5381944444444444,
-        "within3": 0.9044798474945533
-      },
-      "registered": {
-        "medianAbsZ": 0.895719278013626,
-        "within1": 0.5381944444444444,
-        "within3": 0.9044798474945533
-      },
-      "floorShareMedian": 0.00009227244100959367,
-      "outsideBand": "too narrow: strong drag 2026 in-track, the density forecast's (stack #527); the floor holds 0 to 3 % of in-track, so no floor factor moves it"
-    },
-    {
-      "regime": "P",
-      "name": "strong drag 2026",
-      "day": 3,
-      "axis": "C",
-      "windows": 306,
-      "samples": 14688,
-      "atOne": {
-        "medianAbsZ": 0.15904090029343426,
-        "within1": 0.9995915032679739,
-        "within3": 1
-      },
-      "registered": {
-        "medianAbsZ": 0.15904090029343426,
-        "within1": 0.9995915032679739,
-        "within3": 1
-      },
-      "floorShareMedian": 0.043465060365598295,
-      "outsideBand": "too wide: the cross-track sizes and floor are set on records at zonal degree 20, whose node drift a record at 70 does not have: an over-statement (stack #531)"
-    },
-    {
-      "regime": "P",
-      "name": "strong drag 2026",
-      "day": 5,
-      "axis": "R",
-      "windows": 306,
-      "samples": 14688,
-      "atOne": {
-        "medianAbsZ": 0.8107384911567779,
-        "within1": 0.5976988017429193,
-        "within3": 0.9319852941176471
-      },
-      "registered": {
-        "medianAbsZ": 0.7884597535986553,
-        "within1": 0.6111791938997821,
-        "within3": 0.9373638344226579
-      },
-      "floorShareMedian": 0.25609616420549675,
-      "outsideBand": "too narrow: strong drag 2026 radial at days 5 and 7, the drag share c against the 2026 storms (stack #531)"
-    },
-    {
-      "regime": "P",
-      "name": "strong drag 2026",
-      "day": 5,
-      "axis": "I",
-      "windows": 306,
-      "samples": 14688,
-      "atOne": {
-        "medianAbsZ": 0.9063403166359021,
-        "within1": 0.53125,
-        "within3": 0.8858932461873639
-      },
-      "registered": {
-        "medianAbsZ": 0.9063403166359021,
-        "within1": 0.53125,
-        "within3": 0.8858932461873639
-      },
-      "floorShareMedian": 0.000010959610811749912,
-      "outsideBand": "too narrow: strong drag 2026 in-track, the density forecast's (stack #527); the floor holds 0 to 3 % of in-track, so no floor factor moves it"
-    },
-    {
-      "regime": "P",
-      "name": "strong drag 2026",
-      "day": 5,
-      "axis": "C",
-      "windows": 306,
-      "samples": 14688,
-      "atOne": {
-        "medianAbsZ": 0.12706139461008575,
-        "within1": 1,
-        "within3": 1
-      },
-      "registered": {
-        "medianAbsZ": 0.12706139461008575,
-        "within1": 1,
-        "within3": 1
-      },
-      "floorShareMedian": 0.011713196695796135,
-      "outsideBand": "too wide: the cross-track sizes and floor are set on records at zonal degree 20, whose node drift a record at 70 does not have: an over-statement (stack #531)"
-    },
-    {
-      "regime": "P",
-      "name": "strong drag 2026",
-      "day": 7,
-      "axis": "R",
-      "windows": 306,
-      "samples": 14688,
-      "atOne": {
-        "medianAbsZ": 0.7792967514781928,
-        "within1": 0.6190767973856209,
-        "within3": 0.9480528322440087
-      },
-      "registered": {
-        "medianAbsZ": 0.7702241469255648,
-        "within1": 0.6262935729847494,
-        "within3": 0.9502995642701525
-      },
-      "floorShareMedian": 0.06417712423347786,
+      "floorShareMedian": 0.024522574040561684,
       "outsideBand": "too narrow: strong drag 2026 radial at days 5 and 7, the drag share c against the 2026 storms (stack #531)"
     },
     {
@@ -267,16 +283,16 @@
       "windows": 306,
       "samples": 14688,
       "atOne": {
-        "medianAbsZ": 0.8936225731553962,
-        "within1": 0.5321350762527233,
-        "within3": 0.8578431372549019
+        "medianAbsZ": 0.8934254309101672,
+        "within1": 0.5323393246187363,
+        "within3": 0.857911220043573
       },
       "registered": {
-        "medianAbsZ": 0.8936225731553962,
-        "within1": 0.5321350762527233,
-        "within3": 0.8578431372549019
+        "medianAbsZ": 0.8934254309101672,
+        "within1": 0.5323393246187363,
+        "within3": 0.857911220043573
       },
-      "floorShareMedian": 0.0000026802637957200916,
+      "floorShareMedian": 2.6864292270358766e-06,
       "outsideBand": "too narrow: strong drag 2026 in-track, the density forecast's (stack #527); the floor holds 0 to 3 % of in-track, so no floor factor moves it"
     },
     {
@@ -287,16 +303,16 @@
       "windows": 306,
       "samples": 14688,
       "atOne": {
-        "medianAbsZ": 0.12073921203330581,
-        "within1": 1,
-        "within3": 1
+        "medianAbsZ": 0.12068689343526459,
+        "within1": 1.0,
+        "within3": 1.0
       },
       "registered": {
-        "medianAbsZ": 0.12073921203330581,
-        "within1": 1,
-        "within3": 1
+        "medianAbsZ": 0.12068689343526459,
+        "within1": 1.0,
+        "within3": 1.0
       },
-      "floorShareMedian": 0.004631124787710502,
+      "floorShareMedian": 0.004630433844145386,
       "outsideBand": "too wide: the cross-track sizes and floor are set on records at zonal degree 20, whose node drift a record at 70 does not have: an over-statement (stack #531)"
     },
     {
@@ -307,16 +323,17 @@
       "windows": 28,
       "samples": 1080,
       "atOne": {
-        "medianAbsZ": 0.7023688849884295,
-        "within1": 0.7296296296296296,
-        "within3": 1
+        "medianAbsZ": 0.5861660259642647,
+        "within1": 0.7537037037037037,
+        "within3": 1.0
       },
       "registered": {
-        "medianAbsZ": 0.6404847420536677,
-        "within1": 0.775,
-        "within3": 1
+        "medianAbsZ": 0.5358253187199304,
+        "within1": 0.8018518518518518,
+        "within3": 1.0
       },
-      "floorShareMedian": 0.9896040587775417
+      "floorShareMedian": 0.978854418255058,
+      "outsideBand": "too wide: the radial floor factor exp(0.095) was fitted on errors that carried the zonal theory's +10 m radial bias, which the constant radial term removes from 0.6.43 (SPEC 16.23): the radial error falls and the floor does not (stack #568)"
     },
     {
       "regime": "LS",
@@ -326,16 +343,16 @@
       "windows": 28,
       "samples": 1080,
       "atOne": {
-        "medianAbsZ": 0.045683294885893996,
+        "medianAbsZ": 0.0466470397729816,
         "within1": 0.9972222222222222,
-        "within3": 1
+        "within3": 1.0
       },
       "registered": {
-        "medianAbsZ": 0.045683294885893996,
+        "medianAbsZ": 0.0466470397729816,
         "within1": 0.9972222222222222,
-        "within3": 1
+        "within3": 1.0
       },
-      "floorShareMedian": 0.0015406165937724761,
+      "floorShareMedian": 0.0015363475871190493,
       "outsideBand": "too wide: the low rows' sizes (s_e, s_i, s_l, c) are set on strong drag and are too wide outside it (stack #531)"
     },
     {
@@ -346,16 +363,16 @@
       "windows": 28,
       "samples": 1080,
       "atOne": {
-        "medianAbsZ": 0.5490035200173478,
+        "medianAbsZ": 0.5489260539798055,
         "within1": 0.85,
-        "within3": 1
+        "within3": 1.0
       },
       "registered": {
-        "medianAbsZ": 0.5490035200173478,
+        "medianAbsZ": 0.5489260539798055,
         "within1": 0.85,
-        "within3": 1
+        "within3": 1.0
       },
-      "floorShareMedian": 0.7504211721821243,
+      "floorShareMedian": 0.7513115376492386,
       "outsideBand": "too wide: the low rows' sizes (s_e, s_i, s_l, c) are set on strong drag and are too wide outside it (stack #531)"
     },
     {
@@ -366,16 +383,16 @@
       "windows": 28,
       "samples": 817,
       "atOne": {
-        "medianAbsZ": 0.6096688416101382,
-        "within1": 0.784577723378213,
-        "within3": 1
+        "medianAbsZ": 0.5131674545621077,
+        "within1": 0.8323133414932681,
+        "within3": 1.0
       },
       "registered": {
-        "medianAbsZ": 0.5655306930055505,
-        "within1": 0.8274173806609547,
-        "within3": 1
+        "medianAbsZ": 0.4794381790259959,
+        "within1": 0.8506731946144431,
+        "within3": 1.0
       },
-      "floorShareMedian": 0.8379959343888039,
+      "floorShareMedian": 0.7008663393188292,
       "outsideBand": "too wide: one radial factor serves the laser spheres and altimetry with strong drag and near 700 km (stack #477); past day 1 the sizes carry part of it (stack #531)"
     },
     {
@@ -386,16 +403,16 @@
       "windows": 28,
       "samples": 817,
       "atOne": {
-        "medianAbsZ": 0.019575038962663438,
-        "within1": 1,
-        "within3": 1
+        "medianAbsZ": 0.020382100161998838,
+        "within1": 1.0,
+        "within3": 1.0
       },
       "registered": {
-        "medianAbsZ": 0.019575038962663438,
-        "within1": 1,
-        "within3": 1
+        "medianAbsZ": 0.020382100161998838,
+        "within1": 1.0,
+        "within3": 1.0
       },
-      "floorShareMedian": 0.00006161310334294476,
+      "floorShareMedian": 6.160918025946613e-05,
       "outsideBand": "too wide: the low rows' sizes (s_e, s_i, s_l, c) are set on strong drag and are too wide outside it (stack #531)"
     },
     {
@@ -406,16 +423,16 @@
       "windows": 28,
       "samples": 817,
       "atOne": {
-        "medianAbsZ": 0.1989386745368659,
+        "medianAbsZ": 0.19896658313709487,
         "within1": 0.9987760097919217,
-        "within3": 1
+        "within3": 1.0
       },
       "registered": {
-        "medianAbsZ": 0.1989386745368659,
+        "medianAbsZ": 0.19896658313709487,
         "within1": 0.9987760097919217,
-        "within3": 1
+        "within3": 1.0
       },
-      "floorShareMedian": 0.10636709642623937,
+      "floorShareMedian": 0.10636778411598861,
       "outsideBand": "too wide: the low rows' sizes (s_e, s_i, s_l, c) are set on strong drag and are too wide outside it (stack #531)"
     },
     {
@@ -426,16 +443,16 @@
       "windows": 28,
       "samples": 1080,
       "atOne": {
-        "medianAbsZ": 0.5303775819815405,
-        "within1": 0.8435185185185186,
-        "within3": 1
+        "medianAbsZ": 0.4410838859325878,
+        "within1": 0.8842592592592593,
+        "within3": 1.0
       },
       "registered": {
-        "medianAbsZ": 0.5018905140781572,
-        "within1": 0.8759259259259259,
-        "within3": 1
+        "medianAbsZ": 0.422032625224025,
+        "within1": 0.9,
+        "within3": 1.0
       },
-      "floorShareMedian": 0.6878090205545522,
+      "floorShareMedian": 0.4811601515543573,
       "outsideBand": "too wide: one radial factor serves the laser spheres and altimetry with strong drag and near 700 km (stack #477); past day 1 the sizes carry part of it (stack #531)"
     },
     {
@@ -446,16 +463,16 @@
       "windows": 28,
       "samples": 1080,
       "atOne": {
-        "medianAbsZ": 0.019473064591554096,
-        "within1": 1,
-        "within3": 1
+        "medianAbsZ": 0.02048669947650409,
+        "within1": 1.0,
+        "within3": 1.0
       },
       "registered": {
-        "medianAbsZ": 0.019473064591554096,
-        "within1": 1,
-        "within3": 1
+        "medianAbsZ": 0.02048669947650409,
+        "within1": 1.0,
+        "within3": 1.0
       },
-      "floorShareMedian": 0.000019682439839078193,
+      "floorShareMedian": 1.967086103475109e-05,
       "outsideBand": "too wide: the low rows' sizes (s_e, s_i, s_l, c) are set on strong drag and are too wide outside it (stack #531)"
     },
     {
@@ -466,16 +483,16 @@
       "windows": 28,
       "samples": 1080,
       "atOne": {
-        "medianAbsZ": 0.11840628685913834,
-        "within1": 1,
-        "within3": 1
+        "medianAbsZ": 0.11849532612726452,
+        "within1": 1.0,
+        "within3": 1.0
       },
       "registered": {
-        "medianAbsZ": 0.11840628685913834,
-        "within1": 1,
-        "within3": 1
+        "medianAbsZ": 0.11849532612726452,
+        "within1": 1.0,
+        "within3": 1.0
       },
-      "floorShareMedian": 0.03324249265384102,
+      "floorShareMedian": 0.03325111157618622,
       "outsideBand": "too wide: the low rows' sizes (s_e, s_i, s_l, c) are set on strong drag and are too wide outside it (stack #531)"
     },
     {
@@ -486,16 +503,16 @@
       "windows": 28,
       "samples": 753,
       "atOne": {
-        "medianAbsZ": 0.46201508109956185,
-        "within1": 0.8738379814077025,
-        "within3": 1
+        "medianAbsZ": 0.40882015527577076,
+        "within1": 0.9057104913678619,
+        "within3": 1.0
       },
       "registered": {
-        "medianAbsZ": 0.4427237715283379,
-        "within1": 0.8924302788844621,
-        "within3": 1
+        "medianAbsZ": 0.3988209490152014,
+        "within1": 0.9176626826029216,
+        "within3": 1.0
       },
-      "floorShareMedian": 0.5183885537453231,
+      "floorShareMedian": 0.30877651060839956,
       "outsideBand": "too wide: one radial factor serves the laser spheres and altimetry with strong drag and near 700 km (stack #477); past day 1 the sizes carry part of it (stack #531)"
     },
     {
@@ -506,16 +523,16 @@
       "windows": 28,
       "samples": 753,
       "atOne": {
-        "medianAbsZ": 0.01895468991022165,
-        "within1": 1,
-        "within3": 1
+        "medianAbsZ": 0.019971801187639093,
+        "within1": 1.0,
+        "within3": 1.0
       },
       "registered": {
-        "medianAbsZ": 0.01895468991022165,
-        "within1": 1,
-        "within3": 1
+        "medianAbsZ": 0.019971801187639093,
+        "within1": 1.0,
+        "within3": 1.0
       },
-      "floorShareMedian": 0.00000951568579677513,
+      "floorShareMedian": 9.50497883587777e-06,
       "outsideBand": "too wide: the low rows' sizes (s_e, s_i, s_l, c) are set on strong drag and are too wide outside it (stack #531)"
     },
     {
@@ -526,16 +543,16 @@
       "windows": 28,
       "samples": 753,
       "atOne": {
-        "medianAbsZ": 0.08242443119174651,
-        "within1": 1,
-        "within3": 1
+        "medianAbsZ": 0.0824299274941625,
+        "within1": 1.0,
+        "within3": 1.0
       },
       "registered": {
-        "medianAbsZ": 0.08242443119174651,
-        "within1": 1,
-        "within3": 1
+        "medianAbsZ": 0.0824299274941625,
+        "within1": 1.0,
+        "within3": 1.0
       },
-      "floorShareMedian": 0.013113851070844958,
+      "floorShareMedian": 0.01311372047920612,
       "outsideBand": "too wide: the low rows' sizes (s_e, s_i, s_l, c) are set on strong drag and are too wide outside it (stack #531)"
     },
     {
@@ -546,16 +563,17 @@
       "windows": 40,
       "samples": 1920,
       "atOne": {
-        "medianAbsZ": 0.7138111290775169,
-        "within1": 0.709375,
-        "within3": 1
+        "medianAbsZ": 0.5852008524624519,
+        "within1": 0.7276041666666667,
+        "within3": 0.9994791666666667
       },
       "registered": {
-        "medianAbsZ": 0.6499545466632362,
-        "within1": 0.7661458333333333,
-        "within3": 1
+        "medianAbsZ": 0.5346311160387782,
+        "within1": 0.7703125,
+        "within3": 1.0
       },
-      "floorShareMedian": 0.9914071318464022
+      "floorShareMedian": 0.9820204072972429,
+      "outsideBand": "too wide: the radial floor factor exp(0.095) was fitted on errors that carried the zonal theory's +10 m radial bias, which the constant radial term removes from 0.6.43 (SPEC 16.23): the radial error falls and the floor does not (stack #568)"
     },
     {
       "regime": "DO",
@@ -565,16 +583,16 @@
       "windows": 40,
       "samples": 1920,
       "atOne": {
-        "medianAbsZ": 0.09453362856372577,
+        "medianAbsZ": 0.09197464943498526,
         "within1": 0.9895833333333334,
-        "within3": 1
+        "within3": 1.0
       },
       "registered": {
-        "medianAbsZ": 0.09453362856372577,
+        "medianAbsZ": 0.09197464943498526,
         "within1": 0.9895833333333334,
-        "within3": 1
+        "within3": 1.0
       },
-      "floorShareMedian": 0.001733584142983653,
+      "floorShareMedian": 0.0017256347830897118,
       "outsideBand": "too wide: the low rows' sizes (s_e, s_i, s_l, c) are set on strong drag and are too wide outside it (stack #531)"
     },
     {
@@ -585,16 +603,16 @@
       "windows": 40,
       "samples": 1920,
       "atOne": {
-        "medianAbsZ": 0.5849333752184414,
-        "within1": 0.8411458333333334,
-        "within3": 1
+        "medianAbsZ": 0.5848308825295012,
+        "within1": 0.8390625,
+        "within3": 1.0
       },
       "registered": {
-        "medianAbsZ": 0.5849333752184414,
-        "within1": 0.8411458333333334,
-        "within3": 1
+        "medianAbsZ": 0.5848308825295012,
+        "within1": 0.8390625,
+        "within3": 1.0
       },
-      "floorShareMedian": 0.7815479874715339,
+      "floorShareMedian": 0.7830161676302005,
       "outsideBand": "too wide: the low rows' sizes (s_e, s_i, s_l, c) are set on strong drag and are too wide outside it (stack #531)"
     },
     {
@@ -605,16 +623,16 @@
       "windows": 40,
       "samples": 1920,
       "atOne": {
-        "medianAbsZ": 0.6428530035253041,
+        "medianAbsZ": 0.5864126704181232,
         "within1": 0.7151041666666667,
-        "within3": 0.9958333333333333
+        "within3": 0.984375
       },
       "registered": {
-        "medianAbsZ": 0.597383602426428,
-        "within1": 0.7520833333333333,
-        "within3": 0.9984375
+        "medianAbsZ": 0.5492149458736191,
+        "within1": 0.7427083333333333,
+        "within3": 0.990625
       },
-      "floorShareMedian": 0.8829620665033182,
+      "floorShareMedian": 0.7538308399604561,
       "outsideBand": "too wide: one radial factor serves the laser spheres and altimetry with strong drag and near 700 km (stack #477); past day 1 the sizes carry part of it (stack #531)"
     },
     {
@@ -625,16 +643,16 @@
       "windows": 40,
       "samples": 1920,
       "atOne": {
-        "medianAbsZ": 0.06344002572664861,
+        "medianAbsZ": 0.06112358318396913,
         "within1": 0.9776041666666667,
-        "within3": 1
+        "within3": 1.0
       },
       "registered": {
-        "medianAbsZ": 0.06344002572664861,
+        "medianAbsZ": 0.06112358318396913,
         "within1": 0.9776041666666667,
-        "within3": 1
+        "within3": 1.0
       },
-      "floorShareMedian": 0.00006901052100898954,
+      "floorShareMedian": 6.873261350960661e-05,
       "outsideBand": "too wide: the low rows' sizes (s_e, s_i, s_l, c) are set on strong drag and are too wide outside it (stack #531)"
     },
     {
@@ -645,16 +663,16 @@
       "windows": 40,
       "samples": 1920,
       "atOne": {
-        "medianAbsZ": 0.23752512252035743,
-        "within1": 1,
-        "within3": 1
+        "medianAbsZ": 0.23742353460534538,
+        "within1": 1.0,
+        "within3": 1.0
       },
       "registered": {
-        "medianAbsZ": 0.23752512252035743,
-        "within1": 1,
-        "within3": 1
+        "medianAbsZ": 0.23742353460534538,
+        "within1": 1.0,
+        "within3": 1.0
       },
-      "floorShareMedian": 0.12832252623303064,
+      "floorShareMedian": 0.1283826506780934,
       "outsideBand": "too wide: the low rows' sizes (s_e, s_i, s_l, c) are set on strong drag and are too wide outside it (stack #531)"
     },
     {
@@ -665,16 +683,16 @@
       "windows": 40,
       "samples": 1920,
       "atOne": {
-        "medianAbsZ": 0.6218989991864964,
-        "within1": 0.7296875,
-        "within3": 0.9786458333333333
+        "medianAbsZ": 0.5388511909819798,
+        "within1": 0.7489583333333333,
+        "within3": 0.9630208333333333
       },
       "registered": {
-        "medianAbsZ": 0.5833819498880982,
-        "within1": 0.7541666666666667,
-        "within3": 0.9869791666666666
+        "medianAbsZ": 0.5185983691629117,
+        "within1": 0.7625,
+        "within3": 0.9677083333333333
       },
-      "floorShareMedian": 0.7109701027288693,
+      "floorShareMedian": 0.5007751118451838,
       "outsideBand": "too wide: one radial factor serves the laser spheres and altimetry with strong drag and near 700 km (stack #477); past day 1 the sizes carry part of it (stack #531)"
     },
     {
@@ -685,16 +703,16 @@
       "windows": 40,
       "samples": 1920,
       "atOne": {
-        "medianAbsZ": 0.09556543844870094,
-        "within1": 0.8786458333333333,
-        "within3": 1
+        "medianAbsZ": 0.09165511806774596,
+        "within1": 0.8765625,
+        "within3": 1.0
       },
       "registered": {
-        "medianAbsZ": 0.09556543844870094,
-        "within1": 0.8786458333333333,
-        "within3": 1
+        "medianAbsZ": 0.09165511806774596,
+        "within1": 0.8765625,
+        "within3": 1.0
       },
-      "floorShareMedian": 0.000021018613126245658,
+      "floorShareMedian": 2.0928539358574554e-05,
       "outsideBand": "too wide: the low rows' sizes (s_e, s_i, s_l, c) are set on strong drag and are too wide outside it (stack #531)"
     },
     {
@@ -705,16 +723,16 @@
       "windows": 40,
       "samples": 1920,
       "atOne": {
-        "medianAbsZ": 0.13076499519967627,
-        "within1": 1,
-        "within3": 1
+        "medianAbsZ": 0.1309637514198675,
+        "within1": 1.0,
+        "within3": 1.0
       },
       "registered": {
-        "medianAbsZ": 0.13076499519967627,
-        "within1": 1,
-        "within3": 1
+        "medianAbsZ": 0.1309637514198675,
+        "within1": 1.0,
+        "within3": 1.0
       },
-      "floorShareMedian": 0.036992092884429076,
+      "floorShareMedian": 0.036995088091173495,
       "outsideBand": "too wide: the low rows' sizes (s_e, s_i, s_l, c) are set on strong drag and are too wide outside it (stack #531)"
     },
     {
@@ -725,16 +743,17 @@
       "windows": 40,
       "samples": 1820,
       "atOne": {
-        "medianAbsZ": 0.639100837763535,
-        "within1": 0.6884615384615385,
-        "within3": 0.9362637362637363
+        "medianAbsZ": 0.5631218389528173,
+        "within1": 0.6686813186813186,
+        "within3": 0.9043956043956044
       },
       "registered": {
-        "medianAbsZ": 0.6064350889464475,
-        "within1": 0.7131868131868132,
-        "within3": 0.945054945054945
+        "medianAbsZ": 0.5453105813566447,
+        "within1": 0.6796703296703297,
+        "within3": 0.9137362637362637
       },
-      "floorShareMedian": 0.5493392117381827
+      "floorShareMedian": 0.33328887399734985,
+      "outsideBand": "too wide: the radial floor factor exp(0.095) was fitted on errors that carried the zonal theory's +10 m radial bias, which the constant radial term removes from 0.6.43 (SPEC 16.23): the radial error falls and the floor does not (stack #568)"
     },
     {
       "regime": "DO",
@@ -744,16 +763,16 @@
       "windows": 40,
       "samples": 1820,
       "atOne": {
-        "medianAbsZ": 0.26958575902020143,
-        "within1": 0.7675824175824176,
+        "medianAbsZ": 0.245021736961622,
+        "within1": 0.7670329670329671,
         "within3": 0.9857142857142858
       },
       "registered": {
-        "medianAbsZ": 0.26958575902020143,
-        "within1": 0.7675824175824176,
+        "medianAbsZ": 0.245021736961622,
+        "within1": 0.7670329670329671,
         "within3": 0.9857142857142858
       },
-      "floorShareMedian": 0.00001000510920250133,
+      "floorShareMedian": 9.960541776582072e-06,
       "outsideBand": "too wide: the low rows' sizes (s_e, s_i, s_l, c) are set on strong drag and are too wide outside it (stack #531)"
     },
     {
@@ -764,16 +783,16 @@
       "windows": 40,
       "samples": 1820,
       "atOne": {
-        "medianAbsZ": 0.09826233374279583,
+        "medianAbsZ": 0.09844668308287054,
         "within1": 0.9912087912087912,
         "within3": 0.9994505494505495
       },
       "registered": {
-        "medianAbsZ": 0.09826233374279583,
+        "medianAbsZ": 0.09844668308287054,
         "within1": 0.9912087912087912,
         "within3": 0.9994505494505495
       },
-      "floorShareMedian": 0.0161648625845553,
+      "floorShareMedian": 0.016165744262405732,
       "outsideBand": "too wide: the low rows' sizes (s_e, s_i, s_l, c) are set on strong drag and are too wide outside it (stack #531)"
     },
     {
@@ -784,16 +803,17 @@
       "windows": 48,
       "samples": 2207,
       "atOne": {
-        "medianAbsZ": 0.7542310520810468,
-        "within1": 0.6805618486633439,
-        "within3": 1
+        "medianAbsZ": 0.5971195557345368,
+        "within1": 0.7562301767104667,
+        "within3": 1.0
       },
       "registered": {
-        "medianAbsZ": 0.6866028588692044,
-        "within1": 0.7516991391028546,
-        "within3": 1
+        "medianAbsZ": 0.5446167035226042,
+        "within1": 0.8042591753511554,
+        "within3": 1.0
       },
-      "floorShareMedian": 0.99291456487702
+      "floorShareMedian": 0.9834349066078812,
+      "outsideBand": "too wide: the radial floor factor exp(0.095) was fitted on errors that carried the zonal theory's +10 m radial bias, which the constant radial term removes from 0.6.43 (SPEC 16.23): the radial error falls and the floor does not (stack #568)"
     },
     {
       "regime": "S1",
@@ -803,16 +823,16 @@
       "windows": 48,
       "samples": 2207,
       "atOne": {
-        "medianAbsZ": 0.21860812215227804,
-        "within1": 0.9859537834164024,
-        "within3": 1
+        "medianAbsZ": 0.22141925947976912,
+        "within1": 0.9855006796556411,
+        "within3": 1.0
       },
       "registered": {
-        "medianAbsZ": 0.21860812215227804,
-        "within1": 0.9859537834164024,
-        "within3": 1
+        "medianAbsZ": 0.22141925947976912,
+        "within1": 0.9855006796556411,
+        "within3": 1.0
       },
-      "floorShareMedian": 0.0023944114972748727,
+      "floorShareMedian": 0.0023859659923408127,
       "outsideBand": "too wide: the low rows' sizes (s_e, s_i, s_l, c) are set on strong drag and are too wide outside it (stack #531)"
     },
     {
@@ -823,16 +843,16 @@
       "windows": 48,
       "samples": 2207,
       "atOne": {
-        "medianAbsZ": 0.6032595504492696,
+        "medianAbsZ": 0.6040879280461389,
         "within1": 0.8187584956955143,
-        "within3": 1
+        "within3": 1.0
       },
       "registered": {
-        "medianAbsZ": 0.6032595504492696,
+        "medianAbsZ": 0.6040879280461389,
         "within1": 0.8187584956955143,
-        "within3": 1
+        "within3": 1.0
       },
-      "floorShareMedian": 0.8163514293420543
+      "floorShareMedian": 0.8179465308634878
     },
     {
       "regime": "S1",
@@ -842,16 +862,16 @@
       "windows": 48,
       "samples": 2157,
       "atOne": {
-        "medianAbsZ": 0.7633113529663617,
-        "within1": 0.6184515530829856,
-        "within3": 1
+        "medianAbsZ": 0.783581240618275,
+        "within1": 0.6342141863699583,
+        "within3": 1.0
       },
       "registered": {
-        "medianAbsZ": 0.7001589416575857,
-        "within1": 0.6578581363004172,
-        "within3": 1
+        "medianAbsZ": 0.7258860574847884,
+        "within1": 0.6736207695873899,
+        "within3": 1.0
       },
-      "floorShareMedian": 0.9009313390169805
+      "floorShareMedian": 0.7826308328624593
     },
     {
       "regime": "S1",
@@ -861,16 +881,16 @@
       "windows": 48,
       "samples": 2157,
       "atOne": {
-        "medianAbsZ": 0.3685057739528856,
+        "medianAbsZ": 0.3701005273417725,
         "within1": 0.923041261010663,
-        "within3": 1
+        "within3": 1.0
       },
       "registered": {
-        "medianAbsZ": 0.3685057739528856,
+        "medianAbsZ": 0.3701005273417725,
         "within1": 0.923041261010663,
-        "within3": 1
+        "within3": 1.0
       },
-      "floorShareMedian": 0.00009093191930318235,
+      "floorShareMedian": 9.085543856189506e-05,
       "outsideBand": "too wide: the low rows' sizes (s_e, s_i, s_l, c) are set on strong drag and are too wide outside it (stack #531)"
     },
     {
@@ -881,16 +901,16 @@
       "windows": 48,
       "samples": 2157,
       "atOne": {
-        "medianAbsZ": 0.260553852103805,
-        "within1": 1,
-        "within3": 1
+        "medianAbsZ": 0.26068392215389585,
+        "within1": 1.0,
+        "within3": 1.0
       },
       "registered": {
-        "medianAbsZ": 0.260553852103805,
-        "within1": 1,
-        "within3": 1
+        "medianAbsZ": 0.26068392215389585,
+        "within1": 1.0,
+        "within3": 1.0
       },
-      "floorShareMedian": 0.15558304736420175,
+      "floorShareMedian": 0.15563168082771967,
       "outsideBand": "too wide: the low rows' sizes (s_e, s_i, s_l, c) are set on strong drag and are too wide outside it (stack #531)"
     }
   ]

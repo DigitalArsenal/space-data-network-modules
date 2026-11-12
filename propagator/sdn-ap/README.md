@@ -217,6 +217,14 @@ leaves no step. Gravity alone against FFM 70 x 70, 300 to 1,500 km, the worst da
 numerical arm's went from 21 to 34 of 56 windows on laser spheres and from 28 to 42 of 112 on altimetry (0.6.25). SPEC 16.18
 has the q != 0 part's measurements (`test/slow-set-partition.e2e.mjs`, `test/slow-set-taper.e2e.mjs`).
 
+The zonal theory's constant radial term (from 0.6.43; SPEC 16.23). Held to the dynamics' mean rates, the theory's mean
+radius on a near-circular orbit sat (R_E^4 / a^3)[J2^2 (199 c^4 - 80 c^2 + 25) / 32 - J4 (15/64)(35 s^4 - 40 s^2 + 8)]
+above the true one (c and s the cosine and sine of i): about +11 m at i 87.5 and 420 km, -2.4 m at i 55, +42 m near the
+equator. Every AP set with gravity terms takes that off its radius, at the same osculating energy (AP's output velocity
+is not the rate of its positions, stack #549); SGP4XP is unchanged. Against FFM with J2 to J5 and the Sun and Moon,
+fitted over 0 to 5 days, the offset left is -0.4 to +0.2 m on 42 near-circular cases from 300 to 1,400 km, at most 1.3 m
+at e 0.05, 1.8 m at e 0.1 and 9.1 m at e 0.3 (the eccentric terms are stack #532; `test/zonal-radius-term.e2e.mjs`).
+
 The field's census (from 0.6.32; SPEC 16.20) lists, for a set of mean elements, every tesseral term of the field to degree 70
 whose size over a 5-day forecast reaches 0.5 m, with the weight each carrier the set builds holds of it and the term's
 period. `test/field-census.e2e.mjs` sweeps 101 sets over every class and both sides of every switch. It fails on a term

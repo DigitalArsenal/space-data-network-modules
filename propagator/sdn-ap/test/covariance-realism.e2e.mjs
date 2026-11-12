@@ -9,7 +9,7 @@
 // - The ISS figure: each build flies its fit to the file's last state (12 h from its start, EME2000); the in-track
 //   1-sigma (the position covariance projected on the truth state's in-track axis) and the error, both builds.
 // - The radial floor factor (SPEC 12.5, stack #477): the same fit by this build and by the build the registered rows were
-//   flown on (0.6.42, modules 3e4dcbbe, SHA-256 checked, with ROWS_FACTOR in its floors) differs only by FLOOR_UU times
+//   flown on (0.6.43, modules 217233ca, SHA-256 checked, with ROWS_FACTOR in its floors) differs only by FLOOR_UU times
 //   (f / ROWS_FACTOR)^2 and FLOOR_VU and FLOOR_WU times f / ROWS_FACTOR, with f = RADIAL_FACTOR, and has the same mean
 //   elements: so this build flies the registered windows as the rows' build did, but for the factor.
 // - The registered windows (stack #477, the final build's own flights): 748 windows of the low table (strong drag 2025 and
@@ -22,7 +22,7 @@
 //   sample of the day, and the shares within 1 and 3 sigma.
 // Asserts: the DRAG row and the floors as above; the factor; every judged cell equals the registered cell
 // (test/fixtures/covariance-judged-31-70.json, MEDIAN_RELATIVE); the cells outside the band [0.603, 0.754] are exactly the
-// registered ones, each named with its cause. Realism is not met: 8 of the 42 judged cells are inside the band. JS moves
+// registered ones, each named with its cause. Realism is not met: 3 of the 42 judged cells are inside the band (8 on 0.6.42). JS moves
 // bytes, rotates the module's covariance onto the truth's axes and takes medians; every state and covariance is the module's.
 // Until 0.6.42 the test judged 0.6.0's flights of held-out windows re-weighted with the build's variances. On 0.6.42 (git
 // b7a7191e, wasm f771420f; main 0.6.41's test, git afdd1568, run on it), whose floors follow its closer fit, those cells read
@@ -54,11 +54,11 @@ import { configuration, XP_FORCES } from "./lib/pcf.mjs";
 import { packOem, rfm } from "./lib/frames.mjs";
 
 // the registered rows (stack #477): the build's own flights, records at tesseral 31 / zonal 70, and the build they were flown on
-const ROWS = { path: "/opt/data/sdn-archive/operator-theory/covariance-coverage-1ddff52cf42c/rows-31-70-factor-off.jsonl", sha256: "dc54dafd6da1816734de29cd7f1319e6f023f783d664240e6090912149881be6" };
-const ROWS_BUILD = { commit: "3e4dcbbedc21d07f1443f6bcf1082c9e9569b5a1", sha256: "1ddff52cf42c6f3e9b1c8dfe470d0d70e22b6afcb187838fbe4b7ceb5c333487" };
+const ROWS = { path: "/opt/data/sdn-archive/operator-theory/covariance-coverage-f33e071fc77c/rows-31-70-factor-off.jsonl", sha256: "be09363f9b7cf0382fcc5e09db3792df17acd825562c9ecce998bf2ba686f80c" };
+const ROWS_BUILD = { commit: "217233cab56052072297fa15223be0fcd821e20d", sha256: "f33e071fc77ccca6198ed7641c348957a947606460276fc9e8a926892a991935" };
 // SPEC 12.5's kFloorRadialFastSide, the radial floor's sigma factor in the low table's fast side (DRAG regime), and the one the
 // rows' build carried, which the rows have taken off
-const RADIAL_FACTOR = Math.exp(0.095), ROWS_FACTOR = Math.exp(0.10);
+const RADIAL_FACTOR = Math.exp(0.095), ROWS_FACTOR = Math.exp(0.095);
 const BEFORE ={ commit: "895b6b38de29bc284b4b50a02425a6c3a5fe81a2", sha256: "0b5280f05176fc755dbfb859fd8028fc495759d7537024c53043f498c91faa63" };
 // The floor ratio and the held-out medians as the re-fit stated them: within 1e-12 and 1e-5 relative until 0.6.5, whose fit
 // (the analytic/SIMD covariance Jacobian among its speed changes, SPEC 16.8) stops at another point inside its tolerance:
@@ -87,8 +87,22 @@ const FLOOR_RELATIVE = 2e-3, MEDIAN_RELATIVE = 5e-5;
 // floors are pinned to this build's. The held-out windows of 0.6.0's flights re-weighted with this build's variances are
 // replaced by the build's own flights (the registered rows above): the floor shrinks with the fit's residual, and what a
 // stated covariance is judged on is the build's own errors.
-const FLOORS_PINNED = { FLOOR_UU_KM2: 0.00009038457492534002, FLOOR_VU_KM2: -0.0000020407312816137013, FLOOR_VV_KM2: 0.0004379503542741541,
-  FLOOR_WU_KM2: 0.000006004698113649276, FLOOR_WV_KM2: 0.000004202943063050906, FLOOR_WW_KM2: 0.00006200737685181363 };
+// 0.6.43 (the zonal theory's constant radial term, SPEC 16.23) moves every low-table fit, so the registered rows are its own
+// flights of the same 748 windows (covariance-coverage-f33e071fc77c, the build at git 217233ca, the factor exp(0.095) it
+// carries taken off; ROWS_FACTOR is RADIAL_FACTOR) and the judged cells are registered on them. Against 0.6.42's rows judged
+// the same way: in the band 8 to 3, too narrow 6 to 7, too wide 28 to 32, of 42. Leaving the band: on the wide side the day-1
+// radial of near 700 km (0.687 to 0.545), altimetry (0.650 to 0.535) and the laser spheres (0.640 to 0.536) and altimetry's
+// day-7 radial (0.606 to 0.545); on the narrow side, the unsafe one for a screen, strong drag 2026's day-3 radial (0.748 to
+// 0.828). Narrower where they were too narrow: strong drag 2026 radial days 5 and 7 (0.788 to 0.845, 0.770 to 0.806) and
+// in-track days 3 and 5 (0.896 to 0.902, 0.906 to 0.908). Why: the term removes a +10 m radial bias that sat in the errors
+// and never in the floor (the fit's residual covariance, about its mean), and the factor exp(0.095) was fitted on errors that
+// carried it: the day-1 radial RMS falls 8.1 to 5.5 m (spheres), 9.1 to 5.8 m (altimetry), 10.6 to 6.2 m (near 700 km), 14.4
+// to 9.9 m (strong drag 2025), while strong drag 2026's day 5 rises 109.9 to 112.0 m, its drag-driven radial excursion no
+// longer cancelled in part by the bias (stack #565). The factor by regime is stack #568. The ISS sample's fit moves: its 12 h
+// error 265.1 to 263.3 m, FLOOR_UU_KM2 2.0 % larger, FLOOR_VV_KM2 0.9 % smaller, FLOOR_WW_KM2 as it was; FLOORS_PINNED is
+// this build's.
+const FLOORS_PINNED = { FLOOR_UU_KM2: 0.00009222349489320216, FLOOR_VU_KM2: -0.0000031370232835827193, FLOOR_VV_KM2: 0.00043417978537513166,
+  FLOOR_WU_KM2: -0.000010709838259212625, FLOOR_WV_KM2: 0.000004215804512073688, FLOOR_WW_KM2: 0.00006200777184276415 };
 const ISS = { path: "analysis/od/tests/data/supgp-reference/iss/ISS.OEM_J2K_EPH.trimmed.txt", sha256: "fbda48d1584bee1f38ea562625280ecfe4e6643f67c417e91f2fc245ee48311f" };
 const AXES = ["R", "I", "C"];
 const expected = JSON.parse(fs.readFileSync(fileURLToPath(new URL("fixtures/covariance-refit-held-out.json", import.meta.url)), "utf8"));
