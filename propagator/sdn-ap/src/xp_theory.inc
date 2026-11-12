@@ -1835,6 +1835,7 @@ struct RateContext {
   int32_t wide_slow_count;
   const float* zt;                    ///< AP: zonal tail, in the rates: Fbar, dFbar, g0, g1 (owned, xp_release)
   int32_t zt_degree;
+  double zt_er;                       ///< AP: eccentricity anchor of the shared zonal tail's |w| >= 2 coefficients
   uint8_t zt_wide;                    ///< AP: the tail carries every long-period term (tess::kWideE, SPEC 16.11)
   uint8_t drag_pass;                  ///< AP: epoch e above tess::kWideE, the drag rates of the perigee passages (SPEC 16.12)
   const float* mdaily;                ///< AP: m-daily Fbar, dFbar/di pairs, at output time (owned, xp_release)
@@ -3904,7 +3905,7 @@ inline bool rates(const RateContext& ctx, double t, const double* y, double* out
       tess::wide_slow_six(ctx.wide_slow, ctx.wide_slow_count, ctx.e0, ctx.i0, t, k, fr.a, fr.n, fr.eta, ag.si, ag.ci, ctx.theta_g0, dst);
     if (ctx.zt != nullptr)
       tess::zonal_six(ctx.zt, ctx.zt_degree, ctx.zt_wide != 0, k, fr.n, fr.eta, ag.si, ag.ci, dst, &ag.sw, &ag.cw,
-                      zt_table_id(ctx));
+                      zt_table_id(ctx), ctx.zt_er);
   };
   if (!skip_tail) {
     if (record_epoch_aux || record_stage_aux || (ov != nullptr && ov->tail_eq_out != nullptr)) {
@@ -5943,6 +5944,7 @@ inline bool ap_init(const Elements& e, double n0, int8_t res, XpSat& s) {
     if (same_inc && std::fabs(e.eo - anchor->ctx.e0) <= tess::kShareE &&
         anchor->ctx.zt != nullptr && anchor->ctx.zt_degree == zd && anchor->ctx.zt_wide == (wide ? 1 : 0)) {
       s.ctx.zt = anchor->ctx.zt;
+      s.ctx.zt_er = anchor->ctx.zt_er;
       s.ctx.zt_degree = zd;
       s.ctx.zt_wide = wide ? 1 : 0;
       s.ctx.shared_mask |= 16;
@@ -5952,6 +5954,7 @@ inline bool ap_init(const Elements& e, double n0, int8_t res, XpSat& s) {
       if (kept == nullptr) return false;
       tess::zonal_visit_terms(zd, wide, e.xincl, e.eo, kept);
       s.ctx.zt = kept;
+      s.ctx.zt_er = e.eo > 0.01 ? e.eo : 0.01;
       s.ctx.zt_degree = zd;
       s.ctx.zt_wide = wide ? 1 : 0;
     }
