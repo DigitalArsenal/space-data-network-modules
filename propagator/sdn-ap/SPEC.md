@@ -2707,6 +2707,17 @@ MAXIMUM_TESSERAL_DEGREE is a cap on families, not the degree of a field.
   1,372 km (without them, or held to 1 - w, the case is 88 to 94 m). With the slow set of 16.18, which takes degree 70 whatever d states, the table also holds 1 - w of each slow
   term above d of q -1, 0 and 1. A share under 1 is cut on the term's own size. With d of 12 or less the table is the
   one of every other branch.
+- **The band guard** (the low table above degree 12, a set with drag). The epoch's share holds while the term's rate stays
+  where it was. The rates carry a band term at its current rate, the table at its epoch rate, and drag moves n. So the table
+  takes each term's rate at the epoch and at the record's span's end (eight days on, n moved at the set's own drag rate at
+  the epoch: a 72 h fit's arc and five days). It keeps the smaller of the two ends' shares (1 - w at each), and none where
+  the rate changes sign between them. The two parts then never hold more than the whole term, and the table never holds a
+  term whose rate passes zero: the evaluator divides by the current rate. A set that barely decays keeps its epoch shares.
+  At perigee 200 km, e 0.01, i 55 (the 72 h fit; a truth that falls to 145 km by day 3), the m = 48, j = 3 terms of degree
+  53 to 69 (w 2 to 4, 16 terms) were inside the band's edge at the epoch (x 0.94 to 0.96). The table kept 0.08 to 0.20 of
+  each; the rates took the rest, and all of it once x fell below 0.9. Their rate passes zero 49.4 h after the cutoff, where
+  the flight without the guard spiked to 13,161 km. With the guard D is 58,272 m, beside 57,834 m for the table of every
+  other branch.
 - **On every other branch** they are complete to degree min(d, 12) only. Degrees 13 to min(d, 31) contribute their j = 1
   near-resonant terms in low orbit and the half-day tail, and nothing else.
 - **What the degrees 13 to 70 carry in low orbit** (#498's near-circular cases at 300 to 650 km, the record fitted to a
