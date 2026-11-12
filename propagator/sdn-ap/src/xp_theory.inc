@@ -6688,7 +6688,7 @@ inline bool run_grow(XpSat& s, SetCaches& c, NodeRun& r, int32_t want) {
 
 /// SPEC 16.25 (stack #564): where an AP flight ends, decayed. (b) the mean perigee height a (1 - e) - R_E under kDecayFloorKm;
 /// (a) with drag, more perigee radius lost over one revolution, or over the grid's next step where that is longer,
-/// |d(a (1 - e))/dt| max(P, h), than one density scale height H at the mean perigee (the set's own atmosphere and weather):
+/// max(0, -d(a (1 - e))/dt_drag) max(P, h), than one density scale height H at the mean perigee (the set's own atmosphere and weather):
 /// past it the averaged rates no longer describe the orbit, and the grid's next node is not an orbit (stack #564's seeds: the
 /// last node before the jump loses 0.58 H a revolution and 1.15 H over its 2.9 h step; the node after it has its perigee at
 /// -283 km). H is looked up only once the loss passes kDecayTestKm (below it no height the atmospheres reach has H under it).
@@ -6746,13 +6746,9 @@ inline DecayQ decay_q(const RateContext& ctx, const Node& nd, bool full) {
   // km per revolution, or per grid step where the step is longer: the averaged rates must follow the decay over the step the
   // grid takes next from this node (next_node's)
   const double step = ctx.long_period ? long_period_step(ctx) : averaged_step(ctx, n);
-  // the gate, read from the node's rates with no evaluation: drag is the only force with a secular mean da/dt, so the node's da/dt is
-  // drag's (to the resonance terms' meters a day), and a retarding force lowers the perigee radius by at most twice its fall of the
-  // semi-major axis (at the apogee; at the perigee it lowers none; near e 0 the two fall alike), so the loss in a revolution or a step
-  // is at most 2 |da/dt| max(P, h); the gate passes 4 |da/dt| max(P, h) over kDecayTestKm, twice that bound over the test (SPEC 16.25:
-  // the margin covers the rotating atmosphere's normal components and the resonance terms). Where the Sun and the Moon move the
-  // perigee by tens of kilometers a revolution the gate stays shut: the drag part is evaluated only on a record that nears the rule
-  const double reach = 4.0 * std::fabs(adot) * std::fmax(kTwoPi / n, step) * kRe;
+  // the gate uses the magnitudes of the whole rates' two perigee terms. The Sun and Moon can open it on an eccentric set that
+  // never decays, adding a drag evaluation at each node; the drag-only loss below decides the rule, not this gate.
+  const double reach = (std::fabs(adot * (1.0 - e)) + std::fabs(a * edot)) * std::fmax(kTwoPi / n, step) * kRe;
   if (!(reach > 0.0) || (!full && !(reach > kDecayTestKm))) return q;
   double dd[6];
   if (!drag_rates_at(ctx, nd.t, y, dd)) return q;

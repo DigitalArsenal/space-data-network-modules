@@ -82,14 +82,16 @@ for (const c of CASES) {
     const cm = /^decayed:(\S+);/.exec(blk.COMMENT ?? '');
     assert.ok(cm, `${c.name}: not refused as decayed within the span (${blk.COMMENT})`);
     const crossH = (Date.parse(cm[1] + 'Z') - t0) / 3.6e6;
-    assert.ok(crossH < reH, `${c.name}: the refusal at ${crossH.toFixed(2)} h is not before the truth's re-entry at ${reH.toFixed(2)} h`);
-    assert.ok(blk.EPHEMERIS_DATA_LINES.length >= Math.floor(crossH * 2) - 1 && blk.EPHEMERIS_DATA_LINES.length < 241, `${c.name}: ${blk.EPHEMERIS_DATA_LINES.length} states answered, the refusal at ${crossH.toFixed(2)} h`);
+    assert.ok(crossH > 0 && crossH < reH, `${c.name}: the refusal at ${crossH.toFixed(2)} h is not before the truth's re-entry at ${reH.toFixed(2)} h`);
+    const before = ep.filter((t) => Date.parse(t + 'Z') < Date.parse(cm[1] + 'Z'));
+    assert.deepEqual(blk.EPHEMERIS_DATA_LINES.map((l) => Date.parse(l.EPOCH + 'Z')), before.map((t) => Date.parse(t + 'Z')), `${c.name}: every epoch before the crossing, none after it`);
+    assert.equal(blk.USEABLE_STOP_TIME, cm[1], `${c.name}: usable stop names the crossing`);
     console.log(JSON.stringify({ decayEccentric: c.name, truthReentryH: +reH.toFixed(2), refusedAtH: +crossH.toFixed(2), answered: blk.EPHEMERIS_DATA_LINES.length }));
     continue;
   }
   const states = decodeResult(fr).samples;
   const truthPerigee = states.map((s) => perigeeKm([...s.position, ...s.velocity]));
-  const truthMin = Math.min(...truthPerigee.filter((_, k) => k % 12 === 0));
+  const truthMin = Math.min(...truthPerigee);
   assert.ok(truthMin > c.floorKm, `${c.name}: the truth's perigee reaches ${truthMin.toFixed(1)} km, not above ${c.floorKm}`);
   if (c.rising) assert.ok(truthPerigee[288] > truthPerigee[0] + 20, `${c.name}: the truth's perigee at 24 h ${truthPerigee[288].toFixed(1)} km, at 0 h ${truthPerigee[0].toFixed(1)} km: not rising`);
   const lines = states.map((s, k) => Object.assign(new Line(), { EPOCH: iso(t0 + seconds[k] * 1000), X: s.position[0], Y: s.position[1], Z: s.position[2], X_DOT: s.velocity[0], Y_DOT: s.velocity[1], Z_DOT: s.velocity[2] }));
@@ -98,7 +100,9 @@ for (const c of CASES) {
   const oem = packOem(Object.assign(new OEMT(), { EPHEMERIS_DATA_BLOCK: [block] }));
   const cfg = configuration({ forces: { EPHEMERIS_SOURCE: '', HAS_MAXIMUM_TESSERAL_DEGREE: true, MAXIMUM_TESSERAL_DEGREE: 31, HAS_MAXIMUM_DEGREE: true, MAXIMUM_DEGREE: 20,
     ATMOSPHERE_MODEL: pcfAtmosphereFamily.NRLMSISE00, WEATHER_SOURCE: pcfWeatherSource.RECORDS }, fit: {} });
+  const fitStart = performance.now();
   const fit = await now.invoke({ methodId: 'fit', inputs: [cfg, { portId: 'space_weather', typeRef: type('SPW'), payload: spwStream(rows) }, { portId: 'ephemeris', typeRef: type('OEM'), payload: oem }] });
+  const fitMs = performance.now() - fitStart;
   assert.equal(fit.statusCode, 0, `${c.name}: the fit is refused: ${fit.errorCode}: ${String(fit.errorMessage).slice(0, 160)}`);
   const recordBytes = fit.outputs.find((v) => v.portId === 'elements').payload;
   const record = ocmOf(recordBytes), st = record.ORBIT_DETERMINATION.FIT_STATISTICS;
@@ -113,7 +117,7 @@ for (const c of CASES) {
   const rec = (k) => { const l = blk.EPHEMERIS_DATA_LINES[k]; return perigeeKm([l.X, l.Y, l.Z, l.X_DOT, l.Y_DOT, l.Z_DOT]); };
   const gaps = [48, 144, 240].map((k) => Math.abs(rec(k) - truthPerigee[k * 6]));
   assert.ok(gaps.every((g) => g < 25), `${c.name}: the record's perigee is off the truth's by ${gaps.map((g) => g.toFixed(1))} km at 24, 72 and 120 h`);
-  console.log(JSON.stringify({ decayEccentric: c.name, truthPerigeeMinKm: +truthMin.toFixed(1), fitRmsKm: st.FIT_RMS_KM, converged: st.CONVERGED, perigeeGapsKm: gaps.map((g) => +g.toFixed(2)) }));
+  console.log(JSON.stringify({ decayEccentric: c.name, truthPerigeeMinKm: +truthMin.toFixed(1), fitRmsKm: st.FIT_RMS_KM, fitMs, converged: st.CONVERGED, perigeeGapsKm: gaps.map((g) => +g.toFixed(2)) }));
 }
 await now.close?.();
 await ffm.close?.();

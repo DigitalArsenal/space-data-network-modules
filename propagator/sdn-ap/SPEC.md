@@ -5133,13 +5133,14 @@ keeps its own.
   drag term's part alone, evaluated at the node (the gate below), and counts it only as a fall. On near-circular orbits drag is the whole of the perigee's rate (gravity is 0.2 % of it on the
   seeds below), so their crossings move by that much and no more.
 - What goes in. da/dt and de/dt are the drag term's own mean rates at the node's mean state (a full evaluation of the drag part
-  of the rates, SPEC 3.4, the same call the rates make). The gate: that evaluation is made only where 4 |da/dt| max(P, h_next)
-  passes kDecayTestKm (5 km), da/dt read from the node's whole rates, which are drag's in a (drag is the only force with a secular
-  mean da/dt; the resonance classes' terms are meters a day). A retarding force lowers the perigee radius by at most twice its
-  fall of the semi-major axis (at the apogee; at the perigee it lowers none; near e 0 the two fall alike), so the loss over
-  max(P, h_next) is at most 2 |da/dt| max(P, h_next) and the gate is open, with a factor of 2 for the rotating atmosphere's
-  normal components and the resonance terms, wherever the loss passes 5 km. A record whose Sun and Moon move its perigee by tens of
-  kilometers a revolution (e 0.9) does not open it for that. H is the scale height of the set's own
+  of the rates, SPEC 3.4, the same call the rates make). The gate uses the node's whole mean rates:
+  (|da/dt (1 - e)| + |a de/dt|) max(P, h_next) > kDecayTestKm (5 km), in kilometers. A crossing calculation evaluates
+  the earlier node's drag part for any positive gate value, including values below 5 km. The whole rates only gate the
+  evaluation; the drag-only loss decides the rule. The Sun and Moon open this gate on eccentric records that never decay,
+  adding a full drag evaluation at their nodes. A bound using only the magnitude of the node's da/dt is not established:
+  resonance contributes signed terms to that rate, and a multiplier alone does not bound cancellation with drag. The drag
+  quadrature also uses velocity relative to a rotating atmosphere, so a bound for acceleration opposite the inertial velocity
+  does not directly bound its rates. H is the scale height of the set's own
   atmosphere and weather at its mean perigee, from two density evaluations 1 km either side along the mean perigee's
   direction, made only once the loss passes 5 km. The test changes no step, rate or state: a time before the crossing is
   answered as before, to the bit.
@@ -5192,8 +5193,9 @@ keeps its own.
   covariance started is run to the call's furthest epoch on each side, so the name does not depend on the order or the list of
   the epochs asked (two calls on one record name the same crossing when the crossing lies at or before the furthest epoch of
   both); a call that refuses no epoch runs nothing more, since an epoch answered with its covariance lies before every set's
-  crossing. A Hermite blend's two probes at its window's end hand the call's covariance request on, so each set's covariance
-  exists at its probe and the probe names the record's earliest crossing, whichever epoch of the call is asked first.
+  crossing. A Hermite blend's two probes at its window's end start each set's covariance bank when the call requests covariance,
+  without evaluating that covariance. A refused nominal probe names the record's earliest crossing, whichever epoch of the call
+  is asked first; a moved set crossing between the requested epoch and the window's end does not refuse an epoch before every crossing.
   `propagate_epochs` refuses an epoch past a moved set's crossing as `propagate` does, and, for a record
   that carries no forecast, never writes the block without its covariance. An AP record whose epoch already meets the rule and carries a covariance is refused
   `decayed:<epoch>` in `propagate` and `propagate_epochs`, and `sdnap_covariance_at` and `sdnap_covariance_full_at` give 42 (or
