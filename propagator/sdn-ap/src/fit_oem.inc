@@ -160,6 +160,12 @@ namespace fitoem {
 
 /// An Earth set whose fit RMS exceeds this is refused (fit-implausible), km.
 constexpr double kImplausibleRmsKm = 100.0;
+/// SPEC 8.5 (stack #564): the forecast after a written AP set's epoch over which its decay crossing is stated in the record's
+/// OD COMMENT ("decays at <time>"; the 7 days the catalog flies its records over), for a set whose mean perigee is under
+/// kDecayCheckPerigeeKm: the forward flight is made only for those (a set above it is not checked, and a reader still finds
+/// its crossing from the record whenever it flies past one).
+constexpr double kDecayForecastDays = 7.0;
+constexpr double kDecayCheckPerigeeKm = 400.0;
 
 /// Whether a block's first state (with a velocity) has an osculating eccentricity above `e_min` about the Earth.
 inline bool eccentric_block(const ephemerisDataBlock* blk, double e_min) {
@@ -1085,20 +1091,50 @@ static int fit_blocks() {
       double uvw_ss[3] = {};
       // SPEC 16.18, the low table: the record states the slow set when the set carries a term beyond the shallow set's
       bool record_slow = false;
+      // SPEC 8.5 (stack #564): the written set's decay crossing inside the fit's arc (the record is refused,
+      // decayed-in-arc:<time>) or within kDecayForecastDays after its epoch (written, its OD COMMENT "decays at <time>")
+      bool decayed_in_arc = false, decays_ahead = false;
+      double decay_min = 0.0;
       {
         xpt::XpSat* xs = static_cast<xpt::XpSat*>(std::malloc(sizeof(xpt::XpSat)));
         if (xs != nullptr && xpt::xp_init(elements_of(row), *xs) == kPropOk) {
           record_slow = xs->ctx.slow_extra > 0;
           for (size_t k = 0; k < t_fit.size(); ++k) {
             double rm[3], vm[3], u[3];
-            if (xpt::xp_propagate(*xs, t_fit[k], rm, vm) != kPropOk) break;
+            const int32_t st = xpt::xp_propagate(*xs, t_fit[k], rm, vm);
+            if (st == kPropDecayed && xpt::decay_past(*xs, t_fit[k])) {
+              decayed_in_arc = true;
+              decay_min = xs->decay_t[t_fit[k] >= 0.0 ? 0 : 1];
+            }
+            if (st != kPropOk) break;
             const double e[3] = {rm[0] - r_fit[3 * k], rm[1] - r_fit[3 * k + 1], rm[2] - r_fit[3 * k + 2]};
             cov::to_uvw(rm, vm, e, u);
             for (int j = 0; j < 3; ++j) uvw_ss[j] += u[j] * u[j];
           }
+          // a set whose mean perigee is low enough to reach the rule within the forecast is flown to its end
+          const double hp_km = (std::pow(xpt::kKe / (row.mean_motion_rev_day * kTwoPi / kMinutesPerDay), kX2o3) * (1.0 - row.eccentricity) - 1.0) * xpt::kRe;
+          if (!decayed_in_arc && xpt::is_ap_ctx(xs->ctx) && hp_km < fitoem::kDecayCheckPerigeeKm) {
+            double rq[3], vq[3];
+            if (xpt::xp_propagate(*xs, fitoem::kDecayForecastDays * kMinutesPerDay, rq, vq) == kPropDecayed && xpt::decay_past(*xs, fitoem::kDecayForecastDays * kMinutesPerDay)) {
+              decays_ahead = true;
+              decay_min = xs->decay_t[0];
+            }
+          }
           xpt::xp_release(*xs);
         }
         std::free(xs);
+      }
+      char decay_text[48] = {};
+      if (decayed_in_arc || decays_ahead) {
+        const double c = row.epoch_jd_frac + decay_min / kMinutesPerDay;
+        oem::iso_text(row.epoch_jd_whole + std::floor(c), c - std::floor(c), 0.0, decay_text, sizeof decay_text);
+      }
+      if (decayed_in_arc) {
+        char name[80], why[200];
+        std::snprintf(name, sizeof name, "decayed-in-arc:%s", decay_text);
+        std::snprintf(why, sizeof why, "The fitted set decays at %s, inside the fit's arc (SPEC 8.5): the theory cannot represent the arc's end, so no record is written.", decay_text);
+        plugin_set_error(name, why);
+        return 3;
       }
       // $OCM
       flatbuffers::FlatBufferBuilder fbb(4096);
@@ -1160,6 +1196,7 @@ static int fit_blocks() {
         comment.push_back("drag prior: the default of a 71 h arc with its perigee at 600-2,500 km (median 0.008, sigma of the log 10 ln 10, weighed against "
                           "the data at their own sigma), no fall-back");
       if (lattice) comment.push_back("elements at the two-line text's digits");
+      if (decays_ahead) comment.push_back(std::string("decays at ") + decay_text);  // SPEC 8.5
       // SPEC 16.7 (stack #504): a fit whose two branches' least-squares sets lie across an eccentricity switch ends on one side
       if (res.held_at_switch)
         comment.push_back("fit: held at the eccentricity switch on its own branch; the least-squares sets of both branches lie across it");

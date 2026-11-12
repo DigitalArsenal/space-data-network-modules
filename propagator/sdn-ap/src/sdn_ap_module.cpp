@@ -221,11 +221,20 @@ int32_t sdnap_covariance_at(const uint8_t* ocm, uint32_t length, const double* m
   ocm::Bind bind(set.forces, &a);
   cov::Propagator p;
   if (const int pr = cov::prepare(cs, p)) return pr;
+  // SPEC 8.5 (stack #564): a time past the decay crossing of the nominal or of any moved set (no difference can be formed once
+  // one has crossed) gets 42 NaN, and the call returns 4 (decayed) with every other time filled
+  bool past = false;
   for (uint32_t k = 0; k < count; ++k) {
     double* o = out + 42u * k;
-    if (!cov::eval(p, minutes[k], o, o + 3, o + 6)) return -3;
+    if (!cov::eval(p, minutes[k], o, o + 3, o + 6)) {
+      bool decayed = false;
+      for (int q = 0; q < p.b.count && !decayed; ++q) decayed = xpt::is_ap_ctx(p.b.sats[q].ctx) && xpt::decay_past(p.b.sats[q], minutes[k]);
+      if (!decayed) return -3;
+      for (int j = 0; j < 42; ++j) o[j] = __builtin_nan("");
+      past = true;
+    }
   }
-  return 0;
+  return past ? 4 : 0;
 }
 
 /// SPEC 12.4, for test/epoch-floor.e2e.mjs: the two-body state of a decoded set's mean elements (cov::epoch_floor_state), 6

@@ -75,6 +75,12 @@ inline void run_row(const Job& j, uint32_t i) {
   double r[3] = {0, 0, 0}, v[3] = {0, 0, 0};
   const int32_t e = row_propagate(row, t, r, v, shared);
   if (j.status != nullptr) j.status[i] = e;
+  // SPEC 8.5 (stack #564): an AP row past its decay crossing has status 4 and no state: its planes are not numbers
+  if (e == kPropDecayed) {
+    const Store& st = store();
+    if (row < st.count && st.kind[row] == 1 && xpt::is_ap_ctx(st.xps[st.slot[row]].ctx))
+      for (int q = 0; q < 3; ++q) r[q] = v[q] = __builtin_nan("");
+  }
   if (e == kPropOk && j.kind == kJobJd && j.frame == ORBPRO_FRAME_ECEF) {
     double ro[3], vo[3];
     teme_to_ecef_m(j.theta, r, v, ro, vo);
