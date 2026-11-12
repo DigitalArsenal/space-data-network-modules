@@ -5096,8 +5096,9 @@ an SGP4XP record reaches, and named three it cannot return (gravity-model-mismat
 parameter-invalid:ECOM2_Y0).
 
 **16.25 Decay** (stack #564). An AP flight is refused, as decayed, from the first time either of these holds:
-- (a) with drag, the set loses more perigee radius over one revolution, or over the grid's next step where that is longer,
-  than one density scale height at its mean perigee: |d(a (1 - e))/dt| max(P, h_next) > H(h_p);
+- (a) with drag, DRAG lowers the set's perigee radius over one revolution, or over the grid's next step where that is longer,
+  by more than one density scale height at its mean perigee: -(da/dt (1 - e) - a de/dt)_drag max(P, h_next) > H(h_p), the
+  drag term's own mean rates, counted only where they lower the perigee (a perigee that rises counts for nothing);
 - (b) its mean perigee height a (1 - e) - R_E is under 100 km (kDecayFloorKm; Jacchia 1970 has no density under 90 km).
 
 SGP4XP keeps the library's decay at a mean perigee radius under 1 R_E (section 10), so its conformance is unchanged, and SGP4
@@ -5110,14 +5111,25 @@ keeps its own.
   The crossing therefore depends on the grid's step rule and moves if that rule ever changes: a version that changes the
   step states the crossing times that move. It refuses up to a step earlier than the per-revolution reading would: #564's
   two seeds are flown to 136.7 km (perigee 200 km, e 0.001, BTERM 0.01) and 160.7 km (perigee 220 km, e 0.01, BTERM 0.1).
+- What the rule reads, and why. Drag at a perigee passage lowers the semi-major axis and the eccentricity together, so its own
+  part of the perigee radius's rate, da/dt (1 - e) - a de/dt, is about 0 on a highly eccentric orbit; the Sun and the Moon move
+  the mean perigee of such an orbit by more than a scale height a revolution, rising or falling, and that is not decay. A first
+  form of the rule read the whole mean rate of the perigee radius, every force, in absolute value, and refused 23 synthetic
+  orbits at e 0.9 (apogee 118,000 to 134,000 km) whose numerical truth never decays, and refused the converged records of six of
+  them (stack #594: four at the epoch, two within the first two days, three of the six with a RISING perigee). The rule reads the
+  drag term's part alone, read apart from the node's rates once their perigee rates, taken without sign, pass the gate below,
+  and counts it only as a fall. On near-circular orbits drag is the whole of the perigee's rate (gravity is 0.2 % of it on the
+  seeds below), so their crossings move by that much and no more.
 - What goes in. da/dt and de/dt are the node's own mean rates (its step's, every force: gravity's mean rates of a and e are
   meters a revolution, against the 5 km, kDecayTestKm, at which the test starts). H is the scale height of the set's own
   atmosphere and weather at its mean perigee, from two density evaluations 1 km either side along the mean perigee's
   direction, made only once the loss passes 5 km. The test changes no step, rate or state: a time before the crossing is
   answered as before, to the bit.
 - Eccentric orbits. Drag near perigee takes the apogee down: the semi-major axis falls while the perigee radius barely
-  moves, so the rule is on the perigee radius, which ends the flight. At BTERM 0.01 and a 150 km perigee the semi-major axis
-  loses 3.80 km a revolution at e 0.7 and the perigee radius 0.6 m (H 17.6 km); near e 0 the two are close.
+  moves, so the rule is on the perigee radius, drag's part of it. At BTERM 0.01 and a 150 km perigee the semi-major axis
+  loses 3.80 km a revolution at e 0.7 and the perigee radius 0.6 m (H 17.6 km); near e 0 the two are close. Above e 0.3 the
+  drag test therefore does not fire until the orbit has circularized, and a decaying set is refused by the floor test (b)
+  alone (stack #582).
 - Where it is found. On the grid's nodes as they are made outward from the epoch (the cached node run and the uncached
   integration alike), once per direction, kept with the set beside its checkpoints and window; no node past the crossing
   node is made. Its time is the root of the test's quantity (ln(loss / H), or 100 km - h_p), linear between the last node
@@ -5174,14 +5186,15 @@ keeps its own.
   not 0.6.45's to the bit (0.6.45 blended toward a grid built from a state past the crossing, which is no orbit); the measured
   difference is stated with the test, `test/decay-wide.e2e.mjs`. A set at or below e 0.3, and every state of a wide set outside
   those hours, is 0.6.45's to the bit before the crossing.
-- Limit of the rule above e 0.3. For a set above e 0.3 the rule can come days after the orbit really re-enters: drag at perigee takes
-  the apogee down while the mean perigee barely moves, so the perigee loss the rule reads stays small until late. Measured on
-  made-up sets, both on NRLMSISE-00, the numerical propagator flown from AP's own start state: perigee 110 km, e 0.7, BTERM 0.2
-  (balloon-like) re-enters at 40.3 h and the rule has no crossing within 10 days; perigee 110 km, e 0.5, BTERM 0.045 (not
-  balloon-like) re-enters at 79.3 h and the rule's crossing is at 66.8 h, before it. Where the rule comes late or not at all, AP
-  answers states far from the numerical propagator. This is not made worse by the rule (without it the flight had no end); a rule
-  for these sets has to use the loss per perigee passage against the energy the orbit has left, or the numerical propagator's
-  own crossing as the yardstick (stack #582).
+- Limit of the rule above e 0.3 (stack #582). Above e 0.3 a decaying set is refused by the floor test alone: drag's own part of
+  the perigee's rate is about 0 until the orbit has circularized, so the drag test does not fire and the mean perigee under
+  100 km ends the flight, which can come days after the orbit really re-enters or not at all. Measured on made-up sets, both on
+  NRLMSISE-00, the numerical propagator flown from AP's own start state: perigee 110 km, e 0.7, BTERM 0.2 (balloon-like)
+  re-enters at 40.3 h and the rule has no crossing within 10 days; perigee 110 km, e 0.5, BTERM 0.045 re-enters at 79.3 h and the
+  first form of the rule crossed at 66.8 h and this build, by the floor test, at 68.9 h, both before it. Where the
+  rule comes late or not at all, AP answers states far from the numerical propagator. This is not made worse by the rule (without
+  it the flight had no end); a rule for these sets has to use the loss of orbital energy per perigee passage against the energy
+  the orbit has left, or the numerical propagator's own crossing as the yardstick.
 - What gets worse: a decaying set loses its states from the crossing to the surface, its last revolutions, which the theory
   does not describe (they were up to 31,250 km off).
 - `test/decay.e2e.mjs`: the two seeds decay at 70.133 h and 47.064 h, every state before the crossing 0.6.45's bit for bit
