@@ -191,18 +191,28 @@ for (const c of [{ name: 'perigee 500 km, e 0.001, BTERM 0.01', hp: 500, e: 0.00
       const blk2 = r2.statusCode === 0 ? OEM.getRootAsOEM(new fb.ByteBuffer(r2.outputs.find((o) => o.portId === 'ephemeris').payload)).unpack().EPHEMERIS_DATA_BLOCK[0] : null;
       const cm2 = /^decayed:(\S+);/.exec(blk2?.COMMENT ?? '');
       check(!!cm2 && cm2[1] === cm[1], `a call with other epochs names the crossing ${cm2?.[1]}, the first call ${cm[1]}`);
+      // this record's crossing with its covariance (a moved set's) is EARLIER than its own set's: the same record without its
+      // COVARIANCE_DATA names the nominal's crossing, later; a call that names the earlier one has found the moved set's
+      const bare = repackOcm(moved, (o) => { o.COVARIANCE_DATA = []; o.COV_PARAMETER_KINDS = []; o.COV_PARAMETERS = []; o.COV_UNITS = []; o.COV_PROPAGATION = null; });
+      const rb = await now.invoke({ methodId: 'propagate', inputs: flight([bare], { output: { EPOCHS: [new Date(base0 + (crossMin + 7) * 60000).toISOString().replace('Z', '')], FRAME: pcfOutputFrame.GCRF } }) });
+      const nb = /decayed:(\d{4}-\d\d-\d\dT\d\d:\d\d:\d\d(?:\.\d+)?)/.exec(`${rb.errorCode ?? ''}`);
+      check(!!nb && msOf(nb[1]) > msOf(cm[1]), `the record without covariance names ${nb?.[1]}, not later than its crossing with covariance ${cm[1]}`);
       // a one-epoch list (past the crossing: the call is refused by name) names the same crossing, in propagate and in propagate_epochs
       const one = [new Date(base0 + (crossMin + 7) * 60000).toISOString().replace('Z', '')];
       const r1 = await now.invoke({ methodId: 'propagate', inputs: flight([moved], { output: { EPOCHS: one, FRAME: pcfOutputFrame.GCRF } }) });
       check(r1.statusCode !== 0 && `${r1.errorCode}`.includes(`decayed:${cm[1]}`), `a one-epoch list names ${r1.errorCode}, the crossing ${cm[1]}`);
+      const r4 = await now.invoke({ methodId: 'propagate_epochs', inputs: flight([moved], { output: { EPOCHS: one, FRAME: pcfOutputFrame.GCRF } }) });
+      check(r4.statusCode !== 0 && `${r4.errorCode}`.includes(`decayed:${cm[1]}`), `propagate_epochs on a one-epoch list names ${r4.errorCode ?? 'a block'}, the crossing ${cm[1]}`);
       const r3 = await now.invoke({ methodId: 'propagate_epochs', inputs: flight([moved], { output: { EPOCHS: times, FRAME: pcfOutputFrame.GCRF } }) });
       const blk3 = r3.statusCode === 0 ? OEM.getRootAsOEM(new fb.ByteBuffer(r3.outputs.find((o) => o.portId === 'ephemeris').payload)).unpack().EPHEMERIS_DATA_BLOCK[0] : null;
       check(String(blk3?.COMMENT ?? '').includes(`decayed:${cm[1]}`), `propagate_epochs on the same list names ${blk3?.COMMENT ?? r3.errorCode}, the crossing ${cm[1]}`);
     }
     console.log(`the moved record decays at ${cm[1]}; sdnap_covariance_at status ${status}`);
   }
-  // a wide record (e 0.7) with covariance whose crossing falls in the last fifth of a 48 h interval: the covariance's moved sets read the
-  // nominal's grids, and a time before the crossing is never refused for the next node's sake (SPEC 16.25)
+  // a wide record (e 0.4 to 0.7) with covariance whose crossing falls in the last fifth of a 48 h interval (searched over perigee, e and
+  // BTERM): sdnap_covariance_at at three times in that last fifth before the crossing returns 0 with every value filled. The moved
+  // sets of such a record take the shared output branch and do not reach the wide-node code, so this asserts the answer, not that
+  // branch: the owner's-crossing line for a copy anchored to another set's grid is reached only by the covariance's fallback evaluation
   {
     const base0 = Date.parse('2026-10-01T00:00:00Z');
     let found = null;

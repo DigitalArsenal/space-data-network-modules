@@ -105,23 +105,41 @@ const A2 = await fitOn(again);
 assert.equal(JSON.stringify(A2.MEAN_ELEMENTS), JSON.stringify(A.MEAN_ELEMENTS), 'a second instance fits the same elements');
 assert.equal(JSON.stringify(A2.ORBIT_DETERMINATION.FIT_STATISTICS), JSON.stringify(sa), 'and the same statistics');
 await again.close?.();
-// the record this fit wrote has a radiation term at or under the covariance's step (AGOM -1e-6) and states its covariance: it flies
-// through propagate and propagate_epochs at several epochs, the states and covariances this build's and 0.6.45's to the bit (the
-// covariance's bank holds a slot it never started for such a term; nothing may fly it)
+// the record this fit wrote has a radiation term at or under the covariance's step (AGOM <= 1e-5: the covariance's bank starts no minus
+// set for it, a slot it counts but never started) and states its covariance. What each half reaches: `propagate` at five epochs before
+// the crossing runs every started set of the bank to the furthest epoch before answering (the reach loop, which visits started slots
+// only), and its states and covariances are this build's and 0.6.45's to the bit; `propagate_epochs` at the same epochs answers each state
+// with its covariance and does not reach that loop (nothing is refused), and is compared the same way; `propagate_epochs` with an epoch
+// past the record's crossing reaches it: the epochs before it are answered, each with its covariance, the epoch past it is refused
+// and counted, the block's USEABLE_STOP_TIME is the crossing.
 {
+  assert.ok(Math.abs(A.MEAN_ELEMENTS.AGOM) <= 1e-5, `the record's AGOM ${A.MEAN_ELEMENTS.AGOM} is not at or under the covariance's step`);
   const flyRecord = async (h, method, epochs) => {
     const t = Date.now();
     const r = await h.invoke({ methodId: method, inputs: flight([recordA], { output: { EPOCHS: epochs, FRAME: pcfOutputFrame.GCRF } }) });
     assert.equal(r.statusCode, 0, `${method}: ${r.errorCode}: ${r.errorMessage}`);
     assert.ok(Date.now() - t < 60000, `${method} took ${Date.now() - t} ms`);
     const b = OEM.getRootAsOEM(new fb.ByteBuffer(r.outputs.find((o) => o.portId === 'ephemeris').payload)).unpack().EPHEMERIS_DATA_BLOCK[0];
-    return JSON.stringify([b.EPHEMERIS_DATA_LINES.map((l) => [l.X, l.Y, l.Z, l.X_DOT, l.Y_DOT, l.Z_DOT]), (b.COVARIANCE_MATRIX_LINES ?? []).map((l) => l.CX_X ?? l.COV ?? null)]);
+    const cov = (b.COVARIANCE_MATRIX_LINES ?? []).map((l) => Object.entries(l).filter(([, v]) => typeof v === 'number').map(([, v]) => v));
+    return { block: b, states: b.EPHEMERIS_DATA_LINES.map((l) => [l.X, l.Y, l.Z, l.X_DOT, l.Y_DOT, l.Z_DOT]), cov };
   };
   const days = ['2026-10-29T06:00:00.000', '2026-10-30T00:00:00.000', '2026-10-31T00:00:00.000', '2026-11-01T00:00:00.000', '2026-11-02T00:00:00.000'];
   for (const method of ['propagate', 'propagate_epochs']) {
     const a = await flyRecord(now, method, days), b = await flyRecord(was, method, days);
-    assert.equal(a, b, `${method} of the fit's record: this build's states and covariances are not 0.6.45's`);
+    for (const [who, f] of [['this build', a], ['0.6.45', b]]) {
+      assert.equal(f.states.length, days.length, `${method}: ${who} answers ${f.states.length} states`);
+      assert.equal(f.cov.length, days.length, `${method}: ${who} states ${f.cov.length} covariance lines for ${days.length} epochs`);
+      assert.ok(f.cov.every((c) => c.length === 21), `${method}: ${who}'s covariance lines hold ${f.cov.map((c) => c.length)} values, 21 each expected`);
+    }
+    assert.equal(JSON.stringify([a.states, a.cov]), JSON.stringify([b.states, b.cov]), `${method} of the fit's record: this build's states and covariances are not 0.6.45's`);
   }
+  // propagate_epochs past the crossing (the record decays about 3 h after its 120 h arc)
+  const past = [...days, '2026-11-03T06:00:00.000'];
+  const p = await flyRecord(now, 'propagate_epochs', past);
+  assert.equal(p.states.length, days.length, `propagate_epochs past the crossing answers ${p.states.length} states, ${days.length} expected`);
+  assert.equal(p.cov.length, days.length, `and ${p.cov.length} covariance lines, ${days.length} expected`);
+  assert.ok(/decayed:\S+; 1 epochs after it refused/.test(p.block.COMMENT ?? ''), `the block's COMMENT reads "${p.block.COMMENT}"`);
+  assert.ok(p.block.USEABLE_STOP_TIME && !p.block.USEABLE_START_TIME, `the block's usable limits: start ${p.block.USEABLE_START_TIME}, stop ${p.block.USEABLE_STOP_TIME}`);
 }
 console.log('decay fit E2E: PASS');
 await now.close?.();

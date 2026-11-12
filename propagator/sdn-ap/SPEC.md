@@ -5073,15 +5073,20 @@ keeps its own.
 - Two stated cases. A record that carries a forecast (SPEC 18). In `propagate` the block's USEABLE_STOP_TIME is the theory's
   crossing even when states of the carried forecast after it are in the block (those states are the forecast's), and a carried
   forecast's covariance past the crossing refuses the call, propagation-failed, "no covariance". In `propagate_epochs` the carried
-  forecast's states after the crossing are answered (status 0, without covariance) and count as answered after it, so the block
-  states no USEABLE_STOP_TIME. In a series with a blend (SPEC 14): an epoch
+  forecast's states after the crossing are answered (status 0) and count as answered after it, so for a crossing after the epoch the
+  block states no USEABLE_STOP_TIME, and the block carries no covariance at all: the carried states have none, so every covariance
+  line of the block is dropped, those of the states before the crossing too (for a crossing before the epoch the block states its
+  USEABLE_START_TIME whatever is answered). In a series with a blend (SPEC 14): an epoch
   inside a blend window that holds a set's crossing, where the blend needs the crossed set's state, is refused and counted among
-  the epochs after the crossing though it lies before it.
+  the epochs after the crossing though it lies before it. A third case, a Hermite blend of another shape than 0 with a covariance in
+  the record: the blend's probe at its window's end asks no covariance, so where a moved set of the covariance crossed before the
+  nominal and the nominal crosses at or before that end, the block names the nominal's crossing, while a call that also asks an
+  epoch past the window names the moved set's.
 - Covariance and the crossing. The crossing a call with covariance names is the earliest of the nominal's and every moved set's:
   each is run to the call's furthest epoch on each side before the epochs are answered, so the name does not depend on the order
   or the list of the epochs asked (two calls on one record name the same crossing when the crossing lies at or before the
-  furthest epoch of both). `propagate_epochs` refuses an epoch past a moved set's crossing as `propagate` does, and never writes
-  the block without its covariance. An AP record whose epoch already meets the rule and carries a covariance is refused
+  furthest epoch of both). `propagate_epochs` refuses an epoch past a moved set's crossing as `propagate` does, and, for a record
+  that carries no forecast, never writes the block without its covariance. An AP record whose epoch already meets the rule and carries a covariance is refused
   `decayed:<epoch>` in `propagate` and `propagate_epochs`, and `sdnap_covariance_at` and `sdnap_covariance_full_at` give 42 (or
   the full width of) NaN at every time and return 4.
 - Held-out statistics. The held-out states past a written set's crossing are not scored: HELD_OUT_RMS_KM, HELD_OUT_MAX_KM and the
