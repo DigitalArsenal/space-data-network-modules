@@ -20,6 +20,28 @@ namespace ocm {
 
 constexpr const char* kModuleId = "com.spacedatanetwork.sdn-ap-propagator";
 constexpr const char* kModuleVersion = "0.6.39";
+
+/// SPEC 12.4: the gate's PRODUCER prefix is this module's id and a space, and the first release whose AP records carry the
+/// epoch floor at the two-body state is not above this build's version, so neither can drift from what this build writes.
+constexpr bool prefix_is_id_and_space(const char* prefix, const char* id) {
+  for (; *id != '\0'; ++id, ++prefix)
+    if (*prefix != *id) return false;
+  return prefix[0] == ' ' && prefix[1] == '\0';
+}
+constexpr int version_part(const char* v, int k) {
+  for (; k > 0; ++v)
+    if (*v == '.') --k;
+  int x = 0;
+  for (; *v >= '0' && *v <= '9'; ++v) x = 10 * x + (*v - '0');
+  return x;
+}
+constexpr bool version_at_least(const char* v, const int (&since)[3]) {
+  for (int k = 0; k < 3; ++k)
+    if (version_part(v, k) != since[k]) return version_part(v, k) > since[k];
+  return true;
+}
+static_assert(prefix_is_id_and_space(cov::kFloorProducerPrefix, kModuleId), "SPEC 12.4: the gate's PRODUCER prefix is kModuleId and a space");
+static_assert(version_at_least(kModuleVersion, cov::kEpochFloorSince), "SPEC 12.4: kEpochFloorSince is above this build's version");
 constexpr const char* kWeatherInterpolation =
     "DAILY: F10.7 OF THE PREVIOUS DAY, 81-DAY CENTERED MEAN AND DAILY AP OF THE DAY, NO INTERPOLATION";
 

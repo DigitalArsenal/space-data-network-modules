@@ -17,7 +17,10 @@
 // - 0.6.38's record on this build: sdnap_covariance_at -7; propagate status 0, its three states within STATES_M of 0.6.38's
 //   flight of it (a flight without covariance takes the state path, one with it the covariance's nominal: they part by
 //   about 0.3 mm on any build), no covariance lines, the block's COMMENT naming cov-floor-at-theory-state.
-// - The gate reads PROVENANCE.PRODUCER exactly: this module at 0.6.39 or later as X.Y.Z accepted, anything else refused.
+// - The gate reads PROVENANCE.PRODUCER exactly: this module at 0.6.39 or later as X.Y.Z accepted, anything else refused
+//   (0.6.38, a release on main, writes its floor at the theory state).
+// - The remainder is the hook's (sdnap_test_epoch_floor computes it from the record alone, at the state the reader's own
+//   choice gives: cov::epoch_floor_at); the reader's P(0) is tied to it by the identity at minute 0.
 // - The two-body state (twobody::state_of through epoch_floor_state) of three element sets bit for bit (TWO_BODY): every
 //   record written from 0.6.39 on carries its floor at it, so it must never move; a change to it refuses no record and
 //   moves every later reader's floor.
@@ -172,6 +175,7 @@ check(standInMovedKm > MOVED_KM, `the stand-in moved no case's flown epoch state
 // the gate reads PROVENANCE.PRODUCER exactly
 const PRODUCERS = [['com.spacedatanetwork.sdn-ap-propagator 0.6.39', 0], ['com.spacedatanetwork.sdn-ap-propagator 0.6.99', 0],
   ['com.spacedatanetwork.sdn-ap-propagator 1.0.0', 0], ['com.spacedatanetwork.sdn-ap-propagator 0.6.38', -7],
+  ['com.spacedatanetwork.sdn-ap-propagator 0.6.37', -7],
   ['com.spacedatanetwork.sdn-ap-propagator 0.6.39-rc1', -7], ['com.spacedatanetwork.sdn-ap-propagator 0.6.39.1', -7],
   ['com.spacedatanetwork.sdn-ap-propagator 0.6.39+x', -7], ['com.spacedatanetwork.sdn-ap-propagator 0.6', -7],
   ['org.example.other-propagator 1.0.0', -7], [null, -7]];

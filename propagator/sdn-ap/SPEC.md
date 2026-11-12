@@ -1,6 +1,6 @@
 # SGP4-XP: mathematical specification (clean room, side A)
 
-Version 0.6.39 (dist 18c34feb).
+Version 0.6.39 (dist 41230eb6).
 
 **License note.** The US Space Force Sgp4Prop library is used under the USSF open source agreement
 (`space-data-network-modules/propagator/sgp4-xp/third_party/ussf-sgp4/AGREEMENT.txt`; the 9.9 package carries the
@@ -2023,7 +2023,8 @@ elements (TEME; mu and the radius of 1.3, a = (k_e / n)^(2/3), no recovery), a f
 numbers. That formula (twobody::state_of) must never change: `test/epoch-floor.e2e.mjs` holds its state for three element
 sets bit for bit. A change to the theory's epoch state between the writer and the reader then moves nothing the reader
 takes off: read with its gravity caps moved, so that its flown epoch state moves (31 m at 550 km and i 52.9), a record's
-remainder is the same bit for bit. A set written and flown by one build flies as before (to 1e-11 of a time's largest
+remainder is the same bit for bit as computed from the record, and the reader's P(0) agrees with it within 1e-12 of its
+largest entry. A set written and flown by one build flies as before (to 1e-11 of a time's largest
 entry on the test's cases). An SGP4XP record's F stays at its theory's epoch state, which conformance holds bit for bit.
 Through 0.6.38 an AP record's F was taken at the theory's epoch state on both sides; a reader whose theory has moved then
 takes off another F. Read by a later theory, 0.6.36's own records came out up to 85 times narrower in along-track

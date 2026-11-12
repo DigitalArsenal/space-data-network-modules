@@ -47,6 +47,8 @@ constexpr double kDragRegimeKm = 2500.0;  ///< the noise regimes' split: perigee
 /// theory state: its covariance is refused by name (kFloorRefusal), its states fly.
 constexpr int kEpochFloorSince[3] = {0, 6, 39};
 constexpr const char* kFloorRefusal = "cov-floor-at-theory-state";
+/// SPEC 12.4: the PRODUCER the gate reads, this module's id and a space before X.Y.Z (ocm.inc asserts it is ocm::kModuleId's).
+constexpr char kFloorProducerPrefix[] = "com.spacedatanetwork.sdn-ap-propagator ";
 constexpr const char* kFloorRefusalNote =
     "cov-floor-at-theory-state: the covariance is refused and the states fly. The record's epoch covariance carries its "
     "floor at its writer's theory state (an AP record written before SPEC 12.4's epoch floor at the two-body state of "
@@ -70,9 +72,8 @@ inline bool epoch_floor_state(const ElementRow& row, double r[3], double v[3]) {
 inline bool floor_at_mean_elements(const OCM* o) {
   const PVN* pv = o->PROVENANCE();
   const flatbuffers::String* pr = pv == nullptr ? nullptr : pv->PRODUCER();
-  static constexpr char kPrefix[] = "com.spacedatanetwork.sdn-ap-propagator ";
-  constexpr size_t n = sizeof kPrefix - 1;
-  if (pr == nullptr || pr->size() <= n || std::strncmp(pr->c_str(), kPrefix, n) != 0) return false;
+  constexpr size_t n = sizeof kFloorProducerPrefix - 1;
+  if (pr == nullptr || pr->size() <= n || std::strncmp(pr->c_str(), kFloorProducerPrefix, n) != 0) return false;
   int v[3] = {0, 0, 0};
   const char* c = pr->c_str() + n;
   for (int k = 0; k < 3; ++k) {
@@ -436,13 +437,23 @@ inline void add_floor(const double* F, const double r[3], const double v[3], dou
   }
 }
 
-/// SPEC 12.4: the floor the epoch covariance carries, added to P (6 x 6): an AP record's (ap: its MEAN_ELEMENT_THEORY AP)
-/// at the two-body state of its mean elements (epoch_floor_state), any other at the theory's epoch state (r0, v0). The
-/// writer (of_fit) puts it on and the reader (prepare) takes it off with this one function.
+/// SPEC 12.4: the state the epoch floor is put on and taken off at: an AP record's (ap: its MEAN_ELEMENT_THEORY AP) the
+/// two-body state of its mean elements (epoch_floor_state), any other the theory's epoch state (r0, v0). The writer
+/// (of_fit), the reader (prepare) and the test hook (epoch_floor_parts) all take it from this one function.
+inline bool epoch_floor_at(const ElementRow& row, bool ap, const double r0[3], const double v0[3], double rf[3], double vf[3]) {
+  if (ap) return epoch_floor_state(row, rf, vf);
+  for (int k = 0; k < 3; ++k) {
+    rf[k] = r0[k];
+    vf[k] = v0[k];
+  }
+  return true;
+}
+
+/// SPEC 12.4: the floor the epoch covariance carries, added to P (6 x 6), at the state epoch_floor_at chooses.
 inline bool epoch_floor(const ElementRow& row, bool ap, const double* floor, const double r0[3], const double v0[3], double* P) {
   double rf[3], vf[3];
-  if (ap && !epoch_floor_state(row, rf, vf)) return false;
-  add_floor(floor, ap ? rf : r0, ap ? vf : v0, P);
+  if (!epoch_floor_at(row, ap, r0, v0, rf, vf)) return false;
+  add_floor(floor, rf, vf, P);
   return true;
 }
 
@@ -822,11 +833,7 @@ inline bool epoch_floor_parts(Propagator& p, double* out) {
   double J[6 * kMaxAug], r0[3], v0[3];
   if (!at(p.b, 0.0, r0, v0, J)) return false;
   double rf[3], vf[3];
-  if (s.ap) {
-    if (!epoch_floor_state(s.row, rf, vf)) return false;
-  } else {
-    for (int k = 0; k < 3; ++k) { rf[k] = r0[k]; vf[k] = v0[k]; }
-  }
+  if (!epoch_floor_at(s.row, s.ap, r0, v0, rf, vf)) return false;
   double Ff[36] = {}, F0[36] = {};
   add_floor(s.floor, rf, vf, Ff);
   add_floor(s.floor, r0, v0, F0);
