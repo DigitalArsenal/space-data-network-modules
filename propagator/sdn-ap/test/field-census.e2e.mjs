@@ -9,8 +9,10 @@
 // Asserted:
 // - no term is carried twice (code 30), and a term's weights are in [0, 1.001];
 // - every term carried nowhere (codes 20 to 24) belongs to a known hole below, each named with its issue; a hole that no set
-//   of the sweep shows any more fails the test (remove it when its pull request lands). In the low table a term above the
-//   record's degree is counted apart: there every carrier follows the record (stack #477);
+//   of the sweep shows any more fails the test. In the low table a term above the record's degree is counted apart: there
+//   the output table follows the record's degree (stack #477);
+// - the sets are built with BTERM 0, so the band guard of SPEC 16.1 does not act here (SPEC 16.20 gives what it leaves
+//   carried nowhere on sets with drag);
 // - the low table's sets at a record of 70: no term above any carrier's degree, and every term left nowhere in a hole;
 // - the census of a set is the same twice (no state carried between calls) and returns -1 for elements it refuses.
 // Printed: per band the ten largest terms carried nowhere, with their hole.

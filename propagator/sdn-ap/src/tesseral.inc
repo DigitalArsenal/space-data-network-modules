@@ -892,11 +892,13 @@ inline int sp_comb_bound(int degree, bool wide, int extra = 0) {
 /// band's terms are the rates', and one the rates do not hold, under their size cut, is carried nowhere), and with
 /// slow_held a slow-held term above `degree` (the slow set takes its own degree, kSlowDegree) is this table's too, by the
 /// same 1 minus the band taper, for q of -1, 0 and 1. A share under 1 is cut on the term's own size.
-/// `n_end` (the fast side, 0 for none): the mean motion at the record's span's end at the set's own drag rate. The table's
-/// share of a term is then the smaller of its two ends' (1 minus the larger band taper), and none where the term's rate
-/// changes sign between them: a term the drag carries into or through the band is the rates' over the span, which carry it
-/// at its current rate, so the two never hold more than the whole term (the evaluator divides by the current rate, which a
-/// term that crosses takes through zero). A set that barely decays keeps its epoch shares.
+/// `n_end` (the fast side, 0 for none): the mean motion 8 days on at the set's own drag rate at the epoch, a straight line
+/// with e and i held. The table's share of a term is then the smaller of its two ends' (1 minus the larger band taper), and
+/// none where the term's rate changes sign between them. For n between n0 and n_end the table and the rates (which carry a
+/// band term at its current rate) never hold more than the whole term, and the table holds no term whose rate passes zero
+/// (the evaluator divides by the current rate). A term the guard takes from the table is the rates' where the slow set holds
+/// it and carried nowhere where it does not. Not covered: n outside [n0, n_end] (a flight before the epoch, past 8 days, or
+/// decaying faster than the epoch's rate; SPEC 16.1). A set that barely decays keeps its epoch shares.
 inline int sp_terms(int degree, int near_degree, int cls, bool low, bool wide, double n0, double i0, double e0, SpCombCoef* out,
                     SpCoef* raw_out = nullptr, int* raw_count_out = nullptr, const ShallowTerms* slow_held = nullptr,
                     int mdaily_degree = kFastCap + 2, bool fast_side = false, double n_end = 0.0) {

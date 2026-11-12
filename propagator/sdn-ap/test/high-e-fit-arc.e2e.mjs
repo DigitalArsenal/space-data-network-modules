@@ -87,7 +87,7 @@ const K = 5;
 // and the along-track error grows from day 4 (day 5 22.6 to 30.0 m, day 7 29.6 to 55.5 m). With the drag term held at the
 // truth's 0.044 the fast side is better on every day (days 1 / 3 / 5 / 7: 16.3 / 18.0 / 21.0 / 24.5 m on 0.6.36, 10.3 /
 // 13.1 / 15.8 / 20.8 m with it). The fit's drag term on short arcs near 800 km is stack #541. Bounded at day 5 (33 m, which
-// 0.6.36 and the fast side both meet) and at day 7 (60 m, the fast side's figure with a small margin).
+// 0.6.36 and the fast side both meet) and at day 7 (60 m, loosened from 55 m: the fast side's 55.5 m with a small margin).
 const BASE_4 = {version: '0.6.22', commit: 'f8af1e2b7'};
 const LOW_BOUND = {'Molniya drag off': 8.5};
 const TRUTH_BOUND = {'e 0.25': {t: 60, r: 15}, 'SWOT-like': {t: 30, r: 15}, 'Sentinel-3-like': {t: 60, r: 20, t5: 33}};
@@ -193,8 +193,8 @@ if (!isMainThread) {
     console.log(JSON.stringify({lowE: f, identical: same, day5AlongTrack: [a.t5, b.t5], day7AlongTrack: [a.t, b.t], day7Radial: [a.r, b.r], modelAtBase: a.model, model: b.model}));
     const truth = TRUTH_BOUND[f];
     if (truth) {
-      if (!(b.t <= truth.t && b.r <= truth.r)) lowFailures.push(`${f}: day-7 along-track ${b.t} m and radial ${b.r} m against the truth (at most ${truth.t} and ${truth.r} m)`);
-      if (truth.t5 != null && !(b.t5 <= truth.t5)) lowFailures.push(`${f}: day-5 along-track ${b.t5} m against the truth (at most ${truth.t5} m)`);
+      if (!(Number.isFinite(b.t) && Number.isFinite(b.r) && b.t <= truth.t && b.r <= truth.r)) lowFailures.push(`${f}: day-7 along-track ${b.t} m and radial ${b.r} m against the truth (at most ${truth.t} and ${truth.r} m)`);
+      if (truth.t5 != null && !(Number.isFinite(b.t5) && b.t5 <= truth.t5)) lowFailures.push(`${f}: day-5 along-track ${b.t5} m against the truth (a number at most ${truth.t5} m)`);
     } else if (!(dt <= LOW_BOUND[f] && dr <= LOW_BOUND[f])) {
       lowFailures.push(`${f}: day-7 along-track ${b.t} m and radial ${b.r} m against ${BASE_4.version}'s ${a.t} and ${a.r} (within ${LOW_BOUND[f]} m)`);
     }

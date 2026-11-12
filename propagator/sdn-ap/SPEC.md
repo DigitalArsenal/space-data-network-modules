@@ -2747,15 +2747,26 @@ MAXIMUM_TESSERAL_DEGREE is a cap on families, not the degree of a field.
   one of every other branch.
 - **The band guard** (the low table above degree 12, a set with drag). The epoch's share holds while the term's rate stays
   where it was. The rates carry a band term at its current rate, the table at its epoch rate, and drag moves n. So the table
-  takes each term's rate at the epoch and at the record's span's end (eight days on, n moved at the set's own drag rate at
-  the epoch: a 72 h fit's arc and five days). It keeps the smaller of the two ends' shares (1 - w at each), and none where
-  the rate changes sign between them. The two parts then never hold more than the whole term, and the table never holds a
-  term whose rate passes zero: the evaluator divides by the current rate. A set that barely decays keeps its epoch shares.
-  At perigee 200 km, e 0.01, i 55 (the 72 h fit; a truth that falls to 145 km by day 3), the m = 48, j = 3 terms of degree
-  53 to 69 (w 2 to 4, 16 terms) were inside the band's edge at the epoch (x 0.94 to 0.96). The table kept 0.08 to 0.20 of
-  each; the rates took the rest, and all of it once x fell below 0.9. Their rate passes zero 49.4 h after the cutoff, where
-  the flight without the guard spiked to 13,161 km. With the guard D is 58,272 m, beside 57,834 m for the table of every
-  other branch.
+  takes each term's rate at two mean motions: the epoch's n0, and n_end = n0 + n-dot 8 days, with n-dot the set's own drag
+  rate at the epoch and e and i held (a straight line forward over the record's span: a 72 h fit's arc and five days). It
+  keeps the smaller of the two shares (1 - w at each), and none where the rate changes sign between them.
+  - For n between n0 and n_end, the table and the rates never hold more than the whole term, and the table holds no term
+    whose rate passes zero (the evaluator divides by the current rate). A term the guard takes from the table is the
+    rates' where the slow set holds it, and is carried nowhere where it does not (outside the slow set's 1.3 bands at the
+    epoch, or under its size cut). A set that barely decays keeps its epoch shares.
+  - Not covered: a flight before the epoch, a flight past eight days, and decay faster than the epoch's rate (an
+    accelerating re-entry, a storm in the record's rows). The catalog's fit takes the first state of its 0 to 120 h
+    interval as the epoch and flies forward 5 days, so it meets only the third; a 72 h fit flown to day 7 is 10 days from
+    its epoch.
+  - The jump detector of test/fast-side-band-guard.e2e.mjs, on 102 flights that include each case outside the span (3 days
+    back, 30 days forward, BTERM up to 4 times the case's, a storm in the rows, re-entering seeds flown to refusal), reads
+    under 4.5 m on all but two. Those two are the flight's last minutes above 100 km, and they read the same without the
+    fast side (stack #564).
+  - At perigee 200 km, e 0.01, i 55 (the 72 h fit; a truth that falls to 145 km by day 3), the m = 48, j = 3 terms of
+    degree 53 to 69 (w 2 to 4, 16 terms) were inside the band's edge at the epoch (x 0.94 to 0.96). The table kept 0.08
+    to 0.20 of each; the rates took the rest, and all of it once x fell below 0.9. Their rate passes zero 49.4 h after the
+    cutoff, where the flight without the guard spiked to 13,161 km. With the guard D is 58,272 m, beside 57,834 m for the
+    table of every other branch.
 - **On every other branch** they are complete to degree min(d, 12) only. Degrees 13 to min(d, 31) contribute their j = 1
   near-resonant terms in low orbit and the half-day tail, and nothing else.
 - **What the degrees 13 to 70 carry in low orbit** (#498's near-circular cases at 300 to 650 km, the record fitted to a
@@ -4489,7 +4500,13 @@ size cut is carried exactly once, by the carrier its rate gives it, in every cla
 the record's tesseral degree, the size cut in m), every term (l, m, p, q) of the embedded field, order 1 to 70 and degree to
 70, with |q| up to 4 (8 up to e 0.3, 12 above), whose size reaches the cut.
 
-The census builds the set as a flight builds it (`ap_init`, the slow set on). It then reads each carrier's own tables:
+The census builds the set as a flight builds it (`ap_init`, the slow set on), with BTERM 0. The band guard of 16.1 acts
+only on a set with drag, so the census's counts are those of a set without it. On a set with drag the guard takes from the
+output table the share of a term whose rate moves toward the band over the guard's span, and at the epoch that share is
+carried nowhere (measured 2026-11-12, the table built with the guard and without it): at perigee 300 km, e 0.001, i 51.6,
+BTERM 0.0064, 17 terms, 19.2 m summed, the largest 4.3 m (l 42, m 32, j 2); at 420 km, i 51.6, BTERM 0.01, 8 terms, 0.03
+m summed; on the guard test's set (perigee 200 km, BTERM 0.022) the 16 terms whose rate passes zero, 6.8 m summed, the
+largest 1.5 m. It then reads each carrier's own tables:
 - the rates: the shallow and slow list, with each term's band taper at the epoch; the class's terms; the half-day and one-day
   tails;
 - the output table: each entry's weight, its coefficient over the term's F;
@@ -4538,17 +4555,18 @@ The test fails on any term carried twice, and on any term carried nowhere that i
 named with the issue that closes it. A hole that no set of the sweep shows any more also fails the test, so it is removed when
 its fix lands.
 
-In the low table every carrier follows the record's degree: the output table to 70 (16.1, stack #477), the slow set to its
-own. A term above the record's degree is outside what the record asks for, so the test counts it apart, not as a hole: at
+In the low table the output table follows the record's degree to 70 (16.1, stack #477); the slow set takes degree 70
+whatever the record states (16.18). A term above the record's degree is outside what the record asks for, so the test
+counts it apart, not as a hole: at
 the sweep's degree 31, 2,028 terms, the largest 18.5 m (at 300 km). The same low-table sets at a record of
 70 show no term above any carrier's degree, and the test asserts that every term they leave nowhere (9,538, the largest
 15.3 m, of \|q\| 2 at e 0.05) is in a hole below.
 
 The holes, measured 2026-11-11 with 16.1's fast side on the field EGM2008 (terms over the sweep; the largest, in m over 5 days). From 0.6.28 the wide slow
 list carries every class's slow terms above the switch to degree 12, outside low orbit; the census's hole there went from 978
-terms (the largest 19 km, at e 0.9) to the 15 left in low orbit above the switch. On 0.6.32 the low table's output table
-stopped at degree 12: 10,740 terms to 74 m, and 58 band-taper complements to 21 m, carried nowhere (stack #477, closed by
-16.1's fast side):
+terms (the largest 19 km, at e 0.9) to the 15 left in low orbit above the switch. Before 16.1's fast side the low table's
+output table stopped at degree 12 (measured on 0.6.32): 10,740 terms to 74 m, and 58 band-taper complements to 21 m,
+carried nowhere (stack #477, closed by the fast side):
 
 | Hole | Issue | Terms | Largest |
 | --- | --- | ---: | ---: |
@@ -4736,8 +4754,10 @@ covariance's moved sets fly the record's branch (12.1), a fit that would end on 
 fit-at-branch-limit (16.7), and the epoch store does not blend two sets on different branches (14.3). A consumer that
 differences, blends or interpolates two records of one object must do the same.
 
-MAXIMUM_TESSERAL_DEGREE is a cap on families, not the degree of a field (16.1). In the low table, with tesseral cap d the
-short-period terms are complete to first order to degree min(d, 70). On every other branch they are complete to min(d, 12),
+MAXIMUM_TESSERAL_DEGREE is a cap on families, not the degree of a field (16.1). In the low table, with tesseral cap d above
+12 the short-period terms are complete to first order to degree min(d, 70), with |l - 2p| up to 17, the table's own 0.5 m
+size cut, and 16.1's band rule and band guard (a term inside the slow band is the table's at most 1 - w). On every other
+branch they are complete to min(d, 12),
 and degrees 13 to min(d, 31) contribute their j = 1 near-resonant terms and the half-day tail only. Off the low table at
 800 km, the terms of degree 13 to 31 not carried are 14 m RMS (18.9 m in all against a 31 x 31 field).
 
