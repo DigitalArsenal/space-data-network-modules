@@ -498,8 +498,29 @@ inline int32_t state_of(Store& st, Series& s, uint32_t k, double t, double* r, d
                         : t - en.epoch;
   const int32_t e = q.xp != nullptr ? xpt::xp_propagate(*q.xp, dt, r, v) : sat_propagate(*q.sat, q.nodes, dt, r, v);
   // SPEC 16.25 (stack #564): an AP set past its decay crossing; the crossing's split Julian date for the call's refusal by name
+  // the record's earliest crossing on dt's side: the nominal's and, where a covariance is asked, every started moved set's, each run to dt
+  // first (the covariance's own evaluation stops at the first set it refuses), so the name does not depend on what was asked before
+  auto earliest = [&](double& first) {
+    bool any = false;
+    const double sd = dt >= 0.0 ? 1.0 : -1.0;
+    double tc = 0.0;
+    if (q.xp != nullptr && xpt::decay_crossing(*q.xp, dt, tc)) { first = tc; any = true; }  // under the set's lock: shared
+    if (P != nullptr && q.cp != nullptr) {
+      for (int k = 0; k < q.cp->b.count; ++k) {
+        if (!cov::live_slot(q.cp->b, k)) continue;  // only the slots the bank started
+        double r2[3], v2[3];
+        xpt::xp_propagate(q.cp->b.sats[k], dt, r2, v2);
+      }
+      for (int k = 0; k < q.cp->b.count; ++k) {
+        if (!cov::live_slot(q.cp->b, k) || !xpt::decay_crossing(q.cp->b.sats[k], dt, tc)) continue;
+        if (!any || sd * tc < sd * first) first = tc;
+        any = true;
+      }
+    }
+    return any;
+  };
   double crossing_min = 0.0;
-  if (e == kPropDecayed && q.xp != nullptr && xpt::is_ap_ctx(q.xp->ctx) && xpt::decay_crossing(*q.xp, dt, crossing_min)) {  // under the set's lock: shared
+  if (e == kPropDecayed && q.xp != nullptr && xpt::is_ap_ctx(q.xp->ctx) && earliest(crossing_min)) {
     const double c = crossing_min / kMinutesPerDay + en.row.epoch_jd_frac;
     g_decay_jd[0] = en.row.epoch_jd_whole + std::floor(c);
     g_decay_jd[1] = c - std::floor(c);
@@ -513,22 +534,8 @@ inline int32_t state_of(Store& st, Series& s, uint32_t k, double t, double* r, d
     // SPEC 16.25: a moved set of the covariance past its decay crossing where the nominal still flies: the epoch is past the record's
     // crossing (the earliest of the nominal's and every moved set's), refused as propagate refuses it, not written without covariance
     if (!have_p && q.xp != nullptr && xpt::is_ap_ctx(q.xp->ctx)) {
-      bool any = false;
       double first = 0.0;
-      // every moved set is run to this epoch first (the covariance's own evaluation stops at the first set it refuses), so the
-      // earliest crossing named is the record's whatever epochs were asked before
-      for (int k = 0; k < q.cp->b.count; ++k) {
-        double r2[3], v2[3];
-        xpt::xp_propagate(q.cp->b.sats[k], dt, r2, v2);
-      }
-      for (int k = 0; k < q.cp->b.count; ++k) {
-        double tc = 0.0;
-        if (!xpt::decay_crossing(q.cp->b.sats[k], dt, tc)) continue;
-        const double sd = dt >= 0.0 ? 1.0 : -1.0;
-        if (!any || sd * tc < sd * first) first = tc;
-        any = true;
-      }
-      if (any) {
+      if (earliest(first)) {
         const double c = first / kMinutesPerDay + en.row.epoch_jd_frac;
         g_decay_jd[0] = en.row.epoch_jd_whole + std::floor(c);
         g_decay_jd[1] = c - std::floor(c);

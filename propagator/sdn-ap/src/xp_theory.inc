@@ -7248,7 +7248,9 @@ inline int32_t xp_propagate_impl(XpSat& s, double t, double r[3], double v[3], c
       // SPEC 16.25: the next schedule node lies past the set's decay crossing (asking for it is what ran the grid there and found
       // the crossing, so this holds in any call order): the state is answered from this node's grid alone, never refused
       double tc = 0.0;
-      if (is_ap_ctx(s.ctx) && decay_crossing(s, next * tess::kGridEvery, tc)) { g1 = nullptr; blend_use = 0.0; }
+      // the crossing of the set that owns the grid (a copy built in a grid-sharing scope reads its anchor's nodes: wide_node asked the anchor)
+      XpSat& owner = s.ctx.wide_anchor != nullptr ? *s.ctx.wide_anchor : s;
+      if (is_ap_ctx(s.ctx) && decay_crossing(owner, next * tess::kGridEvery, tc)) { g1 = nullptr; blend_use = 0.0; }
       else nodes_ok = false;
     }
     if (!nodes_ok) {
@@ -7672,7 +7674,8 @@ inline bool xp_propagate_cov_at(XpSat* sats, int np, const int* slot, const bool
     bool nodes_ok = wide_node(s0, jn, g0, h0);
     if (nodes_ok && blend_use > 0.0 && !wide_node(s0, next, g1, h1)) {
       double tc = 0.0;  // SPEC 16.25, as xp_propagate_impl: the next node past the crossing, the state from this node's grid alone
-      if (is_ap_ctx(s0.ctx) && decay_crossing(s0, next * tess::kGridEvery, tc)) { g1 = nullptr; blend_use = 0.0; }
+      XpSat& owner = s0.ctx.wide_anchor != nullptr ? *s0.ctx.wide_anchor : s0;  // the set that owns the grid
+      if (is_ap_ctx(s0.ctx) && decay_crossing(owner, next * tess::kGridEvery, tc)) { g1 = nullptr; blend_use = 0.0; }
       else nodes_ok = false;
     }
     if (!nodes_ok) {

@@ -78,9 +78,11 @@ const cfg = configuration({ forces: { EPHEMERIS_SOURCE: '', HAS_MAXIMUM_TESSERAL
 const fitOn = async (h) => {
   const r = await h.invoke({ methodId: 'fit', inputs: [cfg, { portId: 'space_weather', typeRef: type('SPW'), payload: spwStream(rows) }, { portId: 'ephemeris', typeRef: type('OEM'), payload: oem }] });
   assert.equal(r.statusCode, 0, `${c.name}: ${r.errorCode}: ${r.errorMessage}`);
-  return ocmOf(r.outputs.find((v) => v.portId === 'elements').payload);
+  lastRecord = r.outputs.find((v) => v.portId === 'elements').payload;
+  return ocmOf(lastRecord);
 };
-const A = await fitOn(now), B = await fitOn(was);
+let lastRecord = null;
+const A = await fitOn(now), recordA = lastRecord, B = await fitOn(was);
 const sa = A.ORBIT_DETERMINATION.FIT_STATISTICS, sb = B.ORBIT_DETERMINATION.FIT_STATISTICS;
 const agom = (o) => o.MEAN_ELEMENTS.AGOM;
 const summary = { case: c.name, rmsKm: [sa.FIT_RMS_KM, sb.FIT_RMS_KM], iterations: [sa.ITERATIONS, sb.ITERATIONS], converged: [sa.CONVERGED, sb.CONVERGED],
@@ -103,6 +105,24 @@ const A2 = await fitOn(again);
 assert.equal(JSON.stringify(A2.MEAN_ELEMENTS), JSON.stringify(A.MEAN_ELEMENTS), 'a second instance fits the same elements');
 assert.equal(JSON.stringify(A2.ORBIT_DETERMINATION.FIT_STATISTICS), JSON.stringify(sa), 'and the same statistics');
 await again.close?.();
+// the record this fit wrote has a radiation term at or under the covariance's step (AGOM -1e-6) and states its covariance: it flies
+// through propagate and propagate_epochs at several epochs, the states and covariances this build's and 0.6.45's to the bit (the
+// covariance's bank holds a slot it never started for such a term; nothing may fly it)
+{
+  const flyRecord = async (h, method, epochs) => {
+    const t = Date.now();
+    const r = await h.invoke({ methodId: method, inputs: flight([recordA], { output: { EPOCHS: epochs, FRAME: pcfOutputFrame.GCRF } }) });
+    assert.equal(r.statusCode, 0, `${method}: ${r.errorCode}: ${r.errorMessage}`);
+    assert.ok(Date.now() - t < 60000, `${method} took ${Date.now() - t} ms`);
+    const b = OEM.getRootAsOEM(new fb.ByteBuffer(r.outputs.find((o) => o.portId === 'ephemeris').payload)).unpack().EPHEMERIS_DATA_BLOCK[0];
+    return JSON.stringify([b.EPHEMERIS_DATA_LINES.map((l) => [l.X, l.Y, l.Z, l.X_DOT, l.Y_DOT, l.Z_DOT]), (b.COVARIANCE_MATRIX_LINES ?? []).map((l) => l.CX_X ?? l.COV ?? null)]);
+  };
+  const days = ['2026-10-29T06:00:00.000', '2026-10-30T00:00:00.000', '2026-10-31T00:00:00.000', '2026-11-01T00:00:00.000', '2026-11-02T00:00:00.000'];
+  for (const method of ['propagate', 'propagate_epochs']) {
+    const a = await flyRecord(now, method, days), b = await flyRecord(was, method, days);
+    assert.equal(a, b, `${method} of the fit's record: this build's states and covariances are not 0.6.45's`);
+  }
+}
 console.log('decay fit E2E: PASS');
 await now.close?.();
 await was.close?.();

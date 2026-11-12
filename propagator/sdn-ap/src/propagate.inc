@@ -175,7 +175,7 @@ extern "C" int propagate(void) {
       };
       // SPEC 16.25: the crossing a covariance's call names is the record's: every set (the nominal and each moved one) is run to the
       // call's furthest epoch on each side first, so every crossing at or before it is found whatever order the epochs come in
-      if (ap_set && with_cov && xs == nullptr && tw.size() > 1) {
+      if (ap_set && with_cov && xs == nullptr) {
         double tmax = 0.0, tmin = 0.0;
         for (size_t k = 0; k < tw.size(); ++k) {
           const double t = ((tw[k] - e.epoch_jd_whole) + (tf[k] - e.epoch_jd_frac)) * kMinutesPerDay;
@@ -187,7 +187,8 @@ extern "C" int propagate(void) {
           if (tmax > 0.0) xpt::xp_propagate(q, tmax, rr, vv);
           if (tmin < 0.0) xpt::xp_propagate(q, tmin, rr, vv);
         };
-        for (int q = 0; q < cprop.b.count; ++q) reach(cprop.b.sats[q]);
+        for (int q = 0; q < cprop.b.count; ++q)
+          if (cov::live_slot(cprop.b, q)) reach(cprop.b.sats[q]);  // only the slots the bank started
       }
       for (size_t k = 0; k < tw.size(); ++k) {
         const double t = ((tw[k] - e.epoch_jd_whole) + (tf[k] - e.epoch_jd_frac)) * kMinutesPerDay;

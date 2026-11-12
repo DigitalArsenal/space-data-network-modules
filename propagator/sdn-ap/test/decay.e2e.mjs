@@ -191,8 +191,54 @@ for (const c of [{ name: 'perigee 500 km, e 0.001, BTERM 0.01', hp: 500, e: 0.00
       const blk2 = r2.statusCode === 0 ? OEM.getRootAsOEM(new fb.ByteBuffer(r2.outputs.find((o) => o.portId === 'ephemeris').payload)).unpack().EPHEMERIS_DATA_BLOCK[0] : null;
       const cm2 = /^decayed:(\S+);/.exec(blk2?.COMMENT ?? '');
       check(!!cm2 && cm2[1] === cm[1], `a call with other epochs names the crossing ${cm2?.[1]}, the first call ${cm[1]}`);
+      // a one-epoch list (past the crossing: the call is refused by name) names the same crossing, in propagate and in propagate_epochs
+      const one = [new Date(base0 + (crossMin + 7) * 60000).toISOString().replace('Z', '')];
+      const r1 = await now.invoke({ methodId: 'propagate', inputs: flight([moved], { output: { EPOCHS: one, FRAME: pcfOutputFrame.GCRF } }) });
+      check(r1.statusCode !== 0 && `${r1.errorCode}`.includes(`decayed:${cm[1]}`), `a one-epoch list names ${r1.errorCode}, the crossing ${cm[1]}`);
+      const r3 = await now.invoke({ methodId: 'propagate_epochs', inputs: flight([moved], { output: { EPOCHS: times, FRAME: pcfOutputFrame.GCRF } }) });
+      const blk3 = r3.statusCode === 0 ? OEM.getRootAsOEM(new fb.ByteBuffer(r3.outputs.find((o) => o.portId === 'ephemeris').payload)).unpack().EPHEMERIS_DATA_BLOCK[0] : null;
+      check(String(blk3?.COMMENT ?? '').includes(`decayed:${cm[1]}`), `propagate_epochs on the same list names ${blk3?.COMMENT ?? r3.errorCode}, the crossing ${cm[1]}`);
     }
     console.log(`the moved record decays at ${cm[1]}; sdnap_covariance_at status ${status}`);
+  }
+  // a wide record (e 0.7) with covariance whose crossing falls in the last fifth of a 48 h interval: the covariance's moved sets read the
+  // nominal's grids, and a time before the crossing is never refused for the next node's sake (SPEC 16.25)
+  {
+    const base0 = Date.parse('2026-10-01T00:00:00Z');
+    let found = null;
+    const grid = [];
+    for (const wide of [{ hp: 110, e: 0.7 }, { hp: 110, e: 0.5 }, { hp: 120, e: 0.6 }, { hp: 105, e: 0.4 }])
+      for (let kb = 0; kb < 60; ++kb) grid.push({ ...wide, bt: Math.round((0.04 + 0.025 * kb) * 1000) / 1000 });
+    for (const gp of grid) {
+      if (found) break;
+      const bt = gp.bt;
+      const w = repackOcm(bytes, (o) => {
+        o.MEAN_ELEMENTS.MEAN_MOTION = nOf(gp.hp, gp.e);
+        o.MEAN_ELEMENTS.ECCENTRICITY = gp.e;
+        o.MEAN_ELEMENTS.BTERM = bt;
+        const cp = o.COV_PROPAGATION;
+        cp.NOISE_NON_GRAVITATIONAL_RAD_DAY2 = cp.NON_GRAVITATIONAL_SHARE * Math.abs(cp.NON_GRAVITATIONAL_RATE_PER_DAY) * o.MEAN_ELEMENTS.MEAN_MOTION * 2 * Math.PI;
+      });
+      const rw = await now.invoke({ methodId: 'propagate', inputs: flight([w], { output: { EPOCHS: ['2026-10-12T00:00:00.000'], FRAME: pcfOutputFrame.GCRF } }) });
+      const mw = /decayed:(\d{4}-\d\d-\d\dT\d\d:\d\d:\d\d(?:\.\d+)?)/.exec(`${rw.errorCode ?? ''}`);
+      if (!mw) continue;
+      const crossMinW = (msOf(mw[1]) - base0) / 60000;
+      const phase = (crossMinW / (48 * 60)) % 1;
+      if (phase > 0.82) { found = { w, crossMinW, bt }; break; }
+    }
+    check(!!found, 'a wide record with covariance whose crossing falls in the last fifth of its interval');
+    if (found) {
+      const x = now.instance.exports;
+      const minutes = [found.crossMinW - 120, found.crossMinW - 30, found.crossMinW - 2];
+      const qo = x.sdnap_alloc(found.w.length), qm = x.sdnap_alloc(8 * minutes.length), qout = x.sdnap_alloc(8 * 42 * minutes.length);
+      new Uint8Array(now.memory.buffer, qo, found.w.length).set(found.w);
+      new Float64Array(now.memory.buffer, qm, minutes.length).set(minutes);
+      const st = x.sdnap_covariance_at(qo, found.w.length, qm, minutes.length, qout);
+      const got = Array.from(new Float64Array(now.memory.buffer, qout, 42 * minutes.length));
+      x.sdnap_free(qo); x.sdnap_free(qm); x.sdnap_free(qout);
+      check(st === 0 && got.every(Number.isFinite), `a wide record with covariance (BTERM ${found.bt}, crossing at ${found.crossMinW.toFixed(1)} min): sdnap_covariance_at before the crossing returns ${st}, not 0 with every value filled`);
+      console.log(`the wide record with covariance (BTERM ${found.bt}) crosses at ${(found.crossMinW / 60).toFixed(2)} h; its covariance at three times in the last fifth before it: status ${st}`);
+    }
   }
   // a record with covariance whose epoch already meets the rule is decayed at every time, named so
   {

@@ -1,6 +1,6 @@
 # SGP4-XP: mathematical specification (clean room, side A)
 
-Version 0.6.47 (dist 59456db9).
+Version 0.6.47 (dist 46049045).
 
 **License note.** The US Space Force Sgp4Prop library is used under the USSF open source agreement
 (`space-data-network-modules/propagator/sgp4-xp/third_party/ussf-sgp4/AGREEMENT.txt`; the 9.9 package carries the
@@ -5070,9 +5070,11 @@ keeps its own.
   `test/decay-fit.e2e.mjs`: a made-up set at a 200 km perigee whose drag crosses the rule 2 to 3 h after a 120 h arc, fitted to
   FFM's states: the first form of the rule (a refused column ending its pass as converged) read AGOM 0 and a fit RMS 1.21 times
   0.6.45's; this build reads 1.01 times, AGOM solved.
-- Two stated cases. A record that carries a forecast (SPEC 18): the block's USEABLE_STOP_TIME is the theory's crossing even when
-  states of the carried forecast after it are in the block (those states are the forecast's), and a carried forecast's
-  covariance past the crossing refuses the call, propagation-failed, "no covariance". In a series with a blend (SPEC 14): an epoch
+- Two stated cases. A record that carries a forecast (SPEC 18). In `propagate` the block's USEABLE_STOP_TIME is the theory's
+  crossing even when states of the carried forecast after it are in the block (those states are the forecast's), and a carried
+  forecast's covariance past the crossing refuses the call, propagation-failed, "no covariance". In `propagate_epochs` the carried
+  forecast's states after the crossing are answered (status 0, without covariance) and count as answered after it, so the block
+  states no USEABLE_STOP_TIME. In a series with a blend (SPEC 14): an epoch
   inside a blend window that holds a set's crossing, where the blend needs the crossed set's state, is refused and counted among
   the epochs after the crossing though it lies before it.
 - Covariance and the crossing. The crossing a call with covariance names is the earliest of the nominal's and every moved set's:
