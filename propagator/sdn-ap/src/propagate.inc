@@ -170,32 +170,39 @@ static int propagate_call(void) {
           for (int q = 0; q < cprop.b.count; ++q) take(cprop.b.sats[q]);
         return any;
       };
+      // SPEC 16.25: the crossing a covariance's call names is the record's: when the first epoch is refused, every started set of the
+      // bank (the nominal and each moved one) is run to the call's furthest epoch on each side, so every crossing at or before it is
+      // found whatever order or list the epochs come in. An epoch answered with its covariance lies before every set's crossing, so a
+      // call that refuses none runs nothing here (a record that never decays pays nothing)
+      bool reached = false;
+      auto reach_all = [&]() {
+        if (reached) return;
+        reached = true;
+        if (!(with_cov && xs == nullptr)) return;
+        double tmax = 0.0, tmin = 0.0;
+        for (size_t k = 0; k < tw.size(); ++k) {
+          const double tk = ((tw[k] - e.epoch_jd_whole) + (tf[k] - e.epoch_jd_frac)) * kMinutesPerDay;
+          tmax = std::fmax(tmax, tk);
+          tmin = std::fmin(tmin, tk);
+        }
+        for (int q = 0; q < cprop.b.count; ++q) {
+          if (!cov::live_slot(cprop.b, q)) continue;  // only the slots the bank started
+          double rr[3], vv[3];
+          if (tmax > 0.0) xpt::xp_propagate(cprop.b.sats[q], tmax, rr, vv);
+          if (tmin < 0.0) xpt::xp_propagate(cprop.b.sats[q], tmin, rr, vv);
+        }
+      };
       auto mark_past = [&](size_t k, double t) {
         double tc = 0.0;
-        if (!ap_set || !crossing_of(t, tc)) return false;
+        if (!ap_set) return false;
+        reach_all();
+        if (!crossing_of(t, tc)) return false;
         past[k] = 1;
         ++past_n;
         if (!crossed || std::fabs(tc) < std::fabs(cross_min)) cross_min = tc;
         crossed = true;
         return true;
       };
-      // SPEC 16.25: the crossing a covariance's call names is the record's: every set (the nominal and each moved one) is run to the
-      // call's furthest epoch on each side first, so every crossing at or before it is found whatever order the epochs come in
-      if (ap_set && with_cov && xs == nullptr) {
-        double tmax = 0.0, tmin = 0.0;
-        for (size_t k = 0; k < tw.size(); ++k) {
-          const double t = ((tw[k] - e.epoch_jd_whole) + (tf[k] - e.epoch_jd_frac)) * kMinutesPerDay;
-          tmax = std::fmax(tmax, t);
-          tmin = std::fmin(tmin, t);
-        }
-        auto reach = [&](xpt::XpSat& q) {
-          double rr[3], vv[3];
-          if (tmax > 0.0) xpt::xp_propagate(q, tmax, rr, vv);
-          if (tmin < 0.0) xpt::xp_propagate(q, tmin, rr, vv);
-        };
-        for (int q = 0; q < cprop.b.count; ++q)
-          if (cov::live_slot(cprop.b, q)) reach(cprop.b.sats[q]);  // only the slots the bank started
-      }
       for (size_t k = 0; k < tw.size(); ++k) {
         const double t = ((tw[k] - e.epoch_jd_whole) + (tf[k] - e.epoch_jd_frac)) * kMinutesPerDay;
         double r[3], v[3], P[36];

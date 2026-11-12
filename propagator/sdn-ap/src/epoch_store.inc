@@ -515,7 +515,9 @@ inline int32_t state_of(Store& st, Series& s, uint32_t k, double t, double* r, d
     const double sd = dt >= 0.0 ? 1.0 : -1.0;
     double tc = 0.0;
     if (q.xp != nullptr && xpt::decay_crossing(*q.xp, dt, tc)) { first = tc; any = true; }  // under the set's lock: shared
-    if (P != nullptr && q.cp != nullptr) {
+    // the bank when the slot has one (a covariance asked for this call), also for a probe that asks no covariance of its own: the
+    // Hermite blend's probe at its window's end must name the record's crossing, not the nominal's
+    if (q.cp != nullptr) {
       for (int k = 0; k < q.cp->b.count; ++k) {
         if (!cov::live_slot(q.cp->b, k)) continue;  // only the slots the bank started
         double r2[3], v2[3];
@@ -924,9 +926,9 @@ static int propagate_epochs_call(void) {
         comment = comment.empty() ? carried::sources_comment(src, tw, tf) : carried::sources_comment(src, tw, tf) + ". " + comment;
       }
       // SPEC 16.25: a block that stops at a set's decay names it, counts the epochs refused after it, and takes it as its usable limit
-      // a crossing before the epoch is the block's usable start; a crossing after it, its usable stop when no epoch is answered after it
-      // (a later set of the series may answer epochs past an earlier set's crossing: the block then states neither limit and its
-      // COMMENT names the refused run)
+      // a crossing before the epoch is the block's usable start whatever is answered; a crossing after it, its usable stop when no epoch
+      // is answered after it (a later set of the series may answer epochs past an earlier set's crossing: for a crossing after the
+      // epoch the block then states neither limit and its COMMENT names the refused run)
       bool answered_after = false;
       if (past_n > 0 && !cross_back)
         for (size_t q = 0; q < kw.size() && !answered_after; ++q) answered_after = ((kw[q] - cross_jd[0]) + (kf[q] - cross_jd[1])) > 0.0;

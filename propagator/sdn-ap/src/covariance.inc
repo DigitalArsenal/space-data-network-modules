@@ -310,6 +310,7 @@ inline void release(Bank& b) {
   std::free(b.sats);
   b.sats = nullptr;
   b.count = 0;
+  for (bool& f : b.live) f = false;  // a second init on this bank starts from no started slot
 }
 
 inline bool init(const ElementRow& row, const fit::Options& o, Bank& b, xpt::XpSat* nominal = nullptr) {
