@@ -891,7 +891,8 @@ static int fit_blocks() {
         cov::Set first_cov;
         double first_ng = 0.0;
         const bool first_have = cov::of_fit(chosen.row, chosen.opt, chosen.t_fit.data(), chosen.r_fit.data(),
-                                            static_cast<int>(chosen.t_fit.size()), chosen.fit_end_min, chosen.sigma_km, first_cov, first_ng);
+                                            static_cast<int>(chosen.t_fit.size()), chosen.fit_end_min, chosen.sigma_km, first_cov, first_ng,
+                                            ocm::theory_of(chosen.row.theory, po.forces) == meanElementSource_AP);
         const double sl = first_have ? first_cov.log_sigma[0] : 0.0;
         const fitoem::ArcCheck first_arc =
             fitoem::arc_check(chosen.row, chosen.t_fit.data(), chosen.r_fit.data(), static_cast<int>(chosen.t_fit.size()));
@@ -960,7 +961,8 @@ static int fit_blocks() {
       cov::Set fit_cov;
       double ng_rate = 0.0;
       const bool have_cov =
-          cov::of_fit(row, opt, t_fit.data(), r_fit.data(), static_cast<int>(t_fit.size()), fit_end_min, sigma_km, fit_cov, ng_rate);
+          cov::of_fit(row, opt, t_fit.data(), r_fit.data(), static_cast<int>(t_fit.size()), fit_end_min, sigma_km, fit_cov, ng_rate,
+                      ocm::theory_of(row.theory, po.forces) == meanElementSource_AP);
       // SPEC 12.8: above e 0.3 with the perigee in the drag, on an arc shorter than 7 days, the residual is the theory's,
       // not noise, and the arc does not separate BTERM from it: the arc's width on BTERM is the offset whose signature over
       // the arc equals the RMS floor (the formal information over the residual components), combined with the prior's;

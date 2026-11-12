@@ -1,5 +1,5 @@
 {
-  "generatedAt": "2026-11-12T01:53:42.361Z",
+  "generatedAt": "2026-11-12T04:09:30.864Z",
   "moduleCount": 160,
   "parityScopeModuleCount": 60,
   "isomorphicWasmCount": 154,
@@ -7502,7 +7502,7 @@
       "pluginId": "com.spacedatanetwork.sdn-ap-propagator",
       "name": "SDN-AP Propagator",
       "pluginFamily": "propagator",
-      "version": "0.6.38",
+      "version": "0.6.39",
       "methodIds": [
         "export_omm",
         "fit",
@@ -7525,7 +7525,7 @@
       ],
       "cxxSourceFileCount": 1,
       "cSourceFileCount": 0,
-      "testFileCount": 188,
+      "testFileCount": 189,
       "parityScope": true,
       "action": "review-before-parity-use",
       "sourceFiles": [
@@ -7563,6 +7563,7 @@
         "test/drag-prior-fallback.e2e.mjs",
         "test/drag-term-sigma-honesty.e2e.mjs",
         "test/egrid-continuity.e2e.mjs",
+        "test/epoch-floor.e2e.mjs",
         "test/epoch-store.e2e.mjs",
         "test/etalon-resonance.e2e.mjs",
         "test/exports.e2e.mjs",
@@ -7577,13 +7578,13 @@
         "test/fixtures/ap-fit-0.4.0.epochs.oem",
         "test/fixtures/ap-fit-0.4.0.oem",
         "test/fixtures/ap-fit-0.4.0.omm",
-        "test/fixtures/ap-fit-0.6.36-0.6.38.cov",
-        "test/fixtures/ap-fit-0.6.36-0.6.38.oem",
-        "test/fixtures/ap-fit-0.6.36.eme2000-0.6.38.oem",
-        "test/fixtures/ap-fit-0.6.36.epochs-0.6.38.oem",
+        "test/fixtures/ap-fit-0.6.36-0.6.36.cov",
+        "test/fixtures/ap-fit-0.6.36-0.6.36.oem",
+        "test/fixtures/ap-fit-0.6.36.eme2000-0.6.36.oem",
+        "test/fixtures/ap-fit-0.6.36.epochs-0.6.36.oem",
         "test/fixtures/ap-fit-0.6.36.ocm",
-        "test/fixtures/ap-fit-0.6.36.teme-0.6.38.oem",
-        "test/fixtures/ap-fit-0.6.38.ocm",
+        "test/fixtures/ap-fit-0.6.36.teme-0.6.36.oem",
+        "test/fixtures/ap-fit-0.6.39.ocm",
         "test/fixtures/ap-fit-0.6.4.ocm",
         "test/fixtures/covariance-refit-held-out.json",
         "test/fixtures/de440-bodies-2010-2035.json",
@@ -7643,6 +7644,7 @@
         "test/one-day-slow-band.e2e.mjs",
         "test/output-frames.mjs",
         "test/perigee-drag-continuity.e2e.mjs",
+        "test/perigee-kepler-branch.e2e.mjs",
         "test/pool-growth.e2e.mjs",
         "test/products-parameters.e2e.mjs",
         "test/pvn-carry.e2e.mjs",
@@ -7718,8 +7720,7 @@
         "test/vendor/orbit-accuracy-experiments-c89f2bc/harness/prw.mjs",
         "test/vendor/orbit-accuracy-experiments-c89f2bc/harness/records.mjs",
         "test/vendor/orbit-accuracy-experiments-c89f2bc/harness/truth-gate.mjs",
-        "test/wasmedge-parity.mjs",
-        "test/zonal-radius-term.e2e.mjs"
+        "test/wasmedge-parity.mjs"
       ]
     },
     {

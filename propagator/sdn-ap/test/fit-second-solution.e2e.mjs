@@ -118,7 +118,7 @@ const MOLNIYA = {
 // 0.6.36 (the field EGM2008 in place of EGM-96) moves LEO AP's fit: 266.2 m from 0.6.27's over the 4 days, FIT_RMS 0.11
 // m lower; against the fixture's own truth the error 48 to 72 h past the arc goes from 43 to 42 m. So LEO AP is held
 // against 0.6.36's fit (test/fixtures/ap-fit-0.6.36.ocm), the bounds kept.
-// 0.6.38 (the zonal theory's constant radial term, SPEC 16.21) moves LEO AP's fit: 8.48 m from 0.6.36's over the 4 days,
+// 0.6.43 (the zonal theory's constant radial term, SPEC 16.22) moves LEO AP's fit: 8.48 m from 0.6.36's over the 4 days,
 // FIT_RMS 0.03 m lower; against the fixture's own truth the error 48 to 72 h past the arc stays at 42 m. So LEO AP is
 // held against 0.6.38's fit (test/fixtures/ap-fit-0.6.38.ocm), the bounds kept.
 const NO_HARM = { "LEO AP": 1, "LEO SGP4XP": 0.001 };
@@ -196,7 +196,7 @@ for (const [name, oem, config, spw] of cases) {
     check(stats(c).rms * 1000 <= GEO_AP.fitRmsM && tc <= GEO_AP.truthM && tc <= tb,
       `${name}: FIT_RMS ${stats(c).rms * 1000} m (at most ${GEO_AP.fitRmsM} m); the fit flown 4 days ${tc} m from its truth (at most ${GEO_AP.truthM} m, and not above 0.6.2's ${tb} m)`);
   } else
-    check(d && d.posM <= NO_HARM[name] && dRms <= 0.01, `${name}: the fit flown 4 days ${d?.posM} m from ${PINNED[name] ? "0.6.38's fit" : "0.6.2's"} (within ${NO_HARM[name]} m), FIT_RMS ${dRms} m apart (within 0.01 m)`);
+    check(d && d.posM <= NO_HARM[name] && dRms <= 0.01, `${name}: the fit flown 4 days ${d?.posM} m from ${PINNED[name] ? "0.6.43's fit" : "0.6.2's"} (within ${NO_HARM[name]} m), FIT_RMS ${dRms} m apart (within 0.01 m)`);
 }
 if (geo) console.log(`GEO arc: ${OEM.getRootAsOEM(new flatbuffers.ByteBuffer(geo)).unpack().EPHEMERIS_DATA_BLOCK[0].EPHEMERIS_DATA_LINES.length} states`);
 

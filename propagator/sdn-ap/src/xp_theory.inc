@@ -1866,7 +1866,7 @@ inline bool is_ap_ctx(const RateContext& ctx) {
   return ctx.ap_third_body != 0 || ctx.ap_resonance != 0 || ctx.ap_frame != 0;
 }
 
-/// SPEC 16.21 (stack #503, #532): the constant radial term the zonal theory leaves out, R_E, for the mean semi-major axis a
+/// SPEC 16.22 (stack #503, #532): the constant radial term the zonal theory leaves out, R_E, for the mean semi-major axis a
 /// (R_E) and cos^2 of the mean inclination. Held to the dynamics' mean rates, the theory's mean radius of a near-circular
 /// orbit sits (R_E^4 / a^3) [J2^2 (199 c^4 - 80 c^2 + 25) / 32 - J4 (15/64)(35 s^4 - 40 s^2 + 8)] above the true one (c, s
 /// the cosine and sine of i; J2 and J4 of 1.3): the J4 part first order, the J2^2 part exact at i = 0 (9/2) and fitted
@@ -1878,14 +1878,14 @@ inline double zonal_radius_term(double a, double c2) {
                             kJ4 * (15.0 / 64.0) * (35.0 * s2 * s2 - 40.0 * s2 + 8.0));
 }
 
-/// SPEC 16.21: the factor on the transverse speed rf (R_E/min) of a state at radius r (R_E) moved radially by d (R_E) that
+/// SPEC 16.22: the factor on the transverse speed rf (R_E/min) of a state at radius r (R_E) moved radially by d (R_E) that
 /// keeps its osculating energy, rf^2 / 2 + rdot^2 / 2 - mu / r (the radial speed kept): sqrt(1 - 2 mu d / (r (r + d) rf^2)).
 inline double energy_speed_factor(double r, double d, double rf) {
   const double q = 1.0 - 2.0 * kMu * d / (r * (r + d) * rf * rf);
   return q > 0.0 ? std::sqrt(q) : 1.0;
 }
 
-/// SPEC 16.21: a Cartesian state (km, km/s) moved radially by d km at the same osculating energy: the position along r-hat
+/// SPEC 16.22: a Cartesian state (km, km/s) moved radially by d km at the same osculating energy: the position along r-hat
 /// by d, the transverse velocity scaled by energy_speed_factor, the radial velocity kept.
 inline void radial_shift(double r[3], double v[3], double d) {
   const double rn = std::sqrt(r[0] * r[0] + r[1] * r[1] + r[2] * r[2]);
@@ -4542,6 +4542,15 @@ inline bool next_node(const RateContext& ctx, const Node& a, int dir, Node& out)
 
 // --- SPEC 8: osculating output ------------------------------------------------
 
+/// Osculating Kepler solves (stack #550; SPEC 16.21) of every caller (output states, covariance sigma points, fit evaluations,
+/// the long-period regime's output Jacobian), read and reset by sdnap_kepler_unconverged:
+/// [0] AP's (output_impl) whose Newton ended its 30 steps with a last step of 1e-12 or more (far from the root), which then
+///     take the bisection;
+/// [1] section 8's (output_j2_osc) that ended so, which then take the bisection;
+/// [2] AP's whose Newton ended its 30 steps within 1e-12 of the root (the tolerance meeting rounding), solved, their sine and
+///     cosine taken from that E.
+inline uint32_t g_kepler_unconverged[3] = {0, 0, 0};
+
 [[gnu::noinline]] inline int32_t output_j2_osc(const double* y, double Ewarm, double r_out[3], double v_out[3]) {
   const Kepler k = kepler_of(y);
   if (!(k.e < 1.0)) return kPropEccentricity;
@@ -4555,12 +4564,34 @@ inline bool next_node(const RateContext& ctx, const Node& a, int dir, Node& out)
     dm -= kTwoPi * std::floor((dm + kPi) / kTwoPi);
     E = Ewarm + dm;
   }
+  bool met = false;
+  double last = 0.0;
   for (int it = 0; it < 30; ++it) {
     double sEi, cEi;
     fm::sincos(E, sEi, cEi);
     const double dE = (E - e * sEi - k.m) / (1.0 - e * cEi);
     E -= dE;
-    if (std::fabs(dE) < 1e-15) break;
+    last = dE;
+    if (std::fabs(dE) < 1e-15) {
+      met = true;
+      break;
+    }
+  }
+  if (!met && std::fabs(last) >= 1e-12) {
+    // stack #550, SPEC 16.21: Newton ended its 30 steps with its last step 1e-12 or more (for the milliseconds of a perigee passage in which
+    // the warm start's anomaly and k.m lie either side of 0 it starts a turn from k.m and, unless its step 2 pi / (1 - e cos E)
+    // is a whole number of turns, never converges): counted, and E taken by bisection on [k.m - e, k.m + e], where
+    // E - e sin E - k.m, increasing, changes sign. Every solve that converges is 0.6.37's bit for bit (one that converges a
+    // turn from k.m has the same sine and cosine), and an ending within rounding of the root stands, its sine and cosine
+    // taken below.
+    __atomic_fetch_add(&g_kepler_unconverged[1], 1u, __ATOMIC_RELAXED);
+    double lo = k.m - e, hi = k.m + e;
+    for (int b = 0; b < 128 && hi - lo > 1e-15 * (1.0 + std::fabs(k.m)); ++b) {
+      const double mid = 0.5 * (lo + hi);
+      if (mid - e * std::sin(mid) - k.m < 0.0) lo = mid;
+      else hi = mid;
+    }
+    E = 0.5 * (lo + hi);
   }
   const double eta = std::sqrt(1.0 - e * e);
   double sE, cE;
@@ -5336,10 +5367,15 @@ inline int32_t output_impl(const RateContext& ctx, double t, const double* ym, d
         cE = cm0 * cu - sm0 * su;
         solved_kepler = true;
       }
+      // the mean anomaly Newton solves for: m_ang on the warm start's branch (stack #550). For a few seconds of a perigee
+      // passage the mean and the osculating anomaly lie either side of 0; there m_ang is 2 pi from the start's branch, and
+      // Newton, solving for it, stepped about 4 pi each iteration and left E off by up to 3e-3 rad after its 30.
+      double m_t = m_ang;
       if (!solved_kepler) {
         if (Ewarm == Ewarm) {
           double dm = m_ang - (Ewarm - e * sEwarm);
           dm -= kTwoPi * std::floor((dm + kPi) * (1.0 / kTwoPi));
+          m_t = m_ang + kTwoPi * std::round(((Ewarm - e * sEwarm) - m_ang) * (1.0 / kTwoPi));
           E = fast_ang ? (Ewarm + dm / (1.0 - e * cEwarm)) : (Ewarm + dm);
         } else if (fast_ang) {
           double sm0, cm0;
@@ -5353,7 +5389,7 @@ inline int32_t output_impl(const RateContext& ctx, double t, const double* ym, d
           double sEi, cEi;
           if (fast_ang) fm::sincos_fast(E, sEi, cEi);
           else fm::sincos(E, sEi, cEi);
-          const double dE = (E - e * sEi - m_ang) / (1.0 - e * cEi);
+          const double dE = (E - e * sEi - m_t) / (1.0 - e * cEi);
           E -= dE;
           last_dE = dE;
           if (fast_ang ? (std::fabs(dE) < 5e-6 && e * dE * dE < (1.0 - e) * 1e-15) : (std::fabs(dE) < 1e-15)) {
@@ -5364,9 +5400,25 @@ inline int32_t output_impl(const RateContext& ctx, double t, const double* ym, d
             break;
           }
         }
-        if (std::fabs(last_dE) >= 1e-8) {
+        if (last_dE != 0.0 && std::fabs(last_dE) < 1e-12) {
+          // Newton ended its 30 steps within rounding of the root (stack #550: the 1e-15 tolerance of the non-fast path can
+          // cycle between neighboring doubles of E; through 0.6.36 the sine and cosine were then left at 0 and 1, a perigee
+          // state): solved, its sine and cosine taken from E, counted apart
+          __atomic_fetch_add(&g_kepler_unconverged[2], 1u, __ATOMIC_RELAXED);
           if (fast_ang) fm::sincos_fast(E, sE, cE);
           else fm::sincos(E, sE, cE);
+        } else if (last_dE != 0.0) {
+          // Newton ended its 30 steps far from the root (through 0.6.36 E was then taken as it stood): counted, and E taken by
+          // bisection on [m_t - e, m_t + e], where E - e sin E - m_t, increasing, changes sign
+          __atomic_fetch_add(&g_kepler_unconverged[0], 1u, __ATOMIC_RELAXED);
+          double lo = m_t - e, hi = m_t + e;
+          for (int b = 0; b < 128 && hi - lo > 1e-15 * (1.0 + std::fabs(m_t)); ++b) {
+            const double mid = 0.5 * (lo + hi);
+            if (mid - e * std::sin(mid) - m_t < 0.0) lo = mid;
+            else hi = mid;
+          }
+          E = 0.5 * (lo + hi);
+          fm::sincos(E, sE, cE);
         }
       }
       dF_osc = fast_wrap(E - m_ang);
@@ -5436,7 +5488,7 @@ inline int32_t output_impl(const RateContext& ctx, double t, const double* ym, d
                                 c * n_a * e * snu * (3.0 * th2 - 1.0) * (aor2 * inv_1peta + inv_eta * inv_eta * inv_eta));
     const double drfdot = eta * (-n_a * aor2 * dr +
                                  n_a * (a * aor) * d * si * si * (3.0 * c2u + e * (3.0 * cw1 + cw3)));
-    // SPEC 16.21: the zonal theory's constant radial term, at the same osculating energy (the transverse speed moves with it)
+    // SPEC 16.22: the zonal theory's constant radial term, at the same osculating energy (the transverse speed moves with it)
     const double dr2 = zonal_radius_term(a, th * th), rk0 = r + dr, rf0 = rfdot0 + drfdot;
     const double rk = rk0 + dr2, rdotk = rdot0 + drdot, rfdotk = rf0 * energy_speed_factor(rk0, dr2, rf0);
     const double cu0 = cw * cnu - sw * snu, su0 = sw * cnu + cw * snu;
@@ -5517,7 +5569,7 @@ inline int32_t output_impl(const RateContext& ctx, double t, const double* ym, d
   }
   const int32_t rc = output_j2_osc(y, Ewarm, r_out, v_out);
   if (rc == kPropOk) {
-    // SPEC 16.21: the constant radial term on this path too (where e^2 or tan^2(i/2) is at most 1e-24)
+    // SPEC 16.22: the constant radial term on this path too (where e^2 or tan^2(i/2) is at most 1e-24)
     const double t2f = y[kChi] * y[kChi] + y[kPsi] * y[kPsi], thf = (1.0 - t2f) / (1.0 + t2f);
     radial_shift(r_out, v_out, zonal_radius_term(fast_a_from_n(y[kN]), thf * thf) * kRe);
   }
@@ -7249,7 +7301,7 @@ inline int32_t xp_propagate_local(XpSat& s, double t, double r[3], double v[3], 
                      wasm_f64x2_mul(wasm_f64x2_mul(wasm_f64x2_mul(vna, vaor), wasm_f64x2_mul(vd_j2, wasm_f64x2_mul(vsi, vsi))),
                                     vc_sum)));
 
-  // SPEC 16.21: the sigma sets take the nominal's constant radial term, each at its own a and inclination
+  // SPEC 16.22: the sigma sets take the nominal's constant radial term, each at its own a and inclination
   const v128_t vdr2 = wasm_f64x2_make(zonal_radius_term(wasm_f64x2_extract_lane(va, 0), wasm_f64x2_extract_lane(vth2, 0)),
                                      zonal_radius_term(wasm_f64x2_extract_lane(va, 1), wasm_f64x2_extract_lane(vth2, 1)));
   const v128_t vrk0 = wasm_f64x2_add(vr, vdr);

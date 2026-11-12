@@ -62,10 +62,10 @@ const FLOOR_RELATIVE = 2e-3, MEDIAN_RELATIVE = 5e-5;
 // 1.476 times 0.6.0's, FLOOR_WW_KM2 1.462 to 1.451 times. The held-out cells move by at most 0.0021 in median |z| (S1 24 h R
 // 0.6474 to 0.6454): of the 11 that move past the bound, 5 move toward 0.674 and 6 away, and none crosses the band's edge.
 // So the floors and medians are pinned to 0.6.36's, the bounds kept.
-// 0.6.38 (the zonal theory's constant radial term, SPEC 16.21) moves it again: its 12 h error 322.7 to 320.8 m, FLOOR_VV_KM2
+// 0.6.43 (the zonal theory's constant radial term, SPEC 16.22) moves it again: its 12 h error 322.7 to 320.8 m, FLOOR_VV_KM2
 // 1.476 to 1.474 times 0.6.0's, FLOOR_UU_KM2 1.399 to 1.418 times, FLOOR_WW_KM2 1.451 times. The held-out cells move by at
 // most 0.0006 in median |z| (S1 24 h R 0.6454 to 0.6459): of the 11 that move past the bound, 6 move toward 0.674 and 5
-// away, and none crosses the band's edge. So the floors and medians are pinned to 0.6.38's, the bounds kept.
+// away, and none crosses the band's edge. So the floors and medians are pinned to 0.6.43's, the bounds kept.
 const FLOORS_PINNED = { FLOOR_UU_KM2: 0.0002199234578520575, FLOOR_VU_KM2: -8.792171664745917e-07, FLOOR_VV_KM2: 0.0013065976993620711,
   FLOOR_WU_KM2: -3.753562368306414e-05, FLOOR_WV_KM2: -0.00016897008343219502, FLOOR_WW_KM2: 0.00020713174602958123 };
 const MEDIANS_PINNED = { "T 24 R": 0.641777, "T 24 C": 0.786779, "T 72 R": 0.750072, "T 72 C": 0.875771, "T 167 R": 0.756986,

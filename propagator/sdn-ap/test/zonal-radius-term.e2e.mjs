@@ -1,5 +1,5 @@
 #!/usr/bin/env node
-// E2E (SPEC 16.21, stack #503, #532): AP's output carries the zonal theory's constant radial term.
+// E2E (SPEC 16.22, stack #503, #532): AP's output carries the zonal theory's constant radial term.
 // Model truth (test/lib/synthetic-truth.mjs): FFM with the zonal field J2 to J5 alone (EGM2008 degree 5, order 0) and the
 // Sun and Moon from DE440; AP with gravity terms (tesseral cap 0, zonal cap 5: J2 to J5 and its own Sun and Moon), fitted
 // over 72 h and flown hourly for 7 days. Mean radial error (AP minus FFM, the reference's RTN) over days 1 to 5:
@@ -9,7 +9,7 @@
 //   departs from that e = 0 form by 1.3 m, measured on 0.6.36: stack #532);
 // - this build's offset no larger in size than 0.6.36's by more than 0.3 m.
 // Cases: circular at 420 km, i 87.5, 55 and 98 deg, and i 5 deg (near the equator, the largest); e 0.05 at a = R + 1,200 km,
-// i 28.5 deg. Measured on 0.6.38: 0.18, -0.17, 0.16, -0.34 and -1.31 m (before the term 10.88, -2.43, 9.58, 42.37 and
+// i 28.5 deg. Measured on 0.6.43: 0.18, -0.17, 0.16, -0.34 and -1.31 m (before the term 10.88, -2.43, 9.58, 42.37 and
 // 11.12 m).
 //   node test/zonal-radius-term.e2e.mjs
 import assert from 'node:assert/strict';
@@ -31,7 +31,7 @@ assert.equal(createHash('sha256').update(baseBytes).digest('hex'), BASE.sha256, 
 const basePath = path.join(scratchTemp('sdn-ap-zonal-radius-'), `sdn-ap-${BASE.version}.wasm`);
 fs.writeFileSync(basePath, baseBytes);
 
-/** The closed form of SPEC 16.21, m: the offset the theory leaves without the term. */
+/** The closed form of SPEC 16.22, m: the offset the theory leaves without the term. */
 const predicted = (aKm, iDeg) => {
   const c2 = Math.cos(iDeg * Math.PI / 180) ** 2, s2 = 1 - c2;
   return 1000 * RE ** 4 / aKm ** 3 * (J2 * J2 * (199 * c2 * c2 - 80 * c2 + 25) / 32 - J4 * 15 / 64 * (35 * s2 * s2 - 40 * s2 + 8));
