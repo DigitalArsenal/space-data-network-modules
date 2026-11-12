@@ -45,7 +45,7 @@ Build: `npm run build` (module SDK compiler lane, clang `wasm32-wasip1-threads`,
   vector's radial, in-track and cross-track components and `sdnap_uvw_to_frame` its mirror.
 - The osculating Kepler solve (SPEC 16.21; `test/perigee-kepler-branch.e2e.mjs`): `sdnap_kepler_unconverged(reset, which)`
   counts the solves, every caller's, whose Newton ended its 30 steps without meeting its tolerance: `which` 0 AP's ending
-  far from the root (then solved by bisection), 1 section 8's ending far from it (counted only), 2 AP's ending within 1e-12
+  far from the root (then solved by bisection), 1 section 8's ending far from it (then solved by bisection), 2 AP's ending within 1e-12
   of it (solved); `reset` non-zero reads and clears it in one step.
 - Covariance (SPEC 12; `test/covariance.e2e.mjs`): `fit` writes, for its SGP4XP sets, the fit's covariance at its epoch
   as COVARIANCE (TEME, 21 values) with USER_DEFINED_SDNAP_COV_x rows (the BTERM and AGOM parameters' covariances, the

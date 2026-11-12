@@ -4509,7 +4509,7 @@ inline bool next_node(const RateContext& ctx, const Node& a, int dir, Node& out)
 /// the long-period regime's output Jacobian), read and reset by sdnap_kepler_unconverged:
 /// [0] AP's (output_impl) whose Newton ended its 30 steps with a last step of 1e-12 or more (far from the root), which then
 ///     take the bisection;
-/// [1] section 8's (output_j2_osc) that ended so, counted only (its arithmetic unchanged);
+/// [1] section 8's (output_j2_osc) that ended so, which then take the bisection;
 /// [2] AP's whose Newton ended its 30 steps within 1e-12 of the root (the tolerance meeting rounding), solved, their sine and
 ///     cosine taken from that E.
 inline uint32_t g_kepler_unconverged[3] = {0, 0, 0};
@@ -4522,9 +4522,13 @@ inline uint32_t g_kepler_unconverged[3] = {0, 0, 0};
   // Kepler's equation M = E - e sin E (Newton, to machine precision), started
   // from the mean solution when the Sun and Moon corrections were applied.
   double E = k.m + e * std::sin(k.m);
+  // the mean anomaly Newton solves for: k.m on the warm start's branch (stack #550, SPEC 16.21: for the milliseconds of a
+  // perigee passage in which the warm start's anomaly and k.m lie either side of 0, k.m is 2 pi from the start's branch)
+  double m_t = k.m;
   if (Ewarm == Ewarm) {
     double dm = k.m - (Ewarm - e * std::sin(Ewarm));
     dm -= kTwoPi * std::floor((dm + kPi) / kTwoPi);
+    m_t = k.m + kTwoPi * std::round(((Ewarm - e * std::sin(Ewarm)) - k.m) * (1.0 / kTwoPi));
     E = Ewarm + dm;
   }
   bool met = false;
@@ -4532,7 +4536,7 @@ inline uint32_t g_kepler_unconverged[3] = {0, 0, 0};
   for (int it = 0; it < 30; ++it) {
     double sEi, cEi;
     fm::sincos(E, sEi, cEi);
-    const double dE = (E - e * sEi - k.m) / (1.0 - e * cEi);
+    const double dE = (E - e * sEi - m_t) / (1.0 - e * cEi);
     E -= dE;
     last = dE;
     if (std::fabs(dE) < 1e-15) {
@@ -4540,7 +4544,18 @@ inline uint32_t g_kepler_unconverged[3] = {0, 0, 0};
       break;
     }
   }
-  if (!met && std::fabs(last) >= 1e-12) __atomic_fetch_add(&g_kepler_unconverged[1], 1u, __ATOMIC_RELAXED);
+  if (!met && std::fabs(last) >= 1e-12) {
+    // Newton ended its 30 steps far from the root: counted, and E taken by bisection on [m_t - e, m_t + e] (an ending within
+    // rounding of the root is solved as it stands, its sine and cosine taken below)
+    __atomic_fetch_add(&g_kepler_unconverged[1], 1u, __ATOMIC_RELAXED);
+    double lo = m_t - e, hi = m_t + e;
+    for (int b = 0; b < 128 && hi - lo > 1e-15 * (1.0 + std::fabs(m_t)); ++b) {
+      const double mid = 0.5 * (lo + hi);
+      if (mid - e * std::sin(mid) - m_t < 0.0) lo = mid;
+      else hi = mid;
+    }
+    E = 0.5 * (lo + hi);
+  }
   const double eta = std::sqrt(1.0 - e * e);
   double sE, cE;
   fm::sincos(E, sE, cE);
