@@ -909,6 +909,7 @@ static int fit_blocks() {
           }
         }
       }
+      bool stage2_used = false;
       // Two-stage decoupled fit (R17): when FIT.MINIMUM_SPAN_HOURS < 24 h (e.g. 17.1 h, the 12 h order-2 tesseral
       // resonance null) and FIT.DEFAULT_SPAN_HOURS >= 24 h on a non-eccentric orbit, Stage 1 above solved BTERM and AGOM
       // over the long drag span; Stage 2 pins BTERM and AGOM to Stage 1's solution and fits the 6 Brouwer mean elements
@@ -933,7 +934,60 @@ static int fit_blocks() {
           stage2.opt.agom_sigma = chosen.opt.agom_sigma;
           stage2.srp = chosen.srp;
           chosen = std::move(stage2);
+          stage2_used = true;
         }
+      }
+      // SPEC 16.7 (stack #558): a record that ends held at an eccentricity switch: the same pass again, once per side, with
+      // every set within 0.01 of a switch in e on that side's branch (xpt::ForceSideScope). A side's record replaces the
+      // held one where its e lies on its own side, so that its own branch is the one it was fitted on, and its arc's fit
+      // RMS is lower by more than 1e-9 relative; the lower of two such stands. Otherwise the held record stands as it is.
+      // The pick reads the fit's own RMS only; the OD COMMENT says what each side read and which record was kept
+      std::string side_note;
+      if (chosen.res.held_at_switch && !stage2_used) {
+        const double e_held = chosen.row.eccentricity, held_rms = chosen.res.rms_km;
+        const double limit = std::fabs(e_held - xpt::tess::kWideE) < std::fabs(e_held - xpt::tess::kWideENonResonant) ? xpt::tess::kWideE
+                                                                                                                  : xpt::tess::kWideENonResonant;
+        const pcf::Prior drag_kept = used_drag;
+        const bool before_kept = atm::active() != nullptr && atm::active()->before_rows;
+        char read[2][160];
+        int best = -1;
+        Pass best_pass;
+        for (int s = 0; s < 2; ++s) {
+          const char* name = s == 0 ? "below" : "above";
+          Pass f;
+          int rc;
+          {
+            const xpt::ForceSideScope force(s == 0 ? -1 : 1);
+            rc = run_pass(span_used > 0.0 ? span_used : default_span, f, last_useable, -1, fell_back ? &drag_kept : nullptr);
+          }
+          used_drag = drag_kept;
+          if (atm::active() != nullptr) atm::active()->before_rows = before_kept;
+          const bool own = rc == 0 && (s == 0 ? f.row.eccentricity <= limit : f.row.eccentricity > limit);
+          if (rc != 0)
+            std::snprintf(read[s], sizeof read[s], "the %s side gives no record", name);
+          else if (!own)
+            std::snprintf(read[s], sizeof read[s], "the %s side's set lies across the switch (e %.10f, arc RMS %.1f m)", name,
+                          f.row.eccentricity, f.res.rms_km * 1000.0);
+          else
+            std::snprintf(read[s], sizeof read[s], "the %s side's record: e %.10f, arc RMS %.1f m", name, f.row.eccentricity,
+                          f.res.rms_km * 1000.0);
+          if (own && f.res.rms_km < held_rms * (1.0 - 1e-9) && (best < 0 || f.res.rms_km < best_pass.res.rms_km)) {
+            best = s;
+            best_pass = std::move(f);
+          }
+        }
+        char note[480];
+        if (best >= 0) {
+          std::snprintf(note, sizeof note,
+                        "fit: the %s side's record of the eccentricity switch at %.2f (arc RMS %.1f m) in place of the set held at the "
+                        "switch (e %.10f, arc RMS %.1f m); %s; %s",
+                        best == 0 ? "below" : "above", limit, best_pass.res.rms_km * 1000.0, e_held, held_rms * 1000.0, read[0], read[1]);
+          chosen = std::move(best_pass);
+        } else {
+          std::snprintf(note, sizeof note, "fit: the set held at the switch stands (arc RMS %.1f m); %s; %s", held_rms * 1000.0, read[0],
+                        read[1]);
+        }
+        side_note = note;
       }
       std::vector<double>& t_fit = chosen.t_fit;
       std::vector<double>& r_fit = chosen.r_fit;
@@ -1163,6 +1217,7 @@ static int fit_blocks() {
       // SPEC 16.7 (stack #504): a fit whose two branches' least-squares sets lie across an eccentricity switch ends on one side
       if (res.held_at_switch)
         comment.push_back("fit: held at the eccentricity switch on its own branch; the least-squares sets of both branches lie across it");
+      if (!side_note.empty()) comment.push_back(side_note);
       if (po.ecom2)
         comment.push_back(opt.fit_y0 ? "radiation: ECOM2 Y0 solved beside the sphere's AGOM; not a covariance row"
                                      : "radiation: ECOM2 Y0 held at its stated value (an arc under 72 h, a set under the drag, or a second stage)");

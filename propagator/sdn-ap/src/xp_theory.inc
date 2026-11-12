@@ -1767,6 +1767,16 @@ struct Branch {
   }
   bool operator!=(const Branch& o) const { return !(*this == o); }
 };
+/// SPEC 16.7 (stack #558): set by the fit only, while it refits a record held at an eccentricity switch: every set within
+/// kForceBand of a switch in e takes one side's flags (-1 the below side's, +1 the above side's). 0 everywhere else, so
+/// no flight and no other fit sees it.
+inline thread_local int g_force_side = 0;
+constexpr double kForceBand = 0.01;
+struct ForceSideScope {
+  int prev;
+  explicit ForceSideScope(int side) : prev(g_force_side) { g_force_side = side; }
+  ~ForceSideScope() { g_force_side = prev; }
+};
 inline Branch branch_of(double n0, double e0, bool ap) {
   Branch b;
   b.resonance = static_cast<int8_t>(res::band_of(n0));
@@ -1775,6 +1785,14 @@ inline Branch branch_of(double n0, double e0, bool ap) {
     b.wide_tess = tess::wide_set(b.resonance, e0) ? 1 : 0;
     b.wide_e = e0 > tess::kWideE ? 1 : 0;
     b.series_e = e0 > res::kSeriesE ? 1 : 0;  // strictly above, as the other two: e0 exactly 0.3 is the below side (stack #504)
+    if (g_force_side != 0) {
+      const uint8_t up = g_force_side > 0 ? 1 : 0;
+      if (std::fabs(e0 - (b.resonance == 0 ? tess::kWideENonResonant : tess::kWideE)) < kForceBand) b.wide_tess = up;
+      if (std::fabs(e0 - tess::kWideE) < kForceBand) {
+        b.wide_e = up;
+        b.series_e = up;
+      }
+    }
   }
   if (b.long_period && ap) {
     b.lp_step = b.resonance == 1 ? 38.0 : kLongPeriodStep;
