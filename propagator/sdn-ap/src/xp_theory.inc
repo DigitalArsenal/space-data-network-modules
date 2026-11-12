@@ -5680,6 +5680,8 @@ struct XpSat {
   int32_t window_valid[2];
   int32_t sparse_count[2];    ///< checkpoints held per direction (index stride * (k + 1))
   Node sparse[2][kSparse];
+  double decay_t[2];          ///< SPEC 8.5 (stack #564): an AP set's decay crossing per direction (minutes from epoch), once found
+  int8_t decay_found[2];      ///< 1 once the grid's nodes in that direction reached the crossing: every later time is decayed
   int32_t wide_lock;          ///< AP above tess::kWideE: the schedule nodes' grids this set holds (SPEC 16.11)
   tess::WideGrid* wide_node[2];
   int32_t wide_node_j[2];
@@ -5979,6 +5981,7 @@ inline double radiation_y0(const Elements& e) { return e.ndot_rev_day2; }
 inline double& radiation_y0(Elements& e) { return e.ndot_rev_day2; }
 
 /// Inside a tess::FitGridScope (SPEC 16.11) the grids this set builds above tess::kWideE are freed with it, never kept idle.
+inline void decay_epoch(XpSat& s);  // SPEC 8.5, below
 inline int32_t xp_init(const Elements& e, XpSat& s) {
   s = XpSat{};
   s.ctx.ctx_id = next_ctx_id();
@@ -6071,6 +6074,7 @@ inline int32_t xp_init(const Elements& e, XpSat& s) {
   const double span = 8.0 * kMinutesPerDay;
   int32_t stride = static_cast<int32_t>(std::ceil(span / (kSparse * step)));
   s.stride = stride < 1 ? 1 : stride;
+  decay_epoch(s);  // SPEC 8.5: an epoch past the rule is decayed at every time (one test of the epoch node, its own rates)
   return kPropOk;
 }
 
@@ -6635,6 +6639,108 @@ inline bool run_grow(XpSat& s, SetCaches& c, NodeRun& r, int32_t want) {
   return true;
 }
 
+/// SPEC 8.5 (stack #564): where an AP flight ends, decayed. (b) the mean perigee height a (1 - e) - R_E under kDecayFloorKm;
+/// (a) with drag, more perigee radius lost over one revolution, or over the grid's next step where that is longer,
+/// |d(a (1 - e))/dt| max(P, h), than one density scale height H at the mean perigee (the set's own atmosphere and weather):
+/// past it the averaged rates no longer describe the orbit, and the grid's next node is not an orbit (stack #564's seeds: the
+/// last node before the jump loses 0.58 H a revolution and 1.15 H over its 2.9 h step; the node after it has its perigee at
+/// -283 km). H is looked up only once the loss passes kDecayTestKm (below it no height the atmospheres reach has H under it).
+constexpr double kDecayFloorKm = 100.0;
+constexpr double kDecayTestKm = 5.0;
+/// The density (kg/m^3) at geocentric radius rr (ER) along the unit direction pu (TEME) at t: node_density's, the set's own
+/// atmosphere and weather at that time.
+inline double decay_density(const RateContext& ctx, double t, const Vec3& pu, double rr) {
+  const Vec3 rs = rr * pu;
+  const double d50 = ctx.d50_epoch + t / kMinutesPerDay, theta_g = ctx.theta_g0 + kOmegaE * t;
+  const Bodies b = ctx.ap_third_body ? bodies_at_ap(d50) : bodies_at(d50);
+  const double sdsun = b.sun_u.z, cdsun = std::sqrt(std::fmax(0.0, 1.0 - sdsun * sdsun)), rasun = std::atan2(b.sun_u.y, b.sun_u.x);
+  const bool generic = ctx.atmosphere == nullptr || !ctx.atmosphere->measured;
+  const drag::Flux fl = generic ? drag::flux_at(d50) : atm::drivers_at(*ctx.atmosphere, d50);
+  double D, Nd;
+  drag::day_of_year(d50, D, Nd);
+  const drag::DateTerms dt = drag::date_terms(fl, D, Nd);
+  const double dca = ctx.atmosphere != nullptr && !ctx.atmosphere->dca_d50.empty() ? atm::dca_scale(*ctx.atmosphere, d50) : 1.0;
+  const double sp = rs.z / rr, cp = std::sqrt(std::fmax(0.0, 1.0 - sp * sp));
+  const NodeHeight nh = node_height(sp, cp, rr);
+  const double alpha = std::atan2(rs.y, rs.x);
+  double H = alpha - rasun;
+  H -= kTwoPi * std::floor(H / kTwoPi);
+  return node_density(ctx.atmosphere, dt, fl, dca, d50, sp, cp, sdsun, cdsun, H, alpha, theta_g, nh);
+}
+/// A node's two decay tests as quantities that cross 0 at the rule: qb = kDecayFloorKm - h_p (km), qa = ln(loss / H)
+/// (-1e300 without drag, under kDecayTestKm unless `full`, or where the atmosphere gives no gradient). Decayed when either is
+/// 0 or more. The node's rates are its own (the step's), so the test adds no rate evaluation.
+struct DecayQ {
+  double qa, qb;
+};
+inline DecayQ decay_q(const RateContext& ctx, const Node& nd, bool full) {
+  const double* y = nd.y;
+  const Frame fr = frame_of(y);
+  const double e = std::sqrt(fr.e2), a = fr.a, n = fr.n;
+  DecayQ q{-1e300, kDecayFloorKm - (a * (1.0 - e) - 1.0) * kRe};
+  if (!(ctx.bterm > 0.0) || !(n > 0.0)) return q;
+  const double adot = -kX2o3 * a / n * nd.f[kN];
+  const double edot = e > 0.0 ? (y[kAf] * nd.f[kAf] + y[kAg] * nd.f[kAg]) / e : 0.0;
+  // km per revolution, or per grid step where the step is longer: the averaged rates must follow the decay over the step the
+  // grid takes next from this node (next_node's)
+  const double step = ctx.long_period ? long_period_step(ctx) : averaged_step(ctx, n);
+  const double loss = std::fabs(adot * (1.0 - e) - a * edot) * std::fmax(kTwoPi / n, step) * kRe;
+  if (!(loss > 0.0) || (!full && !(loss > kDecayTestKm))) return q;
+  const Kepler k = kepler_of(y, fr.a);
+  Vec3 r, v;
+  double roa;
+  state_at_F(y, fr, k.argp + k.node, r, v, roa);  // the mean perigee (E = 0)
+  const Vec3 pu = (1.0 / norm(r)) * r;
+  const double rp = a * (1.0 - e), dr = 1.0 / kRe;
+  const double lo = decay_density(ctx, nd.t, pu, rp - dr), hi = decay_density(ctx, nd.t, pu, rp + dr);
+  if (!(lo > hi) || !(hi > 0.0)) return q;
+  q.qa = std::log(loss * std::log(lo / hi) / 2.0);  // ln(loss / H), H = 2 km / ln(rho(h - 1) / rho(h + 1))
+  return q;
+}
+inline bool decayed(const DecayQ& q) { return q.qa >= 0.0 || q.qb >= 0.0; }
+/// The crossing's time between node a (not decayed) and node b (decayed), direction dir: the earlier of the two tests' roots,
+/// each linear in its quantity between the two nodes (no rate evaluation); a test already met at a gives a's time.
+inline double decay_cross_t(const RateContext& ctx, const Node& a, const Node& b, const DecayQ& qb, int dir) {
+  const DecayQ qa = decay_q(ctx, a, true);
+  auto root = [&](double x0, double x1) {
+    if (x0 >= 0.0) return a.t;
+    const double u = x1 > x0 ? -x0 / (x1 - x0) : 1.0;
+    return a.t + (b.t - a.t) * (u < 0.0 ? 0.0 : u > 1.0 ? 1.0 : u);
+  };
+  double t = b.t;
+  if (qb.qb >= 0.0) t = root(qa.qb, qb.qb);
+  if (qb.qa >= 0.0) {
+    const double ta = root(qa.qa, qb.qa);
+    if (dir * ta < dir * t) t = ta;
+  }
+  return t;
+}
+/// SPEC 8.5: test a new node of s's grid in direction di (dir), from cur; on the crossing record its time once. True when the
+/// grid ends at this node (the crossing lies between cur and nxt).
+inline bool decay_node(XpSat& s, int dir, int di, const Node& cur, const Node& nxt) {
+  if (!is_ap_ctx(s.ctx)) return false;
+  // found before (a run started again from an earlier node): the grid ends at the first node at or past the crossing
+  if (s.decay_found[di]) return dir * nxt.t >= dir * s.decay_t[di];
+  const DecayQ q = decay_q(s.ctx, nxt, false);
+  if (!decayed(q)) return false;
+  s.decay_t[di] = decay_cross_t(s.ctx, cur, nxt, q, dir);
+  s.decay_found[di] = 1;
+  return true;
+}
+/// SPEC 8.5: t lies past s's decay crossing (on t's side of the epoch, the crossing already found).
+inline bool decay_past(const XpSat& s, double t) {
+  const int di = t >= 0.0 ? 0 : 1, dir = t >= 0.0 ? 1 : -1;
+  return s.decay_found[di] == 2 || (s.decay_found[di] && dir * t > dir * s.decay_t[di]);
+}
+/// SPEC 8.5: an AP set whose epoch already meets the rule is decayed at every time, its epoch too (decay_found 2).
+inline void decay_epoch(XpSat& s) {
+  if (!is_ap_ctx(s.ctx) || !decayed(decay_q(s.ctx, s.epoch, false))) return;
+  for (int di = 0; di < 2; ++di) {
+    s.decay_t[di] = 0.0;
+    s.decay_found[di] = 2;
+  }
+}
+
 /// The bracket of t from s's node run in direction dir (s's caches held by this thread): 1 found (lo, hi point into the
 /// run or at its base), 0 the grid ends before t, -1 t lies beyond the checkpoint span or the pool has no room (the
 /// checkpoints answer). The run is extended to t as bracket_ptr would integrate, filling the same checkpoints. A run
@@ -6685,6 +6791,9 @@ inline int run_bracket(XpSat& s, SetCaches& c, int dir, int di, double t, const 
       }
     }
     r.nodes[r.count++] = nxt;
+    // SPEC 8.5: an AP set's grid ends at the node past its decay crossing (the node is kept: the times before the crossing
+    // bracket on it as before)
+    if (decay_node(s, dir, di, cur, nxt)) r.ended = true;
   }
   auto node_at = [&](int k) -> const Node& { return k == 0 ? r.base : r.nodes[k - 1]; };
   int k = r.hint;
@@ -6718,6 +6827,7 @@ inline bool bracket_ptr(XpSat& s, double t, const Node*& lo, const Node*& hi) {
   const int di = dir > 0 ? 0 : 1;
   const double at = dir * t;
   auto beyond = [&](const Node& n) { return dir * n.t > at; };
+  if (decay_past(s, t)) return false;  // SPEC 8.5: past a crossing already found, no node is integrated
   if (g_flown_set == &s && s.caches != nullptr) {
     const int rc = run_bracket(s, *s.caches, dir, di, t, lo, hi);
     if (rc >= 0) return rc == 1;
@@ -6753,7 +6863,10 @@ inline bool bracket_ptr(XpSat& s, double t, const Node*& lo, const Node*& hi) {
         s.sparse_count[di] = slot + 1;
       }
     }
+    // SPEC 8.5: the grid ends at the node past an AP set's decay crossing; a time past that node has no bracket
+    const bool ends = decay_node(s, dir, di, cur, nxt);
     if (beyond(nxt)) break;
+    if (ends) return false;
     cur = nxt;
   }
   s.window[di][0] = cur;
@@ -6814,6 +6927,7 @@ inline void set_sp_anchor(const XpSat& s, const Node& lo, const Node& hi) {
 
 /// Mean equinoctial state at t on a caller-private XpSat (lock-free, zero Node copies).
 inline bool mean_at_local(XpSat& s, double t, double* y) {
+  if (decay_past(s, t)) return false;  // SPEC 8.5
   if (t == 0.0) {
     // stack #491: the epoch has no bracket; what output bakes there (the m-daily and tesseral terms) is the state's own,
     // never the bracket of whichever set this thread flew last
@@ -6822,7 +6936,7 @@ inline bool mean_at_local(XpSat& s, double t, double* y) {
     return true;
   }
   const Node *lo = nullptr, *hi = nullptr;
-  if (!bracket_ptr(s, t, lo, hi)) return false;
+  if (!bracket_ptr(s, t, lo, hi) || decay_past(s, t)) return false;  // SPEC 8.5: a crossing this bracket found
   if (!s.ctx.is_cov_sigma) update_active_bracket(s, *lo, *hi);
   set_sp_anchor(s, *lo, *hi);
   hermite(*lo, *hi, t, y);
@@ -6831,6 +6945,7 @@ inline bool mean_at_local(XpSat& s, double t, double* y) {
 
 /// Mean equinoctial state at t (minutes from epoch).
 inline bool mean_at(XpSat& s, double t, double* y) {
+  if (decay_past(s, t)) return false;  // SPEC 8.5
   if (t == 0.0) {
     tess::g_sp_anchor.valid = false;  // stack #491, as mean_at_local
     for (int j = 0; j < 6; ++j) y[j] = s.epoch.y[j];
@@ -6838,7 +6953,7 @@ inline bool mean_at(XpSat& s, double t, double* y) {
   }
   Node lo, hi;
   lock(&s.lock);
-  const bool ok = bracket(s, t, lo, hi);
+  const bool ok = bracket(s, t, lo, hi) && !decay_past(s, t);
   unlock(&s.lock);
   if (!ok) return false;
   if (!s.ctx.is_cov_sigma) update_active_bracket(s, lo, hi);
@@ -6851,6 +6966,7 @@ inline bool mean_at(XpSat& s, double t, double* y) {
 /// that time's output reads (the window, the third-body bracket, the tesseral anchor) are left as they were, so the
 /// output does not depend on whether the grid had to be built.
 inline bool mean_at_aside(XpSat& s, double t, double* y) {
+  if (decay_past(s, t)) return false;  // SPEC 8.5
   if (t == 0.0) {
     for (int j = 0; j < 6; ++j) y[j] = s.epoch.y[j];
     return true;
@@ -6861,7 +6977,7 @@ inline bool mean_at_aside(XpSat& s, double t, double* y) {
   int32_t window_valid[2];
   std::memcpy(window, s.window, sizeof window);
   std::memcpy(window_valid, s.window_valid, sizeof window_valid);
-  const bool ok = bracket(s, t, lo, hi);
+  const bool ok = bracket(s, t, lo, hi) && !decay_past(s, t);
   std::memcpy(s.window, window, sizeof window);
   std::memcpy(s.window_valid, window_valid, sizeof window_valid);
   unlock(&s.lock);
@@ -7041,7 +7157,8 @@ inline int32_t xp_propagate_impl(XpSat& s, double t, double r[3], double v[3], c
     ~AnchorScope() { tess::g_sp_anchor = saved; }
   } anchor_scope;
   double y[6];
-  if (!(local_sat ? mean_at_local(s, t, y) : mean_at(s, t, y))) return kPropMeanMotion;
+  // SPEC 8.5: a time past an AP set's decay crossing is refused as decayed (status 4)
+  if (!(local_sat ? mean_at_local(s, t, y) : mean_at(s, t, y))) return decay_past(s, t) ? kPropDecayed : kPropMeanMotion;
   // AP above e 0.3: the drag rates output_drag_pass adds, from the state's segment; a fit (inside its tess::FitGridScope)
   // keeps drag_part at each of its states, so the sets it writes do not depend on the segments
   DragPassRates pass_rates;
