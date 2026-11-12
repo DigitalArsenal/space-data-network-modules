@@ -12,19 +12,28 @@
 // 1,200 km, i 0.5 and 8.89 m at 550 km, i 52.9 (main 0.6.39, git 94351f34, wasm 7a857d63: within 0.1 mm of 0.6.38's).
 // The refusal is also read on a record main wrote: each case's arc
 // fitted by 0.6.38 (MAIN, SHA-256 checked) and flown here has its covariance refused by name and its states flown.
+// From 0.6.43 (the zonal theory's constant radial term, SPEC 16.23, which moves a low-orbit set's own flight by meters) the
+// self check is against SELF_BASE, the term's first build on 0.6.42 (git a5293c54), and a pre-cure record's states are held
+// against this build's flight of the same record with PRODUCER 0.6.39, which flies its covariance; the arc is fitted also by
+// 0.6.39 (CURE, git 94351f34, the rule's release, SHA-256 checked) for the check across a theory change.
 // - The cure (a reader whose theory's epoch state differs from the writer's): this build's record read again with its
 //   gravity caps moved from 31 and 20 to 12 and 6, so its flown epoch state moves and the two-body state of its mean
 //   elements does not (at i 52.9 by 31 m; near the equator the caps leave the epoch state as it was, and one case must
 //   move by more than MOVED_KM). The epoch covariance less the floor the reader takes off (sdnap_test_epoch_floor) is the
 //   same bit for bit; and on both, at minute 0, P(0) less the floor at the flown state equals that remainder within
 //   IDENTITY of P(0)'s largest entry.
-// - A set's own flight is as it was: this build's record flown by this build against BASE's record flown by BASE,
-//   sdnap_covariance_at hourly to 48 h, within SELF.
+// - A set's own flight is as it was: this build's record flown by this build against SELF_BASE's record flown by
+//   SELF_BASE, sdnap_covariance_at hourly to 48 h, within SELF.
+// - Across a theory change (from 0.6.43, the case that found stack #551): 0.6.39's record flown by this build against
+//   0.6.39's flight of it, sdnap_covariance_at hourly to 48 h, within ACROSS, 1e-3 (measured: ACROSS_MEASURED; over seven cases
+//   fitted to zero residual, under 1.5e-4 on 0.6.42 and with the term on it; the fault it guards was 0.1 and up: 0.6.36's
+//   records under the term came out negative or 85 times too narrow).
 // - Caps 0 (an AP set without gravity terms): this build's record flies its covariance with the floor at the two-body
 //   state (one rule for every AP record), and BASE's has it refused.
-// - BASE's record on this build: sdnap_covariance_at -7; propagate status 0, its three states within STATES_M of BASE's
-//   flight of it (a flight without covariance takes the state path, one with it the covariance's nominal: they part by
-//   about 0.3 mm on any build), no covariance lines, the block's COMMENT naming cov-floor-at-theory-state.
+// - BASE's record on this build: sdnap_covariance_at -7; propagate status 0, its three states within STATES_M of this
+//   build's flight of the same record with PRODUCER 0.6.39, which flies its covariance (a flight without covariance takes
+//   the state path, one with it the covariance's nominal: they part by about 0.3 mm on any build; through 0.6.42 against
+//   BASE's own flight of it), no covariance lines, the block's COMMENT naming cov-floor-at-theory-state.
 // - The gate reads PROVENANCE.PRODUCER exactly: this module at 0.6.39 or later as X.Y.Z accepted, anything else refused
 //   (0.6.38, a release on main, writes its floor at the theory state).
 // - The remainder is the hook's (sdnap_test_epoch_floor computes it from the record alone, at the state the reader's own
@@ -58,7 +67,9 @@ import {scratchTemp} from './lib/scratch.mjs';
 ensureBuilt();
 const BASE = {version: '0.6.36', commit: '258d824d2c83da8aa0f9ad2325273cfe478ae5d8', sha256: '01f8fd18eb97107b4cd1e0d7694f31787bcddf7cbb61f44255d83e3f45f3f56f'};
 const MAIN = {version: '0.6.38', commit: 'f8fd3240fe360f7b7649e9daf9e4d7b09ba21bd0', sha256: '1933b5da4d2c3c4bca644a9f88e43584d85b8f6f455762879294a8cf1a66c75b'};
-const SELF = {ofLargest: 1e-11, along: 1e-10}, STATES_M = 0.001, MOVED_KM = 1e-4, IDENTITY = 1e-12;
+const CURE = {version: '0.6.39', commit: '94351f345a32c659e0beec0d87dfb14100e2ea23', sha256: '7a857d632d044cd3830456cdcb8fbac5cb95a201087a417c530773f2e0bc295a'};
+const SELF_BASE = {version: '0.6.43', commit: 'a5293c54ba6ab58483d7fd7bb5e93d6212d532e7', sha256: 'f33e071fc77ccca6198ed7641c348957a947606460276fc9e8a926892a991935'};
+const SELF = {ofLargest: 1e-11, along: 1e-10}, ACROSS = {ofLargest: 1e-3, along: 1e-3}, STATES_M = 0.001, MOVED_KM = 1e-4, IDENTITY = 1e-12;
 // the two-body state of TWO_BODY_SETS' mean elements, recorded on 0.6.38, the same on 0.6.39 (IEEE 754 hex, km and km/s)
 const TWO_BODY = [
   ['4093b9d48c182380', '40b49e65f890b127', '40afdb86f9e97c32', 'c019ddfa467d95f6', 'bff6ea35419b85d0', '400ee1ede45a0864'],
@@ -76,6 +87,14 @@ assert.equal(createHash('sha256').update(mainBytes).digest('hex'), MAIN.sha256, 
 const mainPath = path.join(scratchTemp('sdn-ap-epoch-floor-main-'), `sdn-ap-${MAIN.version}.wasm`);
 fs.writeFileSync(mainPath, mainBytes);
 const mainH = await createStandaloneHarness('browser', mainPath, {surface: 'direct'});
+const harnessOf = async (b) => {
+  const bytes = execFileSync('git', ['-C', modules, 'show', `${b.commit}:propagator/sdn-ap/dist/isomorphic/module.wasm`], {maxBuffer: 1 << 26});
+  assert.equal(createHash('sha256').update(bytes).digest('hex'), b.sha256, `${b.version} (${b.commit.slice(0, 8)}) sha256`);
+  const p = path.join(scratchTemp('sdn-ap-epoch-floor-b-'), `sdn-ap-${b.commit.slice(0, 8)}.wasm`);
+  fs.writeFileSync(p, bytes);
+  return createStandaloneHarness('browser', p, {surface: 'direct'});
+};
+const [cure, selfBase] = [await harnessOf(CURE), await harnessOf(SELF_BASE)];
 
 const RE = 6378.1363, MU = 398600.4418, t0 = Date.parse('2026-10-01T00:00:00Z');
 const iso = (ms) => new Date(ms).toISOString().replace('Z', '');
@@ -141,7 +160,7 @@ for (const c of CASES) {
     assert.equal(f.statusCode, 0, `${c.name}: fit ${f.errorCode} ${f.errorMessage}`);
     return new Uint8Array(f.outputs.find((o) => o.portId === 'elements').payload);
   };
-  const old = await fitBy(base), mine = await fitBy(cur);
+  const old = await fitBy(base), mine = await fitBy(cur), cured = await fitBy(cure), selfRec = await fitBy(selfBase);
   if (!producerRecord) producerRecord = mine;
   const row = {name: c.name};
   // the identity at minute 0, and (caps 31 and 20) the reader whose epoch state differs
@@ -164,15 +183,22 @@ for (const c of CASES) {
       `${c.name}: read with the gravity caps at 12 and 6: remainder ${same ? 'the same' : 'moved'}, flown epoch state moved ${flownMovedKm} km, identity ${idm.gap}`);
   }
   // a set's own flight is as it was
-  const [ob, mc] = [covAt(base, old), covAt(cur, mine)];
+  const [ob, mc] = [covAt(selfBase, selfRec), covAt(cur, mine)];
   const self = ob.status === 0 && mc.status === 0 ? apart(ob.out, mc.out) : null;
   row.self = self;
   check(self && self.ofLargest <= SELF.ofLargest && self.along <= SELF.along,
-    `${c.name}: this build's record on this build against ${BASE.version}'s on ${BASE.version}: ${JSON.stringify(self ?? [ob.status, mc.status])} (within ${JSON.stringify(SELF)})`);
-  // the record written before: its covariance refused by name, its states flown as the base flies them
+    `${c.name}: this build's record on this build against ${SELF_BASE.commit.slice(0, 8)}'s on ${SELF_BASE.commit.slice(0, 8)}: ${JSON.stringify(self ?? [ob.status, mc.status])} (within ${JSON.stringify(SELF)})`);
+  // across a theory change: the rule's release's record on this build against that release's flight of it
+  const [cc, cm2] = [covAt(cure, cured), covAt(cur, cured)];
+  const across = cc.status === 0 && cm2.status === 0 ? apart(cc.out, cm2.out) : null;
+  row.across = across;
+  check(across && across.ofLargest <= ACROSS.ofLargest && across.along <= ACROSS.along,
+    `${c.name}: ${CURE.version}'s record on this build against ${CURE.version}'s flight of it: ${JSON.stringify(across ?? [cc.status, cm2.status])} (within ${JSON.stringify(ACROSS)})`);
+  // the record written before: its covariance refused by name, its states flown as the same record relabeled 0.6.39 flies them
   const oc = covAt(cur, old);
   const out = {output: {EPOCHS: [iso(t0), iso(t0 + 86400000), iso(t0 + 2 * 86400000)], FRAME: pcfOutputFrame.GCRF}};
-  const [pb, pc] = [await base.invoke({methodId: 'propagate', inputs: flight([old], out)}), await cur.invoke({methodId: 'propagate', inputs: flight([old], out)})];
+  const relabeled = repackOcm(old, (u) => { u.PROVENANCE.PRODUCER = `com.spacedatanetwork.sdn-ap-propagator ${CURE.version}`; });
+  const [pb, pc] = [await cur.invoke({methodId: 'propagate', inputs: flight([relabeled], out)}), await cur.invoke({methodId: 'propagate', inputs: flight([old], out)})];
   const bb = pb.statusCode === 0 ? statesOf(pb) : null, cb = pc.statusCode === 0 ? statesOf(pc) : null;
   const lines = cb ? cb.EPHEMERIS_DATA_LINES.length : 0;
   const statesM = bb && cb && lines === 3 && bb.EPHEMERIS_DATA_LINES.length === 3
@@ -180,7 +206,7 @@ for (const c of CASES) {
   Object.assign(row, {preFloorStatus: oc.status, preFloorStates: lines, preFloorStatesM: statesM, preFloorCovLines: cb?.COVARIANCE_MATRIX_LINES.length});
   check(oc.status === -7, `${c.name}: sdnap_covariance_at of ${BASE.version}'s record: ${oc.status}, expected -7`);
   check(statesM <= STATES_M && cb.COVARIANCE_MATRIX_LINES.length === 0 && String(cb.COMMENT ?? '').startsWith('cov-floor-at-theory-state:'),
-    `${c.name}: propagate of ${BASE.version}'s record: ${pc.statusCode === 0 ? `${lines} states ${statesM} m from ${BASE.version}'s, ${cb.COVARIANCE_MATRIX_LINES.length} covariance lines, COMMENT ${cb.COMMENT}` : pc.errorCode}`);
+    `${c.name}: propagate of ${BASE.version}'s record: ${pc.statusCode === 0 ? `${lines} states ${statesM} m from the relabeled record's, ${cb.COVARIANCE_MATRIX_LINES.length} covariance lines, COMMENT ${cb.COMMENT}` : pc.errorCode}`);
   // the record main wrote (0.6.38): refused by name here, its states flown
   const m38 = await fitBy(mainH), mo = covAt(cur, m38);
   const pm = await cur.invoke({methodId: 'propagate', inputs: flight([m38], out)}), cm = pm.statusCode === 0 ? statesOf(pm) : null;
