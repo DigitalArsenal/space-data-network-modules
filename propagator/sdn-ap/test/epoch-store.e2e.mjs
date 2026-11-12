@@ -334,11 +334,11 @@ for (const [label, cfg] of [["NEAREST, SMOOTHSTEP", {}], ["NEAREST, HERMITE", { 
   // so from 0.6.42 the stored record is 0.6.42's own fit (ap-fit-0.6.42.ocm) with its flight
   // (ap-fit-0.6.42.epochs-0.6.42.oem; ap-fit-0.6.36.epochs-0.6.36.oem went), and the own fit is the same record, the bounds
   // kept. 0.6.36's fit is held against this build's flight of 0.6.39's fit, a record with the same mean elements.
-  // 0.6.43 (the zonal theory's constant radial term at the same osculating energy, SPEC 16.23) moves the stored record's
-  // flight by 2,151.662 mm, 2,360.668 um/s and a covariance of 2.28e-6 of a line's largest entry, and records it from itself (ap-fit-0.6.42.epochs-0.6.43.oem; the 0.6.42 file went), the bounds
-  // kept. It moves the fit: 317.33 mm and 347.12 um/s on the grid from 0.6.42's fit (both flown by 0.6.43), FIT_RMS
-  // 37.286 against 37.273 m. So the own fit is 0.6.43's (ap-fit-0.6.43.ocm); the stored record stays 0.6.42's
-  // fit.
+  // 0.6.43 (the zonal theory's constant radial term at the same osculating energy, SPEC 16.23) moves the stored
+  // record's flight by 2,151.662 mm, 2,360.668 um/s and a covariance of 2.28e-6 of a line's largest entry, and records
+  // it from itself (ap-fit-0.6.42.epochs-0.6.43.oem; the 0.6.42 file went), the bounds kept. It moves the fit: 317.33
+  // mm and 347.12 um/s on the grid from 0.6.42's fit (both flown by 0.6.43), FIT_RMS 37.286 against 37.273 m. So the
+  // own fit is 0.6.43's (ap-fit-0.6.43.ocm); the stored record stays 0.6.42's fit.
   const storedRecord = new Uint8Array(fs.readFileSync(new URL("fixtures/ap-fit-0.6.42.ocm", import.meta.url)));
   const fitRecord = new Uint8Array(fs.readFileSync(new URL("fixtures/ap-fit-0.6.43.ocm", import.meta.url)));
   const fitRecordFlight = await command.invoke({ methodId: "propagate_epochs", inputs: [store({}, { output: GRID_OUTPUT }), one([fitRecord])] });

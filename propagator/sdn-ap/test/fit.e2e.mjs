@@ -21,17 +21,15 @@
 // - Against the 0.6.3 dist (git, modules 03ee86234, its SHA-256 checked; 0.6.4's fits of these arcs are 0.6.3's): each
 //   fit's $ODR names its own $OCM (RUN_ID and OCM_CONTENT_ID are the CID of its $OCM's bytes); each stored record's
 //   sdnap_covariance_at at every fixture grid time (state and covariance, 42 doubles a time) and its propagate $OEM in
-//   EME2000 and TEME every 6 h for 7 days within FLIGHT_BOUND on this build and on 0.6.3 (byte identity until 0.6.5), the
-//   AP record's (ap-fit-0.6.42.ocm, 0.6.42's fit of the same inputs; this test's own fit writes the release's own with
-//   SDNAP_RECORD_DIR set; 0.6.4's states EGM-96 and is refused, SPEC 16.2; 0.6.36's has its covariance refused, SPEC 12.4)
-//   against 0.6.43's flight of it (ap-fit-0.6.42-0.6.43.cov, ap-fit-0.6.42.eme2000-0.6.43.oem, ap-fit-0.6.42.teme-0.6.43.oem; history at
-//   FLIGHT_BOUND). With
-//   SDNAP_EXAMPLES set to the published examples (each <id>.ocm and <id>.json), every set flies on both builds at every epoch
-//   of its window, with sdnap_covariance_at at every 12th epoch; a set outside the band 0.6.4's switch moves (class 0 by the
-//   SPEC 6 bands of its mean motion with 0.05 < e <= 0.3) and at e 0.3 or below within EXAMPLE_BOUND, a set in the band or
-//   above e 0.3 measured and printed (nothing masked).
-// JS only moves bytes and compares numbers the module produced.
-//   node test/fit.e2e.mjs
+//   EME2000 and TEME every 6 h for 7 days within FLIGHT_BOUND on this build and on 0.6.3 (byte identity until 0.6.5),
+//   the AP record's (ap-fit-0.6.42.ocm, 0.6.42's fit of the same inputs; this test's own fit writes the release's own
+//   with SDNAP_RECORD_DIR set; 0.6.4's states EGM-96 and is refused, SPEC 16.2; 0.6.36's has its covariance refused,
+//   SPEC 12.4) against 0.6.43's flight of it (ap-fit-0.6.42-0.6.43.cov, ap-fit-0.6.42.eme2000-0.6.43.oem,
+//   ap-fit-0.6.42.teme-0.6.43.oem; history at FLIGHT_BOUND). With SDNAP_EXAMPLES set to the published examples (each
+//   <id>.ocm and <id>.json), every set flies on both builds at every epoch of its window, with sdnap_covariance_at at
+//   every 12th epoch; a set outside the band 0.6.4's switch moves (class 0 by the SPEC 6 bands of its mean motion with
+//   0.05 < e <= 0.3) and at e 0.3 or below within EXAMPLE_BOUND, a set in the band or above e 0.3 measured and printed
+//   (nothing masked). JS only moves bytes and compares numbers the module produced. node test/fit.e2e.mjs
 import fs from "node:fs";
 import { recordReference } from "./lib/record.mjs";
 import { scratchTemp } from "./lib/scratch.mjs";
@@ -130,11 +128,13 @@ const cases = [
 // SGP4XP record and its base (0.6.3) and bounds are unchanged.
 // 0.6.43 (the zonal theory's constant radial term at the same osculating energy, SPEC 16.23) moves the stored record's
 // flight: sdnap_covariance_at 2,151.662 mm, covariance 2.28e-6; propagate EME2000 and TEME over 7 days 2,151.680 mm,
-// 2,360.655 um/s, covariance 1.73e-6 (the record carries its epoch floor at the two-body state of its mean elements, SPEC
-// 12.4, so its covariance moves with the states); it records it from itself (ap-fit-0.6.42-0.6.43.cov, ap-fit-0.6.42.eme2000-0.6.43.oem,
-// ap-fit-0.6.42.teme-0.6.43.oem; the 0.6.42 files went), the bounds kept. It moves the fit: 3.47 m and 3.81 mm/s over 7 days from 0.6.42's fit (both flown by 0.6.43), FIT_RMS 37.286 against 37.273 m (1.3 cm higher).
-// Against the fixture's own truth (propagator/ffm's 550 km trajectory) the error over the arc stays at 16.4 m and 48 to 72 h past it goes from 45 to 46 m. So the reference
-// fit is 0.6.43's (ap-fit-0.6.43.ocm, this test's AP fit); the stored record stays 0.6.42's fit.
+// 2,360.655 um/s, covariance 1.73e-6 (the record carries its epoch floor at the two-body state of its mean elements,
+// SPEC 12.4, so its covariance moves with the states); it records it from itself (ap-fit-0.6.42-0.6.43.cov,
+// ap-fit-0.6.42.eme2000-0.6.43.oem, ap-fit-0.6.42.teme-0.6.43.oem; the 0.6.42 files went), the bounds kept. It moves
+// the fit: 3.47 m and 3.81 mm/s over 7 days from 0.6.42's fit (both flown by 0.6.43), FIT_RMS 37.286 against 37.273 m
+// (1.3 cm higher). Against the fixture's own truth (propagator/ffm's 550 km trajectory) the error over the arc stays at
+// 16.4 m and 48 to 72 h past it goes from 45 to 46 m. So the reference fit is 0.6.43's (ap-fit-0.6.43.ocm, this test's
+// AP fit); the stored record stays 0.6.42's fit.
 const FIT_BOUND = { AP: 3, XP: 0.001, rmsM: 0.01 };
 const FLIGHT_BOUND = { posM: 0.01, covOfLargest: 2e-4 };
 const EXAMPLE_BOUND = { posM: 0.05, covOfLargest: 2.5e-3 };

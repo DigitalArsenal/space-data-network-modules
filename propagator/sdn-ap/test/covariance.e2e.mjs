@@ -107,13 +107,15 @@ const AP_DRAG = { s_e: 1.8579913326733934e-7, s_i: 1.12761105007012e-6, s_l: 7.6
 /// with its numbers (ap-fit-0.6.42-0.6.42.cov; ap-fit-0.6.36-0.6.36.cov went), and the own fit is the same record, the
 /// bounds kept.
 /// 0.6.43 (the zonal theory's constant radial term at the same osculating energy, SPEC 16.23) moves the stored record's
-/// numbers by 2,151.662 mm and a covariance of 2.28e-6 of a time's largest entry, and records them from itself (ap-fit-0.6.42-0.6.43.cov; the 0.6.42 file went), the bounds
-/// kept: the record carries its epoch floor at the two-body state of its mean elements (SPEC 12.4), so its covariance moves
-/// with the states (on a record written before 0.6.39 the term moved what the reader takes off, stack #551). It moves the
-/// fit: 317.33 mm on the grid and a covariance of 2.04e-2 of a time's largest entry from 0.6.42's fit (both flown by
-/// 0.6.43); its epoch covariance by 1.31e-2 of that record's largest entry and its floors (the fit's residual covariance,
-/// SPEC 12.4) by up to 4.3 times themselves (FLOOR_WU_KM2, the smallest, which changes sign; FLOOR_UU_KM2 3.0 %, FLOOR_WV_KM2
-/// 6.2 %, the rest under 0.3 %); FIT_RMS 37.286 against 37.273 m. So the own fit is 0.6.43's (ap-fit-0.6.43.ocm); the stored record stays 0.6.42's fit.
+/// numbers by 2,151.662 mm and a covariance of 2.28e-6 of a time's largest entry, and records them from itself
+/// (ap-fit-0.6.42-0.6.43.cov; the 0.6.42 file went), the bounds kept: the record carries its epoch floor at the
+/// two-body state of its mean elements (SPEC 12.4), so its covariance moves with the states (on a record written before
+/// 0.6.39 the term moved what the reader takes off, stack #551). It moves the fit: 317.33 mm on the grid and a
+/// covariance of 2.04e-2 of a time's largest entry from 0.6.42's fit (both flown by 0.6.43); its epoch covariance by
+/// 1.31e-2 of that record's largest entry and its floors (the fit's residual covariance, SPEC 12.4) by up to 4.3 times
+/// themselves (FLOOR_WU_KM2, the smallest, which changes sign; FLOOR_UU_KM2 3.0 %, FLOOR_WV_KM2 6.2 %, the rest under
+/// 0.3 %); FIT_RMS 37.286 against 37.273 m. So the own fit is 0.6.43's (ap-fit-0.6.43.ocm); the stored record stays
+/// 0.6.42's fit.
 const AP_COV_FLIGHT = { posM: 0.004, velMmS: 0.004, covOfLargest: 1e-4 };
 const AP_COV_FIT = { posM: 0.1, covOfLargest: 2.5e-4, epoch: 7.5e-4, floors: 2.5e-4 };
 

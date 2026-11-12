@@ -121,11 +121,14 @@ const { ap, xp, rows } = await fixtureSets(h);
 // kept. 0.6.36's fit is held against this build's flight of 0.6.39's fit, a record with the same mean elements bit for
 // bit (0.361 mm: the state path against the covariance's nominal), its covariance refused by name.
 // 0.6.43 (the zonal theory's constant radial term at the same osculating energy, SPEC 16.23) moves the stored record's
-// flight by 2,151.662 mm, 2,360.668 um/s and a covariance of 2.41e-6 of a line's largest entry, and records it from itself (ap-fit-0.6.42-0.6.43.oem; the 0.6.42 file went), the bounds kept:
-// the record carries its epoch floor at the two-body state of its mean elements (SPEC 12.4), so its covariance moves with
-// the states (on a record written before 0.6.39 the term moved what the reader takes off, by 8.77e-2 of a line's largest
-// entry with the same states, stack #551). It moves the fit: 3.47 m and 3.81 mm/s over 7 days from 0.6.42's fit (both flown by 0.6.43), FIT_RMS 37.286 against 37.273 m (1.3 cm higher); on the grid 317.33 mm and 347.12 um/s. Against the fixture's own truth (propagator/ffm's 550 km trajectory) the error over the arc stays at 16.4 m and 48 to 72 h past it goes from 45 to 46 m. So the own fit is 0.6.43's (ap-fit-0.6.43.ocm);
-// the stored record stays 0.6.42's fit.
+// flight by 2,151.662 mm, 2,360.668 um/s and a covariance of 2.41e-6 of a line's largest entry, and records it from
+// itself (ap-fit-0.6.42-0.6.43.oem; the 0.6.42 file went), the bounds kept: the record carries its epoch floor at the
+// two-body state of its mean elements (SPEC 12.4), so its covariance moves with the states (on a record written before
+// 0.6.39 the term moved what the reader takes off, by 8.77e-2 of a line's largest entry with the same states, stack
+// #551). It moves the fit: 3.47 m and 3.81 mm/s over 7 days from 0.6.42's fit (both flown by 0.6.43), FIT_RMS 37.286
+// against 37.273 m (1.3 cm higher); on the grid 317.33 mm and 347.12 um/s. Against the fixture's own truth
+// (propagator/ffm's 550 km trajectory) the error over the arc stays at 16.4 m and 48 to 72 h past it goes from 45 to 46
+// m. So the own fit is 0.6.43's (ap-fit-0.6.43.ocm); the stored record stays 0.6.42's fit.
 const FLIGHT = { posM: 0.004, velMmS: 0.004, covOfLargest: 1e-4 };
 const FIT = { posM: 0.1, velMmS: 0.1, rmsM: 0.01 };
 

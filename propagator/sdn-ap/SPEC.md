@@ -4852,10 +4852,12 @@ output state would drift up to ten times faster along-track (seeded at a 500 km 
 along-track RMS is 7.8 km on 0.6.36, 77 km at the same angular rate, 7.8 km at the same energy). The fit's residuals
 are positions only, so the fitted elements are the same either way; the epoch covariance's velocity part moves by about
 1e-6 of itself. A record carries its epoch floor at the two-body state of its mean elements (12.4), so the term does not
-move what a reader takes off: a record written and fitted to zero residual by 0.6.39, flown by this build against
-0.6.39's flight of it, has its along-track variance at 24 h within 1.7e-5 of 0.6.39's at 300 to 1,200 km and i 0.5 to 97
-deg (seven cases; under 1.7e-5 over 1 to 48 h), while the term moves the states up to 45 m. The main output path, its fallback (where e^2 or tan^2(i/2) is at most 1e-24) and the covariance's
-sigma-set pairs take the same term, each set at its own a and i.
+move what a reader takes off. A record written and fitted to zero residual by 0.6.39, flown against 0.6.39's flight of it
+at 300 to 1,200 km and i 0.5 to 97 deg (seven cases), has its along-track variance at 24 h within 1.7e-5 of 0.6.39's with
+the term on 0.6.41 (the term moves the states up to 45 m), and within 1.4e-4 with the term on 0.6.42, whose low table's fast
+side moves them too (0.6.42 alone: 1.5e-4); `test/epoch-floor.e2e.mjs` holds it at 1e-3. The main output path, its
+fallback (where e^2 or tan^2(i/2) is at most 1e-24) and the covariance's sigma-set pairs take the same term, each set at
+its own a and i.
 SGP4XP's output (section 8) is unchanged, bit for bit. J2 and J4 are 1.3's (EGM-96's). The numerical propagator's EGM2008
 J4 differs by 1.7e-4 of itself, which would move the J4 part by at most 3 mm.
 

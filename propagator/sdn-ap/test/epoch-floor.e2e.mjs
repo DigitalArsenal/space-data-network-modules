@@ -36,11 +36,11 @@
 //     time's largest entry (printed), and no build before the cure carries exp(0.095). Across the cure itself they were held
 //     to 1e-11 between the fast side's builds before and after it (258d824d and 9855dadd, both at exp(0.10)).
 // - Across a theory change (from 0.6.43, the case that found stack #551): 0.6.39's record flown by this build against
-//   0.6.39's flight of it, sdnap_covariance_at hourly to 48 h, within ACROSS, 1e-3 (measured on this test's cases: up to 2.1e-4 of a
-//   time's largest entry and in along-track variance, at 1,200 km and i 0.5, an arc this fit does not reach exactly; 0 at
-//   caps 0, which carry no term; over seven cases fitted to zero residual, under 1.5e-4 on 0.6.42 and with the term on it). The fault it guards was 0.1 and up
-//   (0.6.36's records under the term came out negative or 85 times too narrow), so the bound is about five times the
-//   largest measured and a hundred times under the fault.
+//   0.6.39's flight of it, sdnap_covariance_at hourly to 48 h, within ACROSS, 1e-3 (measured on this test's cases: up
+//   to 2.1e-4 of a time's largest entry and in along-track variance, at 1,200 km and i 0.5, an arc this fit does not
+//   reach exactly; 0 at caps 0, which carry no term; over seven cases fitted to zero residual, under 1.5e-4 on 0.6.42
+//   and with the term on it). The fault it guards was 0.1 and up (0.6.36's records under the term came out negative or
+//   85 times too narrow), so the bound is about five times the largest measured and a hundred times under the fault.
 // - Caps 0 (an AP set without gravity terms): this build's record flies its covariance with the floor at the two-body
 //   state (one rule for every AP record), and BASE's has it refused.
 // - BASE's record on this build: sdnap_covariance_at -7; propagate status 0, its three states within STATES_M of this
@@ -215,7 +215,8 @@ for (const c of CASES) {
   row.across = across;
   check(across && across.ofLargest <= ACROSS.ofLargest && across.along <= ACROSS.along,
     `${c.name}: ${CURE.version}'s record on this build against ${CURE.version}'s flight of it: ${JSON.stringify(across ?? [cc.status, ccm.status])} (within ${JSON.stringify(ACROSS)})`);
-  // the record written before: its covariance refused by name, its states flown as the same record relabeled 0.6.39 flies them
+  // the record written before: its covariance refused by name, its states flown as the same record relabeled 0.6.39 flies
+  // them
   const oc = covAt(cur, old);
   const out = {output: {EPOCHS: [iso(t0), iso(t0 + 86400000), iso(t0 + 2 * 86400000)], FRAME: pcfOutputFrame.GCRF}};
   const relabeled = repackOcm(old, (u) => { u.PROVENANCE.PRODUCER = `com.spacedatanetwork.sdn-ap-propagator ${CURE.version}`; });

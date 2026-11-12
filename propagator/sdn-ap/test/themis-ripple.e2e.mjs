@@ -13,7 +13,8 @@
 //    days at 600 s give ephemerides within NO_HARM
 //    (below) on this build and on BASE (from 0.6.43 the zonal theory's constant radial term's first build on 0.6.42, git
 //    a5293c54, SHA-256 checked, its own version string 0.6.43; until then the low table's fast side's first build with the
-//    epoch floor of SPEC 12.4, git 9855dadd, its own version string 0.6.39; it must be a build of this theory, since no harm is held at 15 mm and the
+//    epoch floor of SPEC 12.4, git 9855dadd, its own version string 0.6.39; it must be a build of this theory, since no
+//    harm is held at 15 mm and the
 //    fast side moves a low-table set 60 to 96 m from a build without it, and a build with the epoch floor, since a reader before
 //    it takes 0.6.36's record's floor off at its own theory state; the fast side's first build, git 73331c6a, version string
 //    0.6.36, before it;
@@ -83,9 +84,10 @@ const BASE_VERSION = '0.6.43', BASE = 'a5293c54b', BASE_SHA256 = 'f33e071fc77ccc
 // figure above).
 // The zonal theory's constant radial term (0.6.43, SPEC 16.23) moves them from 9855dadd: LEO 2,029.98, geostationary 183.49,
 // Etalon 14.37, GPS 37.90, e 0.25 462.26 and e 0.3 462.26 mm (velocity 2.23 to 2,227.31 um/s), and the fitted set (0.6.39's
-// fit) by 2,151.66 mm, its covariance by 9.40e-7 of a line's largest entry: every AP set with gravity terms carries the term, about (R_E / a)^3 of the Earth's
-// radius times J2 squared; SGP4XP byte-identical. From 0.6.43 the baseline is the term's first build on 0.6.42 (git
-// a5293c54, not a release), every AP set under the one bound, 15 mm; it carries the fast side and the epoch floor.
+// fit) by 2,151.66 mm, its covariance by 9.40e-7 of a line's largest entry: every AP set with gravity terms carries the
+// term, about (R_E / a)^3 of the Earth's radius times J2 squared; SGP4XP byte-identical. From 0.6.43 the baseline is the
+// term's first build on 0.6.42 (git a5293c54, not a release), every AP set under the one bound, 15 mm; it carries the fast
+// side and the epoch floor.
 const NO_HARM = {posM: 0.015, velMmS: 0.01, covOfLargest: 1e-3};
 const modules = fileURLToPath(new URL('../../../', import.meta.url)), packageRoot = path.join(modules, 'propagator/sdn-ap');
 // a scratch outside the package: the test build copies the package's sources, which cannot hold its own destination
