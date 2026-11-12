@@ -89,6 +89,16 @@ for (const e of [0.05, 0.1, 0.2])
   for (const tesseral of [0, 31])
     REGIMES.push({ name: `leo-e${e}${tesseral ? "-t31" : ""}`, n: revPerDay((RE + 500) / (1 - e)), e, i: 63, raan: 40, argp: 60, ma: 10, bterm: 0.001,
       agom: 0.01, weather: "quiet", tesseral });
+// Sets that build the first-order grid above e 0.3 (stack #497): the resonance classes (half-day, one-day, eight-hour,
+// sixteen-hour) and the long-period regime, each with the tesseral terms to degree 31 (their grid in the eccentric anomaly).
+for (const r of REGIMES.filter((q) => ["gto", "molniya", "themis", "chandra", "tess"].includes(q.name)))
+  REGIMES.push({ ...r, name: `${r.name}-t31`, tesseral: 31 });
+REGIMES.push(
+  { name: "eight-hour-e0.5-t31", n: 3.0, e: 0.5, i: 55, raan: 20, argp: 200, ma: 10, bterm: 0.001, agom: 0.01, weather: "quiet", tesseral: 31 },
+  { name: "sixteen-hour-e0.5-t31", n: 1.5, e: 0.5, i: 40, raan: 220, argp: 100, ma: 10, bterm: 0.001, agom: 0.01, weather: "quiet", tesseral: 31 },
+  { name: "long-period-e0.9-t31", n: revPerDay((RE + 1000) / 0.1), e: 0.9, i: 55, raan: 120, argp: 30, ma: 10, bterm: 0.001, agom: 0.01, weather: "quiet",
+    tesseral: 31 },
+);
 const regimes = PICK ? REGIMES.filter((r) => PICK.includes(r.name)) : REGIMES;
 if (!regimes.length) throw new Error(`no regime among ${PICK}`);
 
@@ -243,7 +253,7 @@ async function diff() {
       const ref = new Array(count);
       let refused = 0;
       for (let k = 0; k < count; ++k) { ref[k] = before.state(W[k], F[k]); if (!Array.isArray(ref[k])) ++refused; }
-      const row = { regime: r.name, theory, states: count, refusedBefore: refused };
+      const row = { regime: r.name, theory, states: count, refusedBefore: refused, refusedFromStart: !Array.isArray(ref[0]) };
       for (const [order, ks] of [["time", null], ["reverse", reversed], ["shuffled", shuffled]]) {
         if (ks) await after.load();
         let dr = 0, dv = 0, mismatch = 0;
@@ -267,9 +277,15 @@ async function diff() {
 const result = DIFF ? await diff() : await cost();
 if (JSON_OUT) fs.writeFileSync(JSON_OUT, `${JSON.stringify(result, null, 1)}\n`);
 if (DIFF && BOUND) {
-  const over = result.rows.filter((r) => r.time.maxPositionM > BOUND[0] || r.time.maxVelocityMps > BOUND[1] || r.time.statusMismatch > 0);
-  for (const r of over) console.log(`OVER ${r.regime} ${r.theory}: ${r.time.maxPositionM} m, ${r.time.maxVelocityMps} m/s, ${r.time.statusMismatch} status`);
-  console.log(over.length ? `KERNEL-COST DIFF FAIL: ${over.length} of ${result.rows.length} over ${BOUND[0]} m or ${BOUND[1]} m/s` : `KERNEL-COST DIFF PASS: every state of ${result.rows.length} flights within ${BOUND[0]} m and ${BOUND[1]} m/s in time order`);
+  // every order is gated: a state over the bound, a state refused by one build and answered by the other (or refused with
+  // another code), and a flight that answers nothing at all on the reference build fail the diff
+  const orders = ["time", "reverse", "shuffled"];
+  const nothing = (r) => r.refusedBefore === r.states;
+  const over = result.rows.filter((r) => nothing(r) || orders.some((o) => r[o].maxPositionM > BOUND[0] || r[o].maxVelocityMps > BOUND[1] || r[o].statusMismatch > 0));
+  for (const r of over) console.log(`OVER ${r.regime} ${r.theory}: ${orders.map((o) => `${o} ${r[o].maxPositionM} m, ${r[o].maxVelocityMps} m/s, ${r[o].statusMismatch} status`).join("; ")}${nothing(r) ? "; answers nothing" : ""}`);
+  const fromStart = result.rows.filter((r) => r.refusedFromStart).length;
+  console.log(`flights refused from their first state: ${fromStart} of ${result.rows.length}`);
+  console.log(over.length ? `KERNEL-COST DIFF FAIL: ${over.length} of ${result.rows.length} over ${BOUND[0]} m or ${BOUND[1]} m/s, differing in status or answering nothing` : `KERNEL-COST DIFF PASS: every state of ${result.rows.length} flights within ${BOUND[0]} m and ${BOUND[1]} m/s in time order, in reverse and shuffled`);
   process.exit(over.length ? 1 : 0);
 }
 process.exit(0);

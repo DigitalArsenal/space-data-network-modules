@@ -13,7 +13,12 @@
 // "BTERM_SOURCE=BTERM AGOM_SOURCE=AGOM" or "BTERM_SOURCE=BSTAR AGOM_SOURCE=MEAN_MOTION_DDOT".
 // -----------------------------------------------------------------------------
 
+static int ingest_omm_call(void);
 extern "C" int ingest_omm(void) {
+  sdnap::mem::CallMark call_mark;
+  return sdnap::mem::finish(ingest_omm_call());
+}
+static int ingest_omm_call(void) {
   using namespace sdnap;
   plugin_reset_output_state();
   std::vector<ElementRow> rows;

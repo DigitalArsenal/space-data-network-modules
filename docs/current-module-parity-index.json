@@ -1,5 +1,5 @@
 {
-  "generatedAt": "2026-11-12T11:03:20.013Z",
+  "generatedAt": "2026-11-12T19:57:30.555Z",
   "moduleCount": 160,
   "parityScopeModuleCount": 60,
   "isomorphicWasmCount": 154,
@@ -7502,7 +7502,7 @@
       "pluginId": "com.spacedatanetwork.sdn-ap-propagator",
       "name": "SDN-AP Propagator",
       "pluginFamily": "propagator",
-      "version": "0.6.45",
+      "version": "0.6.48",
       "methodIds": [
         "export_omm",
         "fit",
@@ -7525,7 +7525,7 @@
       ],
       "cxxSourceFileCount": 1,
       "cSourceFileCount": 0,
-      "testFileCount": 196,
+      "testFileCount": 200,
       "parityScope": true,
       "action": "review-before-parity-use",
       "sourceFiles": [
@@ -7553,6 +7553,9 @@
         "test/covariance-realism.e2e.mjs",
         "test/covariance-realism.mjs",
         "test/covariance.e2e.mjs",
+        "test/decay-fit.e2e.mjs",
+        "test/decay-wide.e2e.mjs",
+        "test/decay.e2e.mjs",
         "test/docs-version.e2e.mjs",
         "test/drag-cost.mjs",
         "test/drag-high-eccentricity.e2e.mjs",
@@ -7603,6 +7606,7 @@
         "test/fixtures/xp-fit-0.4.0.omm",
         "test/fixtures/xp-fit-0.6.4.ocm",
         "test/geo-step-convergence.e2e.mjs",
+        "test/grid-cache.e2e.mjs",
         "test/gto-geopotential-perigee.e2e.mjs",
         "test/gto-high-degree-perigee-terms.e2e.mjs",
         "test/heo-frame.e2e.mjs",

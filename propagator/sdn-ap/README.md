@@ -1,6 +1,6 @@
 # sdn-ap-propagator
 
-Version 0.6.49 (dist ce5c96aa).
+Version 0.6.49 (dist 2492891b).
 
 General-perturbations propagation of whole catalogs in one isomorphic WASM module (browser and WasmEdge), with two
 theories and AP, an advanced propagator that builds on the entire history of astrodynamics ($PCF FORCES selects its drag
@@ -54,6 +54,12 @@ Build: `npm run build` (module SDK compiler lane, clang `wasm32-wasip1-threads`,
   caller's own); `reset` non-zero reads and clears it in one step. Such a record states CONVERGED false and, in a line of
   its OD COMMENT no version before wrote, says so: a fit under the drag that ends at 40 keeps the elements, statistics and
   flights of the version before, and its record's bytes differ by that line alone.
+- Memory (SPEC 1.6, 16.11; `test/grid-cache.e2e.mjs`): a method during which one of the module's own allocations failed
+  refuses with errorCode `out-of-memory` and emits nothing, never success nor another reason (a decay answer, SPEC 16.25,
+  included); `sdnap_fit` then gives status -1 and leaves its row as it came.
+  `sdnap_wide_grid_budget(bytes, out)` sets the grid cache's byte bound (512 MiB by default; live and idle grids, each at
+  its allocated bytes, the least recently used idle grid freed first) when bytes is 1 or more (1 keeps no idle grid), and
+  writes the bound, the bytes held, the grids held and those idle. The bound decides which grids are kept, never a state.
 - Covariance (SPEC 12; `test/covariance.e2e.mjs`): `fit` writes, for its SGP4XP sets, the fit's covariance at its epoch
   as COVARIANCE (TEME, 21 values) with USER_DEFINED_SDNAP_COV_x rows (the BTERM and AGOM parameters' covariances, the
   theory floor, the process noise); `sdnap_covariance_at(omm, length, minutes, count, out)` gives, per time, the TEME
@@ -252,6 +258,19 @@ motion leaves the half-day band during the week, the day-7 along-track error is 
 against -20,534.324 m for the noncrossing companion (11.6 %; E2E bound 25 %). SPEC 16.7 defines the fixture. Through 0.6.11
 these were -168,218.829 and -136,267.630 m (-167,341.326 m when 0.6.6 and 0.6.7 rebuilt their tables for the current
 class): the epoch state at perigee came after the whole drag pass, which FFM, seeded there, still flies in part.
+
+An AP flight ends at its decay (SPEC 16.25, stack #564). The decay comes when the set loses more perigee radius over a
+revolution, or over the grid's next step where that is longer, than one density scale height at its mean perigee, or when
+its mean perigee falls under 100 km. That time is the record's, the same in any call order.
+- Past it, a state has status 4 (ORBPRO_STATE_DECAYED).
+- `propagate` and `propagate_epochs` answer the epochs before it, the block stating "decayed:<time>; <n> epochs after it
+  refused", and refuse a call with none before it as `decayed:<time>`.
+- `fit` refuses a set that decays inside its arc (`decayed-in-arc:<time>`) and, for an AP set whose mean perigee is under
+  400 km, notes "decays at <time>" in the record's OD COMMENT when the set decays within 7 days of its epoch.
+- Before this rule, #564's two seeds flew on to 31,250 km and 14.5 km of jump and under the surface. They now stop at
+  136.7 km and 160.7 km, every state before that unchanged to the bit for a set at or below e 0.3 (`test/decay.e2e.mjs`);
+  above e 0.3, the states in the last fifth of a 48 h interval whose next node lies past the crossing are answered from the
+  interval's own grid (SPEC 16.25).
 
 Above e 0.3 with drag, each perigee pass changes the osculating elements smoothly over the pass, at the pass's own width
 in the mean anomaly (SPEC 16.12). Through 0.6.11 they changed in one step at perigee, so the output jumped there: by 42

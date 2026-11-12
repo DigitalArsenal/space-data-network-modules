@@ -299,13 +299,18 @@ struct Bank {
   fit::Options o{};
   xpt::XpSat* sats = nullptr;  ///< [0] the set, then the moved sets
   int count = 0;
+  /// the slots init started: a one-sided parameter (an AGOM at or under its step) leaves its minus slot as a zeroed XpSat that count
+  /// still spans; nothing may fly such a slot
+  bool live[1 + 2 * fit::kMaxParams] = {};
 };
+inline bool live_slot(const Bank& b, int q) { return q >= 0 && q < b.count && b.live[q]; }
 
 inline void release(Bank& b) {
   for (int i = 0; b.sats != nullptr && i < b.count; ++i) xpt::xp_release(b.sats[i]);
   std::free(b.sats);
   b.sats = nullptr;
   b.count = 0;
+  for (bool& f : b.live) f = false;  // a second init on this bank starts from no started slot
 }
 
 inline bool init(const ElementRow& row, const fit::Options& o, Bank& b, xpt::XpSat* nominal = nullptr) {
@@ -316,7 +321,7 @@ inline bool init(const ElementRow& row, const fit::Options& o, Bank& b, xpt::XpS
   int moved = 0;
   for (int j = 0; j < b.np; ++j) b.slot[j] = modeled(b.kind[j]) ? moved++ : -1;
   const int total = 1 + 2 * moved;
-  b.sats = static_cast<xpt::XpSat*>(std::calloc(static_cast<size_t>(total), sizeof(xpt::XpSat)));
+  b.sats = static_cast<xpt::XpSat*>(sdnap::mem::calloc(static_cast<size_t>(total), sizeof(xpt::XpSat)));
   if (b.sats == nullptr) return false;
   drag::table();
   auto start = [&](const double* x, int slot) {
@@ -324,12 +329,14 @@ inline bool init(const ElementRow& row, const fit::Options& o, Bank& b, xpt::XpS
     fit::row_of(x, o, r);
     const bool ok = xpt::xp_init(elements_of(r), b.sats[slot]) == kPropOk;
     if (slot + 1 > b.count) b.count = slot + 1;
+    b.live[slot] = true;
     return ok;
   };
   if (nominal != nullptr && xpt::is_ap_ctx(nominal->ctx)) {
     b.sats[0] = *nominal;
     *nominal = xpt::XpSat{};
     b.count = 1;
+    b.live[0] = true;
     if (b.sats[0].init_error != 0) return false;
   } else {
     if (!start(b.x, 0)) return false;
@@ -531,8 +538,8 @@ inline bool noise_of(const ElementRow& row, double t_a, double sigma_km, double 
   ng_rate = 0.0;
   ElementRow none = row;
   none.bterm = 0.0;
-  xpt::XpSat* s1 = static_cast<xpt::XpSat*>(std::calloc(1, sizeof(xpt::XpSat)));
-  xpt::XpSat* s0 = static_cast<xpt::XpSat*>(std::calloc(1, sizeof(xpt::XpSat)));
+  xpt::XpSat* s1 = static_cast<xpt::XpSat*>(sdnap::mem::calloc(1, sizeof(xpt::XpSat)));
+  xpt::XpSat* s0 = static_cast<xpt::XpSat*>(sdnap::mem::calloc(1, sizeof(xpt::XpSat)));
   drag::table();
   const bool ok = s1 != nullptr && s0 != nullptr && xpt::xp_init(elements_of(row), *s1) == kPropOk;
   if (ok && xpt::xp_init(elements_of(none), *s0) == kPropOk && s1->epoch.y[xpt::kN] > 0.0)

@@ -229,6 +229,12 @@ for (const [name, o] of Object.entries(ORBITS)) {
       bterm: a < RE + 2000 ? 0.005 + 0.05 * rnd() : 0.01, agom: 0.01, norad: 100000 + k, theory: THEORY.SGP4XP };
     if (e < 0.3) rows.push(row);
   }
+  // stack #564 (SPEC 16.25): one decaying AP set (perigee 200 km, BTERM 0.01: refused from about 70 h) beside the catalog mix, flown at
+  // instants on both sides of its crossing, so the comparison below asserts the same status and the same bits for it on 0 and on
+  // 4 threads. A test of the law on the new path (a crossing found by whichever worker's node run reaches it), not a regression test
+  const decayRow = { epochWhole: 2461328.5, epochFrac: 0, meanMotion: revPerDay((RE + 200) / (1 - 0.001)), ecc: 0.001, inc: 55, raan: 40, argp: 90, ma: 0,
+    bterm: 0.01, agom: 0.01, norad: 199564, theory: THEORY.SGP4XP };
+  rows.push(decayRow);
   // each instant's planes and statuses, the calls' returns, sdnap_pool_stats after the last
   const fly = async (threads, setup = () => {}) => {
     const m = await open(testBuild, threads);
@@ -260,6 +266,10 @@ for (const [name, o] of Object.entries(ORBITS)) {
   console.log(`the row store's build of ${rows.length} AP rows at 31/20: ${zero.storeMB.toFixed(2)} MB of memory on 0 threads, ${four.storeMB.toFixed(2)} MB on 4 (at most ${ROW_STORE_MB} MB)`);
   const differ = differing(four, zero), values = zero.all.length * zero.all[0].length;
   check(differ === 0, `the pool's threads: ${differ} of ${values} values differ between 0 and 4 threads`);
+  // the decaying set (the last row): flown (status 0) at the first instant, refused as decayed (status 4) at the last, on both
+  const statusAt = (r, k) => r.all[k][6 * rows.length + rows.length - 1];
+  check(statusAt(zero, 0) === 0 && statusAt(zero, 19) === 4 && statusAt(four, 0) === 0 && statusAt(four, 19) === 4,
+    `the decaying set's status at the first and last instants: ${statusAt(zero, 0)}, ${statusAt(zero, 19)} on 0 threads; ${statusAt(four, 0)}, ${statusAt(four, 19)} on 4 (0 and 4 expected)`);
   // stack #487: the memory does not grow inside a threaded batch (its sets' room is made before it; sbrk refuses inside it)
   const [, batches, refused, deferred, grew, dead] = four.pool;
   check(zero.pool[1] === 0 && batches === 20 && grew === 0 && dead === 0, `the pool's batches: ${batches} threaded (20 expected), ${grew} with the memory grown inside (none expected), dead ${dead}`);

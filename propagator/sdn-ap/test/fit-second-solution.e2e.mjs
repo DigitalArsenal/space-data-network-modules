@@ -69,7 +69,7 @@ if (sha256(arc) === ARC.sha256) {
   const config = configuration({ theory: "AP", forces: VACUUM_AP });
   // SPEC 16.11: the fit's grid lookups (sdnap_wide_grid_stats: [0] by sets outside a fit, [1] by a fit's sets), reset before the
   // fit, read after it; the grid cache (sdnap_wide_grid_cache: held grids, bytes) before and after it
-  const x = cand.instance.exports, statsPtr = x.sdnap_alloc(16), cachePtr = x.sdnap_alloc(16);
+  const x = cand.instance.exports, statsPtr = x.sdnap_alloc(16), cachePtr = x.sdnap_alloc(24);  // sdnap_wide_grid_cache writes three doubles
   const cache = () => { x.sdnap_wide_grid_cache(cachePtr); return Array.from(new Float64Array(cand.memory.buffer, cachePtr, 2)); };
   x.sdnap_wide_grid_stats(1, statsPtr);
   const held0 = cache();
@@ -150,7 +150,7 @@ const GEO_AP = { fitRmsM: 0.02, truthM: 2.3 };
     check(sha256(payload) === pin, `${file} is ${sha256(payload)}, pinned ${pin}`);
     return { portId, typeRef: T(type), payload };
   });
-  const x = cand.instance.exports, statsPtr = x.sdnap_alloc(16), cachePtr = x.sdnap_alloc(16);
+  const x = cand.instance.exports, statsPtr = x.sdnap_alloc(16), cachePtr = x.sdnap_alloc(24);  // sdnap_wide_grid_cache writes three doubles
   const cache = () => { x.sdnap_wide_grid_cache(cachePtr); return Array.from(new Float64Array(cand.memory.buffer, cachePtr, 2)); };
   x.sdnap_wide_grid_stats(1, statsPtr);
   const held0 = cache();
