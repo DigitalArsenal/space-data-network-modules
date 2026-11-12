@@ -1,7 +1,7 @@
 #!/usr/bin/env node
 // A high-apogee orbit on model truth (SPEC 16.11): e 0.9, perigee 5,000 km, apogee 210,000 km, i 70 (the synthetic set's
 // grid-hp5000-e0.9-i70 elements, seeded at perigee on test/lib/heo-model-truth.mjs's epoch). The truth: FFM (named below by
-// its SHA-256) with EGM96 70 x 70 and DE440's Sun and Moon, no radiation or drag, 30-minute states over 5 days. AP (degree
+// its SHA-256) with EGM2008 70 x 70 and DE440's Sun and Moon, no radiation or drag, 30-minute states over 5 days. AP (degree
 // 31, zonal 20, drag and radiation held at 0) fitted to those 5 days, then flown at their epochs. D, the largest 3D distance
 // to the truth, is what the theory cannot represent over 5 days: no fit before a cutoff adds to it.
 // In the long-period regime the Sun and Moon act on the mean elements as point masses and move the mean motion along each
@@ -36,8 +36,9 @@ console.log(JSON.stringify({name: 'e0.9-perigee-5000', states: lines.length, D_m
 await h.close?.();
 // The recorded figure, within 1 m either way. History (this truth): 0.6.26 1,422.0 m at 84.5 h; 0.6.26 with the grid's mean
 // motion held at the epoch's alone 689.4 m at 86 h; 0.6.29 (the Sun and Moon through the output, SPEC 16.19) 1,427.4 m;
-// 0.6.30, the grid's mean motion held in the long-period regime (SPEC 16.11) on 0.6.29, 618.6 m at 83.5 h.
-const RECORDED = 618.6;
+// 0.6.30, the grid's mean motion held in the long-period regime (SPEC 16.11) on 0.6.29, 618.6 m at 83.5 h; 0.6.34, the
+// epoch-axis turn to TEME of date for every AP set (SPEC 16.4), 599.4 m at 83.5 h.
+const RECORDED = 599.4;
 if (!process.env.SDN_AP_MODEL_TRUTH_MODULE)
   assert.ok(Math.abs(D - RECORDED) <= 1, `D over the 5 days ${D.toFixed(1)} m, recorded ${RECORDED} m (0.6.26: 1,422.0 m)`);
 console.log('High-apogee model truth E2E: PASS');

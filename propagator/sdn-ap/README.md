@@ -1,6 +1,6 @@
 # sdn-ap-propagator
 
-Version 0.6.33 (dist 9bd03921).
+Version 0.6.36 (dist 4e939b31).
 
 General-perturbations propagation of whole catalogs in one isomorphic WASM module (browser and WasmEdge), with two
 theories and AP, an advanced propagator that builds on the entire history of astrodynamics ($PCF FORCES selects its drag
@@ -181,7 +181,9 @@ Build: `npm run build` (module SDK compiler lane, clang `wasm32-wasip1-threads`,
 first-order terms to 12, near-resonant terms, shallow resonances and the half-day and one-day resonant tails to 31; each to the degree asked if lower;
 MAXIMUM_TESSERAL_DEGREE is a cap on families, not the degree of a field: SPEC 16.1); `HAS_MAXIMUM_DEGREE`
 and `MAXIMUM_DEGREE` add the zonal tail from J6. With either set, mean elements hold the axes of the set's epoch and each state is
-carried to TEME of its date. The field is EGM-96, pinned from propagator/ffm/lib by `build.mjs`. With both at 0 or unset the theory is
+carried to TEME of its date. The field is EGM2008 (from 0.6.36; EGM-96 through 0.6.34), pinned from propagator/ffm/lib by `build.mjs`. From 0.6.36 a flight
+refuses an AP set with gravity terms whose PERTURBATIONS.GRAVITY_MODEL is not that field (gravity-model-mismatch): every
+such record written before 0.6.36 is fitted again. With both at 0 or unset the theory is
 SGP4XP bit for bit. A set fitted with them records `SDNAP_GRAVITY_TERMS`, and a call with other degrees refuses it
 (`gravity-terms-mismatch`); `ingest_omm` refuses any such set. E2E: `test/ap-terms.e2e.mjs`.
 
@@ -715,11 +717,10 @@ to numerical-integral precision and third order within |de| <= 0.02. Measured pe
 errors are 1.1e-4 at |de| = 0.01, 1.5e-3 at 0.02, and 4-15% at 0.05; these are not uniform error bounds.
 SPEC 6.4 and 16.2 distinguish this approximation from the added high-degree half-day tail.
 
-The nonresonant long-period AP branch uses one native TEME-of-date path in fitting and propagation, without
-an additional epoch-axis rotation (SPEC 16.4). On the seven already-read AP6 TESS windows, the exploratory
-median paired day-3 AP-minus-XP error falls from +420.105792 to -0.000784 m, within the 50 m bound. All four
-synthetic HEO fixtures retain their day-1/3/7 errors exactly (0.000 m change, <1 m allowed), and XP retains
-its digest. `test/heo-frame.e2e.mjs` prints every window and fixture; unread-window confirmation is separate.
+Every AP set carries its epoch-axis states to TEME of date by M(t) M(t0)^T, in fitting and propagation alike
+(SPEC 16.4). That includes the long-period regime's class 0 sets, the sets with epoch periods of about 1,795
+minutes and more. A covariance's sigma sets take the same rotation as their nominal. SGP4XP takes no such
+rotation. `test/heo-frame.e2e.mjs` prints the TESS replay's every window and the four synthetic HEO fixtures.
 
 AP adds each third body's tidal terms of degree 4 to 10 to the averaged rates of orbits with periods below 1100 min
 (SPEC 16.8; XP's stop at degree 3). On the eleven already-read AP6 windows of each (exploratory), the median paired

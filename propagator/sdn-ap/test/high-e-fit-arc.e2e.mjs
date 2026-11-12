@@ -4,15 +4,15 @@
 // width counts one independent sample per revolution (the RMS floor) with the determination naming an arc shorter than 7
 // days as not separating the coefficient. Baseline (4) BASE_4 (the 0.4.16 release, git 1ec779200, until 0.6.21), the
 // module under test this build.
-// Model truth as test/lib/heo-model-truth.mjs (FFM EGM96 70x70, Sun and Moon from DE440, NRLMSISE-00 at constant weather,
+// Model truth as test/lib/heo-model-truth.mjs (FFM EGM2008 70x70, Sun and Moon from DE440, NRLMSISE-00 at constant weather,
 // B = 0.044 m^2/kg, no SRP; AP FORCES 31,20 with NRLMSISE-00; AGOM pinned at 0); Molniya (2 rev/day, e 0.74, perigee 541
 // km) and GTO-500 (2.40 rev/day, e 0.7081, 500 km); 7 days flown after the arc on a 10-minute grid, day-7 whole-day RMS.
 // Acceptance:
 // 1. a 7-day ephemeris with no USEABLE times and no drag prior: the fit takes the 7 days, BTERM within 0.6 % of 0.044
 //    (both of Molniya's solutions; 0.5 % until the E-grid's C1 read, stack #420) and
-//    day-7 along-track, the largest over the arc and K perturbed copies (K, SEVEN_DAY_BOUND below), at most 171.5 m on
-//    Molniya and 325.5 m on GTO-500 (re-derived 2026-11-10 on FFM 2.2.1's truth; set at 150 and 300 m on 2.0.4's, the
-//    registration's, amended after the first run: the record's
+//    day-7 along-track, the largest over the arc and K perturbed copies (K, SEVEN_DAY_BOUND below), at most 176.0 m on
+//    Molniya (171.5 through 0.6.34, history at SEVEN_DAY_BOUND) and 325.5 m on GTO-500 (re-derived 2026-11-10 on FFM
+//    2.2.1's truth; set at 150 and 300 m on 2.0.4's, the registration's, amended after the first run: the record's
 //    150 m is below what the 7-day arc reaches with BTERM pinned at the truth, 158.8 m on GTO-500, 218.9 m on Molniya;
 //    GTO-500 flies 291.3 m at its fitted -0.28 %, against 736.2 m on 0.4.16's 72 h wide-prior arc);
 // 2. only 72 h with no drag prior, and 72 h on the model-truth library's Gaussian prior (0.044 +- 0.1): the determination
@@ -91,7 +91,9 @@ const K = 5;
 const BASE_4 = {version: '0.6.22', commit: 'f8af1e2b7'};
 const LOW_BOUND = {'Molniya drag off': 8.5};
 const TRUTH_BOUND = {'e 0.25': {t: 60, r: 15}, 'SWOT-like': {t: 30, r: 15}, 'Sentinel-3-like': {t: 72, r: 20, t5: 40}};
-const SEVEN_DAY_BOUND = {Molniya: 171.5, 'GTO-500': 325.5};
+// The field EGM2008 on both sides (0.6.36, SPEC 16.2; the truth's field was EGM-96 before, as AP's) takes Molniya's largest
+// day-7 along-track over the arc and its copies from at most 171.5 to 175.39 m (the unperturbed arc 171.30 m): bound 176.0.
+const SEVEN_DAY_BOUND = {Molniya: 176.0, 'GTO-500': 325.5};
 const posterior = (text) => {
   const log = /posterior sigma of the log ([0-9.eE+-]+); posterior median ([0-9.eE+-]+)/.exec(text ?? '');
   if (log) return {sigmaLog: Number(log[1]), median: Number(log[2])};

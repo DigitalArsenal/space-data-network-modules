@@ -9,8 +9,10 @@
 // 3. The 12 THEMIS windows as recorded on this source's build against the base: median roughness under 0.2 m; the paired ratio's
 //    upper bootstrap bound at days 1, 3 and 7 at or below 1.05.
 // 2. No harm at e 0.3 and below: AP (31, 20) seeded sets (LEO, geostationary, Etalon-like, GPS-like, e 0.25, e 0.3) and a
-//    fitted AP set flown 2 days at 600 s give ephemerides within NO_HARM (below) on this build and on BASE (sdn-ap 0.6.22,
-//    SHA-256 checked; sdn-ap 0.6.2 until 0.6.20, 0.6.21 at 0.6.21, history at NO_HARM); the SGP4XP seed byte-identical.
+//    fitted AP set (0.6.36's fit, test/fixtures/ap-fit-0.6.36.ocm) flown 2 days at 600 s give ephemerides within NO_HARM
+//    (below) on this build and on BASE (the field change's first build, git 7ebc98e4, SHA-256 checked, its own version string
+//    0.6.33; sdn-ap 0.6.2 until 0.6.20, 0.6.21 at 0.6.21, 0.6.22 to 0.6.34, history at NO_HARM); the SGP4XP seed byte-identical; analysis/catalog-composer's AP fixture (sdn-ap 0.5.1's
+//    fit, GRAVITY_MODEL EGM-96) refused (gravity-model-mismatch, SPEC 16.2).
 import assert from 'node:assert/strict';
 import {requireTruth} from './lib/ffm-truth.mjs';
 requireTruth('ea4576901f9e8dc21af2c24feb7887645706ef934488cb9756a0b5c21ab47934'); // the model truth: FFM 2.3.0 (modules 48a00fd6), 2.2.1's truth bit for bit
@@ -26,7 +28,7 @@ import {seedOcm, flight, T} from './lib/ocm.mjs';
 import {oemDistance} from './lib/oem-distance.mjs';
 import {configuration} from './lib/pcf.mjs';
 
-const BASE_VERSION = '0.6.22', BASE = 'f8af1e2b7', BASE_SHA256 = '2d599d86f03528cbe49e1946dd64046144b283fd7e0f7768fab3b6d4f2a72ef4';
+const BASE_VERSION = '0.6.33', BASE = '7ebc98e4e', BASE_SHA256 = '0bd00d280330ff62e8e06ac74745520d39920c887902e3968c7a6e4991e63410';
 // 2's bound on the AP seeds (fixed elements, 48 h at 600 s). Against sdn-ap 0.6.2 (modules c82160de7, SHA-256 84d50dca...)
 // until 0.6.20: byte-identical until 0.6.5, whose speed changes move a flight of fixed elements by millimeters (SPEC 16.8);
 // measured 2026-11-10 on 0.6.8, per seed: LEO 3.10, GEO 0.41, Etalon 3.62, GPS 5.01, e 0.25 9.11 and e 0.3 10.66 mm
@@ -44,7 +46,15 @@ const BASE_VERSION = '0.6.22', BASE = 'f8af1e2b7', BASE_SHA256 = '2d599d86f03528
 // Sun and Moon (0.6.22, SPEC 16.17, stack #446) move them from 0.6.21: LEO 33.08, geostationary 12,457.37, Etalon
 // 1,057.72, GPS 850.26, e 0.25 2,751.97 and e 0.3 3,442.84 mm (velocity 36.6 to 782.6 um/s) and the fitted set by 34.76
 // mm (covariance 2.2e-5): every AP set flies the third bodies, and the Moon moved by up to 377 arcsec; SGP4XP
-// byte-identical. From 0.6.22 the baseline is 0.6.22 (git f8af1e2b), every AP set under the one bound, 15 mm.
+// byte-identical. From 0.6.22 the baseline is 0.6.22 (git f8af1e2b), every AP set under the one bound, 15 mm. The field
+// EGM2008 (0.6.36, SPEC 16.2) moves them from 0.6.22: LEO 3,071.80, geostationary 1.73, Etalon 6.43, GPS 6.14, e 0.25 297.94
+// and e 0.3 10.16 mm (velocity 0.13 to 3,168.94 um/s), and the fitted set by 7,140.58 mm (covariance 5.28e-3 of a line's
+// largest entry): every AP set reads the field's tesserals and zonal tail, which part from EGM-96's with degree; SGP4XP
+// byte-identical. From 0.6.36 the baseline is the field change's first build (git 7ebc98e4, not a release; BASE_VERSION is
+// that build's own version string), every AP set under the one bound, 15 mm. From 0.6.36
+// a record stating another field is refused (SPEC 16.2): the fitted set until then, analysis/catalog-composer's fixture
+// (ap-fit-sdn-ap-0.5.1.ocm, GRAVITY_MODEL EGM-96), is asserted refused, and the fitted set is 0.6.36's own fit of the
+// 550 km arc (test/fixtures/ap-fit-0.6.36.ocm), which the baseline flies too.
 const NO_HARM = {posM: 0.015, velMmS: 0.01, covOfLargest: 1e-3};
 const modules = fileURLToPath(new URL('../../../', import.meta.url)), packageRoot = path.join(modules, 'propagator/sdn-ap');
 // a scratch outside the package: the test build copies the package's sources, which cannot hold its own destination
@@ -304,10 +314,16 @@ for (const [name, s] of Object.entries(SEEDS)) {
   const payload = seedOcm({epoch, ...s});
   compare(name, await fly(wasmPath, payload), await fly(basePath, payload));
 }
-// a fitted AP set (analysis/catalog-composer's fixture, LEO), flown on the same output grid
+// a fitted AP set (0.6.36's own fit of the 550 km arc, LEO), flown on the same output grid; the catalog-composer fixture
+// (sdn-ap 0.5.1's fit, GRAVITY_MODEL EGM-96 with gravity terms) refused by this build
 {
-  const payload = new Uint8Array(fs.readFileSync(path.join(modules, 'analysis/catalog-composer/tests/fixtures/ap-fit-sdn-ap-0.5.1.ocm')));
-  compare('fitted AP set (catalog-composer fixture)', await fly(wasmPath, payload), await fly(basePath, payload));
+  const payload = new Uint8Array(fs.readFileSync(path.join(packageRoot, 'test/fixtures/ap-fit-0.6.36.ocm')));
+  compare('fitted AP set (0.6.36\'s fit)', await fly(wasmPath, payload), await fly(basePath, payload));
+  const old = new Uint8Array(fs.readFileSync(path.join(modules, 'analysis/catalog-composer/tests/fixtures/ap-fit-sdn-ap-0.5.1.ocm')));
+  const h = await createStandaloneHarness('browser', wasmPath, {surface: 'direct'});
+  const r = await h.invoke({methodId: 'propagate', inputs: flight([old], {output})});
+  await h.close?.();
+  assert.ok(r.statusCode !== 0 && r.errorCode === 'gravity-model-mismatch', `the catalog-composer fixture (EGM-96): ${r.statusCode === 0 ? 'flown' : r.errorCode}, expected gravity-model-mismatch`);
 }
 
 // 4. grid retention leaves no trace (exact keys; a fit's grids freed under tess::FitGridScope): in one instance a fit
