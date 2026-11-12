@@ -37,8 +37,8 @@ requireTruth('ea4576901f9e8dc21af2c24feb7887645706ef934488cb9756a0b5c21ab47934')
 const modulePath = process.env.SDN_AP_MODEL_TRUTH_MODULE ?? wasmPath;
 const AGOM = 0.02;
 const CASES = [
-  // measured on 0.6.NN, radiation's error at day 7: 20.0 m (0.6.34, SPEC 4's carriers: 48.3 m; the shadow as on or off
-  // at each evaluation, a scratch build: 108.2 m)
+  // measured on 0.6.NN, radiation's error at day 7: 20.0 m (0.6.34, SPEC 4's carriers: 48.3 m; with the shadow as on or
+  // off at each evaluation: 108.2 m)
   {name: 'eclipsing, 30 h, e 0.31, i 30', n: 0.8, e: 0.31, i: 30, raan: 0, argp: 270, day7: 40},
   // measured on 0.6.NN: 207.7 m (0.6.34: 1,386.5 m; with AP's constant at FFM's, 2.3 m in a J2-only build)
   {name: 'TESS-like, 13.7 d, e 0.55, i 40', n: 1 / 13.7, e: 0.55, i: 40, raan: 0, argp: 120, day7: 300},
