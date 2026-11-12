@@ -599,11 +599,14 @@ where the decisions go in mixed directions); 4 samples where the reference's 9.1
 module and 9.9 is not; the equator node (29 of 29 within 1 m flipped); the refusal epochs (164 of 164 within 1 %
 of the lifetime). No corpus sample is open. The corpus's times are random, so a window of a few milliseconds at a
 perigee passage is met only by chance; a perigee-passage part (ten eccentric records, e 0.02 to 0.9, flown every 1 ms for
-3 s either side of their first perigee passages, five at e 0.5 and above and two below, every sample held to 1 m) fails on
-this build: 53 of its 210,035 samples, in 10 of 35 passages of three records (e 0.5 at 4 rev/day: all five passages,
-7 to 8 ms about 0.55 s before perigee, up to 5.3 km; e 0.82 at 1 rev/day: one of five, 1 ms, 16,000 km; e 0.9 at
-0.5 rev/day: four of five, 1 to 6 ms just after perigee, up to 134,000 km), where the library's states are smooth (stack
-#550). So the E2E fails; `test/known-defects.json` lists it. `test/results/open-outliers.md` names the tail's causes
+3 s either side of their first perigee passages, five at e 0.5 and above and two below, every sample held to 1 m) passes
+on this build: 0 of its 210,035 samples over 1 m, the largest 5.2e-5 m. Through 0.6.37 it failed at 53 of them, in 10 of 35
+passages of three records (e 0.5 at 4 rev/day: all five passages, 7 to 8 ms about 0.55 s before perigee, up to 5.3 km;
+e 0.82 at 1 rev/day: one of five, 1 ms, 16,000 km; e 0.9 at 0.5 rev/day: four of five, 1 to 6 ms just after perigee, up to
+134,000 km), where the library's states are smooth: section 8's Kepler solve ended there far from its root (SPEC 16.21,
+stack #550). From 0.6.38 those solves take the bisection, and they are the only samples that differ from 0.6.37: 54 of the
+part's 210,035 (the 53 and one of 1.8 cm), each closer to the library, and none of the corpus's 81,600 states, whose digest
+is unchanged. `test/results/open-outliers.md` names the tail's causes
 and the decisions that reproduce 9.9. The corpus is
 synthetic (seeded). The E2E prints the sha256 of every module output; `--worst N` lists the largest differences
 per regime; `--reproduce test/results/conformance.json` checks that a moved or rebuilt tree gives this run bit for
