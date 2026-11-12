@@ -594,9 +594,10 @@ where the decisions go in mixed directions); 4 samples where the reference's 9.1
 module and 9.9 is not; the equator node (29 of 29 within 1 m flipped); the refusal epochs (164 of 164 within 1 %
 of the lifetime). No corpus sample is open. The corpus's times are random, so a window of a few milliseconds at a
 perigee passage is met only by chance; a perigee-passage part (ten eccentric records, e 0.02 to 0.9, flown every 1 ms for
-3 s either side of two perigee passages each, every sample held to 1 m) fails on this build: 25 of its 120,020 samples,
-in all four passages of two records (e 0.5 at 4 rev/day: 7 ms per passage about 0.55 s before perigee, up to 0.79 km;
-e 0.9 at 0.5 rev/day: 5 and 6 ms just after perigee, up to 134,000 km), where the library's states are smooth (stack
+3 s either side of their first perigee passages, five at e 0.5 and above and two below, every sample held to 1 m) fails on
+this build: 53 of its 210,035 samples, in 10 of 35 passages of three records (e 0.5 at 4 rev/day: all five passages,
+7 to 8 ms about 0.55 s before perigee, up to 5.3 km; e 0.82 at 1 rev/day: one of five, 1 ms, 16,000 km; e 0.9 at
+0.5 rev/day: four of five, 1 to 6 ms just after perigee, up to 134,000 km), where the library's states are smooth (stack
 #550). So the E2E fails; `test/known-defects.json` lists it. `test/results/open-outliers.md` names the tail's causes
 and the decisions that reproduce 9.9. The corpus is
 synthetic (seeded). The E2E prints the sha256 of every module output; `--worst N` lists the largest differences
@@ -630,9 +631,9 @@ built by `test/lib/spw-constant.mjs` (`FFM_SPW_FIXTURE` names another file of su
 
 - `test/conformance.e2e.mjs` (the task's E2E): a randomized corpus across LEO, SSO, MEO, GEO, HEO and VDS
   over 7 days against the black-box oracle; per-regime maximum and median position difference; and the perigee-passage
-  part: ten eccentric records flown every 1 ms for 3 s either side of each one's first two perigee passages (the
-  oracle's own radius minima), every sample within 1 m (acceptance `perigeePassages`, kept apart from the corpus's
-  digests). The oracle (the
+  part: ten eccentric records flown every 1 ms for 3 s either side of each one's first perigee passages, five at e 0.5
+  and above and two below (the oracle's own radius minima), every sample within 1 m (acceptance `perigeePassages`, kept
+  apart from the corpus's digests; `--perigee-only` runs it alone). The oracle (the
   unmodified US Space Force Sgp4Prop library behind a black-box harness) is not in this repository:
   `SDN_AP_ORACLE_ROOT` names its directory (`SDN_AP_ORACLE_VERSION` its leg, 9.9 by default;
   `SDN_AP_ORACLE_SECOND` the other build for the reference-split class, 9.1.1.0 by default), and the E2E and
