@@ -13,5 +13,10 @@
     "test": "molniya-7day-drag-sigma",
     "issue": "DigitalArsenal/spacedatanetwork-stack#438",
     "text": "On a 7-day arc of an eccentric orbit with drag (Molniya), the record states the drag coefficient to 0.09 % while the fitted value is 0.3 to 0.5 % from the truth: the stated uncertainty is 5 to 7 times too small; its position covariance is honest."
+  },
+  {
+    "test": "conformance",
+    "issue": "DigitalArsenal/spacedatanetwork-stack#550",
+    "text": "At some perigee passages of eccentric orbits, the SGP4-XP theory gives a wrong position for a few milliseconds, where the US Space Force library's positions are smooth. Of ten eccentric orbits flown every millisecond through two perigee passages each, two show it at both passages: an orbit of eccentricity 0.5 going around the Earth 4 times a day (7 ms per passage, up to 0.79 km off) and one of eccentricity 0.9 going around every two days (5 to 6 ms, up to 134,000 km off). Positions taken at random times, as the rest of the conformance test takes them, almost never fall in such a window."
   }
 ]
