@@ -177,6 +177,19 @@ initializes it again.
 state whose set could not be initialized with the theory's refusal code, as before. `sdnap_wide_grid_cache` and
 `sdnap_wide_grid_budget` show the instance's grids and bytes.
 
+**Outside the rule** (no call mark; what each does when one of the module's allocations fails):
+- `sdnap_covariance_at` and `sdnap_covariance_full_at`: a covariance bank that cannot be prepared answers their existing
+  refusal code -3, and so does a time the bank cannot reach.
+- `sdnap_epochs_at` (and the other `sdnap_epochs_*` readers) with a covariance asked: a bank that cannot be built, or a moved
+  set's flight that fails, gives status 0 and the state without its covariance.
+- `ingest_omm`, refused `out-of-memory`: by then the old row store is dropped (the new store's build begins by freeing it).
+  When the new store's arrays could be had, it is installed; a row whose set failed to initialize for want of memory holds
+  the theory's refusal. Its $OCM outputs are discarded with the refusal.
+- `load_epochs`, refused for any reason: the old snapshot is gone (the store's build begins by clearing it). A record's
+  carried forecast is read with operator new (below), so it traps rather than counts. The forecast check that flies a set
+  at the carried span's ends (`carried::build`) is reached only by `fit`; there a set that cannot be initialized writes "the
+  theory does not reach it", and the fit then answers `out-of-memory`.
+
 **Not counted, and trapping (as before) when they fail:**
 - std::vector and operator new under -fno-exceptions, including the paths a caller's input sizes:
   - a fit's states;
@@ -185,11 +198,11 @@ state whose set could not be initialized with the theory's refusal code, as befo
   - the $OMM sets, the burns, the $SPW rows;
   - a carried forecast's segments;
   - every output's FlatBufferBuilder.
-- The per-thread stores a thread allocates on its first use of AP's terms. Each is a fixed size, not sized by any input:
-  - the GCRF and drift node caches (`new`);
-  - the bodies' store (`new`);
-  - the short-period evaluator's block (192 KiB, aligned_alloc; it aborts on failure, counted first);
-  - its thread cache (aborts).
+- The per-thread stores a thread allocates on its first use of AP's terms, fixed in size, not sized by any input: the GCRF
+  and drift node caches (`new`), the bodies' store (`new`) and the short-period evaluator's thread cache (it aborts).
+
+**Counted, then aborting when it fails:** the short-period evaluator's per-thread block (192 KiB, aligned_alloc through the
+accounting; the failure is counted, then the thread aborts).
 
 **The stack.** No array whose size follows the grid's anomalies or a degree lies on it: the grid builder's anomaly arrays
 (9 x 128 doubles) and the m-daily family's inclination functions are on the heap. The fixed-size arrays indexed by the
@@ -3662,7 +3675,7 @@ instance began (out[2]).
   - with a cold, warm or shuffled cache;
   - on 1 and 8 pool threads.
 
-Through 0.6.47 idle grids were bounded by their count alone (128: about 630 MB at degree 12). The 128-node rule is exact to 1e-13 to degree 20; at degree 31 its relative error is 1e-6 at e 0.72 and
+Through 0.6.47 idle grids were bounded by their count alone (128 x 5,069,464 bytes: about 650 MB, 618.8 MiB, at degree 12). The 128-node rule is exact to 1e-13 to degree 20; at degree 31 its relative error is 1e-6 at e 0.72 and
 2e-3 at e 0.79. Against the full-field quadrature on THEMIS (e 0.82, 7 days at
 300 s): 0.12 m RMS, 2.6 m at most, 3 mm second difference, and 0.09 m RMS with the eccentricity drifting 3e-3 a week; a
 first-order series in M, the set the grid replaces, was 65 m RMS and 2.96 m. The near-resonant terms above degree 12 stay in
@@ -5158,11 +5171,15 @@ keeps its own.
   inside a blend window that holds a set's crossing, where the blend needs the crossed set's state, is refused and counted among
   the epochs after the crossing though it lies before it.
 - Covariance and the crossing. The crossing a call with covariance names is the earliest of the nominal's and every moved set's:
-  when the call's first epoch is refused, each set the covariance started is run to the call's furthest epoch on each side, so the
-  name does not depend on the order or the list of the epochs asked (two calls on one record name the same crossing when the
-  crossing lies at or before the furthest epoch of both); a call that refuses no epoch runs nothing more, since an epoch answered
-  with its covariance lies before every set's crossing. A Hermite blend's probe at its window's end asks no covariance of its
-  own and names the record's earliest crossing the same way. `propagate_epochs` refuses an epoch past a moved set's crossing as `propagate` does, and, for a record
+  at the first epoch the call refuses, wherever it stands in the list and whatever the refusal (a decay or another), each set the
+  covariance started is run to the call's furthest epoch on each side, so the name does not depend on the order or the list of
+  the epochs asked (two calls on one record name the same crossing when the crossing lies at or before the furthest epoch of
+  both); a call that refuses no epoch runs nothing more, since an epoch answered with its covariance lies before every set's
+  crossing. In a call with covariance, a Hermite blend's two probes at its window's end ask no covariance of their own. The earlier set's probe follows
+  that set's own epoch, which started its covariance, so it names that record's earliest crossing. The later set's probe names
+  its record's earliest crossing only when an earlier epoch of the call already started that set's covariance; on a fresh
+  store it names the later set's nominal crossing (as 0.6.47 did), so the name for the later set depends on the call's earlier
+  epochs. `propagate_epochs` refuses an epoch past a moved set's crossing as `propagate` does, and, for a record
   that carries no forecast, never writes the block without its covariance. An AP record whose epoch already meets the rule and carries a covariance is refused
   `decayed:<epoch>` in `propagate` and `propagate_epochs`, and `sdnap_covariance_at` and `sdnap_covariance_full_at` give 42 (or
   the full width of) NaN at every time and return 4.
