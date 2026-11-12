@@ -39,6 +39,12 @@ constexpr Noise kNoiseAP[2] = {
     {1.8579913326733934e-07, 1.12761105007012e-06, 7.647194501793458e-07, 0.112126311682426, 1.5127596877626373},
     {9.696153866117182e-07, 8.153112791954473e-07, 4.753573962018311e-06, 0, 1.0}};
 constexpr double kDragRegimeKm = 2500.0;  ///< the noise regimes' split: perigee height
+/// SPEC 12.5: the radial floor's sigma factor of an AP set in the low table whose record states a tesseral degree above
+/// kSpCap (the output table's fast side, SPEC 16.1, stack #477). The floor is the fit's residual covariance, and the fast
+/// side fits the arc closer, so the floor fell by 10 to 40 %; the factor is the maximum-likelihood fit of the radial
+/// |z| on 326 choice windows of records at tesseral 31 / zonal 70, judged on 422 others (the grid point exp(0.10), stack
+/// #477). The in-track and cross-track floors keep k_F alone.
+constexpr double kFloorRadialFastSide = 1.1051709180756477;
 
 /// The regime of a set: 0 (DRAG) its perigee height below kDragRegimeKm, 1 (ABOVE) at or above it, where the theory's
 /// density is 1e-20 kg/m^3 at every point of the orbit (SPEC 3.3) and drag does not act. One function for the regime
@@ -514,6 +520,17 @@ inline bool of_fit(const ElementRow& row, const fit::Options& fitted, const doub
   if (!noise_of(row, arc_end_min, sigma_km, span_h, ng_rate, s.regime, s.noise, s.share, floor_scale)) return false;
   s.ng_rate = ng_rate;
   for (double& f : floor) f = f / static_cast<double>(count) * floor_scale;
+  // the low table's fast side (SPEC 12.5, 16.1): the radial floor's sigma times kFloorRadialFastSide, D F D with
+  // D = diag(f, 1, 1) in UVW (UU by f^2, VU and WU by f)
+  {
+    const xpt::Branch br = xpt::branch_of(row.mean_motion_rev_day * kTwoPi / kMinutesPerDay, row.eccentricity, true);
+    if (xpt::tess::active().tesseral > xpt::tess::kSpCap && br.resonance == 0 && !br.long_period && br.wide_tess == 0) {
+      const double f = kFloorRadialFastSide;
+      floor[0] *= f * f;
+      floor[1] *= f;
+      floor[3] *= f;
+    }
+  }
   // epoch image: state block J0 Pp J0^T + floor, cross J0 Pp, consider Pp
   double r0[3], v0[3];
   if (!at(b, 0.0, r0, v0, J)) return false;

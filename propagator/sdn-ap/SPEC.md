@@ -2085,6 +2085,43 @@ leaves held-out cells outside. On the demo's ISS sample the in-track 1-sigma 12 
 (0.6.0: 37.78 km) against the error 0.308 km. `test/covariance-realism.e2e.mjs` reports every held-out cell of both
 rows, the shares within 1 and 2 sigma, and the ISS figure on the built module.
 
+The low table's fast side (16.1, stack #477). The floor is the fit's own residual covariance (12.4), so a theory that fits
+its arc better states a smaller uncertainty. Measured on each build's own flights (748 windows of the low table: strong
+drag 2025 and 2026, laser spheres, burn-free altimetry, near 700 km; records at 31/20), the fast side takes the fit's RMS to
+0.71 of what it was and the floor's sigma to 0.90 radially, 0.61 in-track and 0.77 cross-track; the radial median |z| rose
+by 0.02 to 0.09, out of the band near 700 km (0.75 at day 1, 0.83 at day 3); in-track did not move.
+- Radially, an AP set in the low table whose record states a tesseral degree above 12 takes its floor's sigma times
+  kFloorRadialFastSide, exp(0.10) = 1.105 (the floor's UU times 1.221, VU and WU times 1.105). It is the maximum-likelihood
+  fit of the radial |z| on 326 choice windows of records at tesseral 31 / zonal 70, the records the catalog fits from this
+  version, judged on the other 422 (the split rule's SHA-256 d3177de7). Judged at 31/70, median |z| before and after:
+
+  | Row | Day 1 | Day 3 | Day 5 | Day 7 |
+  | --- | --- | --- | --- | --- |
+  | Strong drag 2026 | 0.72 to 0.66 | 0.79 to 0.75 | 0.81 to 0.79 | 0.78 to 0.77 |
+  | Near 700 km | 0.754 to 0.68 | 0.76 to 0.70 | | |
+  | Laser spheres | 0.70 to 0.64 | 0.61 to 0.56 | 0.53 to 0.50 | 0.46 to 0.44 |
+  | Altimetry | 0.71 to 0.65 | 0.64 to 0.595 | 0.62 to 0.58 | 0.64 to 0.605 |
+
+  Seven of the 14 radial cells are inside the band before and after: three too narrow move in, three already wide move out.
+  Its cost is the laser spheres' and altimetry's radial, wide from day 3, getting wider.
+  One factor, not a size by regime: the fast side shrinks the floor, and the factor keeps that from making the too-narrow
+  cells narrower; a size by regime is the covariance study's (stack #531). On AP's own fits to the reference, a record at
+  zonal degree 70 moves neither the fit's residual (0.986 to 0.999 of 31/20's) nor the radial floor (0.994 to 1.003); the
+  residual falls to 0.78 only for records fitted to the numerical forecast, the catalog's (stack #546).
+- Cross-track is unchanged. On records at zonal degree 20 its strong-drag cells at day 1 are too narrow (0.77 to 1.10 in
+  2025, 1.05 to 1.30 in 2026): the node drift of such a record, the zonal terms of degree 21 to 70 that it leaves out (about
+  12 m of cross-track a day at 440 km, i 88; stack #531). A record at zonal degree 70 has no drift, and there the stated
+  cross-track is too wide: 0.39 / 0.40 at day 1 in strong drag and 0.56 to 0.60 elsewhere, 0.08 to 0.26 from day 3. That is a
+  known over-statement (the sizes s_i are set on strong drag; stack #531), and no factor is applied: the likelihood's 0.58
+  is the floor making up for a too-wide s_i.
+- In-track is unchanged: the floor is not what sets it.
+- Cells outside the band at the factor, by cause (`test/covariance-realism.e2e.mjs` names each): strong drag 2026 radial at
+  days 5 and 7 and in-track at every day, too narrow (the drag share c, 0.1121, against the 2026 storms; the same on
+  0.6.36; stack #531); the laser spheres' radial at days 3 to 7 and altimetry's at days 3 and 5, too wide (one floor factor
+  serves them with near 700 km and strong drag 2026); in-track of the laser spheres, altimetry and near 700 km at every day,
+  too wide (the sizes are set on strong drag); cross-track of every row from day 3, and at day 1 outside near 700 km, too
+  wide (as above).
+
 Above the drag, by class *[2026-11-11, stack #433; experiments headline-loop, sdn-ap 0.6.15]*. Measured on every
 first-pass window whose fitted set is above the drag (923 window-arcs per theory), the ABOVE row is too wide on
 near-circular orbits, 5 to 1,000 times: median |z| 0.001 to 0.15 on laser geodetic, medium Earth orbit, Galileo,
