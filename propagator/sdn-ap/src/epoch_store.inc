@@ -1043,116 +1043,89 @@ inline uint64_t bytes_of(const Store& st) {
 }  // namespace epochs
 }  // namespace sdnap
 
-/// After a dead batch over the store (Store::pool_dead) the store is emptied or replaced only once no pool thread is active:
-/// one still in its chunk reads and writes it. 0, or the refusal "pool-dead" (load_epochs and load_epochs_open).
-static int refuse_while_pool_dead(sdnap::epochs::Store& st) {
-  if (st.pool_dead == 0) return 0;
-  if (sdnap::pool::load(&sdnap::pool::job().active) != 0)
-    return sdnap::ocm::refuse("pool-dead", "A threaded batch over the epoch store ended with a pool thread taken for dead, and a pool "
-                                           "thread is still active: the store cannot be replaced until it is. Start a new instance.");
-  st.pool_dead = 0;
+// A pending load owns its decoded records; the resident snapshot stays readable through every refusal.
+static int refuse_while_pool_dead(sdnap::epochs::Store&) {
+  if (!sdnap::plugin_can_release())
+    return sdnap::ocm::refuse("pool-dead", "A pool thread is still active; the resident stores cannot be replaced.");
   return 0;
 }
 
-/// `load_epochs`: replaces the resident store with the call's snapshot (SPEC 14).
-static int load_epochs_call(void);
-/// An allocation that failed in a call that went on to answer success (mem::finish refuses it): the build and the store are left empty.
-static int load_finish(int answered, int refused) {
-  if (refused != 0 && answered == 0) { sdnap::epochs::resident_build().drop(); sdnap::epochs::clear(sdnap::epochs::resident()); }
-  return refused;
-}
-extern "C" int load_epochs(void) {
-  sdnap::mem::CallMark call_mark;
-  const int answered = load_epochs_call();
-  return load_finish(answered, sdnap::mem::finish(answered));
-}
-static int load_epochs_call(void) {
+static int publish_epoch_load(sdnap::epochs::Store& prepared, int rc) {
   using namespace sdnap;
-  plugin_reset_output_state();
-  // a load in progress is abandoned by any load_epochs, accepted or refused (the store is empty while one is open); a store with no load open is left
-  // as it was by a load_epochs refused before it begins, as it always was
-  epochs::resident_build().drop();
-  uint32_t frames = 0;
-  if (const int rc = ocm::admit(frames)) return rc;
-  if (const int rc = pcf::read(pcf::kEpochs, true)) return rc;
-  epochs::Config cfg;
-  if (const int rc = epochs::read_config(cfg)) return rc;
-  // the three calls in sequence on one payload: a build opened (the store emptied), the frames as one part, the build closed
-  epochs::Store& st = epochs::resident();
-  if (const int rc = refuse_while_pool_dead(st)) return rc;
-  epochs::Build& b = epochs::resident_build();
-  plugin_records_selected();
-  epochs::begin(st, b, cfg);
-  int rc = epochs::add(b, false);
-  if (rc == 0) rc = epochs::close(st, b);
-  b.drop();
-  if (rc != 0) epochs::clear(st);
+  if (rc == 0 && mem::refuse_if_out_of_memory()) rc = 3;
+  if (rc == 0) {
+    auto& st = epochs::resident();
+    epochs::clear(st);
+    st.entries.swap(prepared.entries);
+    st.series.swap(prepared.series);
+    st.plugin_order.swap(prepared.plugin_order);
+    st.atmospheres.swap(prepared.atmospheres);
+    st.cfg = prepared.cfg;
+    st.stats = prepared.stats;
+    st.pool_dead = 0;
+    st.short_day = 0;
+    plugin_records_selected();
+  }
+  epochs::clear(prepared);
   return rc;
 }
 
-/// `load_epochs_open`: starts a load that takes its frames in parts (SPEC 14.1). The $PCF EPOCH_STORE is read here, once. The store is emptied; a load
-/// already open is dropped (this starts over).
-static int load_epochs_open_call(void);
-extern "C" int load_epochs_open(void) {
-  sdnap::mem::CallMark call_mark;
-  const int answered = load_epochs_open_call();
-  return load_finish(answered, sdnap::mem::finish(answered));
-}
-static int load_epochs_open_call(void) {
+extern "C" int load_epochs(void) {
   using namespace sdnap;
+  mem::CallMark call_mark;
   plugin_reset_output_state();
-  // an open ALWAYS drops the load in progress and empties the store, whether or not its configuration is accepted: a non-zero status of any of the three
-  // methods means the load is closed and the store is empty. After a dead batch, not while a pool thread is active (refuse_while_pool_dead)
-  if (const int rc = refuse_while_pool_dead(epochs::resident())) return rc;
+  if (const int rc = refuse_while_pool_dead(epochs::resident())) return mem::finish(rc);
   epochs::resident_build().drop();
-  epochs::clear(epochs::resident());
-  if (const int rc = pcf::read(pcf::kEpochs, true)) return rc;
+  uint32_t frames = 0;
+  if (const int rc = ocm::admit(frames)) return mem::finish(rc);
+  if (const int rc = pcf::read(pcf::kEpochs, true)) return mem::finish(rc);
   epochs::Config cfg;
-  if (const int rc = epochs::read_config(cfg)) return rc;
-  plugin_records_selected();
-  epochs::begin(epochs::resident(), epochs::resident_build(), cfg);
-  return 0;
+  if (const int rc = epochs::read_config(cfg)) return mem::finish(rc);
+  epochs::Store prepared;
+  const int rc = epochs::build(prepared, cfg);
+  return mem::finish(publish_epoch_load(prepared, rc));
 }
 
-/// `load_epochs_part`: decodes one part's 'ocm' frames into the open load (SPEC 14.1). Nothing of the part's bytes is kept. A part refused for any reason
-/// closes the load and leaves the store empty.
-static int load_epochs_part_call(void);
-extern "C" int load_epochs_part(void) {
-  sdnap::mem::CallMark call_mark;
-  const int answered = load_epochs_part_call();
-  return load_finish(answered, sdnap::mem::finish(answered));
-}
-static int load_epochs_part_call(void) {
+extern "C" int load_epochs_open(void) {
   using namespace sdnap;
+  mem::CallMark call_mark;
   plugin_reset_output_state();
-  epochs::Build& b = epochs::resident_build();
-  if (!b.open) { plugin_set_error("load-not-open", "No load is open: call load_epochs_open first."); return 3; }
+  if (const int rc = refuse_while_pool_dead(epochs::resident())) return mem::finish(rc);
+  auto& b = epochs::resident_build();
+  b.drop();
+  if (const int rc = pcf::read(pcf::kEpochs, true)) return mem::finish(rc);
+  epochs::Config cfg;
+  if (const int rc = epochs::read_config(cfg)) return mem::finish(rc);
+  b.cfg = cfg;
+  b.open = true;
+  return mem::finish(0);
+}
+
+extern "C" int load_epochs_part(void) {
+  using namespace sdnap;
+  mem::CallMark call_mark;
+  plugin_reset_output_state();
+  auto& b = epochs::resident_build();
+  if (!b.open) return mem::finish(ocm::refuse("load-not-open", "No load is open: call load_epochs_open first."));
   uint32_t frames = 0;
   int rc = ocm::admit(frames);
   if (rc == 0) rc = epochs::add(b, true);
-  if (rc != 0) { b.drop(); epochs::clear(epochs::resident()); }
+  rc = mem::finish(rc);
+  if (rc != 0) b.drop();
   return rc;
 }
 
-/// `load_epochs_close`: the sort and the install of the open load (SPEC 14.1). On success the store is the snapshot; on any refusal it is empty.
-static int load_epochs_close_call(void);
 extern "C" int load_epochs_close(void) {
-  sdnap::mem::CallMark call_mark;
-  const int answered = load_epochs_close_call();
-  return load_finish(answered, sdnap::mem::finish(answered));
-}
-static int load_epochs_close_call(void) {
   using namespace sdnap;
+  mem::CallMark call_mark;
   plugin_reset_output_state();
-  epochs::Store& st = epochs::resident();
-  epochs::Build& b = epochs::resident_build();
-  if (!b.open) { plugin_set_error("load-not-open", "No load is open: call load_epochs_open first."); return 3; }
-  int rc = 0;
-  if (b.frames == 0) { plugin_set_error("missing-ocm", "The load took no 'ocm' frame: load_epochs_part before load_epochs_close."); rc = 3; }
-  else rc = epochs::close(st, b);
+  auto& b = epochs::resident_build();
+  if (!b.open) return mem::finish(ocm::refuse("load-not-open", "No load is open: call load_epochs_open first."));
+  if (const int rc = refuse_while_pool_dead(epochs::resident())) return mem::finish(rc);
+  epochs::Store prepared;
+  const int rc = b.frames == 0 ? ocm::refuse("missing-ocm", "The load took no 'ocm' frame.") : epochs::close(prepared, b);
   b.drop();
-  if (rc != 0) epochs::clear(st);
-  return rc;
+  return mem::finish(publish_epoch_load(prepared, rc));
 }
 
 /// `propagate_epochs`: the store of the call's own snapshot at the $PCF OUTPUT times (EPOCHS, or START_TIME to STOP_TIME):

@@ -6,15 +6,13 @@ bool plugin_can_release() {
 }
 
 void plugin_epochs_cleared() { frames::release_state(frames::state()); }
-void plugin_records_selected() { store_free(); plugin_records = true; }
-void plugin_rows_selected() {
+void plugin_records_selected() { plugin_records = true; }
+void plugin_rows_selected() { plugin_records = false; }
+void plugin_release() {
+  if (!plugin_can_release()) return;
   epochs::resident_build().drop();
   epochs::clear(epochs::resident());
   epochs::resident().pool_dead = 0;
-  plugin_records = false;
-}
-void plugin_release() {
-  if (!plugin_can_release()) return;
   plugin_rows_selected();
   store_free();
 }

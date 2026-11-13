@@ -6609,12 +6609,15 @@ the host opens and refills a new budget. One owning thread serializes load, refi
 refill can delay a display update. Direct path requests allocate theory caches temporarily and release the path entity's
 caches on completion. These changes add no concurrent-reader guarantee or implicit refill.
 
-**20.1 Source and indices.** An accepted `plugin_init_omm` selects the row source and releases the epoch store, open
-load, plugin index map and frames. Its 88-byte record interpretation, SGP4XP propagation, errors and 64-byte state layout
-are unchanged. A refused initialization preserves an active record source. A successful `load_epochs_open` selects the
-record source, releases rows and exposes zero entities while loading. A failed part or close leaves no records, except
-`load-not-open`, which changes nothing. The single-call `load_epochs` uses the same transitions once its build starts;
-pre-build refusals retain its existing snapshot behavior. An invalid open still clears an existing epoch store.
+**20.1 Source and indices.** The row and record stores coexist. Plugin calls select rows after a successful
+`plugin_init_omm` (including count 0, which selects empty rows), or records after a successful `load_epochs` or
+`load_epochs_close`. `load_epochs_open` and parts stage the replacement while the previous source stays readable.
+Every refused load or refused `plugin_init_omm` preserves the active source and its states. A successful record load
+releases the previous record snapshot and frames, preserving rows. A successful `plugin_init_omm` preserves records,
+frames and any open load; its 88-byte record interpretation and numerical propagation are unchanged.
+`ingest_omm` and `sdnap_init_elements` replace native rows without changing the plugin selection: with records selected,
+plugin calls continue answering records and the native row exports answer the new rows. With rows selected, they answer
+the new rows. Pending and resident catalogs coexist during replacement, increasing peak memory by the pending catalog.
 
 A record entity is one epoch series, identified by the existing identity tuple in section 14. Multiple retained epochs
 share one entity and the epoch API's selection/blending rules. Plugin indices follow the first accepted input occurrence

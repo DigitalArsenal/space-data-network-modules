@@ -56,8 +56,7 @@ inline Store& store() {
   return instance;
 }
 
-inline void store_free() {
-  Store& st = store();
+inline void store_free(Store& st) {
   std::free(st.kind);
   std::free(st.slot);
   std::free(st.sats);
@@ -66,6 +65,10 @@ inline void store_free() {
   std::free(st.nodes);
   st = Store{};
 }
+
+inline void store_free() { store_free(store()); }
+
+bool plugin_can_release();
 
 inline Elements elements_of(const ElementRow& row) {
   Elements e{};
@@ -110,9 +113,7 @@ inline bool row_well_formed(const ElementRow& r) {
 /// Replaces the element set. Returns the number of rows held (refused sets
 /// are held too, flagged, so indices match the input rows), or -1 when memory
 /// is exhausted. `refused` (optional, one flag per row) holds the flagged rows refused whatever they carry.
-inline int32_t store_init(const ElementRow* rows, uint32_t count, const uint8_t* refused = nullptr) {
-  store_free();
-  Store& st = store();
+inline int32_t store_prepare(Store& st, const ElementRow* rows, uint32_t count, const uint8_t* refused = nullptr) {
   if (count == 0) return 0;
   uint32_t nxp = 0;
   for (uint32_t i = 0; i < count; ++i) nxp += rows[i].theory == kTheorySgp4Xp ? 1 : 0;
@@ -122,7 +123,7 @@ inline int32_t store_init(const ElementRow* rows, uint32_t count, const uint8_t*
   st.sats = nsat ? static_cast<Sat*>(sdnap::mem::malloc(sizeof(Sat) * nsat)) : nullptr;
   st.xps = nxp ? static_cast<xpt::XpSat*>(sdnap::mem::malloc(sizeof(xpt::XpSat) * nxp)) : nullptr;
   if (!st.kind || !st.slot || (nsat && !st.sats) || (nxp && !st.xps)) {
-    store_free();
+    store_free(st);
     return -1;
   }
   static const Gravity wgs72 = gravity_wgs72();
@@ -160,7 +161,7 @@ inline int32_t store_init(const ElementRow* rows, uint32_t count, const uint8_t*
     const size_t per = 4u * kCheckpointNodes;
     st.nodes = static_cast<double*>(sdnap::mem::malloc(sizeof(double) * per * resonant));
     if (st.nodes == nullptr) {
-      store_free();
+      store_free(st);
       return -1;
     }
     for (uint32_t i = 0; i < st.sat_count; ++i) {
@@ -174,6 +175,19 @@ inline int32_t store_init(const ElementRow* rows, uint32_t count, const uint8_t*
   }
   return static_cast<int32_t>(count);
 }
+
+/// Prepare before replacing so allocation refusal preserves the previous rows and plugin source.
+inline int32_t store_init(const ElementRow* rows, uint32_t count, const uint8_t* refused = nullptr) {
+  if (!plugin_can_release()) return -1;
+  Store prepared;
+  const uint32_t failures = mem::failures();
+  const int32_t held = store_prepare(prepared, rows, count, refused);
+  if (held < 0 || mem::failures() != failures) { store_free(prepared); return -1; }
+  store_free();
+  store() = prepared;
+  return held;
+}
+
 
 inline const double* nodes_of(const Sat& s) {
   const Store& st = store();
