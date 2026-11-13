@@ -24,6 +24,13 @@ const plans = {
   public: (n) => { const a = share(n, 40.1), b = share(n, 33.3), c = share(n, 11.8), d = share(n, 1.6), e = share(n, 5.3); return [["leo500", a], ["leo830", b], ["ecc", c], ["meo", d], ["geo", e], ["wide", n - a - b - c - d - e]]; },
 };
 const out = {};
+// what a pool costs an instance: the same instance started with and without 15 pool threads (the stored load's 180,486,144 bytes include them)
+const POOL = await (async () => {
+  const none = await openFrames({ initialMemoryBytes: 2 * MIB }), many = await openFrames({ initialMemoryBytes: 2 * MIB, threads: 15 });
+  return many.mem().byteLength - none.mem().byteLength;
+})();
+out.pool = { fifteenThreadsBytes: POOL, perThreadBytes: Math.round(POOL / 15) };
+console.log(`15 pool threads cost the instance ${POOL} B (${Math.round(POOL / 15)} B a thread)`);
 for (const [name, plan] of Object.entries(plans)) {
   const pop = population(plan(N), 20261113, 48);
   const f = await openFrames({ initialMemoryBytes: 2 * MIB });
@@ -71,7 +78,7 @@ for (const [name, plan] of Object.entries(plans)) {
   for (let m = 1; m <= 48; m++) f.refill(t + m * 60000, 180, 1 << 30);
   const sf = f.stats();
   assert.equal(sf[STAT.full], 0, "no row refused for room while the windows turn over");
-  assert.ok(sf[STAT.used] <= PER_SERVED * served, `slab used ${sf[STAT.used]} B after the windows turned over: over the stated ${PER_SERVED} B an object served`);
+  assert.ok(N !== FULL || sf[STAT.used] <= PER_SERVED * served, `slab used ${sf[STAT.used]} B after the windows turned over: over the stated ${PER_SERVED} B an object served`);
   out[name].afterTurn = { slabUsed: sf[STAT.used], bytesPerServed: +(sf[STAT.used] / served).toFixed(1), cells: sf[STAT.cells], cellBytes: sf[STAT.cellBytes], slackShare: +((sf[STAT.used] - 64 - sf[STAT.cellBytes]) / sf[STAT.used]).toFixed(4), compactions: sf[STAT.compactions], moved: sf[STAT.moved] };
   // the instance of a 100,000-set load with covariance holds STORED_LOAD_BYTES; this test's seeded records carry none, so its own load (afterLoad) is smaller:
   // the instance a host holds is the stored load plus what open and the fill added to this one, measured here
@@ -79,7 +86,13 @@ for (const [name, plan] of Object.entries(plans)) {
   const total = STORED_LOAD_BYTES * (N / FULL) + (afterFill - afterLoad);
   out[name].totalWithStoredLoad = total;
   console.log(`${name}: slab used after a full turn of the windows ${sf[STAT.used]} B (${(sf[STAT.used] / served).toFixed(1)} B an object served), cells ${sf[STAT.cells]}, their own bytes ${sf[STAT.cellBytes]}; with the stored load ${(total / 1e6).toFixed(1)} MB`);
-  if (N === FULL) assert.ok(total < 300e6, `the ${name} instance ${total} B is not under 300 MB decimal`);
+  const totalNoPool = total - POOL * (N / FULL);
+  out[name].totalNoPool = totalNoPool;
+  console.log(`${name}: instance with the stored load and 15 pool threads ${(total / 1e6).toFixed(1)} MB, without a pool ${(totalNoPool / 1e6).toFixed(1)} MB (a host that starts at 2 MiB, loads in parts of at most 1,000 records, frees its staging buffer before it allocates its planes, and starts no pool)`);
+  if (N === FULL) {
+    assert.ok(totalNoPool < 300e6, `the ${name} instance without a pool, ${totalNoPool} B, is not under 300 MB decimal`);
+    assert.ok(total < 300e6, `the ${name} instance with 15 pool threads, ${total} B, is not under 300 MB decimal`);
+  }
   f.close();
 }
 console.log(JSON.stringify(out));

@@ -26,9 +26,12 @@ constexpr double kMaxAheadSeconds = kBaseMinutes * 60.0;  ///< refill clamps `ah
 constexpr uint32_t kHeaderBytes = 24;        ///< mid, half-span (doubles, minutes); np, nv, hp, hv (bytes); holder (u32: series << 1 | slot)
 constexpr uint32_t kClassBytes = 64;         ///< cells are cut in classes of this many bytes
 constexpr uint32_t kClasses = 65;            ///< class c holds c * kClassBytes bytes, c in [1, 49] (the largest cell is 3,096 bytes); the table is sized 65
-constexpr int kDenseMult = 8;                ///< sets with a drag pass: the check has this many times the points
-constexpr double kLimit3D = 8.0e-6;          ///< km: no served state is farther than this (3-D) from AP's at a check point of a drag-pass set (2 mm under the 1 cm a dense scan allows between points)
-constexpr double kDragPerigeeKm = 500.0;     ///< a set whose mean perigee height is under this has a drag pass: its output steps (SPEC 19.5)
+constexpr int kDenseMult = 8;                ///< sets that need the dense check: the check has this many times the points
+constexpr double kLimit3D = 8.0e-6;          ///< km: no served state is farther than this (3-D) from AP's at a check point (2 mm under the 1 cm a dense scan allows between points)
+constexpr double kLimitVel3D = 8.0e-8;       ///< km/s: the same in velocity (3-D), beside the 5e-5 m/s of each axis
+constexpr double kDenseLineKm = 500.0;       ///< a set whose perigee height is under this at BTERM 0.01 m^2/kg has output that steps (SPEC 19.5): it takes the dense check
+constexpr double kDenseKmPerDecade = 80.0;   ///< the line moves up by this much for each decade of BTERM above 0.01 (measured from 0.001 to 1), and down for each below
+constexpr double kDenseMinKm = 300.0, kDenseMaxKm = 800.0;  ///< the line's limits (a set without drag has no steps: BTERM 0 takes the lower)
 constexpr uint32_t kMaxCellBytes = kHeaderBytes + 2 * 24 * kNodes;  ///< a cell with every coefficient in doubles
 constexpr uint32_t kFlagPositionOnly = 1;    ///< open: no velocity at all; frames_at writes three planes
 constexpr uint8_t kFreeMark = 0xFF;          ///< byte 16 of a cell on a free list (byte 17: its class)
@@ -62,6 +65,8 @@ struct Sweep {
   uint32_t k = 0;              ///< the place in the sequence that follows the last one visited (the priority list, then the objects in index order)
   uint32_t pc = 0;             ///< the priority list's length and its hash: a sweep belongs to one list
   uint64_t ph = 0;
+  double w0 = 0, f0 = 0;       ///< the clock at which pass 0 began (again, after its one rerun)
+  bool rerun = false;          ///< pass 0 has been run again for a clock that advanced while it ran
 };
 
 struct State {
@@ -228,25 +233,35 @@ struct Built {
   int np, nv;
 };
 
-/// 0: stored in g_cell (size in `bytes`); 1: AP refuses somewhere in the window; 2: the tolerance is not held.
-/// Samples and checks are taken ascending in time for a window after the epoch and descending for a window before it: the set is flown from the epoch toward the window.
-inline bool has_drag_pass(const epochs::Entry& en) {
+/// Whether the set's output steps (AP's baked coefficients change at the parts of a bracket), so that a window must be checked at many points: a function of the
+/// record alone, its perigee height against a line that moves with BTERM (SPEC 19.5 has the measured table).
+inline bool needs_dense_check(const epochs::Entry& en) {
   const double n = en.row.mean_motion_rev_day * kTwoPi / 86400.0;  // rad/s
   if (!(n > 0.0)) return false;
   const double a = std::cbrt(398600.4418 / (n * n));
-  return a * (1.0 - en.row.eccentricity) - 6378.137 < kDragPerigeeKm;
+  const double bt = en.row.bterm;
+  double line = bt > 0.0 ? kDenseLineKm + kDenseKmPerDecade * std::log10(bt / 0.01) : kDenseMinKm;
+  line = std::fmin(std::fmax(line, kDenseMinKm), kDenseMaxKm);
+  return a * (1.0 - en.row.eccentricity) - 6378.137 < line;
 }
 
+/// 0: stored in g_cell (size in `bytes`); 1: AP refuses somewhere in the window; 2: the tolerance is not held.
+/// Samples and checks are taken ascending in time for a window after the epoch and descending for a window before it: the set is flown from the epoch toward the window.
 inline int build_window(xpt::XpSat& xp, epochs::Store& st, const epochs::Entry& en, double a, double b, bool pos_only, uint32_t& bytes) {
   const double mid = 0.5 * (a + b), half = 0.5 * (b - a);
   // The order of the flight is the one that is right on every build: a window lies on one side of the epoch (the grid is anchored on it), a row's cold set is
   // flown toward the window from the epoch (ascending after it, descending before it), and no row's flight crosses the epoch within one set. A flight that
   // crosses its set's epoch is asked on the bracket before it and then on the one after, and a build that keeps one cache for both can answer from a stale one.
   const bool down = b <= 0.0;
-  const bool dense = has_drag_pass(en);
+  const bool dense = needs_dense_check(en);
   const int nchk = dense ? kChecks * kDenseMult : kChecks;
   // the rows of the record's weather must hold every day between the epoch and the window's far end (the end of a window is the next window's first instant)
   if (epochs::rows_cover(st, en, en.epoch + std::fmin(a, 0.0)) != 0 || epochs::rows_cover(st, en, en.epoch + (std::fmax(b, 0.0) - kEndGap)) != 0) return 1;
+  // the window's two edges: its first instant and the last before the next window's. The edge nearer the epoch is asked before the nodes, the far one after
+  // them (the flight's own order), and neither is a point of the nodes or of the checks
+  const double edge_near = down ? b - kEndGap : a, edge_far = down ? a : b - kEndGap;
+  double er[2][3], ev[2][3];
+  if (xpt::xp_propagate(xp, edge_near, er[0], ev[0]) != kPropOk) return 1;
   double u[kNodes], f[6][kNodes];
   for (int j = 0; j < kNodes; ++j) {
     // node j (ascending in u) is Chebyshev point kNodes-1-j; a window before the epoch takes them descending
@@ -256,6 +271,7 @@ inline int build_window(xpt::XpSat& xp, epochs::Store& st, const epochs::Entry& 
     if (xpt::xp_propagate(xp, mid + half * u[jj], r, v) != kPropOk) return 1;
     for (int c = 0; c < 3; ++c) { f[c][jj] = r[c]; f[3 + c][jj] = v[c]; }
   }
+  if (xpt::xp_propagate(xp, edge_far, er[1], ev[1]) != kPropOk) return 1;
   Built bt;
   const int groups = 6;  // velocity is built and checked in a position-only build too: both modes halve alike, and drop it from storage only
   for (int c = 0; c < groups; ++c) for (int k = 0; k < kNodes; ++k) bt.coef[c][k] = 0.0;
@@ -314,26 +330,27 @@ inline int build_window(xpt::XpSat& xp, epochs::Store& st, const epochs::Entry& 
       for (int k = 0; k < bt.nv; ++k) for (int a2 = 0; a2 < 3; ++a2) { if (k < hv) vh[k * 3 + a2] = bt.coef[3 + a2][k]; else vt[(k - hv) * 3 + a2] = static_cast<float>(bt.coef[3 + a2][k]); }
     }
   }
-  // the check: the stored cell against AP at points that are not the sample points, in the direction of the flight, then at the window's two ends (its first
-  // instant and the last instant before the next window's). A set without a drag pass: 96 points, each axis within 5 mm. A set with one (AP's output steps
-  // there, SPEC 19.5): 8 times the points, each within 8 mm in 3-D. Velocity: each axis within 5e-5 m/s at every point of either.
-  auto check_at = [&](double t) -> int {
-    double r[3], v[3], rc[3], vc[3];
-    if (xpt::xp_propagate(xp, t, r, v) != kPropOk) return 1;
+  // the check: the stored cell against AP at points that are not the sample points, in the direction of the flight, and at the window's two edges. Every set,
+  // at every point: each axis within 5 mm and the 3-D distance within 8 mm; velocity each axis within 5e-5 m/s and 3-D within 8e-5 m/s. A set that needs the dense
+  // check (needs_dense_check) has 8 times the points of the other, 96. The dense points are a uniform grid offset from the 96-point grid, not a superset of it.
+  auto check_values = [&](double t, const double r[3], const double v[3]) -> int {
+    double rc[3], vc[3];
     eval_cell(g_cell, t, rc, vc);
-    const double dx = rc[0] - r[0], dy = rc[1] - r[1], dz = rc[2] - r[2];
-    if (dense) { if (!(std::sqrt(dx * dx + dy * dy + dz * dz) <= kLimit3D)) return 2; }
-    else if (!(std::fabs(dx) <= kTolPos && std::fabs(dy) <= kTolPos && std::fabs(dz) <= kTolPos)) return 2;
-    for (int c = 0; c < 3; ++c) if (!(std::fabs(vc[c] - v[c]) <= kTolVel)) return 2;
+    const double dx = rc[0] - r[0], dy = rc[1] - r[1], dz = rc[2] - r[2], wx = vc[0] - v[0], wy = vc[1] - v[1], wz = vc[2] - v[2];
+    if (!(std::fabs(dx) <= kTolPos && std::fabs(dy) <= kTolPos && std::fabs(dz) <= kTolPos && std::sqrt(dx * dx + dy * dy + dz * dz) <= kLimit3D)) return 2;
+    if (!(std::fabs(wx) <= kTolVel && std::fabs(wy) <= kTolVel && std::fabs(wz) <= kTolVel && std::sqrt(wx * wx + wy * wy + wz * wz) <= kLimitVel3D)) return 2;
     return 0;
   };
-  for (int q = 0; q < nchk; ++q) {
-    const int j = down ? nchk - 1 - q : q;
-    const int rc = check_at(mid + half * (-0.98 + 1.96 * (static_cast<double>(j) + 0.31) / nchk));
+  for (int e = 0; e < 2; ++e) {
+    const int rc = check_values(e == 0 ? edge_near : edge_far, er[e], ev[e]);
     if (rc != 0) return rc;
   }
-  for (int e = 0; e < 2; ++e) {
-    const int rc = check_at(down == (e == 0) ? b - kEndGap : a);
+  for (int q = 0; q < nchk; ++q) {
+    const int j = down ? nchk - 1 - q : q;
+    const double t = mid + half * (-0.98 + 1.96 * (static_cast<double>(j) + 0.31) / nchk);
+    double r[3], v[3];
+    if (xpt::xp_propagate(xp, t, r, v) != kPropOk) return 1;
+    const int rc = check_values(t, r, v);
     if (rc != 0) return rc;
   }
   if (pos_only) {  // the velocity group was built and checked; the cell keeps positions alone
@@ -397,9 +414,26 @@ inline bool covered(const State& s, const Obj& o, double t) {
   return c != nullptr && covers_cell(c, t);
 }
 
+/// Every held cell that covers neither time of a call goes back to the slab: the room a stalled row needs. Returns the cells freed.
+inline uint32_t reclaim(State& s, double now_whole, double now_frac, double ahead_minutes) {
+  uint32_t freed = 0;
+  for (uint32_t i = 0; i < s.objects; ++i) {
+    Obj& o = s.obj[i];
+    if (o.kind != 0) continue;
+    const double t0 = minutes_from(o, now_whole, now_frac), ta = t0 + ahead_minutes;
+    for (int slot = 0; slot < 2; ++slot) {
+      uint32_t& off = slot == 0 ? o.cur : o.nxt;
+      const uint8_t* c = cell_at(s, off);
+      if (c != nullptr && !covers_cell(c, t0) && !covers_cell(c, ta)) { slab_free(s, off); off = 0; ++freed; }
+    }
+  }
+  return freed;
+}
+
 /// Stores g_cell (`bytes`) as object i's slot `slot` (0 current, 1 following). `droppable`: the held cells (bit 0 current, bit 1 following) that cover
-/// neither time of the call; they go back to the slab after the new cell is stored, or earlier when the slab is full without them. The slab is compacted when
-/// its bump fails. 0: no room (counted: stats[12]); the held cells are untouched unless they were droppable and the room was needed.
+/// neither time of the call; they go back to the slab after the new cell is stored, or earlier when the slab is full without them. A plain allocation is
+/// tried first, a compaction only when it fails and the free bytes and the bump's remainder hold the cell. 0: no room (counted: stats[12]); the held cells are
+/// untouched unless they were droppable and the room was needed.
 inline bool place(State& s, uint32_t i, int slot, uint32_t bytes, int droppable) {
   const size_t need = static_cast<size_t>(class_of(bytes)) * kClassBytes;
   auto recoverable = [&]() { return (s.slab_bytes - s.used) + s.free_bytes >= need; };  // compaction can make room only if the free bytes and the bump's remainder hold the cell
@@ -410,7 +444,8 @@ inline bool place(State& s, uint32_t i, int slot, uint32_t bytes, int droppable)
     if (droppable & 1) { slab_free(s, o.cur); o.cur = 0; }
     if (droppable & 2) { slab_free(s, o.nxt); o.nxt = 0; }
     droppable = 0;
-    if (recoverable()) { compact(s); at = slab_alloc(s, bytes); }
+    at = slab_alloc(s, bytes);  // the room the early frees made, by plain reuse; a compaction only if that fails and can help
+    if (at == 0 && recoverable()) { compact(s); at = slab_alloc(s, bytes); }
   }
   if (at == 0) { ++s.full; return false; }
   std::memcpy(s.slab + at, g_cell, bytes);
@@ -521,23 +556,26 @@ int32_t sdnap_frames_at(double jd_whole, double jd_frac, uint32_t first, uint32_
 /// `now + ahead_seconds` needs (`ahead` clamped to 48 minutes), at most `max_rows` rows (one row: one cold set, one cell or tombstone; the module imports no
 /// clock). A call resumes the sweep the last call left when `ahead`, the priority list (length and contents) and the store are the same and `now` is the same
 /// or has advanced by at most a minute while the sweep is not done, so a full fill in slices of any size visits each object once; any other call starts a
-/// sweep. A row that cannot be stored (the slab cannot hold the cell even compacted, or a counted allocation failed) ends the call. `result`, 7 int32: [0] places
-/// of the sequence left to visit for `now`, [1] for `now + ahead`, [2] cells stored, [3] tombstones stored, [4] rows that could not be stored, [5] places visited,
-/// [6] the index of the object whose row could not be stored, or -1. Returns 0, or -1 (bad argument: a non-finite time, a negative `ahead`, `max_rows` under 1,
-/// more priority entries than objects), -5 (not open), -6 (open again).
+/// sweep. When pass 0 ends and the clock has advanced since it began, pass 0 runs once more (a covered object costs a skip). A cell that holds this call's `now` is
+/// never freed. A row that cannot be stored (the slab cannot hold the cell even after a reclaim pass over all objects and a compaction) is skipped and reported,
+/// and the later objects are still visited; a counted allocation that failed ends the call. `result`, 7 int32: [0] places of the sequence left to visit for
+/// `now`, [1] for `now + ahead`, [2] cells stored, [3] tombstones stored, [4] rows that could not be stored, [5] places visited, [6] the index of the last object
+/// whose row could not be stored, or -1. Returns 0, or -1 (bad argument: a non-finite time, a negative `ahead`, `max_rows` under 1, more priority entries than
+/// objects), -5 (not open), -6 (open again).
 SDNAP_EXPORT("sdnap_frames_refill")
 int32_t sdnap_frames_refill(double now_whole, double now_frac, double ahead_seconds, uint32_t max_rows, const uint32_t* priority, uint32_t priority_count, int32_t* result) {
   using namespace sdnap::frames;
   State& s = state();
   if (!s.open) return kNotOpen;
   if (!std::isfinite(now_whole) || !std::isfinite(now_frac) || !std::isfinite(ahead_seconds) || ahead_seconds < 0.0 || result == nullptr || max_rows < 1 ||
-      (priority == nullptr && priority_count != 0) || priority_count > s.objects)
+      (priority == nullptr && priority_count != 0))
     return kBadArgument;
   const sdnap::epochs::Store& st = sdnap::epochs::resident();
-  if (st.generation != s.generation) {  // a load replaced the store: every cell is dropped, the table read again
+  if (st.generation != s.generation) {  // a load replaced the store: every cell is dropped, the table read again (before the list is checked against the series)
     if (st.series.size() > s.cap_objects) return kReopen;
     fill_table(s);
   }
+  if (priority_count > s.objects) return kBadArgument;
   const double ahead = std::fmin(ahead_seconds, kMaxAheadSeconds);
   Sweep& sw = s.sweep;
   // the key of a sweep: the length and the contents (FNV-1a) of the priority list, `ahead`, and the store; `now` too, except that a sweep not yet done goes on
@@ -549,46 +587,49 @@ int32_t sdnap_frames_refill(double now_whole, double now_frac, double ahead_seco
   const bool same_clock = sw.w == now_whole && sw.f == now_frac;
   const bool goes_on = sw.valid && sw.pass < 2 && advance >= 0.0 && advance <= 60.0;
   if (!sw.valid || sw.ahead != ahead || sw.pc != priority_count || sw.ph != hash || !(same_clock || goes_on)) {
-    sw = Sweep{}; sw.valid = true; sw.ahead = ahead; sw.pc = priority_count; sw.ph = hash;
+    sw = Sweep{}; sw.valid = true; sw.ahead = ahead; sw.pc = priority_count; sw.ph = hash; sw.w0 = now_whole; sw.f0 = now_frac;
   }
   sw.w = now_whole; sw.f = now_frac;
   const uint32_t total = priority_count + s.objects;
+  const double ahead_min = ahead / 60.0;
   uint32_t rows = 0, stored = 0, tombs = 0, unstored = 0, visits = 0;
   int32_t stalled = -1;
   bool stop = false;
+  auto holds = [&](uint32_t off, double t) { const uint8_t* c = cell_at(s, off); return c != nullptr && covers_cell(c, t); };
   while (sw.pass < 2 && !stop) {
     while (sw.k < total) {
       const uint32_t i = sw.k < priority_count ? priority[sw.k] : sw.k - priority_count;
       Obj& o = s.obj[i < s.objects ? i : 0];
       if (i >= s.objects || o.kind != 0) { ++sw.k; ++visits; continue; }
-      const double t0 = minutes_from(o, now_whole, now_frac), t = sw.pass == 0 ? t0 : t0 + ahead / 60.0;
-      int slot = 0, droppable = 3;
-      if (sw.pass == 0) {
-        if (const uint8_t* n = cell_at(s, o.nxt); n != nullptr && covers_cell(n, t)) {  // the following cell is the current one now
-          slab_free(s, o.cur);
-          o.cur = o.nxt; o.nxt = 0;
-          if (o.cur != 0) { const uint32_t ow = (i << 1); std::memcpy(s.slab + o.cur + 20, &ow, 4); }
-          ++sw.k; ++visits;
-          continue;
-        }
-        const uint8_t* c = cell_at(s, o.cur);
-        if (c != nullptr && covers_cell(c, t)) { ++sw.k; ++visits; continue; }
-      } else {
-        if (covered(s, o, t)) { ++sw.k; ++visits; continue; }
-        slot = 1;
-        droppable = 2;  // the current cell may cover now: only the following one is replaced
+      const double t0 = minutes_from(o, now_whole, now_frac), ta = t0 + ahead_min, t = sw.pass == 0 ? t0 : ta;
+      // the following cell is the current one when it holds this call's `now` (in either pass: a resumed sweep can meet it in the second)
+      if (holds(o.nxt, t0)) {
+        slab_free(s, o.cur);
+        o.cur = o.nxt; o.nxt = 0;
+        const uint32_t ow = (i << 1);
+        std::memcpy(s.slab + o.cur + 20, &ow, 4);
       }
+      if (sw.pass == 0 ? holds(o.cur, t0) : (holds(o.cur, ta) || holds(o.nxt, ta))) { ++sw.k; ++visits; continue; }
+      // the cells a stored replacement may free: those that hold neither time of the call
+      const int slot = sw.pass == 0 ? 0 : 1;
+      const int droppable = ((o.cur != 0 && !holds(o.cur, t0) && !holds(o.cur, ta)) ? 1 : 0) | ((o.nxt != 0 && !holds(o.nxt, t0) && !holds(o.nxt, ta)) ? 2 : 0);
       if (rows >= max_rows) { stop = true; break; }
       ++rows;
       uint32_t bytes = 0;
       const int rc = row(s, i, t, bytes);
-      if (rc == 0) { ++unstored; stalled = static_cast<int32_t>(i); stop = true; break; }
+      if (rc == 0) { ++unstored; stalled = static_cast<int32_t>(i); stop = true; break; }  // a counted allocation failed: the memory, not this object
       if (rc == 3) { ++sw.k; ++visits; continue; }
-      if (!place(s, i, slot, bytes, droppable)) { ++unstored; stalled = static_cast<int32_t>(i); stop = true; break; }
+      bool put = place(s, i, slot, bytes, droppable);
+      if (!put && reclaim(s, now_whole, now_frac, ahead_min) > 0) put = place(s, i, slot, bytes, droppable);  // one reclaim pass over all objects, one retry
+      if (!put) { ++unstored; stalled = static_cast<int32_t>(i); ++sw.k; ++visits; continue; }  // skipped and reported: the later objects are still visited
       if (rc == 1) ++stored; else ++tombs;
       ++sw.k; ++visits;
     }
     if (stop) break;
+    if (sw.pass == 0 && !sw.rerun && (sw.w0 != now_whole || sw.f0 != now_frac)) {  // the clock advanced while pass 0 ran: once more, a covered object costs a skip
+      sw.rerun = true; sw.w0 = now_whole; sw.f0 = now_frac; sw.k = 0;
+      continue;
+    }
     ++sw.pass;
     sw.k = 0;
   }

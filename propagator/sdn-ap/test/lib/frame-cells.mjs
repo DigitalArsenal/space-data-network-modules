@@ -25,6 +25,9 @@ export const KINDS = {
   shortrows: { hp: 600, e: 0.001, serves: true, rowsFrom: "2026-10-14" },  // weather rows from the day before the epoch: AP refuses two days before the epoch
   // resonance-class sets above eccentricity 0.05 (1, 2 and 3 revolutions a day): served, the wide branch begins at 0.3 for them
   geoE10: { hp: 31570, e: 0.1, serves: true, fixedE: true, incs: [5] }, res2E20: { hp: 14870, e: 0.2, serves: true, fixedE: true, incs: [55] }, res3E10: { hp: 11900, e: 0.1, serves: true, fixedE: true, incs: [55] },
+  // sets at the edge of the dense check (SPEC 19.5): the line is 500 km at BTERM 0.01 m^2/kg and moves 80 km a decade of BTERM
+  hp490: { hp: 490, e: 0.0005, serves: true, fixedE: true, incs: [55], drag: true }, hp520b01: { hp: 520, e: 0.0005, serves: true, fixedE: true, incs: [55], bterm: 0.1, drag: true },
+  hp560b1: { hp: 560, e: 0.0005, serves: true, fixedE: true, incs: [55], bterm: 1, drag: true },
   underground: { hp: -230, e: 0.0005, serves: false, fixedE: true, incs: [55], refuses: true },  // 18 revolutions a day: the set loads and AP refuses it at every time
 };
 
@@ -40,7 +43,7 @@ export function population(plan, seed = 20261113, spreadMinutes = 0) {
       const a = (RE + spec.hp) / (1 - e);
       const incs = spec.incs ?? [20, 55, 70, 98];
       const inc = incs[Math.floor(rnd() * incs.length)];
-      const o = { kind, norad: 300000 + out.length, e, a, inc, raan: rnd() * 360, argp: rnd() * 360, ma: rnd() * 360, serves: spec.serves, drag: !!spec.drag, refuses: !!spec.refuses, rowsFrom: spec.rowsFrom ?? null, epochOffsetMs: 0 };
+      const o = { kind, norad: 300000 + out.length, e, a, inc, raan: rnd() * 360, argp: rnd() * 360, ma: rnd() * 360, serves: spec.serves, drag: !!spec.drag, bterm: spec.bterm, refuses: !!spec.refuses, rowsFrom: spec.rowsFrom ?? null, epochOffsetMs: 0 };
       if (spreadMinutes > 0) o.epochOffsetMs = Math.floor(rnd() * spreadMinutes * 60000);  // the epochs of a catalog are spread; each object's grid is anchored at its own
       out.push(o);
     }
@@ -49,7 +52,7 @@ export function population(plan, seed = 20261113, spreadMinutes = 0) {
 }
 const isoOf = (ms) => new Date(ms).toISOString().replace("Z", "");
 export const epochOf = (o) => EPOCH_MS + o.epochOffsetMs;
-export const ocmOfObject = (o, ap = true) => seedOcm({ epoch: o.epochOffsetMs ? isoOf(EPOCH_MS + o.epochOffsetMs) : EPOCH, n: revPerDay(o.a), e: o.e, i: o.inc, raan: o.raan, argp: o.argp, ma: o.ma, bterm: 0.01, agom: 0.01,
+export const ocmOfObject = (o, ap = true) => seedOcm({ epoch: o.epochOffsetMs ? isoOf(EPOCH_MS + o.epochOffsetMs) : EPOCH, n: revPerDay(o.a), e: o.e, i: o.inc, raan: o.raan, argp: o.argp, ma: o.ma, bterm: o.bterm ?? 0.01, agom: 0.01,
   norad: o.norad, msis: ap, records: ap, tesseral: ap ? 31 : 0, zonal: ap ? 20 : 0, rows: ap ? (o.rowsFrom ? allRows.filter((r) => r.DATE >= o.rowsFrom) : allRows) : [] });
 const prefixed = (u) => { const b = Buffer.alloc(4 + u.length); b.writeUInt32LE(u.length, 0); Buffer.from(u).copy(b, 4); return b; };
 
@@ -117,6 +120,8 @@ export async function openFrames({ wasm = wasmPath, initialMemoryBytes, threads 
       if (r.statusCode !== 0) throw new Error(`propagate_epochs ${r.errorCode}: ${r.errorMessage}`);
       return Buffer.concat(r.outputs.map((q) => Buffer.from(q.payload)));
     },
+    /** sdnap_pool_stats: the 16 values (threads, batches, ..., [14] rows completed on pool threads, [15] pool threads that completed one) */
+    poolStats() { const p = x.sdnap_alloc(256); x.sdnap_pool_stats(p, 16); const v = Array.from(new Float64Array(mem(), p, 16)); x.sdnap_free(p); return v; },
     stats() { const p = x.sdnap_alloc(256); x.sdnap_frames_stats(p); const v = Array.from(new Float64Array(mem(), p, 20)); x.sdnap_free(p); return v; },
     close: () => x.sdnap_frames_close(),
   };

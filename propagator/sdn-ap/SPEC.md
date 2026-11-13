@@ -6284,16 +6284,23 @@ tables `drag::table()` makes, the caches the first `xp_init` on a thread makes, 
   series is skipped; the list holds at most as many entries as there are series. A row is one cold set and one cell, or one
   tombstone (19.3); the module imports no clock (SPEC 9), the host turns rows into time with the table below. `max_rows` is at
   least 1. A sweep is keyed on `ahead`, the priority list (its length and its contents) and the store: a call resumes the
-  sweep the one before left when those are the same and `now` is the same, or has advanced by at most a minute while the sweep
-  is not done (a display that asks with a new time every frame goes on from its place); any other call starts a sweep. So a
-  full fill sliced at any `max_rows` visits each object once for each of the two times, and a call costs the places it visits,
-  not all of them. A call that finds nothing to do visits the places of one sweep, two passes over the objects. The cells do not depend on the order in which objects are visited, only on the record
-  and the window. A row that cannot be stored (a counted allocation failed, or the slab is full after a compaction) ends the
-  call, and the following call retries it; the objects after it are not visited until it is stored or the slab changes.
-  `result`, 7 int32: [0] places of the sequence left to visit for `now`, [1] for `now + ahead`, [2] cells stored, [3]
-  tombstones stored, [4] rows that could not be stored, [5] places visited, [6] the index of the object whose row could not be
-  stored, or -1. The host's loop: continue while [0] or [1] is above 0 and not ([4] above 0 and [2] + [3] equal to 0) (the slab
-  or the memory cannot take more; stats[12] counts them). Returns 0, or -1 (bad argument: a non-finite time, a negative
+  sweep the one before left when those are the same and `now` is the same, or has advanced since the previous call by at most
+  a minute of clock while the sweep is not done (a display that asks with a new time every frame goes on from its place); any
+  other call starts a sweep, so a clock that steps by about a window or more at every call restarts the sweep at the first
+  place each time and can starve the later places. When pass 0 (the cells `now` needs) ends and the clock has advanced since
+  it began, pass 0 runs once more (an object that holds its cell costs a skip), so a sweep slowed by `max_rows` across many
+  windows still ends with every object holding the clock of its end. A full fill sliced at any `max_rows` at one clock visits
+  each object once for each of the two times; a call at the clock of a finished sweep visits no place, and a call at a new
+  clock visits the places of one sweep, two passes over the objects (`idleRefillMs` of `node test/frames-cost.mjs` is its
+  cost at 100,000 places). The cells do not depend on the order in which objects are visited, only on the record and the
+  window. A cell that holds this call's `now` is never freed. A row that cannot be stored (the slab is full) gets one
+  reclaim pass over all objects (the cells that hold neither time of the call go back to the slab) and one retry; if it still
+  does not fit, the object is skipped and reported ([4], [6]) and the later objects are still visited. A counted allocation
+  that failed ends the call. `result`, 7 int32: [0] places of the sequence left to visit for `now`, [1] for `now + ahead`, [2]
+  cells stored, [3] tombstones stored, [4] rows that could not be stored, [5] places visited, [6] the index of the last
+  object whose row could not be stored, or -1. The host's loop: continue while [0] or [1] is above 0 and not ([4] above 0 and
+  [2] + [3] equal to 0) (the slab or the memory cannot take more; stats[12] counts them). A host judges that a frame is full by
+  the statuses of `sdnap_frames_at` (19.9), not by [0] and [1]. Returns 0, or -1 (bad argument: a non-finite time, a negative
   `ahead`, `max_rows` under 1, more priority entries than series), -5 (not open), -6 (the store holds more series than
   open's table: open again). `ahead` is for the shortest window the host expects (3 minutes, `ahead` of 180 seconds): a longer
   one builds a cell for a window that is not the one following the current cell, which is not used when the clock reaches the
@@ -6355,10 +6362,14 @@ inside the row. For a window:
    a group in doubles if that sum is not under the limit.
 4. The check of the stored cell, tail included, against AP at points of the window that are not the 64, and at its first
    instant and its last (a minute-millionth before the end: the window ends where the next begins, and a UTC midnight can be
-   the end of the weather rows), the first window after the epoch at t = 0 exactly. A set without a drag pass: 96 points, the
-   cell passes when every axis is within 5 mm and 5e-5 m/s. A set with a drag pass (mean perigee height under 500 km: AP's
-   output steps there, 19.5): 768 points, the cell passes when each is within 8 mm in 3-D, and the velocity bound as before. A
-   window that fails the check, or in which AP refuses a state at any point
+   the end of the weather rows), the first window after the epoch at t = 0 exactly. The two edges are asked of the set before
+   the 64 points and after them (the nearer to the epoch first), not among the checks. At every point of every set the cell
+   passes when each axis is within 5 mm and the 3-D distance within 8 mm, and in velocity each axis within 5e-5 m/s and the
+   3-D distance within 8e-5 m/s. A set whose output steps (19.5) has 768 points, the others 96; which sets those are is a
+   function of the record: the mean perigee height under a line of 500 km at BTERM 0.01 m^2/kg, moving 80 km for each
+   decade of BTERM (to 660 km at BTERM 1, down to 300 km at the lowest), from mean motion, eccentricity and BTERM. The 768
+   points are a uniform grid offset from the 96-point grid, not a superset of it; the two edge points cover the outer 2 %
+   of a window. A window that fails the check, or in which AP refuses a state at any point
    (the set decayed, the weather rows short), is halved, and the half that holds the time is built the same way, down to 3
    minutes. A window of 3 minutes that still fails is stored as a tombstone: a header-only cell for exactly that window
    with its reason, status 3 (AP refuses in it) or 4 (the tolerance is not held in it). A time in a tombstone answers its
@@ -6371,11 +6382,12 @@ A status is a function of the record and the time once the window that holds the
 attempted answers 1. The cell, or the tombstone, that a window holds does not depend on which windows were attempted before.
 
 A cell is 24 bytes of header (mid and half-span in minutes, the counts, the holder) and 8 bytes a coefficient in the head, 4
-in the tail, held in classes of 64 bytes; a tombstone is the header alone. With the position-only flag only position is
-built, checked and written: three planes and no velocity, because AP's velocity is not the derivative of its position (they
-differ by 4.6e-2 m/s rms at 500 km in the module's own measure) and no derivative is offered as a velocity. A host that needs
-velocity opens without the flag. The velocity is built and checked in a position-only build too, and dropped from storage
-only: both modes halve alike, and the positions are the same bits with and without it.
+in the tail, held in classes of 64 bytes; a tombstone is the header alone. With the position-only flag the velocity is built
+and checked and not stored, and `sdnap_frames_at` writes three planes and no velocity, because AP's velocity is not the
+derivative of its position (no command of this repository prints their difference) and no derivative is offered as a
+velocity. A host that needs velocity opens without the flag. Both modes halve alike, and the positions are the same bits with
+and without it. A halved window is built on the set that has already flown its parent windows, always on one side of the
+epoch; the kinds of the test that halve are among those compared with fresh asks.
 
 ### 19.4 A state depends on the set and the time alone
 
@@ -6396,25 +6408,31 @@ class, strong drag and decay included. A window that cannot meet it is not serve
 refuses in it), and the host asks AP's own entries for those times. The cell is a function of the record and the window, so
 the reference is a fresh instance's AP state, which no order of earlier asks moves.
 
-The builder checks every window against that reference: for a set without a drag pass 96 points within 5 mm per axis and the
-window's two ends; for a set with a drag pass 768 points within 8 mm in 3-D and the two ends. The error between check points
-is not bounded by construction: the 1 cm is what a scan every second shows (every 17 s at -1, 2 and 10 days), on the tests'
-populations, not a proof. Why sets with a perigee under 500 km get the denser check: AP's own output steps there. A dense
-scan of it every 0.25 s (`node test/frames-steps.mjs`, seeded sets, three hours at 2 days from the epoch) finds jumps of
-the position at constant intervals; by perigee height, steps an hour, size p50 / p90 / max in mm, and the gap in seconds:
-200 km 22, 16 / 33 / 39, 165; 250 km 37, 3.4 / 6.8 / 11.5, 20 to 168; 300 km 9, 3.5 / 6.5 / 8.9, 76 to 766; 350 km 2.1,
-4.7 / 9.1 / 12.4, 1,570; 400 km 1.1, 3.0 / 6.0 / 10.9, 3,704; 450 km 0.7, 2.9 / 5.6 / 5.6, 5,620; 500 km 0.4, 2.1 / 2.9 /
-2.9, 5,680; none at 600 km and above. The gaps are the spacing of the set's nodes (two mean periods, 4 pi / n) divided by a
-whole number, 64 at 200 km, 7 at 350, 3 at 400, 2 at 450 and 500: the steps fall on the part boundaries of a bracket, where
-AP's baked coefficients change. A step of 10 mm inside a window leaves a polynomial about half of it from AP on each side,
-and a window that holds one cannot meet 8 mm unless the step is small: it is halved to 3 minutes and then tombstoned.
-Measured by `node test/frames.e2e.mjs` (31 seeded objects, inclinations 0.3 to 140 degrees, eccentricity to 0.05, resonance
-classes to 0.2, epochs spread over a day, a set AP refuses, every second at 0 and 5 days from the epoch, every 17 s at -1, 2
-and 10 days; 4.4 million served points at 0 and 5 days): worst position 7.55 mm (3-D) in any class, 6.8 mm and 7.4 mm in
-strong drag (perigees of 300 and 250 km), 7.55 mm in the decaying sets; worst velocity 3.9e-5 m/s. The cost in served time,
-over the same scan: perigee 300 km 100 % of the scanned times served, 250 km 98.0 % (the rest is tombstones of status 4),
-500 km and above 100 %; the decaying sets 18.9 % (they decay inside the scan, and the windows in the last hours that cannot
-meet the line are tombstones); the set with weather rows from the day before its epoch 97.3 % (day -1 is refused by AP).
+The builder checks every window against that reference, with both limits of 19.3 at every point and at the window's two ends.
+The error between check points is not bounded by construction: the 1 cm is what a scan every second shows (every 17 s at -1,
+2 and 10 days, and against fresh instances at every 61st second), on the tests' populations, not a proof. Why some sets get
+the 768-point check: AP's own output steps. A dense scan of AP's states every 0.25 s (`node test/frames-steps.mjs --table all`,
+seeded sets, two hours at 2 days from the epoch, 2 sets a row, 4 hours in all) finds jumps at constant intervals, and they
+follow the perigee height and BTERM. Steps an hour and the largest step in mm (velocity: largest in 1e-5 m/s), at BTERM
+0.01 m^2/kg: 200 km 21, 33.7 (3.4); 250 km 38, 7.2 (0.8); 300 km 6.8, 6.9; 350 km 2.5, 6.4; 400 km 1.0, 6.8; 450 km 0.3, 2.1;
+none at 500 km and above, none at e 0.03 (perigees 500 to 800 km). At 450 km: none at BTERM 0.001, 5.8 an hour (6.1 mm) at
+0.1, 20 an hour (18.2 mm) at 1. At 500 km: none at 0.001, 2.8 an hour (5.4 mm) at 0.1, 45 an hour (7.5 mm) at 1. At 520 km:
+1.3 an hour (8.3 mm) at 0.1, 26 an hour (5.7 mm) at 1. At 560 km: 1 an hour (4.5 mm) at 0.1, 12 an hour (5.7 mm) at 1. At
+600 km: 0.5 an hour at 0.1, 8 an hour (5.6 mm) at 1. At 650 km: 0.5 an hour at 0.1, 3 an hour (5.1 mm) at 1. Velocity steps
+are at most 3.4e-5 m/s at 200 km and 1.8e-5 m/s above. The gaps are the spacing of the set's nodes (4 pi / n) divided by a
+whole number: the steps fall on the part boundaries of a bracket, where AP's baked coefficients change. A step of 10 mm
+inside a window leaves a polynomial about half of it from AP on each side, and a window that holds one cannot meet 8 mm
+unless the step is small: it is halved to 3 minutes and then tombstoned. So the dense line is a function of BTERM: 500 km at
+0.01, 580 km at 0.1, 660 km at 1, down to 300 km at 0.001 (the table has no steps at 450 to 650 km there).
+Measured by `node test/frames.e2e.mjs` (34 seeded objects, inclinations 0.3 to 140 degrees, eccentricity to 0.05,
+resonance classes to 0.2, BTERM 0.01, 0.1 and 1, epochs spread over a day, a set AP refuses; every second at 0 and 5 days
+from the epoch, every 17 s at -1, 2 and 10 days; 5.3 million served points, of which 163,911 against a fresh instance's AP
+state): worst position 6.4 mm (3-D) in any class, 6.4 mm and 6.0 mm in strong drag (perigees of 300 and 250 km), 6.1 mm in
+the decaying sets; worst velocity 4.5e-5 m/s. The cost in served time, over the same scan: perigee 300 km 99.96 % of the
+scanned times served, 250 km 94.5 % (the rest is tombstones of status 4), 490 km at BTERM 0.01, 520 km at 0.1 and 560 km at
+1: 100 %; 500 km and above 100 %; the decaying sets 6.2 % (they decay inside the scan, and the windows in the last hours that
+cannot meet the line are tombstones); the set with weather rows from the day before its epoch 97.2 % (day -1 is refused by
+AP).
 What gets worse:
 
 - A frame state differs from AP's by up to the bound above. Two kinds of state exist for an object (AP's, from
@@ -6449,12 +6467,24 @@ windows turned over (48 minutes in steps of one):
 
 The cells at a full fill exceed the objects by 6.3 % on the recipe: the cells of the following window, built 3 minutes ahead,
 the epochs being spread. A catalog whose epochs are not spread holds two cells for every object during those 3 minutes.
-With the stored 180,486,144 bytes of a 100,000-object load with covariance (the figure of the load probe of
-`test/load-memory.e2e.mjs` at that size) the instance holds 269.7 MB (recipe: 180.5 stored load, this test's load being
-smaller, plus 89.2 block and 0 growth) and 263.0 MB (public shares), under 300 MB decimal; the test asserts both. What the instance holds besides the block: the first row on a thread makes that
-thread's caches (SPEC 9: 1.8 MB, once, kept); a fill grew the instance by no more than 4 MiB in the test, 0 at 100,000
-(the load's freed memory is reused). The instance's memory does not shrink: the bound holds while no wide object is flown in
-the instance (19.5). A slab that fragments (cells that change size) is compacted when its bump fails: the live cells slide down
+The instance total is the module's bytes plus what the host does. The stored 100,000-set load with covariance holds
+180,486,144 bytes with 15 pool threads (the figure of the load probe of `test/load-memory.e2e.mjs`). Three host rules keep the
+instance under the total stated here: (1) start the instance at 2 MiB (a browser harness's default of 64 MiB cost 65.0 MB: the
+heap grows beside the initial pages it does not use); (2) load in parts of at most 1,000 records and free the staging buffer
+(`plugin_free`) after `load_epochs_close` and before allocating the planes and status buffers of the frame (4.78 MB; parts of
+5,000 records cost 20 MB more); (3) start no pool, or count 2.5 MB an instance for each thread (`node
+test/frames-memory.e2e.mjs` prints it: 15 threads, 37.7 MB). With the rules and this block: the recipe's instance holds 269.7
+MB with 15 pool threads (180.5 + 89.2 block, 0 growth) and 232.0 MB without a pool; the public shares 263.0 and 225.3 MB; a
+browser tab following the rules measured 239.7 MB without a pool for 100,000 AP records with covariance, and 272.8 MB at
+open with 15 threads. The test asserts both totals under 300 MB decimal. The host's own output planes of a frame (5.2 MB at
+100,000 objects) are inside the instance and counted. What the instance holds besides the block: the first row on a thread
+makes that thread's caches (SPEC 9: 1.8 MB, once, kept); a fill grew the instance by no more than 4 MiB in the test, 0 at
+100,000. After a load the instance holds 33 to 38 MB more than the store's own count: the load's high-water (staging and the
+decoding of a part), which the memory does not give back to the host. Later allocations reuse it, a block larger than any
+hole in it does not: the 89 MB frame block grows the instance by its full size (open minus load equals the block), and the
+rows' cold sets, the thread's caches and a refill's allocations land in the load's holes and grow it by 0. The instance's
+memory does not shrink: the bound holds while no wide object is flown in the instance (19.5), and a look-ahead of two cells an
+object (19.9) adds 80 to 90 MB (about 330 MB without a pool). A slab that fragments (cells that change size) is compacted when its bump fails: the live cells slide down
 over the free ones and each holder's offset is rewritten (82.7 MB moved for a 100,000-object recipe slab sized 0.4 % above its full fill, six times in 50 minutes of one-minute
 calls: the calls that compacted took 1.66 to 2.12 s, those that did not 1.69 to 2.16 s, for about 2,100 rows each, so a
 compaction's own time is below the spread of a call's); a row is not stored only when the slab is full after that.
@@ -6480,6 +6510,31 @@ bits of one at 5,000 and visiting each object once; the position-only mode; a bu
 4); every counted allocation of open and of a refill row failed in turn (the object keeps no cell, the slab is as it was,
 and the same call then answers with the bits of a clean run). `node test/frames-memory.e2e.mjs`: the bytes at 100,000
 objects. `node test/frames-cost.mjs`: 19.1's rows, 19.7's frame ratios and 19.5's residue of wide sets.
+
+### 19.9 Driving a clock
+
+What a host that draws frames from a running clock needs, and what it gets.
+
+- **The rate.** Every object needs one cell for each window the clock crosses. Rows a second = served objects / (a window's
+  length divided by the clock's speed): a window is 48 minutes of clock, 2,880 s, so 100,000 objects need 35 rows a second at
+  1x, 347 at 10x and 2,083 at 60x (a window at 60x lasts 48 s of wall time). One thread stores about 1 ms a row in low orbit
+  at the epoch's distance of 0 to 2 days (the table of 19.1; about 480 objects a second were stored in a browser tab), so one
+  thread keeps up to about the speed at which its rows a second equal that need, and the first calls on a cold instance cost
+  more than the later ones (2.5 ms a row against 1.16 in the tab): a slice sized from the first calls is too small, size
+  `max_rows` from the running mean of the rows' time. Beyond that speed the cells of the turn arrive late and objects answer 1
+  (no cell) until the rows catch up; a host that cannot catch up at its speed shows the status counts, it does not wait.
+- **The look-ahead and the budget.** `ahead` is clock time, at most 48 minutes. With epochs spread over a window, the share
+  of objects that hold two cells is `ahead` / 48 minutes: 6.3 % at 3 minutes, 10 % at 5 minutes, all of them at 48 minutes. The
+  850 bytes an object of 19.6 holds for a look-ahead of a few minutes; a look-ahead of two cells an object doubles the block
+  (80 to 90 MB at 100,000 objects). A look-ahead that is short in wall time at speed (3 minutes of clock is 3 s at 60x) leaves
+  the rows no time: the host sizes `ahead` as the rows' time at its speed, and pays for it in the budget.
+- **The live clock every frame.** A sweep that is not done goes on from its place when `now` has advanced by at most a minute of
+  clock since the last call (measured in clock time: 16 ms of wall time at 60x is under a second). A host whose frames
+  advance by more than a minute of clock (above 3,600x at 60 frames a second) starts a sweep at every call and scans the
+  objects each time. A finished sweep starts a new one at the next new `now`.
+- **Is it filled?** The counters [0] and [1] of the result count the places a sweep has left; they read 0 between sweeps while
+  the clock has moved on and the next window's cells are not yet built. A host judges whether the frame is full by the
+  statuses `sdnap_frames_at` returns (the objects that answer 1), and uses the counters for the loop of 19.1 only.
 
 ## References
 
