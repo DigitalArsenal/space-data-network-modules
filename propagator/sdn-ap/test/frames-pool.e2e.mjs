@@ -56,7 +56,7 @@ const wasm = process.env.FRAMES_POOL_DIAGNOSTIC ?? buildDiagnostic("frames-pool"
   "frames.inc": s => once(once(once(s, "inline Batch* g_batch = nullptr;", "inline Batch* g_batch = nullptr;\ninline uint32_t test_staging_fail = 0;"),
     "void* memory = std::malloc(sizeof(Batch));", "void* memory = test_staging_fail ? nullptr : std::malloc(sizeof(Batch));"),
     "if (g_attempt_hook != nullptr) g_attempt_hook(i, xpt::batch_running());",
-    "if (g_attempt_hook != nullptr) g_attempt_hook(i, xpt::batch_running());\n  if (mem::test_failure == 1) xpt::g_alloc_refused = 1;"),
+    "if (g_attempt_hook != nullptr) g_attempt_hook(i, xpt::batch_running());\n  if (mem::test_failure == 1 && ::sbrk(1u << 30) != reinterpret_cast<void*>(-1)) std::abort();"),
   "pool.inc": s => once(s, "inline bool reserve_room(size_t bytes) {",
     "inline uint32_t test_reserve_fail = 0, test_reserve_calls = 0;\ninline bool reserve_room(size_t bytes) {\n  ++test_reserve_calls;\n  if (test_reserve_fail) { --test_reserve_fail; return false; }")
 });
@@ -79,7 +79,8 @@ const equal = (a, b, t) => {
 };
 let compared = 0;
 const deadOnly = process.argv.includes("--dead-only");
-for (const threads of deadOnly ? [] : [4, 15]) {
+const refusalOnly = process.argv.includes("--refusal-only");
+for (const threads of deadOnly || refusalOnly ? [] : [4, 15]) {
   const a = await open(0), b = await open(threads);
   for (const flags of [0, 1]) for (const budget of [20000, 2e6]) {
     assert.equal(a.open(budget, flags), 0); assert.equal(b.open(budget, flags), 0);
@@ -96,16 +97,16 @@ for (const threads of deadOnly ? [] : [4, 15]) {
   assert.equal(b.poolStats()[4], 0, "no memory growth in a batch");
   await a.h.destroy(); await b.h.destroy();
 }
-if (!deadOnly) console.log(`ordered calls: ${compared}, equal cells, counters, results and frame bits at 0/4/15 threads`);
+if (!deadOnly && !refusalOnly) console.log(`ordered calls: ${compared}, equal cells, counters, results and frame bits at 0/4/15 threads`);
 
-for (const threads of deadOnly ? [] : [0, 4, 15]) {
+for (const threads of deadOnly || refusalOnly ? [] : [0, 4, 15]) {
   const a = await open(threads), b = await open(threads), t = EPOCH_MS + DAY;
   a.open(2e6); b.open(2e6);
   assert.equal(a.fill(t, 2880, 8).due, 0); assert.equal(b.fill(t, 2880, 5000).due, 0);
   equal(a, b, t);
   await a.h.destroy(); await b.h.destroy();
 }
-if (!deadOnly) console.log("two slicings: identical cells, states and accumulated counters");
+if (!deadOnly && !refusalOnly) console.log("two slicings: identical cells, states and accumulated counters");
 
 for (const mode of deadOnly ? [] : [1, 2]) {
   const a = await open(0), b = await open(4), t = EPOCH_MS + DAY;
@@ -115,7 +116,10 @@ for (const mode of deadOnly ? [] : [1, 2]) {
   const before = b.poolStats();
   assert.deepEqual(b.refill(t, 2880, 32), a.refill(t, 2880, 32));
   equal(a, b, t);
-  if (mode === 1) assert.ok(b.poolStats()[3] > before[3], "refused row retried");
+  if (mode === 1) {
+    assert.ok(b.poolStats()[2] > before[2], "sbrk growth was refused inside the batch");
+    assert.ok(b.poolStats()[3] > before[3], "refused row retried");
+  }
   else { assert.equal(b.stats()[STAT.rowsOom], 1); assert.equal(b.stats()[STAT.rows], 4, "speculative suffix uncommitted"); }
   await a.h.destroy(); await b.h.destroy();
 }
@@ -129,7 +133,7 @@ for (const [reserves, staging] of deadOnly ? [] : [[2, 0], [99, 0], [0, 1]]) {
 }
 if (!deadOnly) console.log("deferred growth refusal, counted OOM, reserve halving and serial fallbacks: pass");
 
-for (const mode of [1, 2]) {
+for (const mode of refusalOnly ? [] : [1, 2]) {
   const f = await open(4), t = EPOCH_MS + DAY;
   f.open(2e6); assert.equal(f.refill(t, 2880, 1).stored, 1);
   const old = { stats: f.stats(), cells: cells(f), frame: f.at(t) };
@@ -153,5 +157,5 @@ for (const mode of [1, 2]) {
   }
   await f.h.destroy();
 }
-console.log("delayed and trapped pool claims: quarantine and stable committed reads pass");
+if (!refusalOnly) console.log("delayed and trapped pool claims: quarantine and stable committed reads pass");
 console.log("FRAMES-POOL PASS");
