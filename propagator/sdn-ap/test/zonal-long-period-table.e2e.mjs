@@ -3,6 +3,8 @@
 // Independent finite binomial sum (mean-anomaly average transformed to true anomaly); no epoch or frame.
 // Value and slope at the anchor agree within float rounding, 3e-6 relative. At anchor +/-0.001 the
 // measured Taylor truncation envelopes are 0.5% in G and 9% in dG (degree 70, e 0.3); degree <=20: 0.03% and 1.6%.
+// The e0=0.2999 comparison (1 m bound) holds the truncation: removing |w| >= 3 gives 15 to 19 m
+// near e 0.3, while the retained terms give 0.80 m. kTailW is also asserted below.
 // The 0.3 switch is isolated against a control with the full zonal harmonics on both sides, with every other
 // switch held as production selects it. Comparing the two eccentricities directly includes their physical separation.
 import assert from 'node:assert/strict';
