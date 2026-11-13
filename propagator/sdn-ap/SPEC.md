@@ -1616,7 +1616,11 @@ bits unchanged, with one exception stated below. What makes it so:
   node's own state (before that step's corrections), never from what the step before left. The grid's nodes are the same
   whichever node an integration starts from.
 - The drag-pass segment above e 0.3 (16.12) takes its perigee time and period from its bracket's lower node, not from the
-  first state asked.
+  first state asked. A segment is kept for its bracket by both nodes' times and its revolution's perigee time: the
+  brackets after and before the epoch have the epoch as their lower node, so the lower node's time alone names both.
+- The bracket the tesseral and m-daily terms are baked on has one identity: the set's context and the smaller of its two
+  nodes' indexes (a node's index is signed by its side of the epoch: 0 for the bracket after the epoch, -1 for the one
+  before it), with its first time and length.
 - The third body's bracket tables are the bracket's own (stack #475). The bracket's lower node chooses their builder,
   rows and sub-interval count, and they are read only as far as the builder wrote.
   Through 0.6.22 two things followed the state asked first instead:
@@ -1625,6 +1629,16 @@ bits unchanged, with one exception stated below. What makes it so:
   So a state near the three mean motions where the builder changes (0.006, 0.015 and 0.035 rad/min) moved with the order
   of requests, by up to 0.285 m (0.015 rad/min, 1e-7 above). Against the earlier states asked in ascending order it is
   now at most 14.3 mm (0.015), 5.8 mm (0.006) and 2.5 mm (0.035), and unchanged elsewhere.
+  Through 0.6.57 a third thing followed the state asked first: the bracket's identity was the set and the lower node's
+  index alone, which is 0 for both the bracket after the epoch and the bracket before it, and the drag-pass segment above
+  e 0.3 was kept under the lower node's time alone, the epoch's for both. A state asked after another state on the other
+  side of the epoch inside the first bracket kept the bakes of the other bracket, so it differed from the same state of
+  the set asked once. Largest differences by class: a decaying set (perigee 200 km, BTERM 0.01) 714 mm, a transfer orbit
+  7.5 mm, e 0.25 1.8 mm, 500 km 0.30 mm, e 0.1 0.22 mm, the 8 h class 0.18 mm, 830 km 0.17 mm, the half-day class 6.5 to
+  31 um, geosynchronous with tesseral 31 0.02 um; geosynchronous without tesseral terms was not affected. Every other
+  bracket (the second and later on either side) was not. `test/state-purity.e2e.mjs` asks each state of thirteen sets
+  once on a fresh instance and again after other asks (orders, mirrored pairs on both sides of the epoch, node times,
+  the thread's caches, the store's blend) and compares bit for bit, beside `test/set-caches.e2e.mjs`.
 - A record's covariance is likewise a function of the record and the time (12.3).
 - The epoch store times an AP set from the split Julian date, with the expression `propagate` uses. Minutes from J2000
   round by up to 1e-7 s at today's dates, 1 mm in low orbit. SGP4XP and SGP4 in the store keep the minutes from J2000:
@@ -1807,7 +1821,7 @@ Caches per set flown a day (a week), by part, and the sets whose caches a budget
 | Chandra-like (n 0.378, e 0.685) | 20.8 KB (44.6) | 0 | 10.0 (33.8) | 5.8 | 4.6 | 12,595 | 50,382 | 100,764 |
 | TESS-like (n 0.073, e 0.55) | 15.8 KB (30.8) | 0 | 5.0 (20.0) | 5.8 | 4.6 | 16,578 | 66,313 | 132,626 |
 
-The rest of the caches is 0.4 KB a set. Each set also carries its drag-pass segments, 0.8 KB, in the set itself. The node
+The rest of the caches is 0.4 KB a set. Each set also carries its drag-pass segments, 784 B, in the set itself. The node
 runs of a set above e 0.3 follow its long-period step (16.10). The THEMIS-like set steps 8.2 minutes, so it holds 351 nodes
 of 160 B a day and 1,402 a week. A run holds at most the checkpoint span, 8 days or about 1,405 nodes (225 KB) a direction:
 256 MB holds the week's caches of 1,129 such sets.
@@ -1845,7 +1859,8 @@ AP memoizes a, e, and cos i at the bracket's two nodes, keyed byte for byte on n
 The memo belongs to the set while its cache lock is held, and to the thread otherwise. The propagation entry
 clears the anchor; epoch calls clear it without consulting the memo. SGP4XP computes its anchor directly.
 
-Inline tesseral and m-daily checks compare the bracket identity, first time, length, and each bake level's part key
+Inline tesseral and m-daily checks compare the bracket identity (the set's context and the smaller of the bracket's two
+node indexes, one value per bracket), first time, length, and each bake level's part key
 before calling the synchronization routines. The checks use the same part-key expression as the bakes. The stored
 part counts and keys follow the cache's existing lock ownership. These shortcuts reuse values without changing
 arithmetic in the bakes or the returned states.

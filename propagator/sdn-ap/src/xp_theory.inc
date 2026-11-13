@@ -5712,13 +5712,14 @@ constexpr int kSparse = 12;
 
 /// AP above e 0.3 (SPEC 16.12): the drag rates the output of a state adds (output_drag_pass) over the last two segments
 /// flown, a segment the part of one revolution (keyed by its perigee time tp) inside one bracket of the mean-element grid
-/// (keyed by its lower node's time): drag_passes at kPoints times of the segment (drag_pass_rates).
+/// (keyed by both of the bracket's node times, so the brackets after and before the epoch, which share the epoch as lower
+/// node, are two): drag_passes at kPoints times of the segment (drag_pass_rates).
 struct DragPassCache {
   static constexpr int kPoints = 3;
   int32_t lock;
   int32_t next;
   int32_t held[2];
-  double tp[2], node_t[2];
+  double tp[2], node_t[2], hi_t[2];  ///< a segment's bracket by both nodes' times: the brackets after and before the epoch share the epoch as lower node
   double tk[2][kPoints];
   double v[2][kPoints][kDragPassValues];
 };
@@ -7131,7 +7132,9 @@ inline void update_active_bracket(const XpSat& s, const Node& lo, const Node& hi
 /// The bracket the tesseral cache bakes on (tess::SpAnchor, SPEC 9): set's lo and hi nodes, a, e and cos i at each.
 inline void set_sp_anchor(const XpSat& s, const Node& lo, const Node& hi) {
   tess::SpAnchor& an = tess::g_sp_anchor;
-  const uint64_t id = (s.ctx.ctx_id << 32) ^ static_cast<uint32_t>(lo.index);
+  // one id per bracket: the smaller of the two nodes' indexes (a node's index is signed by the side of the epoch it lies on), so the
+  // bracket after the epoch (0, 1) is 0 and the bracket before it (0, -1) is -1; the lower node's index alone is 0 for both
+  const uint64_t id = (s.ctx.ctx_id << 32) ^ static_cast<uint32_t>(std::min(lo.index, hi.index));
   if (an.valid && an.id == id && an.tlo == lo.t && an.h == hi.t - lo.t) return;
   auto at = [](const Node& q, double& a, double& e, double& c) {
     a = std::pow(kKe / q.y[kN], kX2o3);
@@ -7312,6 +7315,7 @@ inline bool wide_node(XpSat& s, int j, tess::WideGrid*& out, bool& held) {
 /// state there (the state that time's output flies). kPoints evaluations serve every state of the segment; the largest
 /// difference from drag_part at every state is stated by test/kernel-cost.mjs --diff. False (the state evaluates its own)
 /// at the epoch, when the window does not bracket t, or when a point of the segment falls in another revolution.
+inline thread_local uint64_t g_drag_pass_window_misses = 0;  ///< calls whose window did not hold the time mean_at had just bracketed (a test reads it)
 inline bool drag_pass_rates(XpSat& s, double t, const double* y, DragPassRates& out) {
   if (t == 0.0) return false;
   const Frame fr = frame_of(y);
@@ -7325,7 +7329,16 @@ inline bool drag_pass_rates(XpSat& s, double t, const double* y, DragPassRates& 
   const bool valid = s.window_valid[di] != 0;
   const Node lo = s.window[di][0], hi = s.window[di][1];
   unlock(&s.lock);
-  if (!valid || !(dir * lo.t <= dir * t && dir * t < dir * hi.t)) return false;
+  // The window is the bracket mean_at just left for this time, read again here after mean_at released the set's lock. That holds
+  // while one thread flies a set at a time: the row store's batch gives each row, so each set, to one thread, and a set above
+  // e 0.3 (the only one this function serves) is never flown on a pool lane by the epoch store. A set flown by two threads at once
+  // (such a set put on lanes, or two rows sharing a set) could find the window moved to another bracket, and the state would then
+  // come from drag_part and not from the segment polynomial: a function of the interleaving. The count below is that case; the
+  // state-purity test asserts it stays 0.
+  if (!valid || !(dir * lo.t <= dir * t && dir * t < dir * hi.t)) {
+    ++g_drag_pass_window_misses;
+    return false;
+  }
   // the revolution's perigee time and period from the bracket's lower node, the same for every state of the revolution
   // (a state's own differ by its mean anomaly's drift and its mean motion, so the first state asked would set the
   // segment)
@@ -7353,7 +7366,7 @@ inline bool drag_pass_rates(XpSat& s, double t, const double* y, DragPassRates& 
   };
   lock(&c.lock);
   for (int q = 0; q < 2; ++q)
-    if (c.held[q] && c.node_t[q] == lo.t && std::fabs(c.tp[q] - tp) <= 0.125 * period) {
+    if (c.held[q] && c.node_t[q] == lo.t && c.hi_t[q] == hi.t && std::fabs(c.tp[q] - tp) <= 0.125 * period) {
       take(q);
       unlock(&c.lock);
       return true;
@@ -7378,6 +7391,7 @@ inline bool drag_pass_rates(XpSat& s, double t, const double* y, DragPassRates& 
   c.next ^= 1;
   c.held[q] = 1;
   c.node_t[q] = lo.t;
+  c.hi_t[q] = hi.t;
   c.tp[q] = tp;
   for (int i = 0; i < K; ++i) {
     c.tk[q][i] = tk[i];
