@@ -2825,6 +2825,29 @@ at a time. Two series that carry equal weather share one copy of it: equal means
 same in every bit, so which of two series is kept never depends on their order. A load that fails, for want of memory
 or any refusal, leaves no snapshot: the store is empty and its arrays are freed.
 
+**14.1.1 Load in parts.** A host that cannot stage the whole catalog in the module's memory takes it in parts with three methods:
+`load_epochs_open` (the optional $PCF EPOCH_STORE, read once), `load_epochs_part` (the 'ocm' frames of one part, framed as for
+`load_epochs`; any number of times) and `load_epochs_close`. `load_epochs` is these three in sequence on one payload.
+- **Equality.** The store built from any partition of a list of frames into parts, the parts in order, equals set for set and in
+  order the store `load_epochs` builds from the whole list: the kept sets, each series' order, capped and theory-filtered loads,
+  same-epoch duplicates in whichever parts they fall (the later in input order replaces), the interned weather, the covariances.
+  Nothing is decided before the close: the aging and the cap need the newest epoch of the whole load, and series-forces-differ
+  compares every record of a series.
+- **Refusals.** A part refused for any reason drops the load: the store is empty and the load closed (a later part or close is
+  refused `load-not-open`). The reported failure is the first one met in input order: within a part as `load_epochs` reports it
+  (every frame's type is checked before any record is decoded, so within one part a wrong type is reported before an earlier
+  record's decode refusal), across parts the earlier part's. series-forces-differ and the refusals of the install come at the
+  close. An allocation that fails anywhere (SPEC 1.6) refuses by name `out-of-memory`, with the store empty and the load closed.
+- **State of the store.** From the open to the close the store is empty: the open empties it, a part adds nothing to it, and a
+  state asked of it is refused as for any series it does not hold (the `sdnap_epochs_*` exports answer -1, no such series). A
+  part or a close with no load open is refused `load-not-open` and changes nothing (a loaded store stays). An open while a load
+  is open drops that load and starts over; `load_epochs` while one is open does the same. A close with no part is refused
+  `missing-ocm`, as is a part with no 'ocm' frame.
+- **Memory.** Nothing of a part's bytes is kept after the call, so a host may stage every part in one buffer. What is held
+  between parts is the decoded records (their identity, elements, forces and covariance, with the weather interned once and the
+  forecast of a record that carries one copied out of the part's bytes) and the counts; the sort and the install happen at the
+  close, as in `load_epochs`, so the decoded records of every part are held until then.
+
 **14.2 Selection.** With E_0 < ... < E_{n-1} a series' epochs and t the request time: NEAREST takes the set whose
 epoch is nearest t (switch between E_i and E_{i+1} at tau_i = (E_i + E_{i+1}) / 2); LATEST_BEFORE the latest set at or
 before t (switch at tau_i = E_{i+1}; before E_0, set 0). Binary search: O(log n) per series and request.
