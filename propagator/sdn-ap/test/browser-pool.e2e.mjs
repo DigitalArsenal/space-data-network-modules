@@ -28,10 +28,10 @@ import path from "node:path";
 import { spawn } from "node:child_process";
 import { createRequire } from "node:module";
 import { fileURLToPath, pathToFileURL } from "node:url";
-import { createStandaloneHarness } from "space-data-module-sdk/testing/isomorphic";
+import { Worker } from "node:worker_threads";
 import { wasmPath, elementRows, THEORY } from "./lib/module.mjs";
 import { ocmOf, repackOcm } from "./lib/ocm.mjs";
-import { rowsJob, apJob, framesJob, jdOf } from "./lib/browser-pool/core.mjs";
+import { jdOf } from "./lib/browser-pool/core.mjs";
 
 const here = path.dirname(fileURLToPath(import.meta.url));
 const require = createRequire(import.meta.url);
@@ -91,6 +91,19 @@ try { esbuild = await import("esbuild"); } catch (e) {
   throw e;
 }
 
+// The watchdog runs outside the WASM hosting thread, including during a synchronous guest call.
+let currentCase = "input preparation", activeNode;
+let cleanupRun = async () => { await activeNode?.terminate(); };
+const stop = (code) => { void cleanupRun().then(() => process.exit(code)); };
+const onInt = () => stop(130), onTerm = () => stop(143);
+process.once("SIGINT", onInt);
+process.once("SIGTERM", onTerm);
+const wholeTimer = setTimeout(() => {
+  console.error(`${currentCase}: whole run exceeded 15 minutes`);
+  stop(1);
+}, Math.max(1, 15 * 60 * 1000 - (Date.now() - T0)));
+wholeTimer.unref();
+
 // ---------------------------------------------------------------------------------------------------------------- the seeded inputs
 const fixture = new Uint8Array(fs.readFileSync(path.join(here, "fixtures", "ap-fit-0.6.42.ocm")));
 assert.equal(ocmOf(fixture).MEAN_ELEMENTS.MEAN_ELEMENT_THEORY, 5, "the input record declares AP");
@@ -120,17 +133,27 @@ const meta = { epochMs, rows: ROWS, ap: AP };
 
 // ---------------------------------------------------------------------------------------------------------------- the Node side: the same jobs, the same code
 async function nodeRun(threads) {
-  const h = await createStandaloneHarness("browser", wasmPath, { surface: "direct", maxThreads: Math.max(1, threads), enableBrowserWasiThreads: threads > 0 });
-  const x = h.instance.exports;
-  if (threads > 0) assert.equal(x.sdnap_threads(threads), threads, `Node: sdnap_threads(${threads})`);
-  const ctx = { H: h, x, threads, meta };
-  const result = {
-    rows: await rowsJob(ctx, new Uint8Array(rows), ROWS),
-    ap: await apJob(ctx, new Uint8Array(apBytes), AP),
-    frames: await framesJob(ctx, AP, 500),
-  };
-  await h.destroy?.();
-  return result;
+  const host = new Worker(new URL("./lib/browser-pool/node-host.mjs", import.meta.url), {
+    workerData: { threads, wasmPath, rows, apBytes, meta, ROWS, AP },
+  });
+  activeNode = host;
+  let timer;
+  try {
+    return await new Promise((resolve, reject) => {
+      const arm = (name) => {
+        currentCase = `Node ${threads} threads: ${name}`;
+        clearTimeout(timer);
+        timer = setTimeout(() => reject(new Error(`${currentCase}: exceeded 5 minutes`)), 5 * 60 * 1000);
+      };
+      arm("host startup");
+      host.on("message", (message) => {
+        if (message.case) arm(message.case);
+        else resolve(message.result);
+      });
+      host.once("error", reject);
+      host.once("exit", (code) => reject(new Error(`${currentCase}: host exited (${code}) before reporting`)));
+    });
+  } finally { clearTimeout(timer); await host.terminate(); activeNode = undefined; }
 }
 const nodeSide = {};
 for (const t of THREADS) nodeSide[t] = await nodeRun(t);
@@ -156,6 +179,10 @@ const routes = {
 };
 const server = http.createServer((req, res) => {
   const url = new URL(req.url, "http://127.0.0.1");
+  if (req.method === "POST" && url.pathname === "/progress" && url.searchParams.get("token") === token) {
+    currentCase = `browser ${url.searchParams.get("case")}`;
+    res.writeHead(200, headers); res.end("ok"); return;
+  }
   if (req.method === "POST" && url.pathname === "/done") {
     if (url.searchParams.get("token") !== token) { res.writeHead(403, headers); res.end("forbidden"); return; }
     const chunks = [];
@@ -173,10 +200,10 @@ const server = http.createServer((req, res) => {
   res.writeHead(200, { ...headers, "Content-Type": route[0], "Content-Length": Buffer.byteLength(route[1]) });
   res.end(route[1]);
 });
-let profile, child, timerId;
+let profile, child;
 let cleanupPromise;
 const cleanup = () => cleanupPromise ??= (async () => {
-  clearTimeout(timerId);
+  clearTimeout(wholeTimer);
   if (child?.pid) {
     // detached creates this test's process group; a negative PID addresses only that group.
     try { process.kill(-child.pid, "SIGKILL"); } catch (e) { if (e.code !== "ESRCH") console.warn(`browser cleanup: ${e.message}`); }
@@ -189,22 +216,19 @@ const cleanup = () => cleanupPromise ??= (async () => {
     catch (e) { console.warn(`WARNING: browser profile cleanup: ${e.message}`); }
   }
 })();
-const onInt = () => { void cleanup().then(() => process.exit(130)); };
-const onTerm = () => { void cleanup().then(() => process.exit(143)); };
-process.once("SIGINT", onInt);
-process.once("SIGTERM", onTerm);
+cleanupRun = cleanup;
+currentCase = "browser host startup";
 let browser;
 try {
   await new Promise((resolve, reject) => { server.once("error", reject); server.listen(0, "127.0.0.1", resolve); });
   profile = fs.mkdtempSync(path.join(os.tmpdir(), "sdn-ap-browser-"));
   const { command, args, env } = launch(`http://127.0.0.1:${server.address().port}/?threads=${JSON.stringify(THREADS)}&token=${token}`, profile);
   child = spawn(command, args, { detached: true, stdio: "ignore", env: { ...process.env, ...env } });
-  const timer = new Promise((_, reject) => { timerId = setTimeout(() => reject(new Error("the page did not report within 15 minutes")), 15 * 60 * 1000); });
   const exited = new Promise((_, reject) => {
     child.once("error", reject);
     child.once("exit", (code, signal) => reject(new Error(`the browser exited before reporting (code ${code}, signal ${signal})`)));
   });
-  browser = await Promise.race([done, timer, exited]);
+  browser = await Promise.race([done, exited]);
 } finally {
   await cleanup();
   process.removeListener("SIGINT", onInt);

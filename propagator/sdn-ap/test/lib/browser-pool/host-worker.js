@@ -20,8 +20,11 @@ self.onmessage = async (e) => {
     const ctx = { H, x, threads, meta, running };
     const result = { crossOriginIsolated: self.crossOriginIsolated, sharedMemory: H.memory.buffer instanceof SharedArrayBuffer, running };
     if (job === "all") {
+      self.postMessage({ type: "case", name: "rows" });
       result.rows = await rowsJob(ctx, await fetchBytes("/data/rows.bin"), meta.rows);
+      self.postMessage({ type: "case", name: "ap" });
       result.ap = await apJob(ctx, await fetchBytes("/data/ap.bin"), meta.ap);
+      self.postMessage({ type: "case", name: "frames" });
       result.frames = await framesJob(ctx, meta.ap, 8);
     }
     self.postMessage({ type: "result", result });
