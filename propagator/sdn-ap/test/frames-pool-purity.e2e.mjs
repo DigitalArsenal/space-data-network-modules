@@ -5,9 +5,12 @@
 import assert from "node:assert/strict";
 import { openFrames, population, ocmOfObject, EPOCH_MS, DAY } from "./lib/frame-cells.mjs";
 import { repackOcm } from "./lib/ocm.mjs";
+import { pcfWeatherSource } from "spacedatastandards.org/lib/js/PCF/pcfWeatherSource.js";
 const pop = population([["leo500", 64], ["geo", 16], ["leo830", 16]], 20261113, 48);
 const records = pop.map((o, i) => i < 64 ? ocmOfObject(o) : i < 80 ? ocmOfObject(o, false) : repackOcm(ocmOfObject(o, false), t => {
   t.MEAN_ELEMENTS.MEAN_ELEMENT_THEORY = 0; t.MEAN_ELEMENTS.BSTAR = 1e-4; t.ORB_AVERAGING = "KOZAI";
+  t.MEAN_ELEMENTS.BTERM = 0; t.MEAN_ELEMENTS.AGOM = 0;
+  t.PERTURBATIONS.GRAVITY_MODEL = "WGS-72"; t.PERTURBATIONS.WEATHER_SOURCE = pcfWeatherSource.NONE; t.PERTURBATIONS.ATMOSPHERIC_MODEL = null;
 }));
 for (const threads of [0, 4, 15]) {
   const a = await openFrames({ threads }), b = await openFrames({ threads });
