@@ -704,7 +704,7 @@ preserves committed reads, and quarantines the instance for disposal.
 
 On the measured 100,000-object recipe without covariance, four pool threads build the initial two-cell fill at
 3,271 rows/s and the rolling sweep at 3,253 rows/s, about 3.1 times the unchanged serial control. Calls capped at 32 rows
-have a 95th-percentile duration of about 15.6 ms and a measured maximum of 38.7 ms. SPEC 19.10 gives the host, complete
+have a 95th-percentile duration of about 15.6 ms and a measured maximum of 38.6 ms. SPEC 19.10 gives the host, complete
 0/4/8/15-thread measurements, paired-round variance checks, and the separate memory costs of covariance.
 
 ## SGP4XP status
