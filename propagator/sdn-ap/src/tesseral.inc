@@ -1590,7 +1590,7 @@ inline SpEvalCache* sp_compact_copy(const SpEvalCache& src) {
 
 /// A set's blk_c for one bake, per thread: the lanes' coefficients from F (store_lane's layout), zero in empty lanes.
 /// `blocks` (`count` of them): those blocks only, the others left as they are (the resonant bake reads its own blocks
-/// alone: rebuilding all 107 blocks of a 500 km set for its 6 resonant ones cost 0.16 us a state, stack #441);
+/// alone, stack #441);
 /// nullptr: every block (the base bake).
 inline thread_local float* g_sp_blk_c = nullptr;
 /// The thread's blk_c storage (192 KiB), made on first use or ahead (pool::warm_thread: a pool thread makes its caches
@@ -2786,8 +2786,8 @@ constexpr int64_t kSpPeAtBake = INT64_MIN;  ///< the pe cell of a derivative pas
 /// The coefficients a set's compact cache bakes from (blk_c) for a base bake (every block) or a resonant bake alone
 /// (`blocks`): the thread's own cache's when the compact cache is a copy of the grouping that cache still holds (the
 /// same group_id: the set's terms were grouped there and copied, sp_claim; grouping writes F's coefficients into the
-/// lanes sp_blk_c writes them to, and nothing writes them after), else rebuilt from F. A warm set flown alone rebuilds
-/// none (stack #441: the rebuild cost 7 % of the site's 500 km set's states, for the resonant blocks alone 3 %).
+/// vector positions sp_blk_c writes them to, and nothing writes them after), else rebuilt from F. A warm set flown alone
+/// rebuilds none (stack #441).
 inline float* sp_compact_blk_c(const SpEvalCache& sc, const uint16_t* blocks = nullptr, int count = 0) {
   const SpEvalCache* th = g_sp_eval_cache_ptr;
   if (th != nullptr && th != &sc && th->blk_c != nullptr && th->grouped_ok && sc.group_id != 0 && th->group_id == sc.group_id)
