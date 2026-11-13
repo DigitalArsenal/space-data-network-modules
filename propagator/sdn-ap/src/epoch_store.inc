@@ -298,9 +298,9 @@ inline int decode_record(const uint8_t* p, uint32_t n, Record& r) {
   r.forces = s.forces;
   r.weather = std::move(s.weather);
   {
-    auto track = std::make_shared<carried::Track>();
-    if (carried::read(s.record, r.row, p, n, *track) != 0) return -1;
-    if (!track->empty()) r.track = std::move(track);
+    carried::Track track;  // on the stack: a record that carries no forecast (nearly all) makes no allocation for it
+    if (carried::read(s.record, r.row, p, n, track) != 0) return -1;
+    if (!track.empty()) r.track = std::make_shared<carried::Track>(std::move(track));
     double from = 0.0;
     if (carried::handover_from(s.record, from)) r.handover = from;
   }

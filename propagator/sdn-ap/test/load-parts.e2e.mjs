@@ -386,7 +386,7 @@ SDNAP_EXPORT("sdnap_test_alloc_count") uint32_t sdnap_test_alloc_count(void) { r
   return failed;
   };
   const mixed = [...catalog.slice(0, 6), ...catalog.slice(14, 24), ...catalog.slice(30, 34), ...catalog.slice(34, 36)];
-  assert.ok(await inject('a mixed catalog', mixed, evenly(mixed.length, 3)) > 30);
+  assert.ok(await inject('a mixed catalog', mixed, evenly(mixed.length, 3)) > 20);
   // records that carry a forecast: the copy of each record out of the part's bytes, and the track's arrays, are counted allocations that refuse by name
   const forecast = await inject('records carrying a forecast', withForecast, [2, 1, 1]);
   assert.ok(forecast > 10, `${forecast} allocations of the forecast records`);
