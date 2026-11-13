@@ -35,10 +35,20 @@
 // -----------------------------------------------------------------------------
 
 namespace sdnap {
+namespace epochs { struct Store; }
 namespace pool {
 
 constexpr int32_t kMaxThreads = 16;
 constexpr uint32_t kChunk = 512;
+constexpr uint32_t kEpochChunk = 16;
+/// The series an epoch-store batch holds at most (sdnap_epochs_at runs a larger call in slices of it, one batch each);
+/// test builds set another.
+constexpr uint32_t kEpochSlice = 4096;
+inline uint32_t& epoch_slice_ref() {
+  static uint32_t n = kEpochSlice;
+  return n;
+}
+inline uint32_t epoch_slice() { return epoch_slice_ref() < 2 * kEpochChunk ? 2 * kEpochChunk : epoch_slice_ref(); }
 /// A batch whose pool thread died (it trapped, or stopped answering): the batch's return and every row's status. When
 /// the calling thread, waiting for a batch's last chunks, polls `dead_polls()` times without a row completing on any
 /// thread, a thread is taken for dead; the pool is then not used again (later batches run on the calling thread).
@@ -52,11 +62,15 @@ constexpr int32_t kRowPoolDead = 9;
 constexpr uint64_t kDeadPollsDefault = 1ull << 35;
 /// The same for start's wait for its own view (kDeadPollsDefault's role, counted in yields).
 constexpr uint64_t kDeadYieldsDefault = 1ull << 34;
-/// The room start makes before it creates a thread: the thread's stack (wasi-libc's default, 64 KiB here: stack #487's
-/// probe used 4,992 B of it) and its thread-local block, with margin.
+/// A pool thread's stack. It builds the epoch store's sets (slot_of, xp_init, ap_init, every table build, the decay probe,
+/// the flight): test/pool-stack.e2e.mjs measured 31,192 bytes at the deepest, every class at degree 31 and at 70 with the
+/// slow set, which left wasi-libc's default 64 KiB a margin of 2.1; 256 KiB gives 8.4.
+constexpr size_t kThreadStack = 256u << 10;
+/// The room start makes before it creates a thread: the thread's stack (kThreadStack) and its thread-local block (343,956
+/// bytes measured, the tables' and NRLMSISE-00's thread-locals), with margin.
 constexpr size_t kThreadRoom = 1u << 20;
 
-enum JobKind : int32_t { kJobNone = 0, kJobJd = 1, kJobMinutes = 2 };
+enum JobKind : int32_t { kJobNone = 0, kJobJd = 1, kJobMinutes = 2, kJobEpochs = 3 };
 
 /// The heartbeat (stack #487): the rows each thread has completed, one counter per thread, each aligned to 64 bytes (slot 0
 /// the calling thread's, 1 to kMaxThreads the pool threads'), so a row's count is a store no other thread makes. The
@@ -92,9 +106,14 @@ struct Job {
   int32_t dead;    ///< a thread was taken for dead: the pool is not used again
   int32_t pages;   ///< the memory's size (pages) as the thread that last grew it saw it: no thread uses less (await_view)
   // arguments
+  epochs::Store* epochs;
+  const uint8_t* serial_series;
   double jd_whole, jd_frac;
   const double* minutes;
   uint32_t first, count, frame;
+  /// an epoch-store batch: its rows are the call's series [slice, slice + count) of `stride` (the call's count: the planes'
+  /// length). Read by epoch batches alone; sdnap_epochs_at sets both before each one.
+  uint32_t slice, stride;
   double* out;
   int32_t* status;
   // rows a refused growth stopped, for the calling thread after the batch (room for `count`, made before it)
@@ -148,6 +167,8 @@ inline bool await_view(int32_t pages, uint64_t limit = 0) {
 }
 
 void run_chunk(const Job& j, int32_t chunk);
+void run_epoch_row(const Job& j, uint32_t i);
+inline uint32_t chunk_size(const Job& j) { return j.kind == kJobEpochs ? kEpochChunk : kChunk; }
 /// Test builds only (nullptr in the shipped build): called before each chunk with the chunk and whether a pool thread
 /// (not the calling thread) runs it.
 inline void (*g_chunk_hook)(int32_t chunk, bool pool_thread) = nullptr;
@@ -195,9 +216,11 @@ inline void run_chunks() {
 /// its first state or set initialization (pool::thread_ready, stack #600: made lazily, one was first asked for part way
 /// through a flight, a day after the set's first state, and the module aborted when the memory was full by then). False
 /// when one cannot be had (the failure counted; those made are kept, and the next call makes the rest); once all are made,
-/// one flag test.
+/// one flag test. With them, the guarded statics a pool thread first touches (NRLMSISE-00's flag table): made before any batch,
+/// so no thread, the calling thread least of all, waits in a static's guard inside one.
 inline bool warm_thread() {
   if (g_warm) return true;
+  (void)atm::msis_flags();
   g_warm = warm_thread_xp() && xpt::tess::sp_thread_cache_make() && xpt::tess::sp_blk_c_make() && xpt::tess::sp_build_scratch_make() &&
            xpt::tess::sp_terms_scratch_make() && xpt::tess::half_day_eval_cache_make() && xpt::ap_bodies_store_make() &&
            frames::drift_node_cache_make() && frames::gcrf_node_cache_make();
@@ -252,7 +275,12 @@ inline int32_t start(int32_t requested) {
     g_reserve_block = nullptr;
     __atomic_store_n(&j.pages, view_pages(), __ATOMIC_SEQ_CST);
     pthread_t id;
-    if (pthread_create(&id, nullptr, thread_main, nullptr) != 0) break;
+    pthread_attr_t attr;
+    pthread_attr_init(&attr);
+    pthread_attr_setstacksize(&attr, kThreadStack);
+    const int created = pthread_create(&id, &attr, thread_main, nullptr);
+    pthread_attr_destroy(&attr);
+    if (created != 0) break;
     pthread_detach(id);
     j.threads += 1;
     while (load(&j.warmed) < target) sched_yield();
@@ -270,7 +298,8 @@ inline int32_t start(int32_t requested) {
 /// growth of the memory refused; the rows a refusal stopped are left in j.deferred for the calling thread.
 inline int32_t run(uint32_t count, size_t reserve) {
   Job& j = job();
-  const int32_t chunks = static_cast<int32_t>((count + kChunk - 1) / kChunk);
+  const uint32_t chunk = chunk_size(j);
+  const int32_t chunks = static_cast<int32_t>((count + chunk - 1) / chunk);
   const bool threaded = j.threads > 0 && chunks > 1 && load(&j.dead) == 0;
   __atomic_store_n(&j.deferred_n, 0, __ATOMIC_SEQ_CST);
   __atomic_store_n(&j.done, 0, __ATOMIC_SEQ_CST);
@@ -333,26 +362,80 @@ inline int32_t run(uint32_t count, size_t reserve) {
   return rc;
 }
 
+/// The allocator's break (SPEC 1.6). The allocator grows its heap through sbrk a few 64 KiB pages at a time, and each
+/// memory.grow costs about 0.3 ms in V8: a serial first pass of 20,000 AP series lost a third of its time to them (774
+/// against 501 us an object). sbrk therefore keeps the allocator's break itself, at or below the end of the memory it has
+/// grown, and grows the memory by at least kSbrkStepPages when the break would pass that end: the instance may hold up to
+/// one step more than the allocator has asked for. Test builds set the step to 0 (the memory grown by the request alone).
+constexpr uint64_t kSbrkStepPages = 64;  // 4 MiB
+inline uint64_t g_break = 0;              ///< the allocator's break (0: not yet read)
+inline uint64_t g_module_end = 0;         ///< the memory's end as sbrk last left it; pages past it were grown by another party
+inline int32_t g_break_lock = 0;          ///< the allocator calls sbrk under its own lock; this one keeps the break whole regardless
+inline uint64_t g_memory_growths = 0;     ///< memory.grow calls made (sdnap_pool_stats)
+inline uint64_t g_memory_grown_pages = 0; ///< the pages they added
+
 }  // namespace pool
 }  // namespace sdnap
 
-/// wasi-libc's sbrk (the allocator's only way to grow the memory), with the batch's rule: while a threaded batch runs,
-/// every growth is refused (ENOMEM), on every thread, and counted; the refusing thread's row is deferred (stack #487).
-/// Otherwise it is wasi-libc's: sbrk(0) the memory's end, page-sized growth only, never shrinking.
+/// wasi-libc's sbrk (the allocator's only way to grow the memory): sbrk(0) answers the break (or -1 when the break is at
+/// 4 GiB, the memory at its maximum: a request of nothing there is refused like any other), never shrinking, page-sized
+/// increments only.
+/// - A request below the end sbrk last produced moves the break.
+/// - One past it grows the memory by at least a step, or, when a step does not fit under the memory's maximum, by exactly
+///   what the request lacks before it is refused (ENOMEM).
+/// - Pages found beyond that end were grown by another party (a host, for a buffer of its own): they are never the
+///   allocator's, and the break moves past them, as the memory's end it answered did before the break was kept here.
+/// - Nothing is served at or past 4 GiB, the end of the address space: such a request is refused, never wrapped.
+/// - While a threaded batch runs no growth of the memory is made (SPEC 9): one is refused, on every thread, and
+///   counted, and the refusing thread's row is deferred. The slack below the end is served inside a batch: those pages
+///   were in the memory when the batch published its size, before any thread claimed a chunk, so every thread's view
+///   covers them (a pool thread's trap on a bulk fill came from pages grown after its view was taken; moving the break
+///   grows nothing).
 extern "C" void* sbrk(intptr_t increment) {
-  constexpr uintptr_t kPage = 65536;
-  if (increment == 0) return reinterpret_cast<void*>(static_cast<uintptr_t>(__builtin_wasm_memory_size(0)) * kPage);
-  if (increment < 0 || static_cast<uintptr_t>(increment) % kPage != 0) std::abort();
-  if (sdnap::xpt::batch_running()) {
+  using namespace sdnap::pool;
+  constexpr uint64_t kPage = 65536, kTop = uint64_t{1} << 32;
+  if (increment < 0 || static_cast<uint64_t>(increment) % kPage != 0) std::abort();
+  for (int32_t expected = 0; !__atomic_compare_exchange_n(&g_break_lock, &expected, 1, false, __ATOMIC_ACQUIRE, __ATOMIC_RELAXED); expected = 0) {
+  }
+  bool served = false;
+  const uint64_t end = static_cast<uint64_t>(__builtin_wasm_memory_size(0)) * kPage;
+  if (g_break == 0 || end > g_module_end) {
+    // the first call (the allocator's heap ends where the memory does), or pages another party grew: past them
+    g_break = end;
+    g_module_end = end;
+  }
+  const uint64_t need = g_break + static_cast<uint64_t>(increment);
+  if (need >= kTop) {
+    served = false;  // the end of the address space
+  } else if (need <= g_module_end) {
+    served = true;
+  } else if (sdnap::xpt::batch_running()) {
     __atomic_add_fetch(&sdnap::xpt::batch_stats().refused, 1, __ATOMIC_SEQ_CST);
     sdnap::xpt::g_alloc_refused = 1;
+  } else {
+    const uint64_t short_pages = (need - g_module_end) / kPage;
+    uint64_t pages = short_pages < kSbrkStepPages ? kSbrkStepPages : short_pages;
+    if (g_module_end + pages * kPage >= kTop) pages = short_pages;
+    size_t old = __builtin_wasm_memory_grow(0, static_cast<size_t>(pages));
+    if (old == SIZE_MAX && pages != short_pages) {
+      pages = short_pages;
+      old = __builtin_wasm_memory_grow(0, static_cast<size_t>(pages));
+    }
+    if (old != SIZE_MAX) {
+      // the memory grew from `old` pages: when another party grew it in between, the break starts past their pages
+      if (static_cast<uint64_t>(old) * kPage > g_module_end) g_break = static_cast<uint64_t>(old) * kPage;
+      g_module_end = (static_cast<uint64_t>(old) + pages) * kPage;
+      __atomic_add_fetch(&g_memory_growths, 1, __ATOMIC_RELAXED);
+      __atomic_add_fetch(&g_memory_grown_pages, pages, __ATOMIC_RELAXED);
+      served = g_break + static_cast<uint64_t>(increment) <= g_module_end;
+    }
+  }
+  void* result = reinterpret_cast<void*>(static_cast<uintptr_t>(g_break));
+  if (served) g_break += static_cast<uint64_t>(increment);
+  __atomic_store_n(&g_break_lock, 0, __ATOMIC_RELEASE);
+  if (!served) {
     errno = ENOMEM;
     return reinterpret_cast<void*>(static_cast<intptr_t>(-1));
   }
-  const uintptr_t old = __builtin_wasm_memory_grow(0, static_cast<uintptr_t>(increment) / kPage);
-  if (old == SIZE_MAX) {
-    errno = ENOMEM;
-    return reinterpret_cast<void*>(static_cast<intptr_t>(-1));
-  }
-  return reinterpret_cast<void*>(old * kPage);
+  return result;
 }

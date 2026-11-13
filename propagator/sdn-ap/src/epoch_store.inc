@@ -194,8 +194,16 @@ struct Store {
   Array<Series> series;
   Stats stats;
   Array<std::unique_ptr<atm::Atmosphere>> atmospheres;  ///< the distinct row series and node vectors of the load
-  int32_t short_day = 0;                                      ///< the day a request found no row for (weather-rows-short)
   uint32_t generation = 0;                                    ///< counts the store's replacements (clear, install): the frames (SPEC 19) drop their cells when it changes
+  /// the day a request found no row for (weather-rows-short), written by the thread that flew that state. propagate_epochs
+  /// reads it on its own store, on the calling thread, right after the state that wrote it. After a threaded
+  /// sdnap_epochs_at it holds some series' missing day, not a given one (that export answers each series' status alone).
+  int32_t short_day = 0;
+  /// A threaded batch over the store ended with the pool dead (pool::kBatchPoolDead): a pool thread only slow, not dead,
+  /// may still be building, flying or replacing its series' slots, so nothing reads or frees them again. Every later state
+  /// is refused (kRowPoolDead), and load_epochs and load_epochs_open refuse, before they free anything, until no pool
+  /// thread is active (one that trapped never is).
+  int32_t pool_dead = 0;
 };
 
 /// The covariance bank first: its set 0 borrows the slot's set's term tables (stack #599), so they outlive it.
@@ -638,11 +646,11 @@ inline int32_t rows_cover(Store& st, const Entry& en, double t) {
     // every day from the first row's to the last's: the first day of a - 1 .. b without a row is before the first or after the last
     const int32_t first = d.front().mjd, last = d.back().mjd;
     if (a - 1 < first) {
-      st.short_day = a - 1;
+      __atomic_store_n(&st.short_day, a - 1, __ATOMIC_RELAXED);
       return kRowsShort;
     }
     if (b > last) {
-      st.short_day = a - 1 > last + 1 ? a - 1 : last + 1;
+      __atomic_store_n(&st.short_day, a - 1 > last + 1 ? a - 1 : last + 1, __ATOMIC_RELAXED);
       return kRowsShort;
     }
     return 0;
@@ -651,12 +659,15 @@ inline int32_t rows_cover(Store& st, const Entry& en, double t) {
   for (int32_t day = a - 1; day <= b; ++day) {
     while (k < d.size() && d[k].mjd < day) ++k;
     if (k >= d.size() || d[k].mjd != day) {
-      st.short_day = day;
+      __atomic_store_n(&st.short_day, day, __ATOMIC_RELAXED);
       return kRowsShort;
     }
   }
   return 0;
 }
+
+/// Test builds install a hook to poison the initializing thread's table storage.
+inline void (*g_init_hook)() = nullptr;
 
 /// The slot holding set `k` of series `s`, initialized on first use (the older of the two slots replaced).
 inline Slot& slot_of(Store& st, Series& s, uint32_t k, bool with_cov) {
@@ -673,19 +684,19 @@ inline Slot& slot_of(Store& st, Series& s, uint32_t k, bool with_cov) {
   Slot& q = s.slots[s.next];
   s.next = s.slots.second ? s.next ^ 1u : 0u;
   release(q);
-  q.index = static_cast<int32_t>(k);
   const Entry& en = st.entries[s.first + k];
   const Elements e = elements_of(en.row);
-  // SPEC 1.6 (stack #497): a slot whose initialization failed for want of memory is not kept as refused: it answers this
-  // call with the failure and is initialized again by the next
-  const uint32_t mem_mark = sdnap::mem::failures();
-  struct Retry {
+  if (g_init_hook != nullptr) g_init_hook();
+  // the slot names set k only once its build is complete (Valid, on every return): until then it holds no set (index -1),
+  // so nothing reads a half-built slot as set k. SPEC 1.6 (the counted memory): a slot whose initialization failed for want of
+  // memory is not kept as refused: it answers this call with the failure and is initialized again by the next
+  const uint32_t mem_mark = sdnap::mem::g_thread_failures;
+  struct Valid {
     Slot& q;
+    int32_t k;
     uint32_t mark;
-    ~Retry() {
-      if (q.error != 0 && sdnap::mem::failures() != mark) q.index = -1;
-    }
-  } retry{q, mem_mark};
+    ~Valid() { q.index = q.error != 0 && sdnap::mem::g_thread_failures != mark ? -1 : k; }
+  } valid{q, static_cast<int32_t>(k), mem_mark};
   if (en.row.theory == kTheorySgp4Xp) {
     drag::table();
     q.xp = static_cast<xpt::XpSat*>(sdnap::mem::calloc(1, sizeof(xpt::XpSat)));
@@ -1019,6 +1030,17 @@ inline uint64_t bytes_of(const Store& st) {
 }  // namespace epochs
 }  // namespace sdnap
 
+/// After a dead batch over the store (Store::pool_dead) the store is emptied or replaced only once no pool thread is active:
+/// one still in its chunk reads and writes it. 0, or the refusal "pool-dead" (load_epochs and load_epochs_open).
+static int refuse_while_pool_dead(sdnap::epochs::Store& st) {
+  if (st.pool_dead == 0) return 0;
+  if (sdnap::pool::load(&sdnap::pool::job().active) != 0)
+    return sdnap::ocm::refuse("pool-dead", "A threaded batch over the epoch store ended with a pool thread taken for dead, and a pool "
+                                           "thread is still active: the store cannot be replaced until it is. Start a new instance.");
+  st.pool_dead = 0;
+  return 0;
+}
+
 /// `load_epochs`: replaces the resident store with the call's snapshot (SPEC 14).
 static int load_epochs_call(void);
 /// An allocation that failed in a call that went on to answer success (mem::finish refuses it): the build and the store are left empty.
@@ -1044,6 +1066,7 @@ static int load_epochs_call(void) {
   if (const int rc = epochs::read_config(cfg)) return rc;
   // the three calls in sequence on one payload: a build opened (the store emptied), the frames as one part, the build closed
   epochs::Store& st = epochs::resident();
+  if (const int rc = refuse_while_pool_dead(st)) return rc;
   epochs::Build& b = epochs::resident_build();
   epochs::begin(st, b, cfg);
   int rc = epochs::add(b, false);
@@ -1065,7 +1088,8 @@ static int load_epochs_open_call(void) {
   using namespace sdnap;
   plugin_reset_output_state();
   // an open ALWAYS drops the load in progress and empties the store, whether or not its configuration is accepted: a non-zero status of any of the three
-  // methods means the load is closed and the store is empty
+  // methods means the load is closed and the store is empty. After a dead batch, not while a pool thread is active (refuse_while_pool_dead)
+  if (const int rc = refuse_while_pool_dead(epochs::resident())) return rc;
   epochs::resident_build().drop();
   epochs::clear(epochs::resident());
   if (const int rc = pcf::read(pcf::kEpochs, true)) return rc;
@@ -1316,6 +1340,7 @@ SDNAP_EXPORT("sdnap_drag_orbit_check")
 int32_t sdnap_drag_orbit_check(uint32_t index, double minutes, int32_t samples, double* out) {
   auto& st = sdnap::epochs::resident();
   if (index >= st.series.size() || out == nullptr) return ORBPRO_PROP_BAD_INPUT;
+  if (st.pool_dead != 0) return sdnap::pool::kRowPoolDead;  // after a dead batch over the store (Store::pool_dead): no slot is read
   auto& slot = sdnap::epochs::slot_of(st, st.series[index], 0, false);
   if (slot.xp == nullptr || slot.error != 0) return ORBPRO_PROP_UNPHYSICAL;
   sdnap::xpt::XpSat& s = *slot.xp;
@@ -1349,7 +1374,10 @@ SDNAP_EXPORT("sdnap_epochs_stats")
 void sdnap_epochs_stats(double* out) {
   const auto& st = sdnap::epochs::resident();
   const auto& s = st.stats;
-  const double v[8] = {s.records, s.kept, s.aged, s.capped, s.theory, s.other_center, s.duplicate, static_cast<double>(sdnap::epochs::bytes_of(st) + sdnap::epochs::build_bytes(sdnap::epochs::resident_build()))};
+  // the bytes read every slot: not after a dead batch over the store (Store::pool_dead), NaN; with them, an open load's
+  const double bytes = st.pool_dead != 0 ? std::numeric_limits<double>::quiet_NaN()
+                                         : static_cast<double>(sdnap::epochs::bytes_of(st) + sdnap::epochs::build_bytes(sdnap::epochs::resident_build()));
+  const double v[8] = {s.records, s.kept, s.aged, s.capped, s.theory, s.other_center, s.duplicate, bytes};
   for (int k = 0; k < 8; ++k) out[k] = v[k];
 }
 
@@ -1391,16 +1419,14 @@ int32_t sdnap_epochs_select(uint32_t i, double jd_whole, double jd_frac, double*
   return 0;
 }
 
-/// Series [first, first + count) at one split Julian date (UTC): six planes of `count` doubles (x, y, z, vx, vy, vz),
-/// frame 0 TEME (km, km/s) or 3 Earth-fixed (m, m/s); `status` (optional) one code per series (0 ok); `cov`
-/// (optional) 36 doubles per series, the TEME covariance row-major (NaN for series without one). 0, or -1.
-SDNAP_EXPORT("sdnap_epochs_at")
-int32_t sdnap_epochs_at(double jd_whole, double jd_frac, uint32_t first, uint32_t count, int32_t frame, double* out, int32_t* status, double* cov) {
-  auto& st = sdnap::epochs::resident();
-  if (out == nullptr || first > st.series.size() || count > st.series.size() - first || (frame != 0 && frame != 3)) return -1;
+namespace sdnap {
+namespace epochs {
+/// One series owns both slots throughout selection, initialization, flight and replacement.
+inline void write_series(Store& st, double jd_whole, double jd_frac, uint32_t first, uint32_t count,
+                         int32_t frame, double* out, int32_t* status, double* cov, uint32_t k) {
   const double t = sdnap::epochs::minutes_of(jd_whole, jd_frac);
   const double theta = frame == 3 ? sdnap::gmst(jd_whole, jd_frac) : 0.0;
-  for (uint32_t k = 0; k < count; ++k) {
+
     double r[3], v[3], P[36];
     bool have_p = false;
     const double jd[2] = {jd_whole, jd_frac};
@@ -1414,6 +1440,170 @@ int32_t sdnap_epochs_at(double jd_whole, double jd_frac, uint32_t first, uint32_
     }
     if (cov != nullptr)
       for (int q = 0; q < 36; ++q) cov[36 * k + q] = e == sdnap::kPropOk && have_p ? P[q] : std::numeric_limits<double>::quiet_NaN();
+}
+
+/// A series containing a wide set stays serial for its entire flight: output-time node changes acquire grids too.
+inline bool wide_series(const Store& st, const Series& s) {
+  for (uint32_t k = 0; k < s.count; ++k)
+    if (((st.entries[s.first + k].branch >> 16) & 0xffu) != 0) return true;  // the packed branch's wide_tess byte (load)
+  return false;
+}
+
+/// Reserve retained sets, cache-pool room and each thread's largest table build before forbidding growth. The retained
+/// allowance is 64 KiB per selected cold XP/AP set; SGP4 reserves its satellite and deep-space checkpoints; larger tables use the same allocation-refusal and serial retry as rows.
+inline size_t series_reserve(Store& st, const pool::Job& j) {
+  uint64_t retained = 0;
+  size_t ap_sets = 0;
+  int degree = 0;
+  const double t = minutes_of(j.jd_whole, j.jd_frac), jd[2] = {j.jd_whole, j.jd_frac};
+  for (uint32_t i = 0; i < j.count; ++i) {  // the batch's slice of the call
+    if (j.serial_series[j.slice + i]) continue;
+    const Series& s = st.series[j.first + j.slice + i];
+    const auto selected = choose(st, s, t, jd);
+    const int32_t indices[2] = {static_cast<int32_t>(selected.a), selected.b};
+    for (int32_t k : indices) {
+      if (k < 0) continue;
+      const Entry& en = st.entries[s.first + static_cast<uint32_t>(k)];
+      const bool ap = en.row.theory == kTheorySgp4Xp && (en.forces.tesseral > 0 || en.forces.zonal > 0);
+      if (ap) { ++ap_sets; degree = std::max(degree, en.forces.tesseral); }
+      bool held = false;
+      for (const Slot& slot : s.slots) if (slot.index == k) held = true;
+      if (!held) {
+        if (en.row.theory == kTheorySgp4Xp) retained += 64u << 10;
+        else retained += sizeof(Sat) + (en.row.mean_motion_rev_day <= 6.4 ? sizeof(double) * 4u * kCheckpointNodes : 0u);
+      }
+    }
+  }
+  // The cache holder/order vectors are allocated before the batch, including the no-reserve diagnostic case.
+  const uint64_t room = ap_sets ? xpt::pool_room(ap_sets) : 0;
+  if (pool::g_reserve_off) return 0;
+  degree = std::min(degree, xpt::tess::kFastCap);
+  const int extra = xpt::tess::kShallowMax;
+  const uint64_t table = static_cast<uint64_t>(xpt::tess::sp_comb_bound(degree, false, extra)) * sizeof(xpt::tess::SpCombCoef) +
+      (xpt::keep_sp_raw() ? static_cast<uint64_t>(xpt::tess::sp_bound(degree, false, extra)) * sizeof(xpt::tess::SpCoef) : 0);
+  const uint64_t bytes = retained + (ap_sets ? std::min<uint64_t>(ap_sets * (128ull << 10), room + (1u << 20)) +
+      (j.threads + 1) * (table + sizeof(xpt::tess::SpTermsScratch)) : 0) + (8u << 20);
+  return static_cast<size_t>(std::min<uint64_t>(bytes, 1ull << 30));  // a slice's: far under 2^31 (sbrk's increment)
+}
+}  // namespace epochs
+
+namespace pool {
+void run_epoch_row(const Job& j, uint32_t i) {
+  const uint32_t k = j.slice + i;  // the call's series k (the batch is the call's slice)
+  epochs::Series& s = j.epochs->series[j.first + k];
+  const uint32_t next = s.next;
+  epochs::write_series(*j.epochs, j.jd_whole, j.jd_frac, j.first, j.stride, j.frame, j.out, j.status, nullptr, k);
+  if (xpt::g_alloc_refused) {
+    // Even a successful initializer may have crossed a refused allocation in an external routine. No partial set is
+    // retained for the serial retry, including the other slot of a blend; the slot to replace next is the one it was before
+    // the attempt, so the retry fills the slots in the order a serial call does from here (which slot holds a set is a
+    // cache's choice: no state depends on it, SPEC 9)
+    for (epochs::Slot& slot : s.slots) epochs::release(slot);
+    s.next = next;
+  }
+}
+}  // namespace pool
+}  // namespace sdnap
+
+/// Series [first, first + count) at one split Julian date (UTC): six planes of `count` doubles (x, y, z, vx, vy, vz),
+/// frame 0 TEME (km, km/s) or 3 Earth-fixed (m, m/s); `status` (optional) one code per series (0 ok); `cov`
+/// (optional) 36 doubles per series, the TEME covariance row-major (NaN for series without one). 0, or -1.
+SDNAP_EXPORT("sdnap_epochs_at")
+int32_t sdnap_epochs_at(double jd_whole, double jd_frac, uint32_t first, uint32_t count, int32_t frame, double* out, int32_t* status, double* cov) {
+  auto& st = sdnap::epochs::resident();
+  if (out == nullptr || first > st.series.size() || count > st.series.size() - first || (frame != 0 && frame != 3)) return -1;
+  // after a dead batch over the store (Store::pool_dead) nothing reads its slots, nor the batch's own arrays below, again
+  if (st.pool_dead != 0) {
+    if (status != nullptr) for (uint32_t k = 0; k < count; ++k) status[k] = sdnap::pool::kRowPoolDead;
+    return sdnap::pool::kBatchPoolDead;
+  }
+  auto& j = sdnap::pool::job();
+  const bool threaded = cov == nullptr && j.threads > 0 && count > sdnap::pool::kEpochChunk && sdnap::pool::load(&j.dead) == 0;
+  if (!threaded) {
+    for (uint32_t k = 0; k < count; ++k)
+      sdnap::epochs::write_series(st, jd_whole, jd_frac, first, count, frame, out, status, cov, k);
+    return 0;
+  }
+  // the call's flags (one byte a series) and one slice's deferred rows, through the counted allocator; none to be had: the
+  // call runs on the calling thread
+  static uint8_t* serial = nullptr;
+  static uint32_t* deferred = nullptr;
+  static uint32_t serial_cap = 0, deferred_cap = 0;
+  const uint32_t slice_max = sdnap::pool::epoch_slice();
+  if (count > serial_cap) {
+    if (uint8_t* s = static_cast<uint8_t*>(sdnap::mem::realloc(serial, count))) { serial = s; serial_cap = count; }
+  }
+  if (slice_max > deferred_cap) {
+    if (uint32_t* d = static_cast<uint32_t*>(sdnap::mem::realloc(deferred, sizeof(uint32_t) * slice_max))) { deferred = d; deferred_cap = slice_max; }
+  }
+  if (count > serial_cap || slice_max > deferred_cap) {
+    for (uint32_t k = 0; k < count; ++k) sdnap::epochs::write_series(st, jd_whole, jd_frac, first, count, frame, out, status, nullptr, k);
+    return 0;
+  }
+  for (uint32_t k = 0; k < count; ++k) {
+    serial[k] = sdnap::epochs::wide_series(st, st.series[first + k]);
+    if (serial[k]) sdnap::epochs::write_series(st, jd_whole, jd_frac, first, count, frame, out, status, nullptr, k);
+  }
+  // Constant tables and ERFA's leap-second globals are initialized before any concurrent set build.
+  (void)sdnap::drag::table();
+  (void)sdnap::xpt::tess::egm_tables();
+  double tt1, tt2;
+  (void)sdnap::frames::utc_to_tt(jd_whole, jd_frac, tt1, tt2);
+  j.kind = sdnap::pool::kJobEpochs;
+  j.epochs = &st;
+  j.serial_series = serial;
+  j.jd_whole = jd_whole; j.jd_frac = jd_frac;
+  j.first = first; j.stride = count; j.frame = frame;
+  j.out = out; j.status = status; j.deferred = deferred;
+  // the call in slices (one threaded batch a slice, which grows no memory: SPEC 9): at most epoch_slice() series a batch, the
+  // memory free to grow between them, each slice's reserve its own (series_reserve), so the high-water is the sets made plus
+  // one slice's reserve.
+  // A slice whose reserve cannot be had is halved; one of two chunks or less whose reserve still cannot be had runs on the
+  // calling thread, as the call does without the pool. Every series is a function of its own inputs and time: the slicing
+  // changes no byte.
+  for (uint32_t a = 0; a < count;) {
+    uint32_t len = std::min(slice_max, count - a);
+    size_t reserve = 0;
+    bool batch = true;
+    for (;;) {
+      j.slice = a;
+      j.count = len;
+      reserve = sdnap::epochs::series_reserve(st, j);
+      if (reserve == 0) break;
+      // a reserve that cannot be had is not a failure of the call: not counted. Held through the volatile block, as
+      // pool::run holds its own: a malloc freed at once is a pair an optimizing build may remove, and the test then never ran
+      sdnap::pool::g_reserve_block = std::malloc(reserve);
+      const bool had = sdnap::pool::g_reserve_block != nullptr;
+      std::free(sdnap::pool::g_reserve_block);
+      sdnap::pool::g_reserve_block = nullptr;
+      if (had) break;
+      if (len <= 2 * sdnap::pool::kEpochChunk) {
+        batch = false;
+        break;
+      }
+      len = (len + 1) / 2;
+      __atomic_add_fetch(&sdnap::xpt::batch_stats().reserves_halved, 1, __ATOMIC_RELAXED);
+    }
+    if (!batch) {
+      for (uint32_t k = a; k < a + len; ++k)
+        if (!serial[k]) sdnap::epochs::write_series(st, jd_whole, jd_frac, first, count, frame, out, status, nullptr, k);
+      __atomic_add_fetch(&sdnap::xpt::batch_stats().slices_serial, 1, __ATOMIC_RELAXED);
+      a += len;
+      continue;
+    }
+    const int32_t rc = sdnap::pool::run(len, reserve);
+    if (rc != 0) {
+      // a pool thread taken for dead may be only slow, still in its chunk: the store is refused from now on (Store::pool_dead)
+      st.pool_dead = 1;
+      if (status != nullptr) for (uint32_t k = 0; k < count; ++k) status[k] = sdnap::pool::kRowPoolDead;
+      return rc;
+    }
+    const int32_t n = sdnap::pool::load(&j.deferred_n);
+    std::sort(deferred, deferred + n);
+    for (int32_t q = 0; q < n; ++q)
+      sdnap::epochs::write_series(st, jd_whole, jd_frac, first, count, frame, out, status, nullptr, a + deferred[q]);
+    sdnap::xpt::batch_stats().deferred += static_cast<uint64_t>(n);
+    a += len;
   }
   return 0;
 }
@@ -1435,6 +1625,7 @@ SDNAP_EXPORT("sdnap_epochs_set_at")
 int32_t sdnap_epochs_set_at(uint32_t i, uint32_t k, double jd_whole, double jd_frac, double* out) {
   auto& st = sdnap::epochs::resident();
   if (i >= st.series.size() || out == nullptr || k >= st.series[i].count) return -1;
+  if (st.pool_dead != 0) return sdnap::pool::kRowPoolDead;  // after a dead batch over the store (Store::pool_dead)
   bool have_p = false;
   const double jd[2] = {jd_whole, jd_frac};
   return sdnap::epochs::state_of(st, st.series[i], k, sdnap::epochs::minutes_of(jd_whole, jd_frac), out, out + 3, nullptr, have_p, jd);

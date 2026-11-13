@@ -271,7 +271,7 @@ for (const [name, o] of Object.entries(ORBITS)) {
     const counts = warmCounts(m);
     check(counts[0] > 0 && counts[1] === 0, `${threads} threads: coefficient reuse matches ${counts[0]}, mismatches ${counts[1]}`);
     console.log(`coefficient guard: ${threads} threads, ${counts[0]} matches, ${counts[1]} mismatches`);
-    m.x.sdnap_pool_stats(ps);
+    m.x.sdnap_pool_stats(ps, 10);
     return { all, rcs, storeMB, pool: Array.from(new Float64Array(m.h.memory.buffer, ps, 10)) };
   };
   const differing = (a, b, from = 0) => a.all.slice(from).reduce((d, v, k) => d + v.filter((w, q) => !Object.is(w, b.all[from + k][q])).length, 0);
@@ -328,7 +328,7 @@ for (const [name, o] of Object.entries(ORBITS)) {
   const fly = async (setup) => {
     const m = await open(testBuild, 4);
     const ps = m.x.sdnap_alloc(80);
-    m.x.sdnap_pool_stats(ps);
+    m.x.sdnap_pool_stats(ps, 10);
     const defaults = Array.from(new Float64Array(m.h.memory.buffer, ps, 10));
     setup(m.x);
     const bytes = elementRows(rows), n = rows.length;
