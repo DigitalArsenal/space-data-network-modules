@@ -157,7 +157,9 @@ break):
 - One past it grows the memory by at least a step (64 pages, 4 MiB). When a step does not fit under the memory's maximum,
   it grows by exactly what the request lacks, and only then refuses.
 - Pages found beyond that end were grown by another party (a host's buffer). They are never served: the break moves past
-  them.
+  them. The module's own slack below them is given up, at most one step per such growth. When another party grows the
+  memory between sbrk's check and its own growth, the break moves to the start of sbrk's new pages, and that one request
+  may be refused although the memory grew (the pages stay as slack).
 - Nothing is served at or past 4 GiB, the end of the address space. Such a request is refused, never wrapped.
 
 So the instance may hold up to one step more than the allocator has asked for, and it refuses only where the request
@@ -197,7 +199,9 @@ build, the decay probe with drag and NRLMSISE-00, and the flight. A pool thread'
 over a store of every class: low orbit at 500 and 290 km, the half-day and one-day classes and e 0.2, each at degree 31
 and at 70 with the slow set, plus a decaying set and SGP4XP. The deepest is 31,192 bytes, a margin of 8.4 (2.1 on
 wasi-libc's default 64 KiB). The test holds every thread under half its stack. A thread's thread-local block is 343,956
-bytes. With the stack it fits the 1 MiB room the pool makes free before it creates the thread.
+bytes. With the stack it fits the 1 MiB room the pool makes free before it creates the thread. A pool thread costs
+192 KiB more of the instance than on wasi-libc's default stack. After starting 15 pool threads, an instance started at
+64 MiB holds 104,857,600 bytes, against 100,139,008 on 0.6.56: 2.9 MB of stacks, the rest the 4 MiB step's rounding.
 
 Through 0.6.47 such a call answered one of five ways:
 - the theory's refusal of the elements (`element-set-refused`);
