@@ -1,6 +1,6 @@
 # SGP4-XP: mathematical specification (clean room, side A)
 
-Version 0.6.53 (dist d35d2177).
+Version 0.6.54 (dist 66dcc7d5).
 
 **License note.** The US Space Force Sgp4Prop library is used under the USSF open source agreement
 (`space-data-network-modules/propagator/sgp4-xp/third_party/ussf-sgp4/AGREEMENT.txt`; the 9.9 package carries the
@@ -3153,12 +3153,96 @@ What is left at 4 x 4 is AP's analytic Moon (stack #446): 7.3 to 8.0 m cross-tra
 `test/one-day-resonant-tail.e2e.mjs` checks the 20 x 20 against the 4 x 4 level (0.5 m); `test/one-day-moon-floor.e2e.mjs`
 is #446's known defect.
 
-**16.3 Zonal tail.** J6 to Jz in the rates: the secular terms of even l (p = l/2, q = 0) and the long-period terms of odd l
-(w = +-1, q = -w), first order, F and dF/di at the epoch inclination and G linearized at the epoch eccentricity.
-For e0 at or below 0.3 the zonal tail carries, for even degrees, the secular term only; it omits their cos 2 omega pair, which
-is of the same order in e in the perigee rate and 50 to 78 % of the term kept. The perigee rate is short by 2.0e-5 rad/day at
-800 x 1,100 km, e 0.0206, i 49.8 deg: a radial error growing 3.1 m/day there, and 6 to 54 m/day at e 0.1 between 500 and
-1,200 km. Above e0 0.3 the zonal tail carries every long-period term (16.11).
+**16.3 Zonal tail.** J6 to Jz in the rates, first order, with F and dF/di at the epoch inclination. At epoch eccentricity
+e0 at or below 0.3 the tail carries the secular terms of even l (w = l - 2p = 0, q = 0), the w = +-1 long-period terms
+of odd l, and the long-period terms with 2 <= |w| <= 6 (q = -w, even w on even degrees and odd w on odd degrees).
+The secular and w = +-1 terms retain their epoch linearization. Each added term has G = e^k (a + b e^2), k = |w|,
+matching the value and analytic slope of the finite Hansen sum at its eccentricity anchor:
+
+X_0^{-(l+1),k}(e) = (1 - e^2)^-(l - 1/2) sum_d C(l-1, 2d+k) C(2d+k, d) (e/2)^(2d+k), 2d+k <= l-1.
+
+G and its derivative are exactly zero when k > l - 1, including J6 at |w| = 6. The factor e^k preserves the circular
+limit. The cell width is 0.002 and anchor(e) = 0.002 (floor(max(e, 0.01) / 0.002) + 0.5), a function of the state
+alone. The immutable table stores a and b at anchor(e0). A state in that cell reads them; a state in another cell
+uses coefficients at its own cell center. The coefficients are cached independently of semimajor axis and inclination,
+so changing a does not repeat the closed-form Hansen calculation. The largest eccentricity offset is half a cell,
+0.001, for e >= 0.01; smaller e uses the floor cell. Value and slope are exact at the anchor before float rounding.
+
+At anchor 0.299, the full half-cell tests give these maximum relative errors against the closed form (all retained
+harmonics; the worst degree in the 6 through 70 sweep is 70):
+
+| Degree | Value error | Slope error |
+| --- | ---: | ---: |
+| 6 | 0.000008764 | 0.001664251 |
+| 20 | 0.000211703 | 0.015332648 |
+| 70 | 0.004325949 | 0.086896650 |
+
+A five-day crossing flight starts at hp300 km, e0 0.04999, i55, BTERM 0.0064 m²/kg, with zonal70/tesseral0 and
+Jacchia70. The mean e crosses 0.05 at 604.281828 minutes. Its one-second position second difference is 8.918317 m;
+ten seconds away on either side it is 8.915952 and 8.920569 m. The excess against their vector average is 0.000682 m
+(bound 0.01 m). All 1,441 five-minute states are identical in time, reverse and fixed shuffled order.
+The hp400/i55 same-field pair with seed e0 at 0.049, 0.04999999 and 0.05000001 has maximum 3D errors
+14.494390, 14.519855 and 14.519963 m. Across the boundary placements the maximum difference of AP-minus-FFM residual
+vectors is 0.004882 m over five days (bound 0.1 m); removing each truth's physical displacement isolates the residual.
+These are seed placements for forecast-span fits, not assertions about the fitted record's eccentricity.
+
+A covariance bank's moved sets read the nominal's table. Its |w| <= 1 entries are linearized at the nominal's e0.
+At the same inclination and e0 2e-4 apart, that legacy dependence changes a five-day flight by up to 1.854 m compared
+with a separately built table; restoring only the moved set's legacy entries removes the difference to the bit.
+The |w| >= 2 contribution depends on the state's cell alone: the probe asserts identical bits under both owners
+and in their borrowing sets, including states outside an owner's epoch cell. Shared inclination functions do not
+change with the owner eccentricity.
+
+The cutoff at |w| = 6 is tested near e 0.3 (stack #595): keeping only |w| <= 2 left 15 to 19 m in the earlier controlled
+measurement. The five-day e0 0.2999 comparison with a full-zonal-harmonic control at identical elements is 0.796426 m
+(bound 1 m); the explicit kTailW assertion also fixes the retained range. This control comparison increased from
+0.270331 m before the cell grid because the value-and-slope form can start half a cell from its anchor at the epoch.
+There is no above-switch comparison of the wide path with itself.
+At e 0.3 and degree 70, G7/G6 is 0.664618 and G8/G6 is 0.415383: neglected Hansen factors can be 40 to 66 percent
+of the last retained factor. Parity selects the allowed harmonics. Their small orbital effect depends on the degree
+weight (R/a)^(l+1), not on G alone. On identical unfitted hp400/e0.05/i55 and hp300/e0.01/i55 elements, the final grid
+and the full-zonal control differ by at most 0.312826 and 0.265429 m over five days. These figures, and the 0.796426 m
+near-switch figure, include both the coefficient approximation and harmonic truncation; they are not a measurement
+of omitted terms alone.
+
+The same-field hp400/e0.05/i55 pair is fitted over days 0 to 5 with degree70/order0, solid tide, drag and radiation off.
+The numerical truth also carries Sun, Moon and relativity. Compared with the module before this change, day-1/day-5
+once-per-revolution in-track amplitudes fall from 97.971729/101.574079 to 2.979972/2.126085 m, and maximum 3D error
+from 126.299846 to 14.515642 m. For hp300/e0.01/i55 the amplitudes fall from 36.806399/39.517290 to
+3.315113/2.893981 m and 3D error from 50.914278 to 15.180303 m. The same-field tests use pinned FFM 2.3.0 truths,
+GCRF, UTC and 300 s sampling; their bounds are 10 m for day-1/day-5 amplitudes and 20 m for maximum 3D error.
+
+Cost increases in the measured fits and some cold calls. At degree70 the low-e table grows from 97 to 423 entries
+(confirmed by zonal_count), four floats per entry: 1,552 to 6,768 bytes per set, an increase of 5,216 bytes.
+The cell coefficient cache holds two float arrays indexed by degree and harmonic, plus its anchor and degree,
+3,992 bytes per thread. The inclination work array is 16,128 bytes; the rate cache holds 123 doubles plus keys.
+Alternating 0.6.48 and this build twice on identical five-day, degree70/order31 FFM fits with drag and radiation
+constrained to zero gives hp300/e0.01/i55 0.984052 to 1.222542 s (1.242354 times, 26 to 27 iterations) and
+hp800/e0.05/i20 10.376655 to 18.213401 s (1.755229 times, 25 to 23 iterations). These timings do not isolate
+closed-form calculation from other fit work.
+
+State costs below compare 0.6.48 with this build: two alternating rounds, five repetitions per round, the mean of
+round medians. Warm times use process CPU time for a seven-day sweep; cold times use wall time for a first call
+after loading the record. Both use zonal20, NRLMSISE00 and synthetic quiet weather; near-circular cases use
+tesseral31. The final case has BTERM 0.0064 m²/kg, AGOM zero, i55 and tesseral0; its semimajor axis decreases and
+e rises from 0.04999 to 0.050267301 over seven days, leaving anchor 0.049 for 0.051 by day one.
+The host was under load; especially the cold wall times include scheduling variability. No general zero-cost
+claim follows from these measurements.
+
+| Orbit | Warm 300 s, µs/state | Warm 60 s, µs/state | Cold day 1, µs | Cold day 7, µs |
+| --- | ---: | ---: | ---: | ---: |
+| 300 km, e 0.001 | 0.970 → 0.991 | 0.888 → 0.817 | 1357.375 → 1396.875 | 5634.438 → 7724.271 |
+| 830 km, e 0.001 | 0.883 → 0.866 | 0.769 → 0.746 | 1027.375 → 600.667 | 1017.208 → 1082.062 |
+| hp500 km, e 0.05, tesseral 0 | 0.410 → 0.372 | 0.368 → 0.368 | 464.750 → 504.625 | 2715.313 → 2794.354 |
+| hp500 km, e 0.2, tesseral 31 | 29.139 → 32.124 | 29.051 → 29.101 | 595.563 → 609.646 | 5251.751 → 2919.167 |
+| hp300 km, e 0.04999, decaying | 0.364 → 0.390 | 0.334 → 0.336 | 594.021 → 632.708 | 3697.333 → 6262.855 |
+
+Above e0 0.3 every long-period term and its existing linearized G remain as 16.11 defines them. These are mean-element
+rates only: section 8's output map has no added zonal-tail term. SGP4XP and SGP4 select no AP zonal tail.
+`test/zonal-long-period.e2e.mjs`, `test/zonal-long-period-table.e2e.mjs`, `test/zonal-cell.e2e.mjs` and
+`test/zonal-cell-placements.e2e.mjs` cover the model pairs, finite sum, half-cell envelope, switch, crossing,
+query order, sharing and epoch seed placements. Shared per-set tables are immutable; re-anchoring changes
+only the calling thread's caches.
 
 **16.4 Frame.** Frame policy is selected once, by `ap_init`, from the record's gravity terms. With d or z above 0,
 every AP set carries its epoch-axis states to TEME of date by M(t) M(t0)^T: from 0.6.34 the long-period regime's class 0
@@ -3322,7 +3406,8 @@ drag passage, 16.3 and 16.12; above 0.3 the class's G about e0, 6.4). Each switc
 its limit, so a set at the limit itself is on the below side (from 0.6.40; through 0.6.39 the class's G about e0 began
 at 0.3 itself, and a set at exactly 0.3 was on a branch of its own). When drag or a resonance carries the mean
 motion across a class limit, the epoch class's terms stay in the rates, with F and G at the current elements (16.2), and
-out of the output table; no table is rebuilt during a flight. A record's output is therefore continuous in time: one
+out of the output table; their membership is fixed during a flight (16.3's eccentricity re-anchor changes coefficients only).
+A record's output is therefore continuous in time: one
 seeded set at each of the five mean motions that decide a class (e 0.001, i 55 deg), flown 2 days at 10 s, has a second
 difference of position less the two-body term of at most 0.002, 0.003, 0.004, 0.012 and 0.035 m at 0.8022, 1.2033,
 1.6045, 2.4067 and 3.6100 rev/day (0.6.5, whose tables followed the current mean motion: 89.9, 135.5, 13.7, 0.012 and

@@ -1,4 +1,7 @@
 #!/usr/bin/env node
+// The AP flight reference is the fixed added-zonal-term artifact at 3a5fb74c: the added terms move the stored fits
+// by up to 1.761607 m / 0.996632 mm/s over 48 hours; the historical SGP4XP reference, registered windows, and every
+// bound are retained.
 // Registration: orbit-accuracy-experiments experiments/operator-theory/THEMIS-RIPPLE-FIX.md (modules-sdn-ap-tesseral-series-ripple-20261105).
 // Above e 0.3 (SPEC 16.11) the first-order tesseral families of degree 2 to 12 are a closed-form grid in the eccentric anomaly.
 // 1. Against the full-field quadrature (each (l, m) of the pinned field evaluated directly on the Kepler ellipse, 2,048 mean anomalies
@@ -310,6 +313,12 @@ const basePath = path.join(scratch, `sdn-ap-${BASE}.wasm`);
 const baseBytes = execFileSync('git', ['-C', modules, 'show', `${BASE}:propagator/sdn-ap/dist/isomorphic/module.wasm`], {maxBuffer: 1 << 26});
 assert.equal(crypto.createHash('sha256').update(baseBytes).digest('hex'), BASE_SHA256, `${BASE_VERSION} dist`);
 fs.writeFileSync(basePath, baseBytes);
+// AP's fixed flight reference; the original baseline also checks the SGP4XP seed.
+const AP_REFERENCE = { version: '0.6.48', commit: '3a5fb74c8e12f825160eea58624dbc85a2cbacc5', sha256: 'b2de5af7e03753e57aebf781c49c824552706a16c563ca60b1dbb71d1a2358c6' };
+const apReferenceBytes = execFileSync('git', ['-C', modules, 'show', `${AP_REFERENCE.commit}:propagator/sdn-ap/dist/isomorphic/module.wasm`], {maxBuffer: 1 << 26});
+assert.equal(crypto.createHash('sha256').update(apReferenceBytes).digest('hex'), AP_REFERENCE.sha256);
+const apReferencePath = path.join(scratch, 'ap-reference.wasm');
+fs.writeFileSync(apReferencePath, apReferenceBytes);
 const AP = {tesseral: 31, zonal: 20};
 const SEEDS = {
   'LEO, AP': {n: 15.07, e: 0.0008, i: 51.6, raan: 40, argp: 30, ma: 10, ...AP},
@@ -346,7 +355,7 @@ const compare = (name, a, b) => {
 };
 for (const [name, s] of Object.entries(SEEDS)) {
   const payload = seedOcm({epoch, ...s});
-  compare(name, await fly(wasmPath, payload), await fly(basePath, payload));
+  compare(name, await fly(wasmPath, payload), await fly(name.includes('SGP4XP') ? basePath : apReferencePath, payload));
 }
 // a fitted AP set (0.6.36's own fit of the 550 km arc, LEO), flown on the same output grid; the catalog-composer fixture
 // (sdn-ap 0.5.1's fit, GRAVITY_MODEL EGM-96 with gravity terms) refused by this build
@@ -356,9 +365,9 @@ for (const [name, s] of Object.entries(SEEDS)) {
   // its covariance refused by name
   const payload = new Uint8Array(fs.readFileSync(path.join(packageRoot, 'test/fixtures/ap-fit-0.6.36.ocm')));
   const own = new Uint8Array(fs.readFileSync(path.join(packageRoot, 'test/fixtures/ap-fit-0.6.39.ocm')));
-  compare('fitted AP set (0.6.39\'s fit)', await fly(wasmPath, own), await fly(basePath, own));
+  compare('fitted AP set (0.6.39\'s fit)', await fly(wasmPath, own), await fly(apReferencePath, own));
   assert.ok(noHarm['fitted AP set (0.6.39\'s fit)'].covLines > 0, '0.6.39\'s fit flies its covariance on this build and on the base');
-  const pre = oemDistance(await fly(wasmPath, payload), await fly(basePath, payload));
+  const pre = oemDistance(await fly(wasmPath, payload), await fly(apReferencePath, payload));
   console.log(JSON.stringify({preFloorRecord: '0.6.36\'s fit', positionMm: 1000 * pre.posM, covarianceLines: pre.covLines}));
   assert.ok(pre.posM <= NO_HARM.posM && pre.velMmS <= NO_HARM.velMmS && pre.covLines === 0 && pre.covLinesDiffer !== true, `0.6.36's fit on this build: ${JSON.stringify(pre)} (its states as the base's, no covariance on either)`);
   const old = new Uint8Array(fs.readFileSync(path.join(modules, 'analysis/catalog-composer/tests/fixtures/ap-fit-sdn-ap-0.5.1.ocm')));
