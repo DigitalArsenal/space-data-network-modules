@@ -18,6 +18,11 @@ export async function loadCatalog(f, pop, { covariance = false, maxDegree = 0 } 
     const payload = Buffer.concat(pop.slice(k, k + 1000).map((o, j) => {
       let u = ocmOfObject(o);
       if (template || (maxDegree && k + j < 32)) u = repackOcm(u, t => {
+        if (maxDegree && k + j < 32) {
+          t.PERTURBATIONS.MAXIMUM_TESSERAL_DEGREE = maxDegree;
+          t.MEAN_ELEMENTS.ECCENTRICITY = 0.299;
+          t.MEAN_ELEMENTS.MEAN_MOTION = 2;
+        }
         if (template) {
           for (const key of Object.keys(template)) if (key.startsWith("COV")) t[key] = template[key];
           t.ORBIT_DETERMINATION = template.ORBIT_DETERMINATION;
@@ -25,7 +30,6 @@ export async function loadCatalog(f, pop, { covariance = false, maxDegree = 0 } 
           const p = t.COV_PROPAGATION;
           p.NOISE_NON_GRAVITATIONAL_RAD_DAY2 = p.NON_GRAVITATIONAL_SHARE * Math.abs(p.NON_GRAVITATIONAL_RATE_PER_DAY) * t.MEAN_ELEMENTS.MEAN_MOTION * 2 * Math.PI;
         }
-        if (maxDegree && k + j < 32) t.PERTURBATIONS.MAXIMUM_TESSERAL_DEGREE = maxDegree;
       });
       const b = Buffer.alloc(4 + u.length); b.writeUInt32LE(u.length); b.set(u, 4); return b;
     }));
