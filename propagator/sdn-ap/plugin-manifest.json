@@ -195,7 +195,7 @@
     {
       "methodId": "load_epochs_open",
       "displayName": "Open a load of the epoch store in parts",
-      "description": "Starts a load in parts (SPEC 14.1.1): drops any load in progress, empties the epoch store, reads the optional $PCF EPOCH_STORE once, as load_epochs does. A non-zero status of this method, load_epochs_part or load_epochs_close closes the load and empties the store.",
+      "description": "Starts a load in parts (SPEC 14.1.1): drops any load in progress, empties the epoch store, reads the optional $PCF EPOCH_STORE once, as load_epochs does. A non-zero status of this method, load_epochs_part or load_epochs_close closes the load and empties the store. Refused by name: configuration-refused, invalid-configuration, out-of-memory.",
       "inputPorts": [
         {
           "portId": "configuration",
@@ -226,7 +226,7 @@
     {
       "methodId": "load_epochs_part",
       "displayName": "Take one part of a load of the epoch store",
-      "description": "Decodes one part's 'ocm' frames, framed as for load_epochs, into the open load (SPEC 14.1.1). Nothing of the part's bytes is kept: a host reuses one staging buffer. The store serves no state until load_epochs_close. A part refused for any reason drops the load; with no load open, load-not-open.",
+      "description": "Decodes one part's 'ocm' frames, framed as for load_epochs, into the open load (SPEC 14.1.1). Nothing of the part's bytes is kept: a host reuses one staging buffer. The store serves no state until load_epochs_close. A part refused for any reason drops the load. Refused by name: load-not-open, missing-ocm, invalid-ocm, omm-not-flown, spw-not-flown, dcl-not-flown, grid-not-flown, out-of-memory, and the record refusals of load_epochs (all but series-forces-differ).",
       "inputPorts": [
         {
           "portId": "ocm",
@@ -257,7 +257,7 @@
     {
       "methodId": "load_epochs_close",
       "displayName": "Close a load of the epoch store",
-      "description": "Closes the open load: the sort and the install of all the parts, as load_epochs does (SPEC 14.1.1). The load is closed either way; a refusal leaves the store empty; with no load open, load-not-open; with no part, missing-ocm. A host reads no state while a close is in progress.",
+      "description": "Closes the open load: the sort and the install of all the parts, as load_epochs does (SPEC 14.1.1). The load is closed either way; a refusal leaves the store empty. A host reads no state while a close is in progress. Refused by name: load-not-open, missing-ocm, series-forces-differ, out-of-memory.",
       "inputPorts": [],
       "outputPorts": [],
       "maxBatch": 65535,
