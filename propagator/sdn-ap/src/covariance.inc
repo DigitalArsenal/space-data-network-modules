@@ -868,7 +868,19 @@ inline uint64_t bytes_of(const Propagator& p) {
 /// 0 ready; -3 the theory refuses the set or a moved one; -5 the epoch columns are singular. The floor comes off the
 /// epoch covariance at the state the writer put it on at (SPEC 12.4: an AP set's at the two-body state of its mean
 /// elements); the floor at every time (eval) is the flown state's. `nominal` and `tables`: init's.
-inline int prepare(const Set& s, Propagator& p, xpt::XpSat* nominal = nullptr, const xpt::XpSat* tables = nullptr) {
+inline int prepare(const Set& s, Propagator& p, xpt::XpSat* nominal = nullptr, const xpt::XpSat* tables = nullptr);
+/// prepare with the record's own set as the bank's set 0, as `propagate` and the epoch store build it (SPEC 14.4): the set of
+/// s.row initialized here, under the caller's bindings, and moved into the bank. An SGP4XP set without AP's terms takes
+/// init's own set 0, as everywhere.
+inline int prepare_own(const Set& s, Propagator& p) {
+  drag::table();
+  xpt::XpSat nominal;
+  (void)xpt::xp_init(elements_of(s.row), nominal);  // a refusal is init's: set 0's init_error, -3
+  const int rc = prepare(s, p, &nominal);
+  xpt::xp_release(nominal);  // empty once moved into the bank; an SGP4XP set without AP's terms was not used
+  return rc;
+}
+inline int prepare(const Set& s, Propagator& p, xpt::XpSat* nominal, const xpt::XpSat* tables) {
   p.s = s;
   if (!init(s.row, s.o, p.b, nominal, tables)) return -3;
   const int np = p.b.np;

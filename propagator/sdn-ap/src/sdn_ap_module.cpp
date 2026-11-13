@@ -220,7 +220,7 @@ int32_t sdnap_covariance_at(const uint8_t* ocm, uint32_t length, const double* m
   ocm::atmosphere_of(set, a);
   ocm::Bind bind(set.forces, &a);
   cov::Propagator p;
-  if (const int pr = cov::prepare(cs, p)) {
+  if (const int pr = cov::prepare_own(cs, p)) {  // the record's own set as the nominal, as propagate's (SPEC 14.4)
     // SPEC 16.25: an AP record whose epoch already meets the rule is decayed at every time (its moved sets cannot start)
     if (count > 0 && p.b.count > 0 && xpt::is_ap_ctx(p.b.sats[0].ctx) && xpt::decay_at_epoch(p.b.sats[0], 0.0)) {
       for (uint32_t k = 0; k < count; ++k)
@@ -275,7 +275,7 @@ int32_t sdnap_test_epoch_floor(const uint8_t* ocm, uint32_t length, double* out)
   ocm::atmosphere_of(set, a);
   ocm::Bind bind(set.forces, &a);
   cov::Propagator p;
-  if (const int pr = cov::prepare(cs, p)) return pr;
+  if (const int pr = cov::prepare_own(cs, p)) return pr;  // the record's own set as the nominal, as propagate's (SPEC 14.4)
   return cov::epoch_floor_parts(p, out) ? 0 : -3;
 }
 
@@ -311,7 +311,7 @@ int32_t sdnap_covariance_full_at(const uint8_t* ocm, uint32_t length, const doub
   const uint32_t stride = 6u + static_cast<uint32_t>(np * (np + 1) / 2);
   // SPEC 16.25 (stack #564), as sdnap_covariance_at: an AP record whose epoch already meets the rule is decayed at every time (its moved
   // sets cannot start), and a time past the crossing of the nominal or of a moved set gets NaN and the call returns 4, every other time filled
-  if (const int pr = cov::prepare(cs, p)) {
+  if (const int pr = cov::prepare_own(cs, p)) {  // the record's own set as the nominal, as propagate's (SPEC 14.4)
     if (count > 0 && p.b.count > 0 && xpt::is_ap_ctx(p.b.sats[0].ctx) && xpt::decay_at_epoch(p.b.sats[0], 0.0)) {
       for (uint32_t k = 0; k < count; ++k)
         for (uint32_t j = 0; j < stride; ++j) out[stride * k + j] = __builtin_nan("");
