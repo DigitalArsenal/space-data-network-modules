@@ -1,5 +1,5 @@
 {
-  "generatedAt": "2026-11-13T00:05:10.691Z",
+  "generatedAt": "2026-11-13T03:04:44.188Z",
   "moduleCount": 160,
   "parityScopeModuleCount": 60,
   "isomorphicWasmCount": 154,
@@ -7502,7 +7502,7 @@
       "pluginId": "com.spacedatanetwork.sdn-ap-propagator",
       "name": "SDN-AP Propagator",
       "pluginFamily": "propagator",
-      "version": "0.6.48",
+      "version": "0.6.52",
       "methodIds": [
         "export_omm",
         "fit",
@@ -7525,7 +7525,7 @@
       ],
       "cxxSourceFileCount": 1,
       "cSourceFileCount": 0,
-      "testFileCount": 203,
+      "testFileCount": 202,
       "parityScope": true,
       "action": "review-before-parity-use",
       "sourceFiles": [
@@ -7553,6 +7553,7 @@
         "test/covariance-realism.e2e.mjs",
         "test/covariance-realism.mjs",
         "test/covariance.e2e.mjs",
+        "test/decay-eccentric.e2e.mjs",
         "test/decay-fit.e2e.mjs",
         "test/decay-wide.e2e.mjs",
         "test/decay.e2e.mjs",
@@ -7644,7 +7645,7 @@
         "test/lib/synthetic-truth.mjs",
         "test/lib/tess-frame-windows.mjs",
         "test/lib/tle.mjs",
-        "test/lib/zonal-long-period-truth.mjs",
+        "test/lib/warm-cache-guard.mjs",
         "test/long-period-moon-output.e2e.mjs",
         "test/long-period-perigee-step.e2e.mjs",
         "test/long-period-radiation.e2e.mjs",
@@ -7732,8 +7733,6 @@
         "test/vendor/orbit-accuracy-experiments-c89f2bc/harness/records.mjs",
         "test/vendor/orbit-accuracy-experiments-c89f2bc/harness/truth-gate.mjs",
         "test/wasmedge-parity.mjs",
-        "test/zonal-long-period-table.e2e.mjs",
-        "test/zonal-long-period.e2e.mjs",
         "test/zonal-radius-term.e2e.mjs"
       ]
     },

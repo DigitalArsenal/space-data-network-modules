@@ -1867,6 +1867,21 @@ inline bool is_ap_ctx(const RateContext& ctx) {
   return ctx.ap_third_body != 0 || ctx.ap_resonance != 0 || ctx.ap_frame != 0;
 }
 
+/// Stack #583: whether xp_init keeps the output table's raw term list (RateContext::sp) beside its combined entries. A flight
+/// reads the combined table alone, so a stored or flown set does not keep it; the field census (census_rows reads each term's
+/// weight from it) sets it for the set it builds (KeepSpRaw), per thread.
+inline bool& keep_sp_raw() {
+  static thread_local bool keep = false;
+  return keep;
+}
+struct KeepSpRaw {
+  bool prev;
+  KeepSpRaw() : prev(keep_sp_raw()) { keep_sp_raw() = true; }
+  ~KeepSpRaw() { keep_sp_raw() = prev; }
+  KeepSpRaw(const KeepSpRaw&) = delete;
+  KeepSpRaw& operator=(const KeepSpRaw&) = delete;
+};
+
 /// SPEC 16.23 (stack #503, #532): the constant radial term the zonal theory leaves out, R_E, for the mean semi-major axis a
 /// (R_E) and cos^2 of the mean inclination. Held to the dynamics' mean rates, the theory's mean radius of a near-circular
 /// orbit sits (R_E^4 / a^3) [J2^2 (199 c^4 - 80 c^2 + 25) / 32 - J4 (15/64)(35 s^4 - 40 s^2 + 8)] above the true one (c, s
@@ -5699,10 +5714,24 @@ struct NodeRun {
   bool ended = false;   ///< the grid ends after the last node (a node that is not a number or does not advance)
 };
 
+/// a, e and cos i at a bracket's two nodes (set_sp_anchor) with the ten mean components they are computed from (n, af,
+/// ag, chi and psi at each node): the bracket's later states read them back instead of computing them again (two pow a
+/// state, stack #441). Keyed on those components bit for bit, so it gives what they give, whatever was flown before.
+/// It is not the anchor: sp_anchored never reads it, and g_sp_anchor is set only by the call that brackets the time
+/// (xp_propagate_impl's AnchorScope clears it on entry).
+struct AnchorMemo {
+  bool valid = false;
+  double in[10]{};
+  double a_lo = 1.0, e_lo = 0.0, c_lo = 1.0, a_hi = 1.0, e_hi = 0.0, c_hi = 1.0;
+};
+/// The thread's, for a set flown without its caches.
+inline thread_local AnchorMemo g_anchor_memo{};
+
 struct SetCaches {
   ActiveBracket ab;
   tess::MdailyEvalCache md;
   tess::SpSetSlot sp;
+  AnchorMemo anchor;   ///< written only while the flying thread holds the set's cache_lock (SetScope)
   NodeRun run[2];      ///< forward, backward
   uint64_t stamp = 0;  ///< the pool's clock when the set was last flown
   uint64_t prev = 0;   ///< the stamp of the flight before
@@ -5866,7 +5895,8 @@ inline bool ap_init(const Elements& e, double n0, int8_t res, XpSat& s) {
   if (spd >= 2) {
     const int nd = t.tesseral > tess::kShallowCap ? tess::kShallowCap : t.tesseral;
     const bool wide_sp = br.wide_tess != 0;
-    if (within_share && same_inc && anchor->ctx.sp_comb != nullptr && anchor->ctx.sp_orig != nullptr &&
+    // the anchor's table (its raw list kept or not: stack #583), unless a caller swapped in other terms
+    if (within_share && same_inc && anchor->ctx.sp_comb != nullptr &&
         anchor->ctx.sp == anchor->ctx.sp_orig && anchor->ctx.sp_count == anchor->ctx.sp_orig_count &&
         wide_sp == (anchor->ctx.branch.wide_tess != 0)) {
       s.ctx.sp_comb = anchor->ctx.sp_comb;
@@ -5884,9 +5914,11 @@ inline bool ap_init(const Elements& e, double n0, int8_t res, XpSat& s) {
       // set takes its own degree): at most one entry each
       const bool fast_side = spd > tess::kSpCap;
       const int extra = fast_side && slow_list != nullptr ? slow_list->count - slow_list->old_count : 0;
-      // filled in this thread's scratch at the bounds, kept at the counts (tess::SpTableScratch: no hole left behind)
+      // filled in this thread's scratch at the bounds, kept at the counts (tess::SpTableScratch: no hole left behind). The
+      // raw term list only where the census builds the set (keep_sp_raw, stack #583): a flight reads the combined table alone
+      const bool raw = keep_sp_raw();
       tess::SpTableScratch* table = tess::sp_table_scratch(static_cast<size_t>(tess::sp_comb_bound(spd, wide_sp, extra)),
-                                                           static_cast<size_t>(tess::sp_bound(spd, wide_sp, extra)));
+                                                           raw ? static_cast<size_t>(tess::sp_bound(spd, wide_sp, extra)) : 0u);
       if (table == nullptr) return false;
       int raw_count = 0;
       // the fast side's band guard (sp_terms' n_end): the mean motion at the record's span's end at the set's own drag rate at
@@ -5901,18 +5933,21 @@ inline bool ap_init(const Elements& e, double n0, int8_t res, XpSat& s) {
         if (std::isfinite(dd[kN]) && dd[kN] > 0.0) n_end = n0 + dd[kN] * tess::kFastSpanMinutes;
       }
       const int comb_count =
-          tess::sp_terms(spd, nd, res, res == 0 && !s.ctx.long_period, wide_sp, n0, e.xincl, e.eo, table->comb, table->raw, &raw_count, slow_list,
-                         fast_side ? md : tess::kFastCap + 2, fast_side, n_end);
+          tess::sp_terms(spd, nd, res, res == 0 && !s.ctx.long_period, wide_sp, n0, e.xincl, e.eo, table->comb, raw ? table->raw : nullptr,
+                         &raw_count, slow_list, fast_side ? md : tess::kFastCap + 2, fast_side, n_end);
       tess::SpCombCoef* comb_kept =
           static_cast<tess::SpCombCoef*>(sdnap::mem::malloc((comb_count > 0 ? comb_count : 1) * sizeof(tess::SpCombCoef)));
       if (comb_kept == nullptr) return false;
-      tess::SpCoef* raw_kept = static_cast<tess::SpCoef*>(sdnap::mem::malloc((raw_count > 0 ? raw_count : 1) * sizeof(tess::SpCoef)));
-      if (raw_kept == nullptr) {
-        std::free(comb_kept);
-        return false;
+      tess::SpCoef* raw_kept = nullptr;
+      if (raw) {
+        raw_kept = static_cast<tess::SpCoef*>(sdnap::mem::malloc((raw_count > 0 ? raw_count : 1) * sizeof(tess::SpCoef)));
+        if (raw_kept == nullptr) {
+          std::free(comb_kept);
+          return false;
+        }
       }
       if (comb_count > 0) std::memcpy(comb_kept, table->comb, static_cast<size_t>(comb_count) * sizeof(tess::SpCombCoef));
-      if (raw_count > 0) std::memcpy(raw_kept, table->raw, static_cast<size_t>(raw_count) * sizeof(tess::SpCoef));
+      if (raw_kept != nullptr && raw_count > 0) std::memcpy(raw_kept, table->raw, static_cast<size_t>(raw_count) * sizeof(tess::SpCoef));
       s.ctx.sp_comb = comb_kept;
       s.ctx.sp_comb_count = comb_count;
       s.ctx.sp_ci0 = std::cos(e.xincl);
@@ -5976,9 +6011,9 @@ inline bool ap_init(const Elements& e, double n0, int8_t res, XpSat& s) {
       if (table == nullptr) return false;
       s.ctx.half_day_count = tess::half_day_terms(sd, e.xincl, e.eo, table, s.ctx.hd_a0, res);
       if (s.ctx.half_day_count < 0) { std::free(table); return false; }
-      // the one-day tail keeps what it filled: its amplitude cut leaves a few hundred of the bound's 2,016 entries at
-      // degree 31 (the half-day class's allocation is left as it was)
-      if (res == 1 && s.ctx.half_day_count > 0)
+      // each tail keeps what it filled (stack #583): the one-day tail's amplitude cut leaves a few hundred of the bound's 2,016
+      // entries at degree 31, the half-day tail about 119 of its 1,008; the entries are unchanged, only the unused bound goes
+      if (s.ctx.half_day_count > 0)
         if (void* kept = sdnap::mem::realloc(table, static_cast<size_t>(s.ctx.half_day_count) * sizeof(tess::HalfDayCoef)))
           table = static_cast<tess::HalfDayCoef*>(kept);
       s.ctx.half_day = table;
@@ -6124,7 +6159,7 @@ inline int32_t xp_init(const Elements& e, XpSat& s) {
   const double span = 8.0 * kMinutesPerDay;
   int32_t stride = static_cast<int32_t>(std::ceil(span / (kSparse * step)));
   s.stride = stride < 1 ? 1 : stride;
-  decay_epoch(s);  // SPEC 16.25: an epoch past the rule is decayed at every time (one test of the epoch node, its own rates)
+  decay_epoch(s);  // SPEC 16.25: an epoch past the rule is decayed at every time (one test of the epoch node: its drag part where the gate passes)
   return kPropOk;
 }
 
@@ -6334,7 +6369,11 @@ inline int field_census(int cap, double n, double e, double inc, double cut, dou
   s.ctx.resonance = s.ctx.branch.resonance;
   s.ctx.e0 = e;
   s.ctx.i0 = inc;
-  int count = ap_init(el, n, s.ctx.resonance, s) ? census_rows(s, cap, n, e, inc, cut, rows, max_rows) : -1;
+  int count = -1;
+  {
+    const KeepSpRaw keep;  // the census reads the table's terms one by one (stack #583)
+    if (ap_init(el, n, s.ctx.resonance, s)) count = census_rows(s, cap, n, e, inc, cut, rows, max_rows);
+  }
   if (count >= 0) count = census_radiation_row(s.ctx, count, rows, max_rows);
   xp_release(s);
   s.~XpSat();
@@ -6691,7 +6730,7 @@ inline bool run_grow(XpSat& s, SetCaches& c, NodeRun& r, int32_t want) {
 
 /// SPEC 16.25 (stack #564): where an AP flight ends, decayed. (b) the mean perigee height a (1 - e) - R_E under kDecayFloorKm;
 /// (a) with drag, more perigee radius lost over one revolution, or over the grid's next step where that is longer,
-/// |d(a (1 - e))/dt| max(P, h), than one density scale height H at the mean perigee (the set's own atmosphere and weather):
+/// max(0, -d(a (1 - e))/dt_drag) max(P, h), than one density scale height H at the mean perigee (the set's own atmosphere and weather):
 /// past it the averaged rates no longer describe the orbit, and the grid's next node is not an orbit (stack #564's seeds: the
 /// last node before the jump loses 0.58 H a revolution and 1.15 H over its 2.9 h step; the node after it has its perigee at
 /// -283 km). H is looked up only once the loss passes kDecayTestKm (below it no height the atmospheres reach has H under it).
@@ -6717,9 +6756,24 @@ inline double decay_density(const RateContext& ctx, double t, const Vec3& pu, do
   H -= kTwoPi * std::floor(H / kTwoPi);
   return node_density(ctx.atmosphere, dt, fl, dca, d50, sp, cp, sdsun, cdsun, H, alpha, theta_g, nh);
 }
-/// A node's two decay tests as quantities that cross 0 at the rule: qb = kDecayFloorKm - h_p (km), qa = ln(loss / H)
-/// (-1e300 without drag, under kDecayTestKm unless `full`, or where the atmosphere gives no gradient). Decayed when either is
-/// 0 or more. The node's rates are its own (the step's), so the test adds no rate evaluation.
+/// The drag's own part of the averaged rates (SPEC 3.4) at mean state y and time t, `out` in state order (zero where the set has no
+/// drag or the state fails the 9.9 tests): the same call the rates make for their drag term, and no other force.
+inline bool drag_rates_at(const RateContext& ctx, double t, const double* y, double* out) {
+  for (int j = 0; j < 6; ++j) out[j] = 0.0;
+  if (!(ctx.bterm > 0.0) || state_test(ctx, y) != 0) return false;
+  const Frame fr = frame_of(y);
+  const Kepler k = kepler_of(y, fr.a);
+  const AngleTrig ag = angle_trig(k);
+  const Bodies b = ctx.ap_third_body ? bodies_at_ap(ctx.d50_epoch + t / kMinutesPerDay) : bodies_at(ctx.d50_epoch + t / kMinutesPerDay);
+  drag_part(ctx, t, y, fr, k, ag, b, out);
+  return true;
+}
+/// A node's two decay tests as quantities that cross 0 at the rule: qb = kDecayFloorKm - h_p (km), qa = ln(loss / H), loss the
+/// perigee radius's fall by DRAG over one revolution or over the grid's next step where that is longer (the drag's own da/dt (1 - e)
+/// less a de/dt, counted only where it lowers the perigee: the Sun and Moon move the mean perigee of a highly eccentric orbit by more
+/// than a scale height a revolution, and a perigee that rises or falls under them is not decay) (-1e300 without drag, under
+/// kDecayTestKm unless `full`, or where the atmosphere gives no gradient). Decayed when either is 0 or more. The loss is the drag
+/// term's own mean rates, evaluated at the node (a full drag_part); the node's whole rates only gate that evaluation (below).
 struct DecayQ {
   double qa, qb;
 };
@@ -6734,7 +6788,15 @@ inline DecayQ decay_q(const RateContext& ctx, const Node& nd, bool full) {
   // km per revolution, or per grid step where the step is longer: the averaged rates must follow the decay over the step the
   // grid takes next from this node (next_node's)
   const double step = ctx.long_period ? long_period_step(ctx) : averaged_step(ctx, n);
-  const double loss = std::fabs(adot * (1.0 - e) - a * edot) * std::fmax(kTwoPi / n, step) * kRe;
+  // the gate uses the magnitudes of the whole rates' two perigee terms. The Sun and Moon can open it on an eccentric set that
+  // never decays, adding a drag evaluation at each node; the drag-only loss below decides the rule, not this gate.
+  const double reach = (std::fabs(adot * (1.0 - e)) + std::fabs(a * edot)) * std::fmax(kTwoPi / n, step) * kRe;
+  if (!(reach > 0.0) || (!full && !(reach > kDecayTestKm))) return q;
+  double dd[6];
+  if (!drag_rates_at(ctx, nd.t, y, dd)) return q;
+  const double adot_d = -kX2o3 * a / n * dd[kN];
+  const double edot_d = e > 0.0 ? (y[kAf] * dd[kAf] + y[kAg] * dd[kAg]) / e : 0.0;
+  const double loss = std::fmax(0.0, -(adot_d * (1.0 - e) - a * edot_d)) * std::fmax(kTwoPi / n, step) * kRe;
   if (!(loss > 0.0) || (!full && !(loss > kDecayTestKm))) return q;
   const Kepler k = kepler_of(y, fr.a);
   Vec3 r, v;
@@ -6749,7 +6811,7 @@ inline DecayQ decay_q(const RateContext& ctx, const Node& nd, bool full) {
 }
 inline bool decayed(const DecayQ& q) { return q.qa >= 0.0 || q.qb >= 0.0; }
 /// The crossing's time between node a (not decayed) and node b (decayed), direction dir: the earlier of the two tests' roots,
-/// each linear in its quantity between the two nodes (no rate evaluation); a test already met at a gives a's time.
+/// each linear in its quantity between the two nodes (the nodes' two tests, the earlier node's evaluated in full); a test already met at a gives a's time.
 inline double decay_cross_t(const RateContext& ctx, const Node& a, const Node& b, const DecayQ& qb, int dir) {
   const DecayQ qa = decay_q(ctx, a, true);
   auto root = [&](double x0, double x1) {
@@ -6979,8 +7041,27 @@ inline void set_sp_anchor(const XpSat& s, const Node& lo, const Node& hi) {
     const double t2 = q.y[kChi] * q.y[kChi] + q.y[kPsi] * q.y[kPsi];
     c = (1.0 - t2) / (1.0 + t2);
   };
-  at(lo, an.a_lo, an.e_lo, an.c_lo);
-  at(hi, an.a_hi, an.e_hi, an.c_hi);
+  if (!is_ap_ctx(s.ctx)) {
+    at(lo, an.a_lo, an.e_lo, an.c_lo);
+    at(hi, an.a_hi, an.e_hi, an.c_hi);
+  } else {
+    // AP's set memo while this thread holds its caches, else the thread's own
+    AnchorMemo& m = g_flown_set == &s && s.caches != nullptr ? s.caches->anchor : g_anchor_memo;
+    const double in[10] = {lo.y[kN], lo.y[kAf], lo.y[kAg], lo.y[kChi], lo.y[kPsi],
+                           hi.y[kN], hi.y[kAf], hi.y[kAg], hi.y[kChi], hi.y[kPsi]};
+    if (!m.valid || std::memcmp(m.in, in, sizeof in) != 0) {
+      at(lo, m.a_lo, m.e_lo, m.c_lo);
+      at(hi, m.a_hi, m.e_hi, m.c_hi);
+      std::memcpy(m.in, in, sizeof in);
+      m.valid = true;
+    }
+    an.a_lo = m.a_lo;
+    an.e_lo = m.e_lo;
+    an.c_lo = m.c_lo;
+    an.a_hi = m.a_hi;
+    an.e_hi = m.e_hi;
+    an.c_hi = m.c_hi;
+  }
   an.id = id;
   an.tlo = lo.t;
   an.h = hi.t - lo.t;
@@ -7312,8 +7393,9 @@ inline int32_t xp_propagate_local(XpSat& s, double t, double r[3], double v[3], 
       (std::fabs(ym_p[kChi] - ym0[kChi]) + std::fabs(ym_p[kPsi] - ym0[kPsi])) < plane_lim &&
       (std::fabs(ym_m[kChi] - ym0[kChi]) + std::fabs(ym_m[kPsi] - ym0[kPsi])) < plane_lim;
   const double dlam_p = ym_p[kLam] - ym0[kLam], dlam_m = ym_m[kLam] - ym0[kLam];
-  const bool need_sp_any = (sp.ctx.mdaily != nullptr || sp.ctx.sp != nullptr || sp.ctx.wide != nullptr ||
-                            sm.ctx.mdaily != nullptr || sm.ctx.sp != nullptr || sm.ctx.wide != nullptr);
+  // the output table by its combined entries (a set keeps its raw term list only for the census: stack #583)
+  const bool need_sp_any = (sp.ctx.mdaily != nullptr || sp.ctx.sp_comb != nullptr || sp.ctx.wide != nullptr ||
+                            sm.ctx.mdaily != nullptr || sm.ctx.sp_comb != nullptr || sm.ctx.wide != nullptr);
   if (need_sp_any && !(can_share_sp && small_plane && std::fabs(dlam_p) < 0.15 && std::fabs(dlam_m) < 0.15))
     return 0;
   const bool need_srp_any = (sp.ctx.agom > 0.0 || sm.ctx.agom > 0.0);
@@ -7650,7 +7732,7 @@ inline bool xp_propagate_cov_at(XpSat* sats, int np, const int* slot, const bool
   const Bodies shared = s0.ctx.ap_third_body ? bodies_at_ap(s0.ctx.d50_epoch + t / kMinutesPerDay)
                                              : bodies_at(s0.ctx.d50_epoch + t / kMinutesPerDay);
   const bool can_share_3b = (t != 0.0) && !s0.ctx.long_period && s0.ctx.ap_third_body;
-  const bool can_share_sp = (t != 0.0) && (s0.ctx.mdaily != nullptr || s0.ctx.sp != nullptr || s0.ctx.wide != nullptr);
+  const bool can_share_sp = (t != 0.0) && (s0.ctx.mdaily != nullptr || s0.ctx.sp_comb != nullptr || s0.ctx.wide != nullptr);
   const bool can_share_srp = (t != 0.0) && s0.ctx.agom > 0.0;
   double d_3b0[6] = {0, 0, 0, 0, 0, 0}, dd_3b_dlam[6] = {0, 0, 0, 0, 0, 0};
   double d_sp0[6] = {0, 0, 0, 0, 0, 0}, dd_sp_dlam[6] = {0, 0, 0, 0, 0, 0}, d2_sp_dlam2[6] = {0, 0, 0, 0, 0, 0};

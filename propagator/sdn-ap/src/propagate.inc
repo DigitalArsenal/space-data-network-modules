@@ -170,7 +170,7 @@ static int propagate_call(void) {
           for (int q = 0; q < cprop.b.count; ++q) take(cprop.b.sats[q]);
         return any;
       };
-      // SPEC 16.25: the crossing a covariance's call names is the record's: when the first epoch is refused, every started set of the
+      // SPEC 16.25: the crossing a covariance's call names is the record's: at the first epoch the call refuses (wherever it stands), every started set of the
       // bank (the nominal and each moved one) is run to the call's furthest epoch on each side, so every crossing at or before it is
       // found whatever order or list the epochs come in. An epoch answered with its covariance lies before every set's crossing, so a
       // call that refuses none runs nothing here (a record that never decays pays nothing)

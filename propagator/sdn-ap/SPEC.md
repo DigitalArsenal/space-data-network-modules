@@ -1,6 +1,6 @@
 # SGP4-XP: mathematical specification (clean room, side A)
 
-Version 0.6.48 (dist 564fa16c).
+Version 0.6.52 (dist d18fbf73).
 
 **License note.** The US Space Force Sgp4Prop library is used under the USSF open source agreement
 (`space-data-network-modules/propagator/sgp4-xp/third_party/ussf-sgp4/AGREEMENT.txt`; the 9.9 package carries the
@@ -1771,11 +1771,6 @@ What the exact state costs a single record, against 0.6.12, flown back to back i
 figures come from the minimum and the steady rounds: single-threaded rounds swung by up to 5 times on the shared
 machine, so a median means little.
 
-- One warm record in ascending order is 13 % slower at 500 km and 5 to 7 % at 830 km. MEO is equal; GEO is 2.3 times
-  faster and the transfer orbit 1.7 times.
-  - At 500 km the bracket-anchored bake bookkeeping at every state costs about 6 % (stack #441): bake points one
-    tolerance apart and counted once per bracket recovered 11 of 17 %.
-  - The node re-evaluation below costs about 4 % (stack #439).
 - The first state of a fresh record at 7 days is 25 to 28 % slower at 500 km and GEO (stack #439). Each node step
   evaluates node a's held rates (third body, drag, SRP, the zonal tail) again at the node's own state, which is what
   makes a step depend on its first node alone. Recovering it takes either carrying the held parts in each node (about
@@ -1784,6 +1779,39 @@ machine, so a median means little.
 - The full `propagate` call (GCRF, 7 days at 300 s) of a record fitted with covariance is 11 % slower at 500 km and 15 % at
   GEO; a seeded record is equal at 500 km and 13 % slower at GEO. The integration of the nominal's nodes carries the node
   re-evaluation.
+
+**The warm record's bakes (stack #441).** AP's compact tesseral cache reads block coefficients from the thread cache
+when both hold the same grouping id. An atomic counter assigns each grouping its id before coefficients are written;
+the compact copy preserves it. Otherwise a base bake rebuilds all block coefficients from the terms, and a resonant
+bake rebuilds only resonant blocks. The pool charges `sizeof` for these structures. A thread cache matched by `sp_matches` (table pointer, count, tag,
+a0, e0, and sentinel coefficients) is taken as the same table for grouping and coefficient reuse.
+
+AP memoizes a, e, and cos i at the bracket's two nodes, keyed byte for byte on n, af, ag, chi, and psi at both nodes.
+The memo belongs to the set while its cache lock is held, and to the thread otherwise. The propagation entry
+clears the anchor; epoch calls clear it without consulting the memo. SGP4XP computes its anchor directly.
+
+Inline tesseral and m-daily checks compare the bracket identity, first time, length, and each bake level's part key
+before calling the synchronization routines. The checks use the same part-key expression as the bakes. The stored
+part counts and keys follow the cache's existing lock ownership. These shortcuts reuse values without changing
+arithmetic in the bakes or the returned states.
+
+
+A warm record makes no bake when no bake key changes. Four alternating rounds comparing 0.6.50 with 0.6.51 give
+the AP costs below, in microseconds per state, median [minimum, maximum], on identical saved fitted records over
+seven days at normal priority. The one-minute load range was 16.50–17.41.
+
+| Orbit | Spacing | 0.6.50 | 0.6.51 |
+|---|---|---:|---:|
+| 500 km | 60 s | 0.821 [0.812, 0.837] | 0.676 [0.658, 0.682] |
+| 500 km | 300 s | 1.365 [1.359, 1.400] | 0.839 [0.827, 0.864] |
+| 830 km | 60 s | 0.695 [0.694, 0.708] | 0.600 [0.587, 0.605] |
+| 830 km | 300 s | 0.965 [0.949, 0.971] | 0.694 [0.689, 0.718] |
+
+Test-build `sizeof` measurements against 0.6.50 give SetCaches 11,088 to 11,264 bytes (+176), MdailyEvalCache 4,704 to
+4,736 (+32), SpEvalCache 1,376 to 1,424 (+48), and AnchorMemo 136 bytes. At 1,000 AP sets, store and pool accounting
+measure 176 additional bytes per pooled set before flight and 224 after W5 (one day at 300 s). Thread-owned
+structures add 216 bytes, excluding allocator and TLS alignment overhead; the instance's grouping counter adds
+8 shared bytes. The 10,000-set / 256 MB figures above were not re-measured.
 
 How room is shared:
 
@@ -5194,8 +5222,9 @@ an SGP4XP record reaches, and named three it cannot return (gravity-model-mismat
 parameter-invalid:ECOM2_Y0).
 
 **16.25 Decay** (stack #564). An AP flight is refused, as decayed, from the first time either of these holds:
-- (a) with drag, the set loses more perigee radius over one revolution, or over the grid's next step where that is longer,
-  than one density scale height at its mean perigee: |d(a (1 - e))/dt| max(P, h_next) > H(h_p);
+- (a) with drag, DRAG lowers the set's perigee radius over one revolution, or over the grid's next step where that is longer,
+  by more than one density scale height at its mean perigee: -(da/dt (1 - e) - a de/dt)_drag max(P, h_next) > H(h_p), the
+  drag term's own mean rates, counted only where they lower the perigee (a perigee that rises counts for nothing);
 - (b) its mean perigee height a (1 - e) - R_E is under 100 km (kDecayFloorKm; Jacchia 1970 has no density under 90 km).
 
 SGP4XP keeps the library's decay at a mean perigee radius under 1 R_E (section 10), so its conformance is unchanged, and SGP4
@@ -5207,19 +5236,33 @@ keeps its own.
   from that node (next_node's), a function of the set alone, so the crossing is the record's and the same in any call order.
   The crossing therefore depends on the grid's step rule and moves if that rule ever changes: a version that changes the
   step states the crossing times that move. It refuses up to a step earlier than the per-revolution reading would: #564's
-  two seeds are flown to 136.7 km (perigee 200 km, e 0.001, BTERM 0.01) and 160.7 km (perigee 220 km, e 0.01, BTERM 0.1).
-- What goes in. da/dt and de/dt are the node's own mean rates (its step's, every force: gravity's mean rates of a and e are
-  meters a revolution, against the 5 km, kDecayTestKm, at which the test starts). H is the scale height of the set's own
+  two seeds are flown to 136.5 km (perigee 200 km, e 0.001, BTERM 0.01; 136.7 km through 0.6.48) and 160.7 km (perigee 220 km, e 0.01, BTERM 0.1).
+- What the rule reads, and why. Drag at a perigee passage lowers the semi-major axis and the eccentricity together, so its own
+  part of the perigee radius's rate, da/dt (1 - e) - a de/dt, is about 0 on a highly eccentric orbit; the Sun and the Moon move
+  the mean perigee of such an orbit by more than a scale height a revolution, rising or falling, and that is not decay. A first
+  form of the rule read the whole mean rate of the perigee radius, every force, in absolute value, and refused 23 synthetic
+  orbits at e 0.9 (apogee 118,000 to 134,000 km) whose numerical truth never decays, and refused the fitted records of six of
+  them (five marked CONVERGED; stack #594: four at the epoch, two within the first two days, three of the six with a RISING perigee). The rule reads the
+  drag term's part alone, evaluated at the node (the gate below), and counts it only as a fall. On near-circular orbits drag is the whole of the perigee's rate (gravity is 0.2 % of it on the
+  seeds below), so their crossings move by that much and no more.
+- What goes in. da/dt and de/dt are the drag term's own mean rates at the node's mean state (a full evaluation of the drag part
+  of the rates, SPEC 3.4, the same call the rates make). The gate uses the node's whole mean rates:
+  (|da/dt (1 - e)| + |a de/dt|) max(P, h_next) > kDecayTestKm (5 km), in kilometers. A crossing calculation evaluates
+  the earlier node's drag part for any positive gate value, including values below 5 km. The whole rates only gate the
+  evaluation; the drag-only loss decides the rule. The gate reads the magnitudes of the whole rates' two perigee terms,
+  which on a highly eccentric record are the Sun's and Moon's, so on such a record the drag term is evaluated at every node. H is the scale height of the set's own
   atmosphere and weather at its mean perigee, from two density evaluations 1 km either side along the mean perigee's
   direction, made only once the loss passes 5 km. The test changes no step, rate or state: a time before the crossing is
   answered as before, to the bit.
 - Eccentric orbits. Drag near perigee takes the apogee down: the semi-major axis falls while the perigee radius barely
-  moves, so the rule is on the perigee radius, which ends the flight. At BTERM 0.01 and a 150 km perigee the semi-major axis
-  loses 3.80 km a revolution at e 0.7 and the perigee radius 0.6 m (H 17.6 km); near e 0 the two are close.
+  moves, so the rule is on the perigee radius, drag's part of it. At BTERM 0.01 and a 150 km perigee the semi-major axis
+  loses 3.80 km a revolution at e 0.7 and the perigee radius 0.6 m (H 17.6 km); near e 0 the two are close. Above e 0.3 the
+  drag test (a) therefore stays shut while the orbit is eccentric, and a decaying set is refused by the floor test (b) alone
+  (stack #582).
 - Where it is found. On the grid's nodes as they are made outward from the epoch (the cached node run and the uncached
   integration alike), once per direction, kept with the set beside its checkpoints and window; no node past the crossing
   node is made. Its time is the root of the test's quantity (ln(loss / H), or 100 km - h_p), linear between the last node
-  before it and the first past it, with no further rate evaluation. An epoch that already meets the rule is decayed at every
+  before it and the first past it, with no further evaluation of the rates beyond the earlier node's test. An epoch that already meets the rule is decayed at every
   time.
 - What a caller gets past it. A state: status 4 (kPropDecayed) and the plugin ABI's ORBPRO_STATE_DECAYED; the row store's
   planes are not numbers. `propagate` and `propagate_epochs` answer the epochs before the crossing: the block stops at the
@@ -5260,11 +5303,10 @@ keeps its own.
   covariance started is run to the call's furthest epoch on each side, so the name does not depend on the order or the list of
   the epochs asked (two calls on one record name the same crossing when the crossing lies at or before the furthest epoch of
   both); a call that refuses no epoch runs nothing more, since an epoch answered with its covariance lies before every set's
-  crossing. In a call with covariance, a Hermite blend's two probes at its window's end ask no covariance of their own. The earlier set's probe follows
-  that set's own epoch, which started its covariance, so it names that record's earliest crossing. The later set's probe names
-  its record's earliest crossing only when an earlier epoch of the call already started that set's covariance; on a fresh
-  store it names the later set's nominal crossing (as 0.6.47 did), so the name for the later set depends on the call's earlier
-  epochs. `propagate_epochs` refuses an epoch past a moved set's crossing as `propagate` does, and, for a record
+  crossing. A Hermite blend's two probes at its window's end start each set's covariance bank when the call requests covariance,
+  without evaluating that covariance. A refused nominal probe names the record's earliest crossing, whichever epoch of the call
+  is asked first; a moved set crossing between the requested epoch and the window's end does not refuse an epoch before every crossing.
+  `propagate_epochs` refuses an epoch past a moved set's crossing as `propagate` does, and, for a record
   that carries no forecast, never writes the block without its covariance. An AP record whose epoch already meets the rule and carries a covariance is refused
   `decayed:<epoch>` in `propagate` and `propagate_epochs`, and `sdnap_covariance_at` and `sdnap_covariance_full_at` give 42 (or
   the full width of) NaN at every time and return 4.
@@ -5273,20 +5315,26 @@ keeps its own.
 - Wide sets (e above 0.3). A state in the last fifth of a 48 h interval is blended toward the next schedule node's grid. Where
   that node lies past the crossing, the state is answered from the interval's own grid alone and is not refused: asking such a
   state runs the grid to the next node and so finds the crossing, so the answer is the same in any call order. These states are
-  not 0.6.45's to the bit (0.6.45 blended toward a grid built from a state past the crossing, which is no orbit); the measured
-  difference is stated with the test, `test/decay-wide.e2e.mjs`. A set at or below e 0.3, and every state of a wide set outside
+  not 0.6.45's to the bit (0.6.45 blended toward a grid built from a state past the crossing: an orbit below the floor, or by
+  the drag test one the averaged rates no longer describe); the measured difference is stated with the test, `test/decay-wide.e2e.mjs`. A set at or below e 0.3, and every state of a wide set outside
   those hours, is 0.6.45's to the bit before the crossing.
-- Limit of the rule above e 0.3. For a set above e 0.3 the rule can come days after the orbit really re-enters: drag at perigee takes
-  the apogee down while the mean perigee barely moves, so the perigee loss the rule reads stays small until late. Measured on
-  made-up sets, both on NRLMSISE-00, the numerical propagator flown from AP's own start state: perigee 110 km, e 0.7, BTERM 0.2
-  (balloon-like) re-enters at 40.3 h and the rule has no crossing within 10 days; perigee 110 km, e 0.5, BTERM 0.045 (not
-  balloon-like) re-enters at 79.3 h and the rule's crossing is at 66.8 h, before it. Where the rule comes late or not at all, AP
-  answers states far from the numerical propagator. This is not made worse by the rule (without it the flight had no end); a rule
-  for these sets has to use the loss per perigee passage against the energy the orbit has left, or the numerical propagator's
-  own crossing as the yardstick (stack #582).
+- Limit of the rule above e 0.3 (stack #582). Above e 0.3 a decaying set is refused by the floor test alone: drag's own part of
+  the perigee's rate is about 0 while the orbit is eccentric, so the drag test (a) stays shut and the mean perigee under
+  100 km ends the flight, which can come days after the orbit really re-enters or not at all. Measured on made-up sets, both on
+  NRLMSISE-00, the numerical propagator flown from AP's own start state: perigee 110 km, e 0.7, BTERM 0.2 (balloon-like)
+  re-enters at 40.3 h and the rule has no crossing within 10 days; perigee 110 km, e 0.5, BTERM 0.045 re-enters at 79.3 h and the
+  first form of the rule crossed at 66.8 h and this build, by the floor test, at 68.9 h, both before it. Where the
+  rule comes late or not at all, AP answers states far from the numerical propagator. This is not made worse by the rule (without
+  it the flight had no end); a rule for these sets has to use the loss of orbital energy per perigee passage against the energy
+  the orbit has left, or the numerical propagator's own crossing as the yardstick.
 - What gets worse: a decaying set loses its states from the crossing to the surface, its last revolutions, which the theory
-  does not describe (they were up to 31,250 km off).
-- `test/decay.e2e.mjs`: the two seeds decay at 70.133 h and 47.064 h, every state before the crossing 0.6.45's bit for bit
+  does not describe (they were up to 31,250 km off). The first state after a load over a 7-day grid costs more on the
+  measured e 0.9 records. Two alternating rounds of `test/kernel-cost.mjs --repeats 5 --steps 300`, measured on a shared
+  machine under load, gave 0.6.48 / this build: long-period e 0.9, 153.437 / 255.893 ms and 152.621 / 190.424 ms
+  (+66.8 % and +24.8 %); THEMIS, 218.065 / 251.491 ms and 223.059 / 258.866 ms (+15.3 % and +16.1 %).
+  A state from a warm grid costs the same within 0.6 % on these records: long-period e 0.9, 87.798 / 87.830 µs and
+  89.264 / 89.715 µs; THEMIS, 114.692 / 115.388 µs and 115.554 / 115.832 µs.
+- `test/decay.e2e.mjs`: the two seeds decay at 70.140 h and 47.063 h (70.133 h and 47.064 h through 0.6.48: the rule reads drag's part of the perigee's rate, which moves the crossing by at most 0.01 %), every state before the crossing 0.6.45's bit for bit
   and the jump detector at most 2.88 m over them; the epoch store gives the same states before the crossing and status 4
   after it in time order, reversed and shuffled; sets at a 500 km perigee and at a 300 km perigee with e 0.3 fly 7 days
   bit for bit; `sdnap_covariance_at` returns 4 past a record's crossing.

@@ -3,7 +3,7 @@
 // and 99.241236 m before decay, and the two seven-day flights move 10.341851 and 978.629193 m (maximum velocity
 // change 409.566420 mm/s); every bound is retained.
 // E2E (stack #564, SPEC 16.25): an AP flight ends at its decay crossing, refused by name, and no state before it changes.
-// The rule, on the theory's own grid nodes: (a) more perigee radius lost over one revolution or over the grid's next step,
+// The rule, on the theory's own grid nodes: (a) more perigee radius lost BY DRAG over one revolution or over the grid's next step,
 // whichever is longer, than one density scale height at the mean perigee; (b) a mean perigee height under 100 km.
 // - Two decaying seeds (#564's: AP records 31/20 with the slow set and the solid tide, Jacchia 1970 on the fixture's constant
 //   rows, epoch 2026-10-29; perigee 200 km, e 0.001, BTERM 0.01, and perigee 220 km, e 0.01, BTERM 0.1), `propagate` every
@@ -56,6 +56,11 @@ const basePath = path.join(scratch, 'module-0.6.48.wasm');
 fs.writeFileSync(basePath, baseBytes);
 const now = await createStandaloneHarness('browser', wasmPath, { surface: 'direct' });
 const base = await createStandaloneHarness('browser', basePath, { surface: 'direct' });
+const mainBytes = execFileSync('git', ['-C', modulesRoot, 'show', '01c5fc32:propagator/sdn-ap/dist/isomorphic/module.wasm'], { maxBuffer: 1 << 26 });
+check(crypto.createHash('sha256').update(mainBytes).digest('hex') === '7abf32de5eadbf21fd6b2992b0eb8e113ed20b3cf6efe7a56d2f2f9ee6565e39', 'the 0.6.48 control hash');
+const mainPath = path.join(scratch, 'module-0.6.48.wasm');
+fs.writeFileSync(mainPath, mainBytes);
+const main = await createStandaloneHarness('browser', mainPath, { surface: 'direct' });
 
 const fly = async (h, seed, secs) => {
   const r = await h.invoke({ methodId: 'propagate', inputs: flight([seed], { output: { EPOCHS: secs.map(iso), FRAME: pcfOutputFrame.GCRF } }) });
@@ -210,8 +215,8 @@ for (const c of [{ name: 'perigee 500 km, e 0.001, BTERM 0.01', hp: 500, e: 0.00
       const blk3 = r3.statusCode === 0 ? OEM.getRootAsOEM(new fb.ByteBuffer(r3.outputs.find((o) => o.portId === 'ephemeris').payload)).unpack().EPHEMERIS_DATA_BLOCK[0] : null;
       check(String(blk3?.COMMENT ?? '').includes(`decayed:${cm[1]}`), `propagate_epochs on the same list names ${blk3?.COMMENT ?? r3.errorCode}, the crossing ${cm[1]}`);
     }
-    // a Hermite blend whose window ends past the nominal's crossing: the probe the blend makes at its window's end asks no covariance of
-    // its own, yet the crossing it names is the record's earliest (a moved set's, which is before the nominal's), the same as a call
+    // a Hermite blend whose window ends past the nominal's crossing: its endpoint probe starts the covariance bank but does not
+    // evaluate covariance. The crossing it names is the record's earliest (a moved set's, before the nominal's), the same as a call
     // that asks past the window. Two sets of one object (this record at its epoch and, four days later, again), BLEND_SHAPE 1 with a
     // 48 h window about the hand-over at day 3: an epoch at 06:00 of day 3 lies in the window and before both crossings
     {
@@ -219,6 +224,52 @@ for (const c of [{ name: 'perigee 500 km, e 0.001, BTERM 0.01', hp: 500, e: 0.00
       const later = repackOcm(moved, (o) => { o.MEAN_ELEMENTS.EPOCH = '2026-10-05T00:00:00.000000'; o.TRAJ_FRAME_EPOCH = '2026-10-05T00:00:00.000000'; });
       const rbl = await now.invoke({ methodId: 'propagate_epochs', inputs: flight([moved, later], { epochStore: { BLEND_SHAPE: 1, BLEND_WINDOW_SECONDS: 48 * 3600 }, output: { EPOCHS: [new Date(base0 + 2.25 * 86400e3).toISOString().replace('Z', '')], FRAME: pcfOutputFrame.GCRF } }) });
       check(rbl.statusCode !== 0 && `${rbl.errorCode}`.includes(`decayed:${cm[1]}`), `a Hermite blend's probe past the nominal's crossing names ${rbl.errorCode ?? 'a block'}, the record's crossing ${cm[1]}`);
+    }
+    // the LATER set decaying inside the blend window: the probes at the window's end start the covariance bank (they evaluate nothing of
+    // it), so its bank exists at its probe and a moved set's crossing (before the nominal's) is the one named, whichever epoch is
+    // asked first; the name is asserted to be the moved set's (before the nominal's crossing, after day 9, before the window's end), so
+    // agreeing on the nominal's crossing fails. A stable set from
+    // day 0 and this record from day 7, SELECTION LATEST_BEFORE, BLEND_SHAPE 1, a 7 day window about the later set's epoch (half-width
+    // 3.5 days): an epoch at day 9 lies in the window and before both crossings, its probe at the window's end (day 10.5) is past
+    // the later set's crossing; an epoch at day 11 is past the window (that set alone)
+    {
+      const base0 = Date.parse('2026-10-01T00:00:00Z');
+      const stable = repackOcm(bytes, (o) => {
+        o.MEAN_ELEMENTS.MEAN_MOTION = nOf(500, 0.001);
+        o.MEAN_ELEMENTS.ECCENTRICITY = 0.001;
+        o.MEAN_ELEMENTS.BTERM = 0.01;
+        const cp = o.COV_PROPAGATION;
+        cp.NOISE_NON_GRAVITATIONAL_RAD_DAY2 = cp.NON_GRAVITATIONAL_SHARE * Math.abs(cp.NON_GRAVITATIONAL_RATE_PER_DAY) * o.MEAN_ELEMENTS.MEAN_MOTION * 2 * Math.PI;
+      });
+      const laterDecay = repackOcm(moved, (o) => { o.MEAN_ELEMENTS.EPOCH = '2026-10-08T00:00:00.000000'; o.TRAJ_FRAME_EPOCH = '2026-10-08T00:00:00.000000'; });
+      const at = (days) => new Date(base0 + days * 86400e3).toISOString().replace('Z', '');
+      const nameOf = (r) => /decayed:(\d{4}-\d\d-\d\dT\d\d:\d\d:\d\d(?:\.\d+)?)/.exec(`${r.errorCode ?? ''}`)?.[1];
+      const alone = await now.invoke({ methodId: 'propagate', inputs: flight([laterDecay], { output: { EPOCHS: [at(11.5)], FRAME: pcfOutputFrame.GCRF } }) });
+      const ask = (day) => now.invoke({ methodId: 'propagate_epochs', inputs: flight([stable, laterDecay], { epochStore: { SELECTION: 1, BLEND_SHAPE: 1, BLEND_WINDOW_SECONDS: 7 * 86400 }, output: { EPOCHS: [at(day)], FRAME: pcfOutputFrame.GCRF } }) });
+      const inWindow = nameOf(await ask(9)), afterWindow = nameOf(await ask(11)), own = nameOf(alone);
+      check(!!own && inWindow === own && afterWindow === own, `the later set's crossing: alone ${own}, named from an epoch in the window ${inWindow}, from one after it ${afterWindow}`);
+      const bareLater = repackOcm(laterDecay, (o) => { o.COVARIANCE_DATA = []; o.COV_PARAMETER_KINDS = []; o.COV_PARAMETERS = []; o.COV_UNITS = []; o.COV_PROPAGATION = null; });
+      const nominalName = nameOf(await now.invoke({ methodId: 'propagate', inputs: flight([bareLater], { output: { EPOCHS: [at(11.5)], FRAME: pcfOutputFrame.GCRF } }) }));
+      const dayOf = (text) => (msOf(text) - base0) / 86400e3;
+      check(!!nominalName && !!own && msOf(own) < msOf(nominalName) && dayOf(own) > 9 && dayOf(own) < 10.5,
+        `the crossing named is the moved set's (${own}, day ${dayOf(own ?? '1970-01-01T00:00:00')?.toFixed(4)}), before the nominal's ${nominalName}, after day 9 and before the window's end (day 10.5)`);
+      // a moved set of the later record crossing between the epoch and the window's end while both nominals still fly there: the
+      // probe evaluates nothing of the covariance, so the epoch (before every crossing) is answered, as without the window. The window's
+      // end is set between the moved set's crossing and the nominal's
+      if (own && nominalName) {
+        const endMs = (msOf(own) + msOf(nominalName)) / 2, laterMs = msOf('2026-10-08T00:00:00');
+        const windowSeconds = Math.round(2 * (endMs - laterMs) / 1000);
+        const askMid = (h, day) => h.invoke({ methodId: 'propagate_epochs', inputs: flight([stable, laterDecay], { epochStore: { SELECTION: 1, BLEND_SHAPE: 1, BLEND_WINDOW_SECONDS: windowSeconds }, output: { EPOCHS: [at(day)], FRAME: pcfOutputFrame.GCRF } }) });
+        const rm = await askMid(now, 9), control = await askMid(main, 9);
+        const bm = rm.statusCode === 0 ? OEM.getRootAsOEM(new fb.ByteBuffer(rm.outputs.find((o) => o.portId === 'ephemeris').payload)).unpack().EPHEMERIS_DATA_BLOCK[0] : null;
+        const bc = control.statusCode === 0 ? OEM.getRootAsOEM(new fb.ByteBuffer(control.outputs.find((o) => o.portId === 'ephemeris').payload)).unpack().EPHEMERIS_DATA_BLOCK[0] : null;
+        check(rm.statusCode === 0 && !/decayed/.test(bm?.COMMENT ?? ''), `an epoch before every crossing, in a window ending between a moved set's crossing and the nominal's: ${rm.statusCode === 0 ? 'answered' : rm.errorCode}`);
+        check(bm?.EPHEMERIS_DATA_LINES.length === 1 && bm?.COVARIANCE_MATRIX_LINES.length === 1, 'the epoch before every crossing has its state and covariance');
+        const values = (b) => [...(b?.EPHEMERIS_DATA_LINES ?? []), ...(b?.COVARIANCE_MATRIX_LINES ?? [])].flatMap((l) => Object.values(l).filter((v) => typeof v === 'number'));
+        const actual = values(bm), expected = values(bc);
+        check(control.statusCode === 0 && actual.length >= 27 && actual.every(Number.isFinite) && sameBits(actual, expected), 'the state and covariance before every crossing are 0.6.48\'s bit for bit');
+        console.log(`later-set blend: moved crossing ${own}, nominal ${nominalName}; day 9 state and covariance compared with 0.6.48 at window end ${new Date(endMs).toISOString()}`);
+      }
     }
     console.log(`the moved record decays at ${cm[1]}; sdnap_covariance_at status ${status}`);
   }
@@ -287,6 +338,7 @@ for (const c of [{ name: 'perigee 500 km, e 0.001, BTERM 0.01', hp: 500, e: 0.00
 
 await now.close?.();
 await base.close?.();
+await main.close?.();
 fs.rmSync(scratch, { recursive: true, force: true });
 if (failures.length) {
   for (const f of failures) console.error(`FAIL ${f}`);
