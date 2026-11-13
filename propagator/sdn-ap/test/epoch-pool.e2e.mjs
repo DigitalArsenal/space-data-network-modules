@@ -44,8 +44,7 @@ function records() {
         norad: 900000 + k, msis: true, records: true, rows: rows[k % 2], bterm: 0.001, agom: 0.001,
         tesseral: k % 31 === 0 ? 70 : k % 2 ? 31 : 12, zonal: 20, slow: k % 19 === 0 });
       if (k % 2 === 0) b = repackOcm(b, t => {
-        t.COVARIANCE_DATA = covTemplate.COVARIANCE_DATA;
-        t.COV_PROPAGATION = covTemplate.COV_PROPAGATION;
+        for (const [key, value] of Object.entries(covTemplate)) if (key.startsWith('COV')) t[key] = value;
       });
       result.push(prefix(b));
     }
