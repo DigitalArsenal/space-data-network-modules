@@ -36,6 +36,14 @@ Build: `npm run build` (module SDK compiler lane, clang `wasm32-wasip1-threads`,
   the pool's counts. Before 0.6.31 a pool thread could trap on a block in pages another thread had just grown, and
   the calling thread then waited forever. On a loaded machine that happened in AP batches of a test build, never in the
   shipped build with SGP4XP rows (0 of 40 processes).
+- The epoch store's state-only `sdnap_epochs_at` initializes and flies series on the pool in chunks of 16. Each series'
+  two slots belong to one thread during the batch. Wide series stay serial in series order, including their flight;
+  requests for covariance stay serial. Initialization storage and cache room are reserved before the batch, and any
+  series stopped by refused growth is retried serially. The thread-count and poisoned-storage test is
+  `test/epoch-pool.e2e.mjs`.
+  Browser threads require a dedicated Worker on a cross-origin-isolated page, browser WASI threads enabled in the
+  host, and `sdnap_threads(n)` called while idle. A host refusing thread creation leaves computation on the calling
+  thread. Without cross-origin isolation the required shared-memory module cannot instantiate.
 - Display quantities (the module's own conversions; `test/exports.e2e.mjs` checks each against its inverse):
   `sdnap_mean_elements_at(index, minutes, out)` the mean a (km), e, i, RAAN, argp and M (deg) of an SGP4XP row at
   minutes from its epoch (an SGP4 row is refused); `sdnap_osculating_elements(r, v, out)` the osculating elements of a

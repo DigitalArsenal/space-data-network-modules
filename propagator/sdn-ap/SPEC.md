@@ -1597,10 +1597,27 @@ The pool's threads change no state. Over 1,000 AP rows of a catalog mix in the r
 against 4). The exception today is stack #424: above e 0.048 with tesseral terms, a process holds at most 256 family
 grids. Beyond them a state is refused, and which eccentric set is refused depends on which thread asked first.
 
+The epoch store's state-only `sdnap_epochs_at` also uses the pool. A chunk holds 16 consecutive series; one thread
+owns both slots of each series through selection, initialization, flight and replacement. A series containing a wide
+set is initialized and flown on the calling thread, in series order, because both initialization and output-time nodes
+acquire the shared 256-slot grids. Calls requesting covariance remain serial. The atmosphere and force bindings and
+NRLMSISE-00's mutable state belong to each thread. Constant drag, gravity and leap-second tables are initialized before
+the batch. The context identifier, short-period generation tag and grouping identifier are cache keys only.
+
+`test/epoch-pool.e2e.mjs` compares 2,048 mixed series (6,144 records, eight wide series, half carrying covariance), at
+one instant and a day later, on 0, 1, 4 and 15 threads, with poisoned table storage and with forced growth refusals.
+Every state and status byte equals the one-series serial entry and the 0.6.52 artifact. The 400-wide-series control
+at 0 and 15 threads also keeps every refusal in the same series.
+
 The pool and the memory (stack #487). A threaded batch grows nothing, and a pool thread uses no page it does not see.
 - Before the batch the calling thread makes its room. The reserve is 128 KiB for each AP row whose set holds no caches,
   at most the pool's free budget plus 1 MiB, plus 8 MiB. The calling thread then publishes the memory's size and sets
   the rule that nothing grows. Only then does it store the batch's chunk total and wake the pool threads.
+- An epoch batch additionally reserves 64 KiB per selected cold set, the cache pool's available room, and each
+  thread's combined-table bound plus its term storage. The bound uses the largest selected tesseral degree and allows
+  2,048 complementary slow terms; a diagnostic retaining raw terms also reserves their bound. Term storage is made
+  as each thread starts; shallow-term storage is in TLS. A larger retained table can exhaust the allowance: every
+  affected series releases its slots and is retried on the calling thread after the batch, in series order.
 - Inside the batch, sbrk refuses every growth on every thread.
   - A set refused its caches flies on the thread's caches, with the same states.
   - A row that a refusal stopped is computed again by the calling thread after the batch, in row order.
@@ -2878,8 +2895,8 @@ analysis/density-calibration read the rows; for Jacchia 1970 the three are 3.2's
 every switch 1 but the output units (the daily-Ap form), the total mass density with anomalous oxygen, at the node's
 geodetic latitude phi and height h of 3.4 (below 10 km, 10 km, as 3.3), its longitude alpha - theta_g (alpha the
 node's TEME right ascension, theta_g = theta_g0 + omega_E t, 1.2), the UTC day of year and seconds of d50, and the
-local solar time UT + longitude / 15. Above 2500 km, 1e-20 kg/m^3 as 3.3. NRLMSISE-00 holds file-static state:
-it is evaluated on the calling thread only.
+local solar time UT + longitude / 15. Above 2500 km, 1e-20 kg/m^3 as 3.3. The build gives NRLMSISE-00's 29 mutable file-scope declarations thread-local storage. Its pinned source bytes and
+numerical expressions are unchanged; concurrent initializations use independent state.
 
 **15.4 Open DCA.** A $DCL as FFM reads the open-DCA product: Solved, ATMOSPHERE NRLMSIS00E, CORRECTION LogDensityNodes
 with one finite NODE_LOG_DENSITY_SCALE_DIMENSIONLESS per strictly increasing NODE_TIMES_MS (UTC). s(t) is linear
@@ -2973,8 +2990,8 @@ MAXIMUM_TESSERAL_DEGREE is a cap on families, not the degree of a field.
 - **Where a set's table is built** (from 0.6.42). The table is filled in the building thread's scratch at its bound
   (tess::SpTableScratch: 755 KB at d 31 and 3.1 MB at 70, against 160 KB at 12) and kept at its counts (68 bytes a combined
   entry, 20 a raw one). The scratch is the thread's, never shared, grown to the largest bound it has asked for and kept for
-  the thread's life. Sets are built on the calling thread (the row store's sdnap_init_elements, the epoch store, fit's
-  trial sets, the covariance's moved sets); the pool's threads fly sets built before a batch and hold none.
+  the thread's life. The row store's sdnap_init_elements, fit's trial sets and covariance's moved sets build on the calling thread.
+  The epoch store's state-only batch also builds on pool threads, with each series' two slots owned by one thread.
   - A table taken at its bound and cut down after leaves the rest free between the sets' tables, a hole no later bound
     fits. On 1,000 rows of a catalog mix (test/set-caches.e2e.mjs's, 783 in the low table) at 31/20 the row store's build
     took 223.9 MB of memory that way, 167.4 MB of it free inside the heap, against 51.9 MB on 0.6.41.
