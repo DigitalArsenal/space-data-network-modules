@@ -321,6 +321,15 @@ inline bool each_record(const uint8_t* p, uint32_t n, Fn fn) {
 inline int build(Store& st, const Config& cfg) {
   clear(st);
   st.cfg = cfg;
+  // SPEC 1.6 and 14.1: a load refused for ANY reason leaves no snapshot (the old one is gone and no part of the new one stays). The store is
+  // built in place, so every return but the last clears it: a refusal after some series were installed (a second slot or a matrix that
+  // could not be allocated), a decode refusal after weather was interned, and series-forces-differ. The guard builds nothing and the
+  // high-water is the single store's, as before (a local store swapped on success would hold two at the swap).
+  struct Unwind {
+    Store& s;
+    bool installed = false;
+    ~Unwind() { if (!installed) clear(s); }
+  } unwind{st};
   // Count framing without decoding. Malformed input is still diagnosed in the original decode order.
   size_t count = 0;
   for (uint32_t i = 0; i < plugin_get_input_count(); ++i) {
@@ -474,6 +483,7 @@ inline int build(Store& st, const Config& cfg) {
   }
   while (st.atmospheres.size() > used) st.atmospheres.pop_back();
   st.stats.kept = static_cast<double>(st.entries.size());
+  unwind.installed = true;
   return 0;
 }
 
