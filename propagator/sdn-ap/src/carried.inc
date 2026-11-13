@@ -163,6 +163,29 @@ struct Segment {
   uint32_t x = 0, y = 0, z = 0;  ///< byte offsets in Track::buf of the x, y and z coefficients (little-endian doubles)
 };
 
+/// A fixed array of `T` (zero is its initial value) allocated once through the module's accounting (SPEC 1.6): an allocation that fails is counted and
+/// reported by the caller as out-of-memory, where a std::vector's would trap.
+struct CFree { void operator()(void* p) const { std::free(p); } };
+template <class T> struct CountedArray {
+  std::unique_ptr<T, CFree> p;
+  size_t n = 0;
+  bool assign(size_t count) {
+    p.reset();
+    n = 0;
+    if (count == 0) return true;
+    T* q = static_cast<T*>(mem::calloc(count, sizeof(T)));
+    if (q == nullptr) return false;
+    p.reset(q);
+    n = count;
+    return true;
+  }
+  size_t size() const { return n; }
+  bool empty() const { return n == 0; }
+  T& operator[](size_t k) const { return p.get()[k]; }
+  T& front() const { return p.get()[0]; }
+  T& back() const { return p.get()[n - 1]; }
+};
+
 /// A record's carried forecast as flight reads it: empty when the record carries none. Movable, not copyable (`buf`
 /// may point into `own` or `c`).
 struct Track {
@@ -170,15 +193,16 @@ struct Track {
   double w = 0.0, f = 0.0;     ///< the set's epoch, split Julian date (UTC)
   double start = 0.0, stop = 0.0;  ///< the span, seconds from the epoch (closed)
   double q0[9] = {};           ///< TEMEOFEPOCH: GCRF -> the epoch axes
-  std::vector<uint8_t> own;    ///< the record's bytes, when the track outlives the call that brought them (the store)
+  std::unique_ptr<uint8_t, CFree> own;  ///< the record's bytes, when the track outlives the call that brought them (the store): counted (keep)
+  size_t own_size = 0;
   const uint8_t* buf = nullptr;  ///< the bytes the coefficients are read from: own's, the caller's for the call, or c's
   size_t size = 0;
   const flatbuffers::Vector<flatbuffers::Offset<PPEPositionRecord>>* recs = nullptr;
-  mutable std::vector<Segment> segs;  ///< one per record, sized once; element k written once, before state[k] is kValid
-  std::unique_ptr<std::atomic<int32_t>[]> state;  ///< one per segment (SegmentState)
+  CountedArray<Segment> segs;  ///< one per record, sized once; element k written once, before state[k] is kValid
+  CountedArray<std::atomic<int32_t>> state;  ///< one per segment (SegmentState)
   /// One per segment: 0 not judged, 1 it meets its readable neighbors (each within kJoinSeconds), -1 it does not (kGap).
   /// A function of the record's bytes alone; any thread may judge it, all reach the same value.
-  std::unique_ptr<std::atomic<int8_t>[]> joined;
+  CountedArray<std::atomic<int8_t>> joined;
   std::vector<double> c;       ///< fit's own track: its coefficients in memory (buf points here)
   Track() = default;
   Track(const Track&) = delete;
@@ -188,18 +212,11 @@ struct Track {
   bool empty() const { return segs.empty(); }
   bool covers(double t) const { return !segs.empty() && t >= start && t <= stop; }
   size_t bytes() const {
-    return sizeof(Track) + own.capacity() + segs.capacity() * (sizeof(Segment) + sizeof(std::atomic<int32_t>) + sizeof(std::atomic<int8_t>)) + c.capacity() * sizeof(double);
+    return sizeof(Track) + own_size + segs.size() * (sizeof(Segment) + sizeof(std::atomic<int32_t>) + sizeof(std::atomic<int8_t>)) + c.capacity() * sizeof(double);
   }
-  /// The storage of `count` segments, every one unread and not judged: once, before any flight.
-  void sized(size_t count) {
-    segs.assign(count, Segment{});
-    state.reset(new std::atomic<int32_t>[count]);
-    joined.reset(new std::atomic<int8_t>[count]);
-    for (size_t k = 0; k < count; ++k) {
-      state[k].store(kUnread, std::memory_order_relaxed);
-      joined[k].store(0, std::memory_order_relaxed);
-    }
-  }
+  /// The storage of `count` segments, every one unread and not judged (zero: kUnread, not judged): once, before any flight. False when an allocation
+  /// failed (counted: the caller refuses out-of-memory).
+  bool sized(size_t count) { return segs.assign(count) && state.assign(count) && joined.assign(count); }
 };
 
 /// A little-endian double at p, aligned or not.
@@ -321,13 +338,21 @@ inline int32_t usable(const Track& t, uint32_t k, Segment& out) {
 /// A track's bytes copied into it (a track that outlives the call whose bytes it reads: the store's), the record's
 /// vector found again in the copy at its offset. A track built by fit (its coefficients in memory, no record) is left
 /// as it is.
-inline void keep(Track& t) {
-  if (t.recs == nullptr) return;
-  if (t.empty() || (!t.own.empty() && t.buf == t.own.data())) return;
+///
+/// The copy is one counted allocation (SPEC 1.6): false when it failed (the track is left as it was, reading the caller's bytes), and the caller refuses
+/// out-of-memory.
+inline bool keep(Track& t) {
+  if (t.recs == nullptr) return true;
+  if (t.empty() || (t.own && t.buf == t.own.get())) return true;
   const size_t at = reinterpret_cast<const uint8_t*>(t.recs) - t.buf;
-  t.own.assign(t.buf, t.buf + t.size);
-  t.buf = t.own.data();
+  uint8_t* copy = static_cast<uint8_t*>(mem::malloc(t.size));
+  if (copy == nullptr) return false;
+  std::memcpy(copy, t.buf, t.size);
+  t.own.reset(copy);
+  t.own_size = t.size;
+  t.buf = copy;
   t.recs = reinterpret_cast<const flatbuffers::Vector<flatbuffers::Offset<PPEPositionRecord>>*>(t.buf + at);
+  return true;
 }
 
 /// The carried forecast of a decoded record (`row` its set; `p`, `n` the bytes it lives in, read in place: keep() copies
@@ -356,7 +381,7 @@ inline int read(const OCM* o, const ElementRow& row, const uint8_t* p, size_t n,
   t.buf = p;
   t.recs = recs;
   t.size = n;
-  t.sized(recs->size());
+  if (!t.sized(recs->size())) return mem::refuse_if_out_of_memory(), 3;
   const uint32_t last = recs->size() - 1;
   Segment ends[2];  // the first segment and the last (one and the same when the record carries one)
   for (const int e : {0, 1}) {
@@ -1045,7 +1070,7 @@ inline int build(flatbuffers::FlatBufferBuilder& fbb, const ElementRow& row, boo
   tr.w = w;
   tr.f = f;
   std::memcpy(tr.q0, q0, sizeof q0);
-  tr.sized(best.size());
+  if (!tr.sized(best.size())) return mem::refuse_if_out_of_memory(), 3;
   for (const Fitted& s : best) tr.c.insert(tr.c.end(), s.c.begin(), s.c.end());  // sized: buf points into c below
   tr.buf = reinterpret_cast<const uint8_t*>(tr.c.data());
   tr.size = tr.c.size() * sizeof(double);

@@ -1,6 +1,6 @@
 # SGP4-XP: mathematical specification (clean room, side A)
 
-Version 0.6.56 (dist 2131db19).
+Version 0.6.57 (dist e6442ab7).
 
 **License note.** The US Space Force Sgp4Prop library is used under the USSF open source agreement
 (`space-data-network-modules/propagator/sgp4-xp/third_party/ussf-sgp4/AGREEMENT.txt`; the 9.9 package carries the
@@ -145,7 +145,8 @@ counts the allocations that fail and the largest request. The epoch store's allo
 decoded records a load fills (one allocated when the one before it is full, so a load's memory follows the records
 decoded, never the frame count the payload claims), the arrays of kept sets, entries and series (sized from the kept
 count), the weather pool (which at least doubles when full), each set's covariance matrix, and the second slot of a
-series of more than one set. A covariance matrix that cannot be allocated refuses `out-of-memory`, not
+series of more than one set, and a carried forecast's track (its copy of the record's bytes, which a record that carries one
+holds whole, and its arrays of segments). A covariance matrix that cannot be allocated refuses `out-of-memory`, not
 `invalid-covariance`.
 
 **The memory grows in steps of at least 4 MiB.** The allocator grows its heap through `sbrk` a few 64 KiB pages at a
@@ -168,7 +169,7 @@ the break directly. Against a test build with the step 0 it shows the same bytes
 limit, a host's pages intact, and at most 100 growths where the step-0 build makes thousands.
 
 **A method during which one of them failed refuses with errorCode `out-of-memory` and emits nothing.** That holds for
-`propagate`, `propagate_epochs`, `load_epochs`, `fit`, `maneuver`, `ingest_omm` and `export_omm`, whatever the method
+`propagate`, `propagate_epochs`, `load_epochs`, `load_epochs_open`, `load_epochs_part`, `load_epochs_close`, `fit`, `maneuver`, `ingest_omm` and `export_omm`, whatever the method
 would otherwise have answered. That includes the decay answers of SPEC 16.25:
 - `decayed:<time>` and `decayed-in-arc:<time>`;
 - a record whose held-out states past the crossing read DECAYED;
@@ -271,8 +272,10 @@ set holds no caches and flies on the thread's.
 - `ingest_omm`, refused `out-of-memory`: by then the old row store is dropped (the new store's build begins by freeing it).
   When the new store's arrays could be had, it is installed; a row whose set failed to initialize for want of memory holds
   the theory's refusal. Its $OCM outputs are discarded with the refusal.
-- `load_epochs`, refused for any reason: the old snapshot is gone (the store's build begins by clearing it). A record's
-  carried forecast is read with operator new (below), so it traps rather than counts. The forecast check that flies a set
+- `load_epochs`, refused once its build has begun (a record, a failed allocation, series-forces-differ): the old snapshot is gone
+  and the store is empty. A `load_epochs` refused before its build begins (a frame of a wrong type, a bad $PCF) leaves the old
+  snapshot as it was. A record's carried forecast is a counted block (its copy, when it is kept) and counted arrays, refused
+  `out-of-memory`. The forecast check that flies a set
   at the carried span's ends (`carried::build`) is reached only by `fit`; there a set that cannot be initialized writes "the
   theory does not reach it", and the fit then answers `out-of-memory`.
 
@@ -280,9 +283,10 @@ set holds no caches and flies on the thread's.
 - std::vector and operator new under -fno-exceptions, including the paths a caller's input sizes:
   - a fit's states;
   - the output times (up to OUTPUT.MAXIMUM_STATES);
-  - the records of a load;
+  - the records of a load: the strings of a record's identity, its weather rows and nodes and its covariance as the decode reads
+    them (a part's or a call's), which are std::string and std::vector, until the record is kept or dropped, and the Track object
+    of a record that carries a forecast (`std::make_shared`: the object and its control block, about 200 bytes);
   - the $OMM sets, the burns, the $SPW rows;
-  - a carried forecast's segments;
   - every output's FlatBufferBuilder.
 - A record's covariance as a load reads it (`load_epochs`, `new`), and a carried forecast's segment states.
 - The row store's threaded batch's list of deferred rows (`batch`, a `static std::vector` resized to the batch's count
@@ -3001,8 +3005,65 @@ not stored. A record's theory record (SGP4 Sat or SGP4XP integrator) is made whe
 of one set holds one slot, and a series of more than one holds two (the second is allocated with the series, counted,
 and a load that cannot allocate it is refused `out-of-memory`); of those, the two sets last used hold a theory record
 at a time. Two series that carry equal weather share one copy of it: equal means every row, node and node value the
-same in every bit, so which of two series is kept never depends on their order. A load that fails, for want of memory
-or any refusal, leaves no snapshot: the store is empty and its arrays are freed.
+same in every bit, so which of two series is kept never depends on their order. A `load_epochs` refused once its build has
+begun (a record, a failed allocation, series-forces-differ) leaves no snapshot: the store is empty and its arrays are freed. One
+refused before its build begins (a frame of a wrong type, a bad $PCF) leaves the store as it was. A load that builds while a counted
+allocation failed answers `out-of-memory` with the store empty (through 0.6.56 the built store stayed in place).
+
+**14.1.1 Load in parts.** A host that cannot stage the whole catalog in the module's memory takes it in parts with three methods:
+`load_epochs_open` (the optional $PCF EPOCH_STORE, read once), `load_epochs_part` (the 'ocm' frames of one part, framed as for
+`load_epochs`; any number of times) and `load_epochs_close`. `load_epochs` is these three in sequence on one payload.
+- **Equality.** The store built from any partition of a list of frames into parts, the parts in order, equals set for set and in
+  order the store `load_epochs` builds from the whole list: the kept sets, each series' order, capped and theory-filtered loads,
+  same-epoch duplicates in whichever parts they fall (the later in input order replaces), the interned weather, the covariances.
+  What is decided at a part: the theory filter and the skip of a set not centered on the Earth (counted, not held). What waits for
+  the close: the aging and the cap (they need the newest epoch of the whole load), the same-epoch replacement and series-forces-differ
+  (it compares every record of a series). So a record the close later drops is held until the close, a forecast record whole.
+- **Status.** A non-zero status of any of the three methods means the load is closed and the store is empty, except `load-not-open`,
+  which changes nothing (a part or a close with no load open; a loaded store stays):
+  - an open always drops the load in progress and empties the store, whether or not its configuration is accepted (a refused open
+    leaves no load open and no store);
+  - a part refused for any reason (a type, a frame, a record, `out-of-memory`) drops the load and empties the store;
+  - a close always ends the load, accepted or refused (series-forces-differ, `out-of-memory`, `missing-ocm` for a close with no
+    part), and a refused close leaves the store empty.
+
+  `load_epochs` abandons a load in progress, accepted or refused. With no load open, a `load_epochs` refused before its build begins
+  (a wrong frame type, a bad $PCF) leaves the store as it was, as it always did, where a refused open empties it (the open's contract is
+  the empty store).
+- **The first failure.** The reported failure is the first one met in input order: within a part as `load_epochs` reports it
+  (every frame's type is checked before any record is decoded, so within one part a wrong type is reported before an earlier
+  record's decode refusal), across parts the earlier part's. Two cases differ from `load_epochs` on the whole list: (1) a record that
+  cannot be decoded in an earlier part and a frame of a wrong type in a later one (`load_epochs` reports the wrong type, the parts the
+  record); (2) a bad $PCF, which the open reports before any frame's type is seen, where `load_epochs` checks the frames' types first.
+  series-forces-differ and the refusals of the install come at the close. An allocation that fails in a counted site (SPEC 1.6),
+  including the copy of a forecast and the arrays of a track, refuses by name `out-of-memory`; what SPEC 1.6 lists as not counted
+  (the strings and vectors the decode reads a record into) still traps.
+- **A difference from 0.6.56.** A load (`load_epochs` included) that builds while a counted allocation failed now answers `out-of-memory`
+  with the store empty; through 0.6.56 the built store stayed in place.
+- **State of the store.** From the open to the close the store is empty and no state is served: the open empties it and a part
+  adds nothing to it. The `sdnap_epochs_*` exports answer as for a store that holds nothing, and not uniformly: `sdnap_epochs_count`
+  0; `sdnap_epochs_stats` zero counts and, in the eighth statistic, the bytes the open load holds (below); `sdnap_epochs_series`,
+  `_select` and `_set_at` -1 (no such series); `sdnap_epochs_at` and `_source_at` -1 for any request of one series or more and 0 for
+  a request of none; `sdnap_drag_orbit_check` -4 (ORBPRO_PROP_BAD_INPUT). A host reads no state between the open and the close.
+- **One load at a time.** There is one load per instance, with no handle: a part or a close acts on the load open, whoever opened it,
+  and an open from any caller drops the load in progress. A host serializes one load per instance. No export, the statistics
+  included, may run on another thread while any of the three methods or `load_epochs` runs: the open frees a loaded store, the
+  install writes the resident store in place with no guard (as `load_epochs` never had), and the statistics walk the open load. No pool
+  or batch entry of the module reads this store.
+- **Memory.** Nothing of a part's bytes is kept after the call: a host stages every part in one buffer, allocated once and reused
+  (the module reads a part's frames in place and has copied what it keeps before the call returns). What is held between parts is the
+  decoded records (identity, elements, forces and covariance, the weather interned once, and, for a record that carries a forecast,
+  the whole record's bytes copied out of the part's, as one counted allocation) and the arrays that index them. They are counted in
+  the eighth statistic of `sdnap_epochs_stats` (the bytes held), so a host sees what a load in progress holds. The sort and the
+  install happen at the close, as in `load_epochs`, so the decoded records of every part are held until then, and at the close the
+  decoded records and the installed store are resident together: that is the high-water. Measured on sdn-ap 0.6.57 (32-bit WebAssembly
+  with threads, 2 MiB initial memory, the host's staging buffer reused), 100,000 AP records, each the stored fitted 500 km record at
+  the angles of a seeded mix (85 % low near-circular, 5 % medium orbit, 5 % geosynchronous, 5 % eccentric): in parts of 1,000 the
+  instance (including that high-water, since WebAssembly memory keeps its high-water size) is 150,470,656 bytes (143.5 MiB), of which
+  the installed store counts 112,404,152 bytes (107.2 MiB); in one call it is 6,465.8 bytes an object (616.6 MiB), the payload
+  included. A record that carries a forecast holds the whole record: 3,000 such records of 13,576 bytes each, in parts of 100, hold
+  15,360 bytes each while the load is open and 15,349 bytes each in the store, and the instance is 16,908 bytes an object (30,015 in
+  one call, which holds the payload besides).
 
 **14.2 Selection.** With E_0 < ... < E_{n-1} a series' epochs and t the request time: NEAREST takes the set whose
 epoch is nearest t (switch between E_i and E_{i+1} at tau_i = (E_i + E_{i+1}) / 2); LATEST_BEFORE the latest set at or
@@ -5912,13 +5973,16 @@ are 4 bytes off the builder's alignment (`ocm::view`, as every SDS input here); 
 scalar, and `ensure` reads the coefficients with `memcpy`. A record's vector of segments costs at most 52 bytes of
 the store a segment (an element of 4 bytes in the record): a hostile record of n bytes asks at most 13 n.
 
-Threads. The state-only epoch-store batch assigns each series to one thread, and carried tracks move between threads
-across batches. A track's storage is sized once when it is read and never resized; coefficients are read in place from
+Threads. The state-only epoch-store batch (`sdnap_epochs_at` without a covariance plane) assigns each series to one
+thread, and carried tracks move between threads across batches. `propagate`, `propagate_epochs`, `load_epochs`,
+`load_epochs_open`, `load_epochs_part`, `load_epochs_close`, the other `sdnap_epochs_*` exports and `fit` run on the
+calling thread. A track's storage is sized once when it is read and never resized; coefficients are read in place from
 the record's bytes, copied by the store at load before flight. Segment fields are published by a release store after
 one reader moves the state from unread to busy; acquire readers see the completed fields, and a reader finding busy
-uses its own copy. The search hint is per thread. `test/epoch-carried-pool.e2e.mjs` checks 128 carried and theory series
-at four instants inside and outside the carried span, in TEME and Earth-fixed frames, at 0, 1, 4 and 15 threads.
-All state, status and source bytes equal the serial entry and the 0.6.52 artifact. The verifier stays
+uses its own copy. The search hint is per thread. `test/epoch-carried-pool.e2e.mjs` checks 128 distinct carried and
+theory series at four instants inside and outside the carried span, in TEME and Earth-fixed frames, at 0, 1, 4 and 15
+threads, with threaded batches run: all state, status and source bytes equal the serial entry, whose digest is
+0.6.56's. The verifier stays
 lazy with these states, and they did not change W4: on the six orbits' 1-day records and the 8-day record at 500 km
 (paired rounds against the build before them, 100 records, 21 rounds) the load per record moved by -12 to +3 us,
 within the rounds' spread, and the first state took 0.1 to 1.0 us against 0.2 to 4.3 (the coefficients are no longer
