@@ -18,6 +18,7 @@
 // application. SDNAP_BROWSER=firefox or webkit runs the page in the Firefox or WebKit build of the same Playwright cache instead. The module
 // under test is the one SDNAP_WASM names (the committed dist by default). Absent browser or bundler: the test prints "SKIP browser-pool: ..." and
 // exits 0, and fails instead when SDNAP_REQUIRE_BROWSER=1.
+// SDNAP_CHROMIUM_NO_SANDBOX=1 explicitly disables Chromium sandboxing for restricted Linux containers; default is sandboxed.
 //   node test/browser-pool.e2e.mjs
 import assert from "node:assert/strict";
 import fs from "node:fs";
@@ -69,7 +70,7 @@ if (which === "chromium") {
     const relative = path.relative(path.resolve(root), realShell);
     return !relative.startsWith("..") && !path.isAbsolute(relative) && /^chromium_headless_shell-\d+[/\\]/.test(relative);
   }), "Chromium must be a headless shell inside the Playwright cache");
-  launch = (url, profile) => ({ command: shell, args: ["--headless=new", "--disable-gpu", "--no-first-run", "--no-default-browser-check", "--disable-extensions", "--disable-background-networking", "--disable-sync", `--user-data-dir=${profile}`, url] });
+  launch = (url, profile) => ({ command: shell, args: [...(process.env.SDNAP_CHROMIUM_NO_SANDBOX === "1" ? ["--no-sandbox"] : []), "--headless=new", "--disable-gpu", "--no-first-run", "--no-default-browser-check", "--disable-extensions", "--disable-background-networking", "--disable-sync", `--user-data-dir=${profile}`, url] });
 } else if (which === "firefox") {
   const bin = newest("firefox").flatMap((d) => [path.join(d, "firefox", "Nightly.app", "Contents", "MacOS", "firefox"), path.join(d, "firefox", "firefox")]).find((p) => fs.existsSync(p));
   if (!bin) skip("no Firefox build in the Playwright cache");
