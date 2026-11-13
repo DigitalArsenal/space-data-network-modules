@@ -11,12 +11,13 @@ delete process.env.SDM_MODULE_SIGNING_KEYPAIR_PATH;
 const once = (s, a, b) => { assert.equal(s.split(a).length, 2, a); return s.replace(a, b); };
 const probe = String.raw`
 static uint32_t test_index = UINT32_MAX, test_mode = 0;
-static uint32_t test_hold = 0, test_held = 0;
+static uint32_t test_hold = 0, test_held = 0, test_after = 0;
 static void test_attempt(uint32_t i, bool pooled) {
-  sdnap::mem::test_failure = i == test_index && (pooled || test_mode == 2) ? test_mode : 0;
+  sdnap::mem::test_failure = i != test_index ? 0 : test_mode == 3 ? (pooled ? 1 : 2) : (pooled || test_mode == 2) ? test_mode : 0;
 }
 static void test_chunk(int32_t, bool pooled) {
   if (test_hold == 0) return;
+  if (test_after && sdnap::frames::state().rows < test_after) return;
   if (!pooled) { while (__atomic_load_n(&test_held, __ATOMIC_SEQ_CST) == 0) {} return; }
   uint32_t expected = 0;
   if (!__atomic_compare_exchange_n(&test_held, &expected, 1u, false, __ATOMIC_SEQ_CST, __ATOMIC_SEQ_CST)) return;
@@ -36,6 +37,7 @@ SDNAP_EXPORT("test_hold") void test_hold_set(uint32_t mode) {
   sdnap::pool::dead_polls() = 100000;
 }
 SDNAP_EXPORT("test_active") int32_t test_active() { return sdnap::pool::load(&sdnap::pool::job().active); }
+SDNAP_EXPORT("test_after") void test_after_set(uint32_t rows) { test_after = rows; }
 SDNAP_EXPORT("test_reserves") uint32_t test_reserves() { return sdnap::pool::test_reserve_calls; }
 SDNAP_EXPORT("test_batch_rows") uint32_t test_batch_rows() { return sdnap::frames::g_batch ? sdnap::frames::g_batch->count : 0; }
 SDNAP_EXPORT("test_cell") uint32_t test_cell(uint32_t i, uint32_t slot) {
@@ -123,19 +125,19 @@ for (const threads of deadOnly || refusalOnly ? [] : [0, 4, 15]) {
 }
 if (!deadOnly && !refusalOnly) console.log("two slicings: identical cells, states and accumulated counters");
 
-for (const mode of deadOnly ? [] : [1, 2]) {
+for (const mode of deadOnly ? [] : [1, 2, 3]) {
   const a = await open(0), b = await open(4), t = EPOCH_MS + DAY;
   a.open(2e6); b.open(2e6);
-  if (mode === 2) a.x.test_config(3, mode, 0, 0);
+  if (mode !== 1) a.x.test_config(3, 2, 0, 0);
   b.x.test_config(3, mode, 0, 0);
   const before = b.poolStats();
   assert.deepEqual(b.refill(t, 2880, 32), a.refill(t, 2880, 32));
   equal(a, b, t);
-  if (mode === 1) {
+  if (mode !== 2) {
     assert.ok(b.poolStats()[2] > before[2], "sbrk growth was refused inside the batch");
     assert.ok(b.poolStats()[3] > before[3], "refused row retried");
   }
-  else { assert.equal(b.stats()[STAT.rowsOom], 1); assert.equal(b.stats()[STAT.rows], 4, "speculative suffix uncommitted"); }
+  if (mode !== 1) { assert.equal(b.stats()[STAT.rowsOom], 1); assert.equal(b.stats()[STAT.rows], 4, "speculative suffix uncommitted"); }
   await a.h.destroy(); await b.h.destroy();
 }
 for (const [reserves, staging] of deadOnly ? [] : [[2, 0], [99, 0], [0, 1]]) {
@@ -147,6 +149,21 @@ for (const [reserves, staging] of deadOnly ? [] : [[2, 0], [99, 0], [0, 1]]) {
   await a.h.destroy(); await b.h.destroy();
 }
 if (!deadOnly) console.log("deferred growth refusal, counted OOM, reserve halving and serial fallbacks: pass");
+
+const refuses = async (f, t) => {
+  const old = { stats: f.stats(), cells: cells(f), frame: f.at(t) };
+  assert.equal(f.open(2e6), -20);
+  assert.deepEqual(f.refill(t, 2880, 64), { rc: -20, left: [0, 0], stored: 0, tombstones: 0, unstored: 0, visits: 0, stalled: -1, due: 0 });
+  f.close();
+  for (const methodId of ["load_epochs_open", "load_epochs_part", "load_epochs_close", "load_epochs"])
+    assert.equal((await f.h.invoke({ methodId, inputs: [] })).errorCode, "pool-dead", methodId);
+  const status = f.x.sdnap_alloc(16), out = f.x.sdnap_alloc(192);
+  new Int32Array(f.mem(), status, 4).fill(-123);
+  assert.equal(f.x.sdnap_propagate_soa(...f.jd(t), 0, 4, 0, out, status), -20);
+  assert.deepEqual(Array.from(new Int32Array(f.mem(), status, 4)), [9, 9, 9, 9]);
+  f.x.sdnap_free(status); f.x.sdnap_free(out);
+  assert.deepEqual(f.stats(), old.stats); assert.deepEqual(cells(f), old.cells); assert.deepEqual(f.at(t), old.frame);
+};
 
 for (const mode of refusalOnly ? [] : [1, 2]) {
   const f = await open(4), t = EPOCH_MS + DAY;
@@ -161,6 +178,7 @@ for (const mode of refusalOnly ? [] : [1, 2]) {
   assert.equal(f.x.sdnap_propagate_soa(0, 0, 0, 0, 0, 0, 0), -20, "descriptor reuse refused");
   const load = await f.h.invoke({ methodId: "load_epochs_open", inputs: [] });
   assert.equal(load.errorCode, "pool-dead");
+  await refuses(f, t);
   if (mode === 1) {
     f.x.test_hold(0);
     for (let k = 0; f.x.test_active() !== 0; ++k) {
@@ -173,6 +191,24 @@ for (const mode of refusalOnly ? [] : [1, 2]) {
   await f.h.destroy();
 }
 if (!refusalOnly) console.log("delayed and trapped pool claims: quarantine and stable committed reads pass");
+if (!refusalOnly) {
+  const a = await open(0), b = await open(4), t = EPOCH_MS + DAY;
+  a.open(2e6); b.open(2e6);
+  const prefix = a.refill(t, 2880, 32);
+  b.x.test_after(32); b.x.test_hold(2);
+  const failed = b.refill(t, 2880, 64);
+  assert.deepEqual(failed, { ...prefix, rc: -20 }, "later batch preserves the complete committed-prefix result");
+  equal(a, b, t); await refuses(b, t);
+  await a.h.destroy(); await b.h.destroy();
+  // A non-frames epoch batch dies before any frames open; -20 takes precedence over not-open.
+  const f = await open(4);
+  f.x.test_hold(2);
+  const answer = f.epochsAt(t);
+  assert.equal(answer.rc, -20); assert.ok(answer.status.every(s => s === 9));
+  await refuses(f, t);
+  await f.h.destroy();
+  console.log("later batch death, complete mutation refusal, defined outputs, and prior epoch-pool death: pass");
+}
 if (warmOnly || (!deadOnly && !refusalOnly)) {
   const reference = await open(0), t = EPOCH_MS + DAY;
   reference.open(2e6); const wanted = reference.refill(t, 2880, 32);
