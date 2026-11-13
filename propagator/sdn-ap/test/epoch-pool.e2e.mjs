@@ -12,8 +12,8 @@
 // so a lane that read another lane's binding, weather or set would change a byte.
 // Every case writes the six planes and the statuses at the three instants:
 // - the reference: each series alone (sdnap_epochs_at, one series a call), on the calling thread;
-// - its digest equals MAIN_DIGEST, the same reference made by sdn-ap 0.6.56 (modules 85bc764c), the module this change is
-//   made on: the state, theory and status of every series are 0.6.56's;
+// - its digest equals MAIN_DIGEST, the same reference made by sdn-ap 0.6.57 (modules 6a807990), the module this change is
+//   made on: the state, theory and status of every series are 0.6.57's;
 // - the whole store a call on 0, 1, 4 and 15 pool threads; on a test build (same sources, seams below) on 0, 1, 4 and 15
 //   with each initializing thread's scratch (the table, terms, shallow, half-day, build and trigonometry scratch) and its
 //   half-day evaluation cache's values poisoned before every set it builds, and on 4 with slices of 100 series (21 batches
@@ -49,7 +49,8 @@ import { buildDiagnostic } from './lib/ap-diagnostic.mjs';
 const arg = (name, fallback) => { const i = process.argv.indexOf(name); return i < 0 ? fallback : process.argv[i + 1]; };
 const here = path.dirname(fileURLToPath(import.meta.url));
 const count = Number(arg('--count', 2048));
-// the reference's digest as sdn-ap 0.6.56 (modules 85bc764c, wasm 98694e70) made it, for the default store (2,048 series)
+// the reference's digest as sdn-ap 0.6.57 (modules 6a807990, wasm 652fa229) made it, for the default store (2,048 series);
+// 0.6.56 (85bc764c) gives the same
 const MAIN_DIGEST = '1ca816ba472e78b0b385cad6bc56c17feba3fce835b4131640e015819c6fd5e8';
 const epoch = Date.parse('2026-06-15T00:00:00Z'), day = 86400000;
 const iso = t => new Date(t).toISOString().replace('Z', '');
@@ -271,7 +272,7 @@ function run(label, file, threads, options = []) {
   return { bytes: fs.readFileSync(path.join(root, label + '.bin')), r };
 }
 const reference = run('single', wasmPath, 0, ['--single']);
-if (count === 2048 && wide === 8) assert.equal(reference.r.digest, MAIN_DIGEST, `the reference against sdn-ap 0.6.56's (${MAIN_DIGEST})`);
+if (count === 2048 && wide === 8) assert.equal(reference.r.digest, MAIN_DIGEST, `the reference against sdn-ap 0.6.57's (${MAIN_DIGEST})`);
 for (const threads of [0, 1, 4, 15]) assert.ok(run(`threads-${threads}`, wasmPath, threads).bytes.equals(reference.bytes), `${threads} pool threads`);
 const seamed = [];
 for (const threads of [0, 1, 4, 15]) { const c = run(`poison-${threads}`, diagnostic, threads); assert.ok(c.bytes.equals(reference.bytes), `poison, ${threads} pool threads`); seamed.push(c.r); }
@@ -335,7 +336,7 @@ for (const r of results.filter((q) => q.label.startsWith('threads-') || q.label.
 assert.ok(sliced.r.pool[1] >= 3 * Math.ceil(count / 100) - 3, `slices of 100: ${sliced.r.pool[1]} batches over three instants`);
 assert.ok(deferred.r.pool[3] > 0, 'the deferred case deferred series');
 fs.writeFileSync(path.join(root, 'summary.json'), JSON.stringify(results, null, 2));
-console.log(`PASS: ${count} series (${3 * count} records, ${wide} wide), three instants; the reference 0.6.56's; every case's planes and ` +
+console.log(`PASS: ${count} series (${3 * count} records, ${wide} wide), three instants; the reference 0.6.57's; every case's planes and ` +
   `statuses the reference's, byte for byte, the no-reserve case's deferred states the dropped control's where a set's history moves them ` +
   `(${tookDropped} of ${deferredStates}; ${history} such states in the store)`);
 process.exit(0);

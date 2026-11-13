@@ -1738,7 +1738,7 @@ Three more rules for the lanes:
 of 1 and 2 (slots replaced inside the batch), then set 2 alone. The store holds SGP4, SGP4XP and AP series, AP on
 NRLMSISE-00 at node heights under and over 325 km and on Jacchia 1970, two force sets and two weather tables
 alternating, covariance on half, and eight wide series flown on the calling thread.
-- The reference is each series alone on the calling thread. Its digest is the one sdn-ap 0.6.56 gives.
+- The reference is each series alone on the calling thread. Its digest is the one sdn-ap 0.6.57 gives.
 - On 0, 1, 4 and 15 threads, in slices of 100 series, and with each building thread's scratch and its half-day
   evaluation cache's values poisoned before every set: every state and status byte equals the reference. Every state is
   answered.
@@ -5982,7 +5982,7 @@ one reader moves the state from unread to busy; acquire readers see the complete
 uses its own copy. The search hint is per thread. `test/epoch-carried-pool.e2e.mjs` checks 128 distinct carried and
 theory series at four instants inside and outside the carried span, in TEME and Earth-fixed frames, at 0, 1, 4 and 15
 threads, with threaded batches run: all state, status and source bytes equal the serial entry, whose digest is
-0.6.56's. The verifier stays
+0.6.57's. The verifier stays
 lazy with these states, and they did not change W4: on the six orbits' 1-day records and the 8-day record at 500 km
 (paired rounds against the build before them, 100 records, 21 rounds) the load per record moved by -12 to +3 us,
 within the rounds' spread, and the first state took 0.1 to 1.0 us against 0.2 to 4.3 (the coefficients are no longer
