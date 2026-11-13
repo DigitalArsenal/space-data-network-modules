@@ -4700,6 +4700,96 @@ inline void slow_G(int l, int p, int q, int j, double e0, double& G, double& dG)
   }
 }
 
+/// Per-eccentricity samples for the low slow set. Each recurrence, power and sum
+/// uses exact_G's operand order; only values independent of a term are shared.
+struct SlowExactSamples {
+  struct Sample { double ar, cE, sE, cf, sf, M; };
+  struct Pair { double c, s; };
+  double e, inv_eta;
+  std::vector<Sample> samples;
+  std::vector<double> powers[71];
+  std::vector<Pair> phases[kSlowJMax + 1], waves[kSlowJMax + 2 * kSlowQMax + 1];
+  explicit SlowExactSamples(double eccentricity) : e(eccentricity) {
+    const int N = e < 0.01 ? 32 : e < 0.1 ? 64 : e < 0.8 ? 128 : (e < 0.95 ? 512 : 4096);
+    const double eta = std::sqrt(1.0 - e * e);
+    inv_eta = 1.0 / eta;
+    const double dE = kTwoPi / N;
+    double sdE, cdE, sE, cE;
+    fm::sincos(dE, sdE, cdE);
+    fm::sincos(0.5 * dE, sE, cE);
+    double E = 0.5 * dE;
+    samples.reserve(N / 2);
+    for (int i = 0; i < N / 2; ++i) {
+      if (i > 0) {
+        const double nsE = sE * cdE + cE * sdE;
+        cE = cE * cdE - sE * sdE;
+        sE = nsE;
+        E += dE;
+      }
+      const double ar = 1.0 / (1.0 - e * cE);
+      samples.push_back({ar, cE, sE, (cE - e) * ar, eta * sE * ar, E - e * sE});
+    }
+  }
+  void exact(int l, int p, int q, double& G, double& dG) {
+    const int w = l - 2 * p, j = w + q, aw = w < 0 ? -w : w;
+    auto& wave = waves[w + kSlowQMax];
+    auto& phase = phases[j];
+    auto& power = powers[l];
+    if (wave.empty()) for (const auto& v : samples) {
+      Pair z; res::cpow_uint(v.cf, w < 0 ? -v.sf : v.sf, aw, z.c, z.s); wave.push_back(z);
+    }
+    if (phase.empty()) for (const auto& v : samples) {
+      Pair z; fm::sincos(j * v.M, z.s, z.c); phase.push_back(z);
+    }
+    if (power.empty()) for (const auto& v : samples) power.push_back(res::pow_uint(v.ar, l));
+    double sumG = 0.0, sumdG = 0.0;
+    for (size_t i = 0; i < samples.size(); ++i) {
+      const auto& v = samples[i];
+      const double cp = wave[i].c * phase[i].c + wave[i].s * phase[i].s;
+      const double sp = wave[i].s * phase[i].c - wave[i].c * phase[i].s;
+      const double ak = power[i];
+      sumG += ak * cp;
+      sumdG += ak * (l * v.ar * v.cE * cp - (w * v.ar * inv_eta + j) * v.sE * sp);
+    }
+    const double inv_halfN = 1.0 / static_cast<int>(samples.size());
+    G = sumG * inv_halfN;
+    if (e >= 2e-4 && e + 2e-4 < 1.0) dG = sumdG * inv_halfN;
+    else {
+      double Gs;
+      const res::HansenSeries* hs = res::hansen_series(l, p, q);
+      if (hs != nullptr) res::series_G(*hs, e, Gs, dG);
+      else dG = 0.0;
+    }
+  }
+};
+
+/// The low set's memo excludes m, which enters neither G nor its derivative.
+struct SlowGMemo {
+  struct Value { bool ready = false; double G, dG; };
+  std::vector<Value> values;
+  std::unique_ptr<SlowExactSamples> center, plus, minus;
+  explicit SlowGMemo() : values((kSlowJMax + 1) * (2 * kSlowQMax + 1) * 71) {}
+  void get(int l, int p, int q, int j, double e, double& G, double& dG) {
+    auto& v = values[(j * (2 * kSlowQMax + 1) + q + kSlowQMax) * 71 + l];
+    if (!v.ready) {
+      if (q == 0 && e < 0.03) slow_G(l, p, q, j, e, v.G, v.dG);
+      else {
+        if (!center) center.reset(new SlowExactSamples(e));
+        center->exact(l, p, q, v.G, v.dG);
+        if (q != 0 && e < 2e-4) {
+          constexpr double h = 2e-4;
+          if (!plus) { plus.reset(new SlowExactSamples(e + h)); minus.reset(new SlowExactSamples(e - h)); }
+          double Gp, Gm, d;
+          plus->exact(l, p, q, Gp, d); minus->exact(l, p, q, Gm, d);
+          v.dG = (Gp - Gm) / (2.0 * h);
+        }
+      }
+      v.ready = true;
+    }
+    G = v.G; dG = v.dG;
+  }
+};
+
 /// The slow set's own terms (SPEC 16.18, the low table; Terms::slow), appended to the shallow set's: every (l, m, p, q) of the
 /// field to slow_degree_cap() with j = l - 2p + q from 1 to kSlowJMax and |q| up to slow_q_max() (0 as it lands) whose own rate is inside
 /// kShallowSelect bands at the epoch and whose size reaches kSlowKeepM, except the shallow set's own (j = 1, q = 0, to its
@@ -4710,6 +4800,7 @@ inline int slow_terms_low(int shallow_degree, double n, double e0, double i0, Sh
   const SecularRates sr = secular_rates(n, e0, i0);
   const double a = std::pow(kKe / n, kX2o3), band = kShallowSelect * kShallowBand * n;
   const int qmax = slow_q_max() < 0 ? 0 : slow_q_max() > kSlowQMax ? kSlowQMax : slow_q_max();
+  SlowGMemo gmemo;
   double F[72], dF[72];
   for (int j = 1; j <= kSlowJMax; ++j)
     for (int m = 2; m <= L; ++m)
@@ -4731,7 +4822,7 @@ inline int slow_terms_low(int shallow_degree, double n, double e0, double i0, Sh
           const int pp = (l - w) / 2;
           if (pp < 0 || pp > l) continue;
           double G, dG;
-          slow_G(l, pp, q, j, e0, G, dG);
+          gmemo.get(l, pp, q, j, e0, G, dG);
           // the larger of its size through the mean motion and through the eccentricity vector reaches the cut
           if (slow_size_m(l, m, j, F[l] * G, a, psidot) < kSlowKeepM && slow_size_e_m(l, m, F[l] * dG, a, n, psidot) < kSlowKeepM) continue;
           if (out.count >= kShallowMax) { ++out.over; continue; }  // counted: the diagnostic lists such a term as code 7
