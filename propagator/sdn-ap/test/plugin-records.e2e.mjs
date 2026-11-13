@@ -12,7 +12,7 @@ const pop = population([['leo500', 3], ['wide', 1], ['underground', 1]], 2026111
 const ap = pop.map(o => ocmOfObject(o));
 const xp = ocmOfObject({ ...pop[0], norad: 400001 }, false);
 const sg = repackOcm(ocmOfObject({ ...pop[1], norad: 400002 }, false), t => {
-  t.MEAN_ELEMENTS.MEAN_ELEMENT_THEORY = 0; t.ORB_AVERAGING = 'SGP4'; t.PERTURBATIONS = null;
+  t.MEAN_ELEMENTS.MEAN_ELEMENT_THEORY = 0; t.ORB_AVERAGING = 'KOZAI'; t.PERTURBATIONS = null;
   t.MEAN_ELEMENTS.BTERM = 0; t.MEAN_ELEMENTS.AGOM = 0;
 });
 const ignored = repackOcm(ap[0], t => { t.CENTER_NAME = 'MARS'; });
