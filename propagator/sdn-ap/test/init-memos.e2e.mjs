@@ -12,6 +12,11 @@ import {seedOcm, T} from './lib/ocm.mjs';
 const probeSource = `
 static uint32_t test_pool_rows = 0;
 static void test_row_seen(uint32_t, bool threaded) { if (threaded) __atomic_add_fetch(&test_pool_rows, 1u, __ATOMIC_RELAXED); }
+SDNAP_EXPORT("sdnap_test_inclination_key") void sdnap_test_inclination_key(int which) {
+  sdnap::xpt::tess::NormalizedFkSamples samples;
+  samples.get(2, 72, 19, 0.4, 70);
+  samples.get(2, 72, 19, which == 1 ? 0.5 : 0.4, which == 2 ? 68 : 70);
+}
 SDNAP_EXPORT("sdnap_test_init_memo") int sdnap_test_init_memo(double e) {
   using namespace sdnap::xpt;
   tess::SlowGMemo memo;
@@ -37,7 +42,9 @@ SDNAP_EXPORT("sdnap_test_ap_rows") int sdnap_test_ap_rows(const sdnap::ElementRo
 SDNAP_EXPORT("sdnap_test_pool_rows") uint32_t sdnap_test_pool_rows() { return test_pool_rows; }
 `;
 // An externally supplied diagnostic permits a deliberate mutation without altering this test.
-const diagnostic = process.env.SDNAP_INIT_DIAGNOSTIC || buildDiagnostic('init-memos', probeSource);
+const diagnostic = process.env.SDNAP_INIT_DIAGNOSTIC || buildDiagnostic('init-memos', probeSource, s=>s, {
+ 'sdn_ap_module.cpp':s=>s.replace('#include <cassert>', '#undef NDEBUG\n#include <cassert>')
+});
 const open = async (file, threads=0) => {
   const h = await createStandaloneHarness('browser',file,{surface:'direct',maxThreads:Math.max(1,threads),enableBrowserWasiThreads:threads>0});
   const x=h.instance.exports;
@@ -50,6 +57,11 @@ for(const e of [0,0.0001,0.000199,0.03,0.048,0.05,0.1,0.72,0.85,0.96]) {
   assert.equal(mismatch,0,`scalar memo reference e=${e}, first differing key encoded j*10000+(q+4)*100+l=${mismatch}`);
 }
 console.log('scalar memo references: ten eccentricities, every valid (j,q,l), exact');
+for(const kind of [1,2]) {
+ const bad=await open(diagnostic);
+ assert.throws(()=>bad.x.sdnap_test_inclination_key(kind), `debug build refuses changed ${kind===1?'inclination':'degree'}`);
+}
+console.log('debug inclination memo rejects changed inclination and degree');
 const cases=[
  ['circular',15.2,0,97.4],['central difference',15.2,0.0001,97.4],
  ['exact 0.03',14.2,0.03,65],['exact 0.048',13.8,0.048,65],['exact 0.1',12.8,0.1,65],
