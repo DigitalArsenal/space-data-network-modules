@@ -166,6 +166,7 @@ export async function framesJob(ctx, n, sliceRows) {
     r = Array.from(new Int32Array(H.memory.buffer, result, 6));
     calls++;
   } while (r[0] + r[1] > 0 && r[2] + r[3] > 0);
+  if (r[0] !== 0 || r[1] !== 0) throw new Error("frames: fill incomplete before read");
   const digests = [];
   let nonzero = 0;
   for (const frame of [0, 3]) for (const minutes of [60, 75, 90]) {

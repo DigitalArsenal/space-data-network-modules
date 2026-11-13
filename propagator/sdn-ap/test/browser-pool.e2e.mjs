@@ -223,6 +223,7 @@ for (const t of THREADS) {
   if (f.present) {
     framesPresent = true;
     assert.equal(f.nonzeroStatus, 0, `frames: every status 0 at ${t} threads`);
+    assert.equal(f.served, fn.served, "frames: browser and Node served counts agree");
     assert.equal(f.served, AP, "frames: every object is served by the frame path");
     assert.deepEqual(f.digests, fn.digests, `frames: planes and statuses at three instants, TEME and Earth-fixed, equal to Node's at ${t} threads`);
     assert.equal(f.digest, ref.frames.digest, `frames: the digest at ${t} threads equals the one at 0 (slices of 8 rows against slices of 500)`);
@@ -233,5 +234,6 @@ console.log(`browser-pool (${which}, ${(browser.userAgent.match(/(HeadlessChrome
 console.log(pooledEpochs === null ? "  sdnap_epochs_at: not asked on pool threads" : pooledEpochs ? "  sdnap_epochs_at ran on pool threads; the memory grew during the batches; no refusal, deferral or dead thread"
   : "  sdnap_epochs_at is not handed to the pool by this build: its digests are asserted, no batch bound");
 console.log(framesPresent ? "  frame path: planes and statuses equal to Node's, bit for bit, whatever the slice" : "  frame path: this build has no frame exports; nothing asserted");
+if (!framesPresent && process.env.SDNAP_REQUIRE_FRAMES === "1") throw new Error("frame path required (SDNAP_REQUIRE_FRAMES=1), but this build has no frame exports");
 console.log(`  ${((tNode - T0) / 1000).toFixed(0)} s for the Node side, ${((tEnd - tNode) / 1000).toFixed(0)} s for the browser, ${((tEnd - T0) / 1000).toFixed(0)} s in all`);
 process.exit(0);
