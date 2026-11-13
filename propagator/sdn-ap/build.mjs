@@ -363,6 +363,12 @@ if (!compilation.report?.ok) {
   const issues = (compilation.report?.issues ?? []).map((i) => [i.severity, i.code, i.message].filter(Boolean).join(" ") || String(i));
   throw new Error(`sdn-ap-propagator validation failed: ${issues.join("; ")}`);
 }
+// Inspect the artifact just compiled, including builds redirected through SDNAP_DIST_DIR.
+if (process.env.SDNAP_DIAGNOSTIC_BUILD !== "1") {
+  const module = await WebAssembly.compile(await fs.readFile(outputPath));
+  const diagnostic = WebAssembly.Module.exports(module).filter(({ name }) => /^(?:test_|sdnap_test_)/.test(name));
+  if (diagnostic.length) throw new Error(`release contains diagnostic exports: ${diagnostic.map(x => x.name).join(", ")}`);
+}
 await fs.copyFile(path.join(packageRoot, "plugin-manifest.json"), path.join(distRoot, "plugin-manifest.json"));
 // every license text the package carries (LICENSES/), beside the module
 await fs.mkdir(path.join(distRoot, "LICENSES"), { recursive: true });

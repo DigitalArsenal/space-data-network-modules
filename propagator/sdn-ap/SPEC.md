@@ -6568,6 +6568,12 @@ the batch. At degree 31 and five active builders the reserve is 11,220,888 bytes
 added to the cell slab. Reserve failure halves the candidate count; a single row runs serially. No memory growth occurs
 inside a pooled batch. Thread-local allocation failures and growth refusals are tracked separately.
 
+Release source contains null hook globals (`g_attempt_hook`, `g_chunk_hook`, `g_row_hook`, `g_init_hook`) and their
+null checks, plus the false reserve switch. No release export sets them. Diagnostic source copies inject the setters
+and forced failures; `test/lib/ap-diagnostic.mjs` sets `SDNAP_DIAGNOSTIC_BUILD=1` for those builds. Without that flag,
+`build.mjs` checks the exports of the newly compiled artifact alongside artifact validation and rejects `test_*` and
+`sdnap_test_*` names, including the frames configuration, hold, cell, initialization, and warm-up probes.
+
 A pool failure returns -20 and commits none of the pending batch. Earlier batches of the same call remain committed.
 The descriptor, bounded outputs, resident records, and cell slab remain alive because a delayed claim can complete after
 the failure return. Later open/refill calls return -20, close has no effect, store replacement and descriptor reuse are
