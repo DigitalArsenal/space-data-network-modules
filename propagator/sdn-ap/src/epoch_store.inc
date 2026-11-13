@@ -60,6 +60,8 @@ template <class T> class Array {
   void clear() { while (size_) p_[--size_].~T(); }
   /// The elements destroyed and the buffer given back (clear() keeps it).
   void release() { clear(); std::free(p_); p_ = nullptr; capacity_ = 0; }
+  /// The two arrays exchanged, their buffers and elements untouched (no allocation).
+  void swap(Array& o) { std::swap(p_, o.p_); std::swap(size_, o.size_); std::swap(capacity_, o.capacity_); }
   void pop_back() { p_[--size_].~T(); }
   size_t size() const { return size_; }
   size_t capacity() const { return capacity_; }
@@ -219,6 +221,8 @@ inline Store& resident() {
   static Store s;
   return s;
 }
+struct Build;
+inline Build& resident_build();
 
 inline double minutes_of(double whole, double frac) { return ((whole - 2451545.0) + frac) * kMinutesPerDay; }
 
@@ -321,15 +325,15 @@ inline int decode_record(const uint8_t* p, uint32_t n, Record& r) {
 ///
 /// Two atmospheres are one when every row, node and node value is bit-for-bit the same (memcmp on the doubles that may be -0.0 or NaN: a value that
 /// compares equal to another but differs in bits is a different series), so the copy that is kept never depends on which of them came first.
-inline const atm::Atmosphere* intern(Store& st, Record& r) {
+inline const atm::Atmosphere* intern(Array<std::unique_ptr<atm::Atmosphere>>& pool, Record& r) {
   if (r.forces.weather_source != pcfWeatherSource_RECORDS) return nullptr;
   const auto model = r.forces.msis ? atm::kNrlmsise00 : atm::kJacchia70;
   auto same_rows = [](const atm::SpwDay& x, const atm::SpwDay& y) {
     return x.mjd == y.mjd && x.f107_obs == y.f107_obs && x.f107_center81 == y.f107_center81 && std::memcmp(&x.ap_avg, &y.ap_avg, sizeof(double)) == 0 && x.data_type == y.data_type &&
            std::strcmp(x.date, y.date) == 0;
   };
-  for (size_t h = 0; h < st.atmospheres.size(); ++h) {
-    const auto& held = st.atmospheres[h];
+  for (size_t h = 0; h < pool.size(); ++h) {
+    const auto& held = pool[h];
     if (held->model != model || held->days.size() != r.weather.rows.size() || held->dca_ms != r.weather.node_ms || held->dca_s.size() != r.weather.node_s.size() ||
         (!held->dca_s.empty() && std::memcmp(held->dca_s.data(), r.weather.node_s.data(), held->dca_s.size() * sizeof(double)) != 0)) continue;
     bool same = true;
@@ -344,10 +348,10 @@ inline const atm::Atmosphere* intern(Store& st, Record& r) {
   a->dca_ms = std::move(r.weather.node_ms);
   a->dca_s = std::move(r.weather.node_s);
   for (int64_t ms : a->dca_ms) a->dca_d50.push_back(static_cast<double>(ms) / 86400000.0 + 7306.0);
-  if (!st.atmospheres.grow_one()) return nullptr;  // doubles: n distinct series make O(log n) allocations
-  r.atmosphere_index = st.atmospheres.size();
-  st.atmospheres.push_back(std::move(a));
-  return st.atmospheres.back().get();
+  if (!pool.grow_one()) return nullptr;  // doubles: n distinct series make O(log n) allocations
+  r.atmosphere_index = pool.size();
+  pool.push_back(std::move(a));
+  return pool.back().get();
 }
 
 /// Calls `fn(p, n)` for each record of a frame: size-prefixed records end to end, or one plain record. False when the
@@ -371,10 +375,79 @@ inline bool each_record(const uint8_t* p, uint32_t n, Fn fn) {
   return true;
 }
 
-/// Builds `st` from the call's 'ocm' frames under `cfg`. 0, or 3 with a named error.
-inline int build(Store& st, const Config& cfg) {
+/// A load in progress (SPEC 14.1): the records decoded so far, the weather they intern, and the counts. The store itself is untouched (empty)
+/// until the build closes. `load_epochs` is a build opened, given its frames as one part, and closed; `load_epochs_open`, `_part` and `_close` are the same
+/// three calls made by the host with the frames in any number of parts.
+struct Build {
+  bool open = false;
+  uint32_t frames = 0;  ///< 'ocm' frames taken so far
+  Config cfg;
+  Stats stats;
+  // The decoded records are held in blocks allocated as they arrive: no allocation follows a count read from the payload's framing (SPEC 1.6).
+  Blocks<Record> recs;
+  Array<std::unique_ptr<atm::Atmosphere>> pool;  ///< the distinct weather of the records so far; the store's on close
+  Build() = default;
+  Build(const Build&) = delete;
+  Build& operator=(const Build&) = delete;
+  ~Build() { free_covs(); }
+  void free_covs() { for (Record& r : recs) { delete r.cov; r.cov = nullptr; } }
+  /// Nothing of the build is held afterwards.
+  void drop() { free_covs(); recs.clear(); pool.release(); open = false; frames = 0; stats = Stats{}; }
+};
+
+inline Build& resident_build() {
+  static Build b;
+  return b;
+}
+
+/// Starts a build under `cfg`: the store is emptied, and a build already open is dropped (it starts over).
+inline void begin(Store& st, Build& b, const Config& cfg) {
+  b.drop();
   clear(st);
+  b.cfg = cfg;
+  b.open = true;
+}
+
+/// Decodes the call's 'ocm' frames into the build, in input order. 0, or 3 with a named error (the caller drops the build and empties the store).
+/// `copy_tracks`: the frames' bytes are not kept after the call (a host stages its parts in one buffer), so a record's forecast is copied out of them now.
+inline int add(Build& b, bool copy_tracks) {
+  Blocks<Record>& recs = b.recs;
+  bool refused = false;
+  for (uint32_t i = 0; i < plugin_get_input_count(); ++i) {
+    const plugin_input_frame_t* f = plugin_get_input_frame(i);
+    if (f == nullptr || f->port_id == nullptr || std::strcmp(f->port_id, "ocm") != 0) continue;
+    ++b.frames;
+    const bool ok = each_record(f->payload, f->payload_length, [&](const uint8_t* p, uint32_t n) {
+      Record r;
+      const int d = decode_record(p, n, r);
+      ++b.stats.records;
+      if (d < 0) { refused = true; return false; }
+      if (d == 0) { ++b.stats.other_center; return true; }
+      if (b.cfg.theories != 0 && (b.cfg.theories & theory_bit(r.met)) == 0) { ++b.stats.theory; delete r.cov; return true; }
+      r.atmosphere = intern(b.pool, r);
+      if (mem::refuse_if_out_of_memory()) { delete r.cov; refused = true; return false; }
+      r.weather = ocm::Weather{};
+      if (copy_tracks && r.track) carried::keep(*r.track);
+      if (!recs.grow_one()) { delete r.cov; refused = true; mem::refuse_if_out_of_memory(); return false; }
+      recs.push_back(std::move(r));
+      return true;
+    });
+    if (!ok || refused) {
+      if (refused) return 3;
+      plugin_set_error("invalid-ocm", "An 'ocm' frame is neither size-prefixed $OCM records end to end nor one $OCM record.");
+      return 3;
+    }
+  }
+  return 0;
+}
+
+/// Closes the build: the sort and the install into `st` (empty since begin). 0, or 3 with a named error (the caller drops the build; `st` is left empty).
+inline int close(Store& st, Build& b) {
+  const Config& cfg = b.cfg;
+  Blocks<Record>& recs = b.recs;
   st.cfg = cfg;
+  st.stats = b.stats;
+  st.atmospheres.swap(b.pool);
   // SPEC 1.6 and 14.1: a load refused for ANY reason leaves no snapshot (the old one is gone and no part of the new one stays). The store is
   // built in place, so every return but the last clears it: a refusal after some series were installed (a second slot or a matrix that
   // could not be allocated), a decode refusal after weather was interned, and series-forces-differ. The guard builds nothing and the
@@ -384,40 +457,13 @@ inline int build(Store& st, const Config& cfg) {
     bool installed = false;
     ~Unwind() { if (!installed) clear(s); }
   } unwind{st};
-  // The decoded records are held in blocks allocated as they arrive: no allocation follows a count read from the payload's framing (SPEC 1.6).
-  Blocks<Record> recs;
-  bool refused = false;
-  for (uint32_t i = 0; i < plugin_get_input_count(); ++i) {
-    const plugin_input_frame_t* f = plugin_get_input_frame(i);
-    if (f == nullptr || f->port_id == nullptr || std::strcmp(f->port_id, "ocm") != 0) continue;
-    const bool ok = each_record(f->payload, f->payload_length, [&](const uint8_t* p, uint32_t n) {
-      Record r;
-      const int d = decode_record(p, n, r);
-      ++st.stats.records;
-      if (d < 0) { refused = true; return false; }
-      if (d == 0) { ++st.stats.other_center; return true; }
-      if (cfg.theories != 0 && (cfg.theories & theory_bit(r.met)) == 0) { ++st.stats.theory; delete r.cov; return true; }
-      r.atmosphere = intern(st, r);
-      if (mem::refuse_if_out_of_memory()) { delete r.cov; refused = true; return false; }
-      r.weather = ocm::Weather{};
-      if (!recs.grow_one()) { delete r.cov; refused = true; mem::refuse_if_out_of_memory(); return false; }
-      recs.push_back(std::move(r));
-      return true;
-    });
-    if (!ok || refused) {
-      for (Record& r : recs) delete r.cov;
-      if (refused) return 3;
-      plugin_set_error("invalid-ocm", "An 'ocm' frame is neither size-prefixed $OCM records end to end nor one $OCM record.");
-      return 3;
-    }
-  }
   // the series: (NORAD_CAT_ID, INTERNATIONAL_DESIGNATOR, MEAN_ELEMENT_THEORY, ORIGINATOR), each by epoch (a later record
   // of the same epoch replaces)
   // `order` the input positions sorted into series and epochs; `kept` the input positions of the kept sets in series order and `starts` where each
   // series' sets begin in `kept` (and one past the last): the entries and the series are sized from what is kept, not from what was read (SPEC 1.6).
   Array<uint32_t> order, kept, starts;
   if (!order.reserve(recs.size()) || !kept.reserve(recs.size()) || !starts.reserve(recs.size() + 1)) {
-    for (Record& r : recs) delete r.cov;
+    b.free_covs();
     return mem::refuse_if_out_of_memory(), 3;
   }
   for (uint32_t k = 0; k < recs.size(); ++k) order.push_back(k);
@@ -439,7 +485,7 @@ inline int build(Store& st, const Config& cfg) {
   for (uint32_t k = 1; k < order.size(); ++k) {
     const Record &x = recs[order[k - 1]], &y = recs[order[k]];
     if (x.norad == y.norad && x.object_id == y.object_id && x.met == y.met && x.originator == y.originator && !x.forces.same(y.forces)) {
-      for (Record& r : recs) delete r.cov;
+      b.free_covs();
       char why[200];
       std::snprintf(why, sizeof why, "NORAD %u: two sets of one series state different forces (ATMOSPHERIC_MODEL, WEATHER_SOURCE, DENSITY_CORRECTION or a gravity cap).", x.norad);
       plugin_set_error("series-forces-differ", why);
@@ -489,7 +535,7 @@ inline int build(Store& st, const Config& cfg) {
   bool room = st.entries.reserve(kept.size()) && st.series.reserve(starts.size() - 1) && live.reserve(st.atmospheres.size());
   for (size_t k = 0; room && k < st.atmospheres.size(); ++k) live.push_back(0);
   if (!room) {
-    for (Record& r : recs) delete r.cov;
+    b.free_covs();
     return mem::refuse_if_out_of_memory(), 3;
   }
   for (size_t g = 0; g + 1 < starts.size(); ++g) {
@@ -507,7 +553,7 @@ inline int build(Store& st, const Config& cfg) {
     if (s.count > 1) {
       s.slots.second = mem::counted(new (std::nothrow) Slot{});
       if (s.slots.second == nullptr) {
-        for (Record& r : recs) delete r.cov;
+        b.free_covs();
         return mem::refuse_if_out_of_memory(), 3;
       }
     }
@@ -548,6 +594,17 @@ inline int build(Store& st, const Config& cfg) {
   st.stats.kept = static_cast<double>(st.entries.size());
   unwind.installed = true;
   return 0;
+}
+
+/// Builds `st` from the call's 'ocm' frames under `cfg` in one part (propagate_epochs's own store; load_epochs's, resident). 0, or 3 with a named error and
+/// `st` empty.
+inline int build(Store& st, const Config& cfg) {
+  Build b;
+  begin(st, b, cfg);
+  int rc = add(b, false);
+  if (rc == 0) rc = close(st, b);
+  if (rc != 0) clear(st);
+  return rc;
 }
 
 /// The code a set's state takes when its rows do not hold a day the request flies it through (Store::short_day).
@@ -937,9 +994,15 @@ inline uint64_t bytes_of(const Store& st) {
 
 /// `load_epochs`: replaces the resident store with the call's snapshot (SPEC 14).
 static int load_epochs_call(void);
+/// An allocation that failed in a call that went on to answer success (mem::finish refuses it): the build and the store are left empty.
+static int load_finish(int answered, int refused) {
+  if (refused != 0 && answered == 0) { sdnap::epochs::resident_build().drop(); sdnap::epochs::clear(sdnap::epochs::resident()); }
+  return refused;
+}
 extern "C" int load_epochs(void) {
   sdnap::mem::CallMark call_mark;
-  return sdnap::mem::finish(load_epochs_call());
+  const int answered = load_epochs_call();
+  return load_finish(answered, sdnap::mem::finish(answered));
 }
 static int load_epochs_call(void) {
   using namespace sdnap;
@@ -949,7 +1012,74 @@ static int load_epochs_call(void) {
   if (const int rc = pcf::read(pcf::kEpochs, true)) return rc;
   epochs::Config cfg;
   if (const int rc = epochs::read_config(cfg)) return rc;
-  return epochs::build(epochs::resident(), cfg);
+  // the three calls in sequence on one payload: a build opened (the store emptied), the frames as one part, the build closed
+  epochs::Store& st = epochs::resident();
+  epochs::Build& b = epochs::resident_build();
+  epochs::begin(st, b, cfg);
+  int rc = epochs::add(b, false);
+  if (rc == 0) rc = epochs::close(st, b);
+  b.drop();
+  if (rc != 0) epochs::clear(st);
+  return rc;
+}
+
+/// `load_epochs_open`: starts a load that takes its frames in parts (SPEC 14.1). The $PCF EPOCH_STORE is read here, once. The store is emptied; a load
+/// already open is dropped (this starts over).
+static int load_epochs_open_call(void);
+extern "C" int load_epochs_open(void) {
+  sdnap::mem::CallMark call_mark;
+  const int answered = load_epochs_open_call();
+  return load_finish(answered, sdnap::mem::finish(answered));
+}
+static int load_epochs_open_call(void) {
+  using namespace sdnap;
+  plugin_reset_output_state();
+  if (const int rc = pcf::read(pcf::kEpochs, true)) return rc;
+  epochs::Config cfg;
+  if (const int rc = epochs::read_config(cfg)) return rc;
+  epochs::begin(epochs::resident(), epochs::resident_build(), cfg);
+  return 0;
+}
+
+/// `load_epochs_part`: decodes one part's 'ocm' frames into the open load (SPEC 14.1). Nothing of the part's bytes is kept. A part refused for any reason
+/// closes the load and leaves the store empty.
+static int load_epochs_part_call(void);
+extern "C" int load_epochs_part(void) {
+  sdnap::mem::CallMark call_mark;
+  const int answered = load_epochs_part_call();
+  return load_finish(answered, sdnap::mem::finish(answered));
+}
+static int load_epochs_part_call(void) {
+  using namespace sdnap;
+  plugin_reset_output_state();
+  epochs::Build& b = epochs::resident_build();
+  if (!b.open) { plugin_set_error("load-not-open", "No load is open: call load_epochs_open first."); return 3; }
+  uint32_t frames = 0;
+  int rc = ocm::admit(frames);
+  if (rc == 0) rc = epochs::add(b, true);
+  if (rc != 0) { b.drop(); epochs::clear(epochs::resident()); }
+  return rc;
+}
+
+/// `load_epochs_close`: the sort and the install of the open load (SPEC 14.1). On success the store is the snapshot; on any refusal it is empty.
+static int load_epochs_close_call(void);
+extern "C" int load_epochs_close(void) {
+  sdnap::mem::CallMark call_mark;
+  const int answered = load_epochs_close_call();
+  return load_finish(answered, sdnap::mem::finish(answered));
+}
+static int load_epochs_close_call(void) {
+  using namespace sdnap;
+  plugin_reset_output_state();
+  epochs::Store& st = epochs::resident();
+  epochs::Build& b = epochs::resident_build();
+  if (!b.open) { plugin_set_error("load-not-open", "No load is open: call load_epochs_open first."); return 3; }
+  int rc = 0;
+  if (b.frames == 0) { plugin_set_error("missing-ocm", "The load took no 'ocm' frame: load_epochs_part before load_epochs_close."); rc = 3; }
+  else rc = epochs::close(st, b);
+  b.drop();
+  if (rc != 0) epochs::clear(st);
+  return rc;
 }
 
 /// `propagate_epochs`: the store of the call's own snapshot at the $PCF OUTPUT times (EPOCHS, or START_TIME to STOP_TIME):

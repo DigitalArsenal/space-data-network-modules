@@ -193,6 +193,77 @@
       "drainPolicy": "drain-to-empty"
     },
     {
+      "methodId": "load_epochs_open",
+      "displayName": "Open a load of the epoch store in parts",
+      "description": "Starts a load that takes its snapshot in parts (SPEC 14.1): empties the resident epoch store and reads the optional $PCF EPOCH_STORE table once (the same table, defaults and refusals as load_epochs). A load already open is dropped: this starts over. Then load_epochs_part any number of times, then load_epochs_close; the store built is the one load_epochs builds from all the frames in one call. Refused by name: configuration-refused, invalid-configuration, out-of-memory (an allocation failed, SPEC 1.6).",
+      "inputPorts": [
+        {
+          "portId": "configuration",
+          "displayName": "configuration",
+          "minStreams": 0,
+          "maxStreams": 1,
+          "required": false,
+          "description": "$PCF 1.0.8 (SDS 1.279.0), optional (absent: every default), as load_epochs reads it.",
+          "acceptedTypeSets": [
+            {
+              "setId": "sds-pcf",
+              "allowedTypes": [
+                {
+                  "schemaName": "PCF.fbs",
+                  "fileIdentifier": "$PCF",
+                  "rootTypeName": "PCF"
+                }
+              ],
+              "description": "Ratified SDS $PCF propagation configuration; the module decodes the FlatBuffer itself."
+            }
+          ]
+        }
+      ],
+      "outputPorts": [],
+      "maxBatch": 65535,
+      "drainPolicy": "drain-to-empty"
+    },
+    {
+      "methodId": "load_epochs_part",
+      "displayName": "Take one part of a load of the epoch store",
+      "description": "Decodes the 'ocm' frames of one part (size-prefixed $OCM records end to end, or one $OCM record a frame, as load_epochs takes them) into the load open by load_epochs_open, in input order. Nothing of the part's bytes is kept after the call: the host may reuse its staging buffer. The store stays empty until load_epochs_close. A part refused for any reason (the refusals of load_epochs that concern a record, a frame or its type, and out-of-memory) drops the load and leaves the store empty; with no load open it is refused load-not-open and nothing else changes. A part carries at least one 'ocm' frame (missing-ocm).",
+      "inputPorts": [
+        {
+          "portId": "ocm",
+          "displayName": "ocm",
+          "minStreams": 0,
+          "maxStreams": 65535,
+          "required": false,
+          "description": "The part's frames, as load_epochs' 'ocm' port; a payload whose own file identifier is $OMM, $SPW, $DCL or $OEM is refused by its type.",
+          "acceptedTypeSets": [
+            {
+              "setId": "sds-ocm-element-sets",
+              "allowedTypes": [
+                {
+                  "schemaName": "OCM.fbs",
+                  "fileIdentifier": "$OCM",
+                  "rootTypeName": "OCM"
+                }
+              ],
+              "description": "Ratified SDS $OCM element sets; the module decodes the FlatBuffer itself."
+            }
+          ]
+        }
+      ],
+      "outputPorts": [],
+      "maxBatch": 65535,
+      "drainPolicy": "drain-to-empty"
+    },
+    {
+      "methodId": "load_epochs_close",
+      "displayName": "Close a load of the epoch store",
+      "description": "Closes the load open by load_epochs_open: the sort into series and epochs, the kept sets, and the install, as load_epochs does after it has decoded its frames (SPEC 14.1). On success the resident epoch store is the snapshot of all the parts; on any refusal (series-forces-differ, out-of-memory) the store is empty and the load is closed. With no load open it is refused load-not-open; with no part taken, missing-ocm.",
+      "inputPorts": [],
+      "outputPorts": [],
+      "maxBatch": 65535,
+      "drainPolicy": "drain-to-empty"
+    },
+    {
       "methodId": "propagate_epochs",
       "displayName": "Propagate an epoch store",
       "description": "The epoch store of the call's own snapshot (as load_epochs builds it) at the $PCF OUTPUT times: one $OEM per series, each state from the selected set or, inside a handover window, the blend of two (SMOOTHSTEP: r = (1 - w) r_a + w r_b, v with the weight's derivative; HERMITE: the cubic Hermite of the two sets' states at the window's edges), with the covariance mixture where the sets carry COVARIANCE_DATA. SPEC 14, on $OCM: per series (NORAD_CAT_ID, INTERNATIONAL_DESIGNATOR, MEAN_ELEMENT_THEORY, HEADER.ORIGINATOR) the sets of the last CACHE_DAYS before the newest MEAN_ELEMENTS.EPOCH of the load, at most MAX_SETS_PER_OBJECT (the newest), of THEORIES (SGP4, SGP4XP, AP); sets not centered on the Earth are counted and not stored. Each set flies its own record's forces, SPACE_WEATHER rows and density-correction nodes (identical row series and node vectors held once, by content); two sets of one series whose forces differ (ATMOSPHERIC_MODEL, WEATHER_SOURCE, DENSITY_CORRECTION, the two gravity caps; rows and nodes are data) are refused (series-forces-differ). Refused by name: missing-ocm, invalid-ocm, omm-not-flown, spw-not-flown, dcl-not-flown, grid-not-flown, unsupported-center, mean-elements-missing, mean-element-theory-unspecified, theory-not-flown:<name>, elements-other-theory, orb-averaging-mismatch, frame-pairing-invalid, weather-source-unspecified, atmosphere-weather-mismatch, atmosphere-unsupported, solid-tides-unsupported, gravity-model-mismatch, parameter-repeated:ECOM2_Y0, parameter-invalid:ECOM2_Y0, parameter-not-modeled:<name>, radiation-model-superseded, radiation-model-mismatch, weather-rows-missing, weather-rows-unselected, weather-rows-invalid:<day>, weather-rows-short:<day>, density-correction-missing, density-correction-unselected, invalid-density-correction, density-correction-atmosphere-mismatch, density-correction-cid-missing, cov-parameter-kind-unspecified, cov-propagation-invariant, invalid-covariance, series-forces-differ, configuration-missing, configuration-refused, invalid-configuration, too-many-states, decayed:<time> (an AP series whose epochs all lie past its decay crossing, SPEC 16.25), propagation-failed, frame-failed, out-of-memory (an allocation failed, SPEC 1.6; through 0.6.47 reported as propagation-failed).",
