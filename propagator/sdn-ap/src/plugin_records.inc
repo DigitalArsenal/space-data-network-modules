@@ -2,7 +2,7 @@
 namespace sdnap {
 
 bool plugin_can_release() {
-  return epochs::resident().pool_dead == 0 || pool::load(&pool::job().active) == 0;
+  return pool::load(&pool::job().active) == 0;
 }
 
 void plugin_epochs_cleared() { frames::release_state(frames::state()); }
