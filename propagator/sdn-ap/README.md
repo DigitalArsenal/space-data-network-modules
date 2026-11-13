@@ -1,6 +1,6 @@
 # sdn-ap-propagator
 
-Version 0.6.56 (dist 2131db19).
+Version 0.6.57 (dist e6442ab7).
 
 General-perturbations propagation of whole catalogs in one isomorphic WASM module (browser and WasmEdge), with two
 theories and AP, an advanced propagator that builds on the entire history of astrodynamics ($PCF FORCES selects its drag
@@ -97,7 +97,9 @@ The output map and the terms above e 0.3 retain their definitions.
   batch of series at one time, TEME or Earth-fixed, with the covariance); `propagate_epochs` gives the same for a
   snapshot and a grid in one stateless call. Seven days of the Space-Track catalog (2026-10-07 .. 13, 228,129 records,
   13 frames of at most 4 MiB) load in 0.1 s into 30,931 series and 106,813 sets, 17.0 MiB (577 bytes a series) before
-  any series is propagated.
+  any series is propagated. A host that cannot stage a whole catalog in the module's memory loads it in parts with
+  `load_epochs_open`, `load_epochs_part` (any number of times, one reused staging buffer) and `load_epochs_close` (SPEC 14.1.1):
+  the store is the one `load_epochs` builds from all the frames, and the decoded records, not the payload, are held between parts.
 - Carried forecast (SPEC 18; `test/carried-*.e2e.mjs`), a separate product: the record carries a numerical forecast made
   by another propagator (propagator/ffm, or an operator's ephemeris) and returns it inside its span; its figures are
   that forecast's and the record's, never AP's accuracy, which is the theory's alone. `fit` with `$PCF`
