@@ -111,6 +111,7 @@ struct Batch {
   bool pos_only = false, pooled = false;
 };
 inline Batch* g_batch = nullptr;
+inline uint32_t g_identity_failures = 0;
 /// Diagnostic builds: select allocation failures by object and physical attempt.
 inline void (*g_attempt_hook)(uint32_t index, bool pooled) = nullptr;
 
@@ -448,7 +449,7 @@ inline bool covered(const State& s, const Obj& o, double t) {
 /// Collects distinct missing objects without changing the sweep, object table, or slab.
 inline void collect(const State& s, const Sweep& sw, double whole, double frac, double ahead,
                     const uint32_t* priority, uint32_t pc, uint32_t limit, Batch& b) {
-  b.count = 0; b.end = sw.k;
+  b.count = 0; b.end = sw.k; b.pooled = false;
   b.pos_only = (s.flags & kFlagPositionOnly) != 0;
   const uint32_t total = pc + s.objects;
   for (uint32_t k = sw.k; k < total; ++k) {
@@ -745,9 +746,16 @@ int32_t sdnap_frames_refill(double now_whole, double now_frac, double ahead_seco
       const int slot = sw.pass == 0 ? 0 : 1;
       const int droppable = ((o.cur != 0 && !holds(o.cur, t0) && !holds(o.cur, ta)) ? 1 : 0) | ((o.nxt != 0 && !holds(o.nxt, t0) && !holds(o.nxt, ta)) ? 2 : 0);
       if (rows >= max_rows) { stop = true; break; }
-      ++rows;
       RowOut serial;
       const bool pooled = batch != nullptr && batch->pooled;
+      if (pooled && (batch_row >= batch->count || batch->rows[batch_row].index != i)) {
+        ++g_identity_failures;
+        sdnap::pool::g_frames_quarantined = true;
+        sdnap::epochs::resident().pool_dead = 1;
+        failure = sdnap::pool::kBatchPoolDead; stop = true;
+        break;
+      }
+      ++rows;
       RowOut* built = pooled ? &batch->rows[batch_row++].out : &serial;
       if (pooled && built->result == 4) {
         built = &batch->retry;
