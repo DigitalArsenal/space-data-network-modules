@@ -1,7 +1,7 @@
 {
   "pluginId": "com.spacedatanetwork.sdn-ap-propagator",
   "name": "SDN-AP Propagator",
-  "version": "0.6.56",
+  "version": "0.6.57",
   "description": "General-perturbations propagation of whole catalogs in one WASM module. Theories: SGP4 (STR#3 / Vallado 2006) and SGP4XP (the US Space Force SGP4-XP theory, clean-room from the public change list and the black-box specification), and AP, an advanced propagator that builds on the entire history of astrodynamics. Element sets are $OCM records, each the whole input of its flight: theory, forces, daily space weather, density-correction nodes and covariance typed; the propagator ABI struct path (plugin_init_omm) flies stock SGP4XP only. Propagator ABI exports (plugin_init_omm, plugin_propagate, plugin_propagate_batch, plugin_entity_count, plugin_destroy; Earth-fixed meters) and a structure-of-arrays batch entry (sdnap_*; TEME or Earth-fixed). Bounded checkpoint storage per object; cached brackets interpolate, first queries build nodes, and beyond-span queries integrate from the nearest preceding retained node. An AP state is a function of its set and its time alone: the order of requests, the call they come in and the sets flown between them leave its bits unchanged (SPEC 9; test/set-caches.e2e.mjs). A store's AP sets keep their own caches and node runs from one pool (256 MB; sdnap_cache_stats reads it); sets beyond it fly on the thread's caches with the same states. Cost and memory by request pattern: README, Memory and time (test/kernel-patterns.mjs).",
   "pluginFamily": "propagator",
   "capabilities": [],
@@ -188,6 +188,77 @@
           ]
         }
       ],
+      "outputPorts": [],
+      "maxBatch": 65535,
+      "drainPolicy": "drain-to-empty"
+    },
+    {
+      "methodId": "load_epochs_open",
+      "displayName": "Open a load of the epoch store in parts",
+      "description": "Starts a load in parts (SPEC 14.1.1): drops any load in progress, empties the store, reads the optional $PCF EPOCH_STORE. A non-zero status of the three methods closes the load and empties the store, except load-not-open (no change). Refused by name: configuration-refused, invalid-configuration, out-of-memory.",
+      "inputPorts": [
+        {
+          "portId": "configuration",
+          "displayName": "configuration",
+          "minStreams": 0,
+          "maxStreams": 1,
+          "required": false,
+          "description": "$PCF 1.0.8 (SDS 1.279.0), optional (absent: every default), as load_epochs reads it.",
+          "acceptedTypeSets": [
+            {
+              "setId": "sds-pcf",
+              "allowedTypes": [
+                {
+                  "schemaName": "PCF.fbs",
+                  "fileIdentifier": "$PCF",
+                  "rootTypeName": "PCF"
+                }
+              ],
+              "description": "Ratified SDS $PCF propagation configuration; the module decodes the FlatBuffer itself."
+            }
+          ]
+        }
+      ],
+      "outputPorts": [],
+      "maxBatch": 65535,
+      "drainPolicy": "drain-to-empty"
+    },
+    {
+      "methodId": "load_epochs_part",
+      "displayName": "Take one part of a load of the epoch store",
+      "description": "Decodes one part's 'ocm' frames (framed as for load_epochs) into the open load (SPEC 14.1.1); none of the part's bytes is kept. A refused part drops the load. Refused by name: load-not-open, missing-ocm, invalid-ocm, omm-not-flown, spw-not-flown, dcl-not-flown, grid-not-flown, out-of-memory, and the record refusals of load_epochs (all but series-forces-differ).",
+      "inputPorts": [
+        {
+          "portId": "ocm",
+          "displayName": "ocm",
+          "minStreams": 0,
+          "maxStreams": 65535,
+          "required": false,
+          "description": "The part's frames, as load_epochs' 'ocm' port; a payload whose own file identifier is $OMM, $SPW, $DCL or $OEM is refused by its type.",
+          "acceptedTypeSets": [
+            {
+              "setId": "sds-ocm-element-sets",
+              "allowedTypes": [
+                {
+                  "schemaName": "OCM.fbs",
+                  "fileIdentifier": "$OCM",
+                  "rootTypeName": "OCM"
+                }
+              ],
+              "description": "Ratified SDS $OCM element sets; the module decodes the FlatBuffer itself."
+            }
+          ]
+        }
+      ],
+      "outputPorts": [],
+      "maxBatch": 65535,
+      "drainPolicy": "drain-to-empty"
+    },
+    {
+      "methodId": "load_epochs_close",
+      "displayName": "Close a load of the epoch store",
+      "description": "Closes the open load: sort and install, as load_epochs does (SPEC 14.1.1). The load is closed either way and a refusal empties the store, except load-not-open (no change). Refused by name: load-not-open, missing-ocm, series-forces-differ, out-of-memory.",
+      "inputPorts": [],
       "outputPorts": [],
       "maxBatch": 65535,
       "drainPolicy": "drain-to-empty"
