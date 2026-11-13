@@ -33,7 +33,10 @@ inline int32_t plugin_direct_state(uint32_t raw, double whole, double frac, OrbP
   double r[3], v[3], jd[2] = {whole, frac};
   bool have_cov = false;
   const int32_t code = epochs::at(st, st.series[raw], epochs::minutes_of(whole, frac), r, v, nullptr, have_cov, jd);
-  if (code != kPropOk) return abi_status(code);
+  if (code != kPropOk) {
+    out->flags = code == kPropDecayed ? ORBPRO_STATE_DECAYED : ORBPRO_STATE_NONE;
+    return abi_status(code);
+  }
   teme_to_ecef_m(gmst(whole, frac), r, v, out->position, out->velocity);
   out->flags = ORBPRO_STATE_VALID;
   return 0;
