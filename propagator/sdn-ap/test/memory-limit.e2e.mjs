@@ -6,7 +6,7 @@
 //    rows; node and mean anomaly spread), one load_epochs, 128 MiB, one thread. Flown a day after their epoch, then two days
 //    after, where each set's tesseral cache is baked again from its table. Through 0.6.52 the second pass aborted the module
 //    (wasm unreachable) at its first set: the thread's 192 KiB coefficient block was first asked for there. Codes 0 or 1 (the
-//    theory's refusal, the resident exports' refusal); 539 of the 547 answer in each pass on this build (FIRST_PASS, within
+//    theory's refusal, the resident exports' refusal); 541 of the 547 answer in each pass on this build (FIRST_PASS, within
 //    MARGIN); the first set's first-pass state, asked again after the second pass, is the first.
 // 2. The covariance entry (sdnap_epochs_at with its covariance). 400 copies of a fitted 300 km record that carries a
 //    covariance (test/fixtures/synthetic-grid-hp300-e0-i70.ocm, each its own catalog number), 128 MiB, flown a day after
@@ -17,8 +17,8 @@
 //    threaded batch of the same size runs first, while the memory is free, so that the batch's list of deferred rows (a
 //    std::vector, which SPEC 1.6 names among what still traps) has its room.
 // 4. SGP4XP sets without AP's terms (6,000 stock records at 500 km, 80 MiB, sdnap_epochs_set_at): every set the build this
-//    change was made on answered (0.6.54, modules 796bacbe: 2,329 of them) is answered, each state its state (an SGP4XP flight
-//    makes only the caches it reads, as that build did). 0.6.52 answered 2,335 there, before 0.6.53 and 0.6.54.
+//    change was made on answered (0.6.55, modules 3c14c974: 2,480 of them) is answered, each state its state (an SGP4XP flight
+//    makes only the caches it reads, as that build did). 0.6.54 answered 2,329 there and 0.6.52 2,335, before 0.6.55's load.
 // JS moves bytes and compares numbers the module produced.
 //   node test/memory-limit.e2e.mjs
 import assert from "node:assert/strict";
@@ -35,9 +35,10 @@ import { scratchTemp } from "./lib/scratch.mjs";
 
 ensureBuilt();
 const N = 547, MIB = 1 << 20, DAY = 86400000, EPOCH = Date.parse("2026-06-15T00:00:00Z"), MU = 398600.4418, RE = 6378.137;
-// part 1's first pass on this build: 539 of 547 answer; a later build within 5 of it. Main 0.6.54 alone answers 541 (its
-// second pass traps), two more: this build makes the 192 KiB coefficient block before the first state (on 0.6.52, 547 and 545)
-const FIRST_PASS = 539, MARGIN = 5;
+// part 1's first pass on this build: 541 of 547 answer; a later build within 5 of it. Main 0.6.55 alone answers 543 (its
+// second pass traps), two more: this build makes the 192 KiB coefficient block before the first state (on 0.6.54, 541 and
+// 539; on 0.6.52, 547 and 545)
+const FIRST_PASS = 541, MARGIN = 5;
 const iso = (ms) => new Date(ms).toISOString().replace("Z", "");
 const revPerDay = (a) => (Math.sqrt(MU / a ** 3) * 86400) / (2 * Math.PI);
 const rows = rowsThrough(Array.from({ length: 46 }, (_, k) => ({ DATE: iso(EPOCH + (k - 5) * DAY).slice(0, 10), F107_OBS: 70, F107_OBS_CENTER81: 72, AP_AVG: 4, F107_DATA_TYPE: F107DataType.OBS })));
@@ -167,12 +168,12 @@ async function open(file, { max = 0, threads = 0 } = {}) {
   console.log(`part 3 (two pool threads, the row store): ${lim.held} rows held, ${answered} answers and ${notAnswered} refusals over two instants at 128 MiB, each answer the default maximum's bit for bit`);
 }
 
-// 4. SGP4XP sets without AP's terms, against 0.6.54
+// 4. SGP4XP sets without AP's terms, against 0.6.55
 {
   const modulesRoot = path.resolve(packageRoot, "../..");
-  const bytes = execFileSync("git", ["-C", modulesRoot, "show", "796bacbe:propagator/sdn-ap/dist/isomorphic/module.wasm"], { maxBuffer: 1 << 26 });
-  assert.ok(crypto.createHash("sha256").update(bytes).digest("hex").startsWith("b28d0504"), "0.6.54 at 796bacbe");
-  const oldPath = path.join(scratchTemp("sdnap-memory-limit-"), "module-0.6.54.wasm");
+  const bytes = execFileSync("git", ["-C", modulesRoot, "show", "3c14c974:propagator/sdn-ap/dist/isomorphic/module.wasm"], { maxBuffer: 1 << 26 });
+  assert.ok(crypto.createHash("sha256").update(bytes).digest("hex").startsWith("e96afd51"), "0.6.55 at 3c14c974");
+  const oldPath = path.join(scratchTemp("sdnap-memory-limit-"), "module-0.6.55.wasm");
   fs.writeFileSync(oldPath, bytes);
   const COUNT = 6000;
   const snapshot = Buffer.concat(Array.from({ length: COUNT }, (_, k) => prefixed(seedOcm({ epoch: iso(EPOCH), n: revPerDay(RE + 500), e: 0.001, i: 97.4,
@@ -191,8 +192,8 @@ async function open(file, { max = 0, threads = 0 } = {}) {
   const [old, now] = flown;
   const oldAnswered = old.filter(Array.isArray).length, nowAnswered = now.filter(Array.isArray).length;
   for (let k = 0; k < COUNT; k++)
-    if (Array.isArray(old[k])) assert.ok(Array.isArray(now[k]) && same(now[k], old[k]), `part 4, set ${k}: 0.6.54 answered it; this build ${Array.isArray(now[k]) ? "differs" : `refused it (${now[k]})`}`);
+    if (Array.isArray(old[k])) assert.ok(Array.isArray(now[k]) && same(now[k], old[k]), `part 4, set ${k}: 0.6.55 answered it; this build ${Array.isArray(now[k]) ? "differs" : `refused it (${now[k]})`}`);
   assert.ok(oldAnswered < COUNT, "part 4: the limit not reached");
-  console.log(`part 4 (SGP4XP without AP's terms, 80 MiB): 0.6.54 answered ${oldAnswered} of ${COUNT}, this build ${nowAnswered}; every one 0.6.54 answered is answered, bit for bit`);
+  console.log(`part 4 (SGP4XP without AP's terms, 80 MiB): 0.6.55 answered ${oldAnswered} of ${COUNT}, this build ${nowAnswered}; every one 0.6.55 answered is answered, bit for bit`);
 }
 process.exit(0);
