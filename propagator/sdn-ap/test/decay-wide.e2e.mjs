@@ -13,8 +13,8 @@
 //   there, and no numerical truth exists (below). What the test holds is the refusal behavior: every state before the crossing is
 //   answered, the bits before the last fifth, the same in any order;
 // - the numerical propagator (FFM, named below by its SHA-256, flown from the same start state with EGM2008 70 x 70, the Sun and Moon
-//   and NRLMSISE-00 drag) re-enters (about 100 km) before the rule's crossing on both sets, which is asserted: no truth exists over
-//   the hours the last fifth covers; where it did survive, the distance of each build to it would be printed.
+//   and NRLMSISE-00 drag) gives no truth for these two sets: it stops at its first samples because the start state is at about
+//   100 km geodetic height. Ending within the first 0.1 h is a case precondition; this test holds no comparison with a truth here.
 //   node test/decay-wide.e2e.mjs
 import assert from 'node:assert/strict';
 import fs from 'node:fs';
@@ -127,12 +127,12 @@ for (const c of CASES) {
   rq.inputs.push({ portId: 'earth_orientation', typeRef: TYPE, payload: encodePrw('EARTH_ORIENTATION', makeTable('PRWEarthOrientation', { ROWS: Array.from({ length: 15 }, (_, k) => makeTable('EOP', { DATE: new Date((mjd0 + k - 1 - 40587) * DAY).toISOString(), MJD: mjd0 + k - 1, XP: 0, YP: 0, DUT1: 0, LOD: 0 })) })) });
   const fr = await ffm.invoke(rq);
   if (fr.statusCode !== 0) {
-    // a perigee of about 100 km is where the numerical propagator ends its flight: it states when, and there is nothing to compare;
-    // the rule's crossing is after it (asserted: the floor test lets a set fly on a theory that the truth has already ended)
+    // The start state is at about 100 km geodetic height, so the numerical propagator stops at its first samples.
+    // Ending within the first 0.1 h is a case precondition, not a result about the rule; there is no truth comparison here.
     if (/reentry/.test(String(fr.errorMessage))) {
       const re = /at (\d{4}-\d\d-\d\dT\d\d:\d\d:\d\d)/.exec(String(fr.errorMessage));
       const reH = re ? (msOf(re[1]) - t0) / 3.6e6 : NaN;
-      check(Number.isFinite(reH) && reH < crossM / 3600, `${c.name}: the numerical propagator's re-entry ${reH} h is not before the rule's crossing ${(crossM / 3600).toFixed(2)} h`);
+      check(Number.isFinite(reH) && reH >= 0 && reH < 0.1, `${c.name}: case precondition: the numerical truth must end within the first 0.1 h, got ${reH} h`);
       console.log(`${c.name}: the numerical propagator re-enters before the rule's crossing at ${(crossM / 3600).toFixed(2)} h (${String(fr.errorMessage).slice(-70)})`); continue; }
     check(false, `${c.name}: FFM ${fr.errorCode}: ${fr.errorMessage}`);
     continue;
