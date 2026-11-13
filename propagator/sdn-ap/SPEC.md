@@ -1643,7 +1643,22 @@ backward (t < 0). Node 0 is the epoch state with its rates. The step from node k
   the checkpoint stride uses that same step. Default FORCES retains the 95-minute XP grid.
 
 The grid depends only on the epoch state *[probe 9.1: the library's direct, 1-minute stepped and backward-approach requests
-agree to 0 mm]*. An AP state in this module is a function of its set and its time alone (0.6.18): the order of requests,
+agree to 0 mm]*.
+
+A fit that flies its set on both sides of its epoch gives a different record than 0.6.58 did: different fitted elements, so different
+states from the record. Those are the fits whose epoch is not the first state of the fit interval (fit_oem.inc, `epoch_placement`): an arc under
+24 hours on a block that is not eccentric (the epoch is the arc's last state, the arc before it, the held-out and carried states after it), the
+hand-over fit (OUTPUT.START_TIME without STOP_TIME: the epoch is the arc's last state, the later states held out), and the diagnostic placements of
+`sdnap_fit_epoch_diagnostic` (the middle state, the last). A fit with the default placement, the epoch at the first state, flies its set forward from
+the epoch only, and its record is the same bytes as 0.6.58's: the catalog fit to a forecast from the cutoff (0 to 120 h; 84 stored cases of seven
+classes), the conversion of a set's own SGP4 flight from 2.5 days before its epoch to 5 days after (20 sets), and, by the placement rule, the
+carried-forecast and covariance flights of such a fit. Measured on the 12 h arcs of the carried classes (`test/lib/carried.mjs`): the four AP classes
+change, the eight SGP4-XP classes do not; the largest element changes are 1.4e-5 degrees of mean anomaly (LEO 300 km), 3.7e-6 m^2/kg of AGOM (LEO
+830 km) and 1.3e-8 degrees of argument of perigee (GEO), and the two records' flights over the carried day differ by up to 7.3 mm (LEO 300 km), 7.1 mm
+(LEO 830 km), 0.16 mm (MEO) and 0.08 mm (GEO). No command in this repository prints these figures; the digests of `test/epoch-carried-pool.e2e.mjs`
+(the fitted records' bytes, and the states flown from them) are pinned apart for it.
+
+An AP state in this module is a function of its set and its time alone (0.6.18): the order of requests,
 the call they come in (one epoch, the first state of a call, a state inside a batch), the sets flown before or between
 them, whether the covariance is asked, and the path (`propagate`, `propagate_epochs`, the epoch store's exports) leave its
 bits unchanged, with one exception stated below. What makes it so:
@@ -1669,11 +1684,12 @@ bits unchanged, with one exception stated below. What makes it so:
   So a state near the three mean motions where the builder changes (0.006, 0.015 and 0.035 rad/min) moved with the order
   of requests, by up to 0.285 m (0.015 rad/min, 1e-7 above). Against the earlier states asked in ascending order it is
   now at most 14.3 mm (0.015), 5.8 mm (0.006) and 2.5 mm (0.035), and unchanged elsewhere.
-  Through 0.6.57 a third thing followed the state asked first: the bracket's identity was the set and the lower node's
+  Through 0.6.58 a third thing followed the state asked first: the bracket's identity was the set and the lower node's
   index alone, which is 0 for both the bracket after the epoch and the bracket before it, and the drag-pass segment above
   e 0.3 was kept under the lower node's time alone, the epoch's for both. A state asked after another state on the other
   side of the epoch inside the first bracket kept the bakes of the other bracket, so it differed from the same state of
-  the set asked once. Largest differences by class: a decaying set (perigee 200 km, BTERM 0.01) 714 mm, a transfer orbit
+  the set asked once. Largest differences by class (this checkout with the two old keys put back, `STATE_PURITY_AS_0_6_56=1`
+  `node test/state-purity.e2e.mjs`; the pairs are the mirrored pairs at the first bracket's fractions): a decaying set (perigee 200 km, BTERM 0.01) 714 mm, a transfer orbit
   7.5 mm, e 0.25 1.8 mm, 500 km 0.30 mm, e 0.1 0.22 mm, the 8 h class 0.18 mm, 830 km 0.17 mm, the half-day class 6.5 to
   31 um, geosynchronous with tesseral 31 0.02 um; geosynchronous without tesseral terms was not affected. Every other
   bracket (the second and later on either side) was not. `test/state-purity.e2e.mjs` asks each state of thirteen sets
@@ -1764,7 +1780,8 @@ Three more rules for the pool threads:
 of 1 and 2 (slots replaced inside the batch), then set 2 alone. The store holds SGP4, SGP4XP and AP series, AP on
 NRLMSISE-00 at node heights under and over 325 km and on Jacchia 1970, two force sets and two weather tables
 alternating, covariance on half, and eight wide series flown on the calling thread.
-- The reference is each series alone on the calling thread. Its digest is the one sdn-ap 0.6.57 gives.
+- The reference is each series alone on the calling thread. Its digest is the one sdn-ap 0.6.59 gives; it differs from
+  0.6.58's for the series flown on both sides of their epoch (the medium-orbit series at 18 h).
 - On 0, 1, 4 and 15 threads, in slices of 100 series, and with each building thread's scratch and its half-day
   evaluation cache's values poisoned before every set: every state and status byte equals the reference. Every state is
   answered.
@@ -1823,10 +1840,14 @@ The pool and the memory (stack #487). A threaded batch grows nothing, and a pool
   - Through 0.6.58 an AP set that was asked on both sides of its epoch before could answer a different state here (its
     bake caches used one id for the brackets on both sides of the set's epoch, 9): under a millimeter in every class
     measured (500 km, 830 km, medium orbit, geosynchronous, eccentric: 0 to 0.13 mm) except strong drag, where one of
-    eight sets with perigee under about 350 km differed by 49.7 mm and, on a time-ordered flight across the epoch, a
-    decaying set by up to 0.7 m (9). 0.6.59 removes it.
+    eight sets with perigee under about 350 km differed by 49.7 mm (asked every second for 81,000 s across its epoch,
+    against a fresh instance; no command of this repository prints the 49.7 mm). On a time-ordered flight of 300 states
+    across the epoch the same kind of difference is up to 0.51 mm at 500 km and 57 um for the decaying set (measured
+    on the states after the crossing, this checkout with the two old keys put back). 0.6.59 removes it.
   - Which sets are refused their caches and which series are deferred depend on the threads' timing; no state does.
-    Two runs of the same calls give the same states, serially, on any number of threads.
+    Two runs of the same calls give the same states, serially, on any number of threads, while one thread flies a given
+    set at a time (a set above e 0.3 stays on the calling thread: epoch_store.inc, wide_series), apart from the exception
+    above (a record that carries a covariance, through `propagate`).
 - A pool thread runs a chunk only once its own memory.size covers the size published for the batch. Its claim read the
   batch's total, which was stored after that size, so it reads that size.
 - Outside a batch only the calling thread grows the memory, so its view is its own. The one exception is a pool

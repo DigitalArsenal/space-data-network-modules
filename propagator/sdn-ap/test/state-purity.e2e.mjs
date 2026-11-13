@@ -17,20 +17,26 @@
 //   asserted), each set's state against the cold set;
 // - fifty medium-orbit objects asked at three times, at eight others and at the first three again, at 1 MB and at the default budget;
 // - the decaying set past its decay crossing: refused with status 4 (decayed), cold and after other asks;
-// - the two mechanisms of the defect this test was written for, each put back in a build of this checkout's sources: the
-//   bracket's id and the drag-pass segment's key. Each build must fail the mirrored pairs, and the id build must give the
-//   two first brackets one id where this checkout's sources give two.
+// - the two mechanisms of the defect this test was written for, each put back in a build of this checkout's sources (OLD_ID,
+//   OLD_DRAG_KEY): the bracket's id and the drag-pass segment's key. Each build must fail the mirrored pairs and the
+//   time-ordered flight of the sets named for it (the id: 500 km, half-day class e 0.005, e 0.1, the transfer orbit; the key:
+//   Molniya, the transfer orbit), and the id build must give the two first brackets one id where this checkout's sources give
+//   two. The id build must also fail the pool block and the fifty-object case. The sets that cannot discriminate under the old
+//   id (geosynchronous with and without tesseral terms, Molniya) are not negative controls for it.
 // Sets: 500 and 830 km, half-day class at e 0.005 and 0.02, the 8 h and 16 h classes, geosynchronous with and without
 // tesseral 31, e 0.1 and 0.25, a transfer orbit, a Molniya orbit, a decaying set. H is the first bracket's length on
 // each side of the epoch (a test-build probe reads it). The caches' purity is a property of the module's sources, so
-// the builds are made from this checkout. The test-build probe also counts the calls of drag_pass_rates whose window did
-// not hold the time just bracketed (one thread flies a set at a time, so it is 0).
-// A full run builds 4 modules (about 12 s each) and opens about 1,850 module instances (a fresh instance takes
-// milliseconds); it measured 72 s on one busy core.
+// the builds are made from this checkout. The test-build probe also counts the calls of drag_pass_rates and those whose
+// window did not hold the time just bracketed (one thread flies a set at a time, so none): a guard on determinism, not a
+// proof of the key; it is read on the single-thread builds and on the pool build, and the calls are asserted above zero for
+// the sets above e 0.3.
+// A full run builds 7 modules (about 12 s each) and opens 3,635 module instances (a fresh instance takes
+// milliseconds); it measured 92 s on one busy core.
 //   node test/state-purity.e2e.mjs
-// STATE_PURITY_AS_0_6_56=1 runs it on this checkout's sources with the two mechanisms put back (it fails, printing for each
-// set how far the second state of a pair is from the cold set: the sizes by class of the defect); STATE_PURITY_DECAY_BTERM=b
-// sets the decaying set's BTERM (its size follows the drag).
+// STATE_PURITY_AS_0_6_56=1 runs it on this checkout's sources with the two mechanisms put back (this checkout with OLD_ID and
+// OLD_DRAG_KEY, which is 0.6.56's behavior in these two keys; it fails, printing for each set how far the second state of a
+// pair is from the cold set: the sizes by class of the defect); STATE_PURITY_DECAY_BTERM=b sets the decaying set's BTERM (its
+// size follows the drag).
 // Control and partial runs: STATE_PURITY_PATCH names a module whose default export maps source file names to text
 // transforms (a control build: one mechanism changed at a time), applied to every build; STATE_PURITY_SETS=a,b limits the
 // sets to those names (a substring each); STATE_PURITY_QUICK=1 asks fewer fractions. Such a run is partial: it says so and
@@ -106,7 +112,8 @@ const probeSeam = (text) => {
 const PROBE_EXPORTS =
   'SDNAP_EXPORT("sdnap_test_cache_budget") uint32_t sdnap_test_cache_budget(uint32_t mb) { return sdnap::xpt::cache_budget_mb(mb); }\n' +
   'SDNAP_EXPORT("sdnap_test_anchor") void sdnap_test_anchor(double* o) { for (int k = 0; k < 6; ++k) o[k] = sdnap::xpt::g_test_anchor[k]; }\n' +
-  'SDNAP_EXPORT("sdnap_test_drag_pass_misses") double sdnap_test_drag_pass_misses() { return static_cast<double>(sdnap::xpt::g_drag_pass_window_misses); }\n';
+  'SDNAP_EXPORT("sdnap_test_drag_pass_misses") double sdnap_test_drag_pass_misses() { return static_cast<double>(__atomic_load_n(&sdnap::xpt::g_drag_pass_window_misses, __ATOMIC_RELAXED)); }\n' +
+  'SDNAP_EXPORT("sdnap_test_drag_pass_calls") double sdnap_test_drag_pass_calls() { return static_cast<double>(__atomic_load_n(&sdnap::xpt::g_drag_pass_calls, __ATOMIC_RELAXED)); }\n';
 const probeFile = buildDiagnostic("state-purity-probe", PROBE_EXPORTS, (s) => probeSeam(patchTheory(s)), patchOthers);
 let instances = 0;
 const startedAt = Date.now();
@@ -133,6 +140,7 @@ async function open(file, { budgetMb = 0 } = {}) {
     stats: () => { const p = x.sdnap_alloc(64); x.sdnap_cache_stats(p); const o = Array.from(mem().subarray(p / 8, p / 8 + 8)); x.sdnap_free(p); return o; },
     anchor: () => { x.sdnap_test_anchor?.(probe); return Array.from(mem().subarray(probe / 8, probe / 8 + 6)); },
     misses: () => (x.sdnap_test_drag_pass_misses ? x.sdnap_test_drag_pass_misses() : null),
+    calls: () => (x.sdnap_test_drag_pass_calls ? x.sdnap_test_drag_pass_calls() : null),
     series: (i) => { const p = x.sdnap_alloc(24); x.sdnap_epochs_series(i, p, 0, 0); const o = Array.from(mem().subarray(p / 8, p / 8 + 3)); x.sdnap_free(p); return o; },
   };
 }
@@ -186,6 +194,7 @@ for (const name of names) {
   // from one first bracket before the epoch to one after it, in time order; every 12th state after the crossing is compared with its cold state
   const flight = Array.from({ length: 300 }, (_, k) => ms(-Hb + (k + 0.5) * (Hb + Hf) / 300));
   const flightSamples = flight.filter((t, k) => t > EPOCH && k % 12 === 0);
+  kept.get(name).flight = flight;
   for (const t of flightSamples) if (!ref.has(t)) { ref.set(t, await cold(shippedFile, [rec], 0, 0, t)); check(isState(ref.get(t)), `${name}: a cold reference of the flight is not a state`); }
   check(flightSamples.length >= 10, `${name}: ${flightSamples.length} states of the flight compared after the crossing`);
   const orders = {
@@ -211,8 +220,12 @@ for (const name of names) {
       let nCompared = 0;
       for (const t of times_) { const got = m.at(idx, 0, t), r = ref.get(t); check(isState(got), `${name}, ${mode} caches, ${label}: a state asked is not a state (status ${got[0]})`); if (r === undefined) continue; ++nCompared; if (!same(got, r)) { ++differ; maxM = Math.max(maxM, sizeM(got, r)); } }
       compared.set(name, (compared.get(name) ?? 0) + nCompared);
-      const missed = m.misses();
-      if (missed !== null) check(missed === 0, `${name}, ${mode} caches, ${label}: ${missed} calls of drag_pass_rates whose window did not hold the time just bracketed (one thread flies a set at a time: 0 expected)`);
+      const missed = m.misses(), called = m.calls();
+      if (missed !== null) {
+        check(missed === 0, `${name}, ${mode} caches, ${label}: ${missed} calls of drag_pass_rates whose window did not hold the time just bracketed (one thread flies a set at a time: 0 expected)`);
+        // the zero is not a function never reached: a set above e 0.3 reaches drag_pass_rates (its flights here are on both sides of the epoch)
+        if (o.e > 0.3 && label.startsWith("flight")) check(called > 0, `${name}, ${mode} caches, ${label}: drag_pass_rates was called ${called} times (above 0 expected for a set above e 0.3)`);
+      }
       report[mode][label] = { differ, of: times_.length, maxM };
       // the mode is what it says: with room the set's asks use its own caches (none refused), at 1 MB behind forty other sets some are on the thread's
       const refused = m.stats()[5] + m.stats()[6];
@@ -279,7 +292,7 @@ if (!Object.keys(PATCH).length) {
     ["the bracket id of 0.6.56 (the lower node's index: one id for the brackets before and after the epoch)", OLD_ID, ["500 km", "half-day e 0.005", "e 0.1", "transfer orbit"]],
     ["the drag-pass key of 0.6.56 (the lower node's time alone)", OLD_DRAG_KEY, ["Molniya", "transfer orbit"]],
   ];
-  let controlRuns = 0;
+  let controlRuns = 0, flightDiffer = 0;
   for (const [what, transform, setNames] of controls) {
     const file = buildDiagnostic("state-purity-control", PROBE_EXPORTS, (s) => probeSeam(transform(s)));
     for (const name of setNames) {
@@ -299,7 +312,13 @@ if (!Object.keys(PATCH).length) {
       }
       check(differ > 0, `control build, ${what}: ${name}'s mirrored pairs all equal the cold set, so this test does not see the mechanism`);
       console.log(`control, ${what}: ${name}: ${differ} of 12 states of the mirrored pairs differ from the cold set`);
+      // the time-ordered flight across the epoch, in the same control build: its states after the crossing against the cold set
+      const fm = await open(file); await fm.load([k.rec]);
+      for (const t of k.flight) { const got = fm.at(0, 0, t), r = k.ref.get(t); if (r !== undefined && !same(got, r)) ++flightDiffer; }
     }
+    check(flightDiffer > 0, `control build, ${what}: the time-ordered flights of ${setNames.join(", ")} all equal the cold sets, so the flight does not see the mechanism`);
+    console.log(`control, ${what}: ${flightDiffer} states of the time-ordered flights differ from the cold sets`);
+    flightDiffer = 0;
   }
   check(controlRuns === 6, `${controlRuns} control runs, expected 6 (four sets on the id build, two on the drag-pass build)`);
 }
@@ -380,17 +399,21 @@ if (!Object.keys(PATCH).length) {
   // shuffled; the sets' states against the cold set asked once. Run twice: with the room the batches need reserved, and with every growth of the
   // memory inside a batch refused (a series that needed one is refused on its lane and flown again on the calling thread, which must be counted)
   const POOL_EXPORTS =
-    "static uint32_t g_test_deferred_n = 0;\n" +
-    "void sdnap_test_deferred(uint32_t k) { (void)k; ++g_test_deferred_n; }\n" +
+    "static uint32_t g_test_deferred_n = 0, g_test_deferred_at[4096];\n" +
+    "void sdnap_test_deferred(uint32_t k) { if (g_test_deferred_n < 4096) g_test_deferred_at[g_test_deferred_n] = k; ++g_test_deferred_n; }\n" +
     'SDNAP_EXPORT("sdnap_test_pool_mode") void sdnap_test_pool_mode(int32_t refuse) { sdnap::pool::g_reserve_off = refuse != 0; }\n' +
-    'SDNAP_EXPORT("sdnap_test_deferred_count") uint32_t sdnap_test_deferred_count() { return g_test_deferred_n; }\n';
+    'SDNAP_EXPORT("sdnap_test_deferred_count") uint32_t sdnap_test_deferred_count() { return g_test_deferred_n; }\n' +
+    'SDNAP_EXPORT("sdnap_test_deferred_series") uint32_t sdnap_test_deferred_series(uint32_t* out) { const uint32_t n = g_test_deferred_n < 4096 ? g_test_deferred_n : 4096; for (uint32_t q = 0; q < n; ++q) out[q] = g_test_deferred_at[q]; return n; }\n' +
+    'SDNAP_EXPORT("sdnap_test_drag_pass_misses") double sdnap_test_drag_pass_misses() { return static_cast<double>(__atomic_load_n(&sdnap::xpt::g_drag_pass_window_misses, __ATOMIC_RELAXED)); }\n' +
+    'SDNAP_EXPORT("sdnap_test_drag_pass_calls") double sdnap_test_drag_pass_calls() { return static_cast<double>(__atomic_load_n(&sdnap::xpt::g_drag_pass_calls, __ATOMIC_RELAXED)); }\n';
   const sortLine = "    std::sort(deferred, deferred + n);\n";
   const epochStore = (t) => {
     const at = t.indexOf(sortLine);
     if (at < 0 || t.indexOf(sortLine, at + 1) >= 0) throw new Error("the deferral's sort line is not exactly once in epoch_store.inc");
     return "void sdnap_test_deferred(uint32_t k);\n" + t.replace(sortLine, () => sortLine + "    for (int32_t q = 0; q < n; ++q) sdnap_test_deferred(a + deferred[q]);\n");
   };
-  const poolFile = buildDiagnostic("state-purity-pool", POOL_EXPORTS, patchTheory, { ...patchOthers, "epoch_store.inc": epochStore });
+  const buildPool = (name, theory) => buildDiagnostic(name, POOL_EXPORTS, theory, { ...patchOthers, "epoch_store.inc": epochStore });
+  const poolFile = buildPool("state-purity-pool", patchTheory);
   const kinds = names.map((n) => ORBITS[n]);
   const sets = kinds.map((o, k) => recordOf(o, k, { norad: 92000 + k }));
   const others = Array.from({ length: 47 }, (_, k) => recordOf(ORBITS["500 km"], 200 + k, { norad: 92100 + k }));
@@ -400,8 +423,10 @@ if (!Object.keys(PATCH).length) {
   const sample = flight.filter((t, k) => k % 3 === 1);
   const refs = sets.map(() => new Map());
   for (let k = 0; k < sets.length; ++k) for (const t of sample) { const r = await coldBlend(shippedFile, [sets[k]], 0, t); refs[k].set(t, r.slice(1)); check(isBlend([0, ...r.slice(1)]), `pool: ${names[k]}: a cold reference is not a state`); }
-  for (const refuse of [false, true]) {
-    const h = await createStandaloneHarness("browser", poolFile, { surface: "direct", maxThreads: 4, enableBrowserWasiThreads: true });
+  // one pass: the store on `file` at 4 threads, the flight and the shuffled flight; returns what it counted. `control`: a build with a mechanism put back, whose states are
+  // counted and not asserted
+  const poolPass = async (file, refuse, control) => {
+    const h = await createStandaloneHarness("browser", file, { surface: "direct", maxThreads: 4, enableBrowserWasiThreads: true });
     const x = h.instance.exports;
     check(x.sdnap_threads(4) === 4, "pool: 4 threads not granted");
     const r = await h.invoke({ methodId: "load_epochs", inputs: [{ portId: "ocm", typeRef: T("OCM"), payload: Buffer.concat(all.map(prefixed)) }] });
@@ -409,6 +434,7 @@ if (!Object.keys(PATCH).length) {
     const count = all.length, out = x.sdnap_alloc(48 * count), status = x.sdnap_alloc(4 * count), stats = x.sdnap_alloc(128);
     x.sdnap_test_pool_mode(refuse ? 1 : 0);
     const index = new Map(); { const p = x.sdnap_alloc(24); for (let i = 0; i < count; ++i) { x.sdnap_epochs_series(i, p, 0, 0); index.set(new Float64Array(h.memory.buffer, p, 3)[0], i); } x.sdnap_free(p); }
+    let differTotal = 0;
     const asks = async (label, order) => {
       let differ = 0, compared = 0, worstM = 0;
       for (const t of order) {
@@ -421,23 +447,43 @@ if (!Object.keys(PATCH).length) {
           ++compared; if (!same(got, ref)) { ++differ; worstM = Math.max(worstM, got[0] !== ref[0] ? Infinity : Math.max(...[1, 2, 3].map((q) => Math.abs(got[q] - ref[q]))) * 1000); }
         }
       }
-      note("pool, 4 threads", refuse ? "no reserve" : "reserved", label, differ, compared, worstM);
-      check(differ === 0, `pool on 4 threads, ${refuse ? "every growth in a batch refused" : "room reserved"}, ${label}: ${differ} of ${compared} states differ from the cold set (largest ${fmt(worstM)})`);
+      differTotal += differ;
+      if (!control) {
+        note("pool, 4 threads", refuse ? "no reserve" : "reserved", label, differ, compared, worstM);
+        check(differ === 0, `pool on 4 threads, ${refuse ? "every growth in a batch refused" : "room reserved"}, ${label}: ${differ} of ${compared} states differ from the cold set (largest ${fmt(worstM)})`);
+      }
       return compared;
     };
     const n1 = await asks("time-ordered flight across the epoch", flight);
     const n2 = await asks("the same times shuffled", shuffle(flight));
-    compared.set("pool", (compared.get("pool") ?? 0) + n1 + n2);
     x.sdnap_pool_stats(stats, 16);
     const pool = Array.from(new Float64Array(h.memory.buffer, stats, 16)), deferred = x.sdnap_test_deferred_count();
-    check(pool[1] > 0 && pool[14] > 0 && pool[15] >= 2, `pool, ${refuse ? "no reserve" : "reserved"}: batches ${pool[1]}, rows on pool threads ${pool[14]}, pool threads with rows ${pool[15]} (some, and at least two threads, expected)`);
-    if (refuse) check(pool[2] > 0 && pool[3] > 0 && deferred > 0, `pool, no reserve: refusals ${pool[2]}, deferrals ${pool[3]}, series flown again on the calling thread ${deferred} (all above 0 expected)`);
-    else check(pool[2] === 0 && pool[3] === 0 && deferred === 0, `pool, room reserved: refusals ${pool[2]}, deferrals ${pool[3]}, series flown again ${deferred} (0 expected)`);
-    console.log(`pool, 4 threads, ${refuse ? "every growth in a batch refused" : "room reserved"}: ${n1 + n2} states of ${sets.length} sets equal to the cold set; ${pool[1]} batches, ${pool[14]} rows on ${pool[15]} pool threads, refusals ${pool[2]}, deferrals ${pool[3]}, flown again on the calling thread ${deferred} series`);
+    const at = x.sdnap_alloc(4 * 4096), n = x.sdnap_test_deferred_series(at), deferredSeries = new Set(Array.from(new Uint32Array(h.memory.buffer, at, n)));
+    const deferredSets = sets.map((_, k) => k).filter((k) => deferredSeries.has(index.get(92000 + k)));
+    return { n: n1 + n2, differ: differTotal, pool, deferred, deferredSets, misses: x.sdnap_test_drag_pass_misses(), calls: x.sdnap_test_drag_pass_calls() };
+  };
+  for (const refuse of [false, true]) {
+    const { n, pool, deferred, deferredSets, misses, calls } = await poolPass(poolFile, refuse, false);
+    compared.set("pool", (compared.get("pool") ?? 0) + n);
+    const which = refuse ? "no reserve" : "reserved";
+    check(pool[1] > 0 && pool[14] > 0 && pool[15] >= 2, `pool, ${which}: batches ${pool[1]}, rows on pool threads ${pool[14]}, pool threads with rows ${pool[15]} (some, and at least two threads, expected)`);
+    if (refuse) {
+      check(pool[2] > 0 && pool[3] > 0 && deferred > 0, `pool, no reserve: refusals ${pool[2]}, deferrals ${pool[3]}, series flown again on the calling thread ${deferred} (all above 0 expected)`);
+      // a deferred series is one of the compared sets, and its state is the cold set's (asserted above for every compared set)
+      check(deferredSets.length > 0, "pool, no reserve: none of the thirteen compared sets was among the deferred series");
+    } else check(pool[2] === 0 && pool[3] === 0 && deferred === 0, `pool, room reserved: refusals ${pool[2]}, deferrals ${pool[3]}, series flown again ${deferred} (0 expected)`);
+    check(misses === 0 && calls > 0, `pool, ${which}: ${misses} calls of drag_pass_rates whose window did not hold the time, of ${calls} calls (0 of some expected)`);
+    console.log(`pool, 4 threads, ${refuse ? "every growth in a batch refused" : "room reserved"}: ${n} states of ${sets.length} sets equal to the cold set; ${pool[1]} batches, ${pool[14]} rows on ${pool[15]} pool threads, refusals ${pool[2]}, deferrals ${pool[3]}, flown again on the calling thread ${deferred} series (${deferredSets.length} of the compared sets: ${deferredSets.map((k) => names[k]).join(", ") || "none"}); drag_pass_rates ${calls} calls, ${misses} misses`);
+  }
+  if (!Object.keys(PATCH).length) {
+    // negative controls: the bracket's id of 0.6.58 put back in a build of this checkout's sources: the flight on four threads must differ from the cold sets
+    const control = await poolPass(buildPool("state-purity-pool-control", (s) => OLD_ID(patchTheory(s))), false, true);
+    check(control.differ > 0, "control build (the old bracket id): the pooled flights equal the cold sets, so the pool block does not see the mechanism");
+    console.log(`control, the old bracket id: ${control.differ} of ${control.n} pooled states differ from the cold sets`);
   }
 }
 {
-  // the frames lane's case: fifty medium-orbit objects (the half-day, 8 h and 16 h classes, varying a little) asked at three times, then at other times, then the
+  // fifty medium-orbit objects (the half-day, 8 h and 16 h classes, varying a little) asked at three times, then at other times, then the
   // first three again, at a 1 MB cache budget (sets are reclaimed between) and at the default; every revisit and every state against the object alone in a cold store
   const N = 50;
   let bs = 20261115;
@@ -450,16 +496,37 @@ if (!Object.keys(PATCH).length) {
   const coldOf = [];
   for (let k = 0; k < N; ++k) { const m = new Map(); for (const t of [...first, ...others2]) m.set(t, await asked(shippedFile, [recs[k]], (q) => q.at(0, 0, t))); coldOf.push(m); }
   check(coldOf.every((m) => [...m.values()].every(isState)), "fifty medium-orbit objects: a cold reference is not a state");
-  for (const [label, file, mb] of [["default budget", shippedFile, 0], ["1 MB", probeFile, 1]]) for (const objectMajor of [false, true]) {
+  const fiftyRun = async (file, mb, objectMajor) => {
     const m = await open(file, { budgetMb: mb }); await m.load(recs);
     const index = new Map(); for (let i = 0; i < N; ++i) index.set(m.series(i)[0], i);
     let differ = 0, worstM = 0, n = 0;
     const one = (k, t) => { const g = m.at(index.get(93000 + k), 0, t), r = coldOf[k].get(t); ++n; if (!same(g, r)) { ++differ; worstM = Math.max(worstM, sizeM(g, r)); } };
     if (objectMajor) for (let k = 0; k < N; ++k) for (const t of sequence) one(k, t);
     else for (const t of sequence) for (let k = 0; k < N; ++k) one(k, t);
+    const st = m.stats();
+    return { differ, worstM, n, refused: st[4] + st[5] + st[6] };
+  };
+  for (const [label, file, mb] of [["default budget", shippedFile, 0], ["1 MB", probeFile, 1]]) for (const objectMajor of [false, true]) {
+    const { differ, worstM, n, refused } = await fiftyRun(file, mb, objectMajor);
     note("fifty medium-orbit objects", label, objectMajor ? "object by object" : "time by time", differ, n, worstM);
     check(differ === 0, `fifty medium-orbit objects at ${label}, ${objectMajor ? "object by object" : "time by time"} (three times, eight others, the first three again): ${differ} of ${n} states differ from the object alone in a cold store (largest ${fmt(worstM)})`);
-    console.log(`fifty medium-orbit objects, ${label}, ${objectMajor ? "object by object" : "time by time"}: ${differ} of ${n} states differ from the object alone (largest ${fmt(worstM)})`);
+    // the budget is what it says: at 1 MB sets are reclaimed or refused room, at the default none
+    check(mb > 0 ? refused > 0 : refused === 0, `fifty medium-orbit objects at ${label}: ${refused} sets reclaimed or refused room (${mb > 0 ? "some" : "none"} expected)`);
+    console.log(`fifty medium-orbit objects, ${label}, ${objectMajor ? "object by object" : "time by time"}: ${differ} of ${n} states differ from the object alone (largest ${fmt(worstM)}); ${refused} reclaimed or refused room`);
+  }
+  // the asks bracket the epoch as the case says: for each class, -1 h and 0.5 h lie inside the first bracket on each side (the anchor probe)
+  for (const [q, nClass] of classes.entries()) {
+    const k = q;  // object k is of class k % 3
+    const sides = await asked(probeFile, [recs[k]], (m) => ({ before: (m.at(0, 0, EPOCH - 60 * MIN), m.anchor()), after: (m.at(0, 0, EPOCH + 30 * MIN), m.anchor()) }));
+    check(sides.before[0] === 1 && sides.before[3] === 0 && Math.abs(sides.before[4]) > 60 && sides.after[0] === 1 && sides.after[3] === 0 && sides.after[4] > 30,
+      `fifty medium-orbit objects, class n ${nClass}: -1 h and 0.5 h are not inside the first bracket on each side of the epoch (before ${sides.before.slice(3, 5)}, after ${sides.after.slice(3, 5)})`);
+  }
+  if (!Object.keys(PATCH).length) {
+    // negative control: the old bracket id in a build of this checkout's sources; the revisits must differ from the objects alone
+    const control = buildDiagnostic("state-purity-control-fifty", PROBE_EXPORTS, (s) => probeSeam(OLD_ID(s)));
+    const { differ, n } = await fiftyRun(control, 0, false);
+    check(differ > 0, "control build (the old bracket id): the fifty medium-orbit objects all equal their cold states, so the case does not see the mechanism");
+    console.log(`control, the old bracket id: ${differ} of ${n} states of the fifty objects differ from the objects alone`);
   }
 }
 // every set was flown and compared; a partial run (a set filter, a patched build, the quick fractions) says so

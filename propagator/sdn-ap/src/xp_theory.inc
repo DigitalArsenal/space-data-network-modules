@@ -1760,9 +1760,14 @@ inline void srp_rates(const double* /*y*/, const Frame& fr, const Kepler& k, con
 
 struct XpSat;
 
+/// A set's context id. The tesseral anchor's id keeps its low 32 bits beside the bracket's index (set_sp_anchor), and 0 means "not on a
+/// bracket", so a value whose low 32 bits are 0 is skipped: the ids two sets share are 2^32 initializations apart.
 inline uint64_t next_ctx_id() {
   static uint64_t next = 1;
-  return __atomic_fetch_add(&next, 1, __ATOMIC_RELAXED);
+  uint64_t id;
+  do id = __atomic_fetch_add(&next, 1, __ATOMIC_RELAXED);
+  while (static_cast<uint32_t>(id) == 0u);
+  return id;
 }
 
 /// A set's branch (SPEC 16.7, 17.7): the switches its epoch mean motion n0 (rad/min) and eccentricity e0 decide once, for
@@ -7282,8 +7287,11 @@ inline bool report_rates(const XpSat& s, double t, const double* y, double* f) {
   XpSat* x = static_cast<XpSat*>(sdnap::mem::calloc(1, sizeof(XpSat)));
   if (x == nullptr) return false;
   const atm::Atmosphere* prev_atm = atm::active();
+  const auto prev_terms = tess::active();
   atm::active() = s.ctx.atmosphere;
+  tess::active() = s.ctx.selected_terms;  // the new set takes the terms selected on this thread (xp_init): the reporting set's own
   const bool ok = xp_init(e, *x) == kPropOk;
+  tess::active() = prev_terms;
   atm::active() = prev_atm;
   if (ok)
     for (int j = 0; j < 6; ++j) f[j] = x->epoch.f[j];
@@ -7339,7 +7347,8 @@ inline bool wide_node(XpSat& s, int j, tess::WideGrid*& out, bool& held) {
 /// state there (the state that time's output flies). kPoints evaluations serve every state of the segment; the largest
 /// difference from drag_part at every state is stated by test/kernel-cost.mjs --diff. False (the state evaluates its own)
 /// at the epoch, when the window does not bracket t, or when a point of the segment falls in another revolution.
-inline thread_local uint64_t g_drag_pass_window_misses = 0;  ///< calls whose window did not hold the time mean_at had just bracketed (a test reads it)
+inline uint64_t g_drag_pass_window_misses = 0;  ///< calls, on every thread, whose window did not hold the time mean_at had just bracketed (a test reads it)
+inline uint64_t g_drag_pass_calls = 0;          ///< calls of drag_pass_rates past its first test, on every thread (a test reads it, so that a zero above is not a function never reached)
 inline bool drag_pass_rates(XpSat& s, double t, const double* y, DragPassRates& out) {
   if (t == 0.0) return false;
   const Frame fr = frame_of(y);
@@ -7349,18 +7358,21 @@ inline bool drag_pass_rates(XpSat& s, double t, const double* y, DragPassRates& 
   constexpr int K = DragPassCache::kPoints;
   const int di = t >= 0.0 ? 0 : 1;
   const double dir = t >= 0.0 ? 1.0 : -1.0;
+  __atomic_fetch_add(&g_drag_pass_calls, 1u, __ATOMIC_RELAXED);
   lock(&s.lock);
   const bool valid = s.window_valid[di] != 0;
   const Node lo = s.window[di][0], hi = s.window[di][1];
   unlock(&s.lock);
   // The window is the bracket mean_at just left for this time, read again here after mean_at released the set's lock. That holds
-  // while one thread flies a set at a time: the row store's batch gives each row, so each set, to one thread, and a set above
-  // e 0.3 (the only one this function serves) is never flown on a pool lane by the epoch store. A set flown by two threads at once
-  // (such a set put on lanes, or two rows sharing a set) could find the window moved to another bracket, and the state would then
-  // come from drag_part and not from the segment polynomial: a function of the interleaving. The count below is that case; the
-  // state-purity test asserts it stays 0.
+  // while one thread flies a set at a time. The argument is by reading the code: this function serves a set above e 0.3 only
+  // (drag_pass is set under wide_e), a set above e 0.3 is a wide_tess set (e0 > 0.3 implies e0 > 0.05 and e0 > 0.3, the two
+  // thresholds), and the epoch store keeps every series holding a wide_tess set on the calling thread (epoch_store.inc,
+  // wide_series); the row store's batch gives each row, so each set, to one thread. A set flown by two threads at once could find
+  // the window moved to another bracket, and the state would then come from drag_part and not from the segment polynomial: a
+  // function of the interleaving. The count of such calls is below; the state-purity test reads it, with the count of calls, as a
+  // guard on determinism, not as a proof of the key.
   if (!valid || !(dir * lo.t <= dir * t && dir * t < dir * hi.t)) {
-    ++g_drag_pass_window_misses;
+    __atomic_fetch_add(&g_drag_pass_window_misses, 1u, __ATOMIC_RELAXED);
     return false;
   }
   // the revolution's perigee time and period from the bracket's lower node, the same for every state of the revolution

@@ -2,24 +2,40 @@
 
 ## 0.6.59 — An AP set's state is a function of the set and the time
 
-On every release through 0.6.58, an AP set asked at a time after another time on the other side of its epoch, inside the first bracket either side, answered a state that
-differed from the same state asked once: the bracket after the epoch and the bracket before it shared one identity (the set's context and the lower node's index, 0 for both)
+**Fits that fly their set on both sides of its epoch give different records than on 0.6.58**: different fitted elements, so different states from the record. Those are the fits whose
+epoch is not the first state of the fit interval (fit_oem.inc, the epoch placement): an arc under 24 hours on a block that is not eccentric (the epoch is the arc's last state; the arc is
+before it, the held-out and carried states after it), the hand-over fit (OUTPUT.START_TIME without STOP_TIME: the epoch is the arc's last state, the later states held out), and the diagnostic
+placements of `sdnap_fit_epoch_diagnostic` (the middle state, the last). A fit with the default placement, the epoch at the first state, flies its set forward from the epoch only and its record
+is the same bytes as 0.6.58's: the catalog fit to a forecast from the cutoff (0 to 120 h; 84 stored cases of seven classes, byte for byte), the conversion of a set's own SGP4 flight from 2.5 days
+before its epoch to 5 days after (20 sets, byte for byte), and the carried-forecast and covariance flights of such a fit. Measured on the 12 h arcs of the carried classes of `test/lib/carried.mjs`, 0.6.58
+against this build: the four AP classes change (LEO 300 km, LEO 830 km, MEO, GEO), the eight SGP4-XP classes do not; the largest element changes are 1.4e-5 degrees of mean anomaly (LEO 300 km), 3.7e-6 m²/kg of
+AGOM (LEO 830 km) and 1.3e-8 degrees of argument of perigee (GEO), and the two records' flights over the carried day differ by up to 7.3 mm (LEO 300 km), 7.1 mm (LEO 830 km), 0.16 mm (MEO) and 0.08 mm (GEO).
+No command in this repository prints these figures; the digests of `test/epoch-carried-pool.e2e.mjs` (the fitted records' bytes and the states flown from them, pinned apart) are what moved with them.
+
+What moves besides: on every release through 0.6.58, an AP set asked at a time after another time on the other side of its epoch, inside the first bracket either side, answered a state that
+differed from the same state asked once. The bracket after the epoch and the bracket before it shared one identity (the set's context and the lower node's index, 0 for both)
 in the tesseral and m-daily bake caches, and the drag-pass segment above e 0.3 was kept under the lower node's time alone, the epoch's for both. A time-ordered flight that
-crosses the epoch, which a catalog set asked at a clock time ahead of its epoch does, is such a series. Largest differences by class: a decaying set 714 mm, a transfer
-orbit 7.5 mm, e 0.25 1.8 mm, 500 km 0.30 mm, e 0.1 0.22 mm, 830 km 0.17 mm, half-day class 6.5 to 31 um, geosynchronous with tesseral 31 0.02 um; strong-drag sets with
-perigee under about 350 km up to 49.7 mm on the pooled path (0.6.58). The bracket's identity is now the set's context and the smaller of its two nodes' indexes (signed by
-side), and the drag-pass segment is kept under both nodes' times and the perigee time. A state no longer depends on what the set was asked before, on the caches it flew
-with, on the thread or on the order of the calls (SPEC 9). A set asked only after its epoch is unchanged to the bit. `test/state-purity.e2e.mjs` is the test.
+crosses the epoch, which a catalog set asked at a clock time ahead of its epoch does, is such a series. Largest differences by class (this checkout with the two old keys put back; `STATE_PURITY_AS_0_6_56=1 node test/state-purity.e2e.mjs` prints them):
+a decaying set (perigee 200 km, BTERM 0.01) 714 mm, a transfer orbit 7.5 mm, e 0.25 1.8 mm, 500 km 0.30 mm, e 0.1 0.22 mm, the 8 h class 0.18 mm, 830 km 0.17 mm, half-day class 6.5 to 31 um
+(a blend of two sets 86 um), the 16 h class 31 um, Molniya 0.47 um, geosynchronous with tesseral 31 0.02 um, geosynchronous without tesseral terms none; strong-drag sets with perigee under about 350 km up to
+49.7 mm on the pooled path of 0.6.58 (no command of this repository prints the 49.7 mm). The bracket's identity is now the set's context and the smaller of its two nodes' indexes (signed by
+side), and the drag-pass segment is kept under both nodes' times and the perigee time.
+
+What does not move: a state of a set asked only after its epoch is the same bits (`node test/kernel-cost.mjs --diff` on 132 flights, in time order, in reverse and shuffled, and the replay of the 942 stored
+AP records with their covariance, which no command of this repository runs, against 0.6.56's wasm; against 0.6.58's: see the stamp). A state no longer depends on what the set was asked before, on the caches it flew
+with, or on the order of the calls (SPEC 9), on any number of threads while one thread flies a given set at a time (a set above e 0.3 stays on the calling thread), except the exception SPEC 9 states (a record that carries a covariance,
+flown through `propagate`). Each flown set holds 16 more bytes: the drag-pass cache grows from 768 to 784 bytes (1.6 MB at 100,000 flown sets).
+`test/state-purity.e2e.mjs` is the test; `test/epoch-pool.e2e.mjs` and `test/epoch-carried-pool.e2e.mjs` have the digests of this release.
 
 ## 0.6.58 — The epoch store's first pass on the pool; the memory grown in steps of 4 MiB
 
 `sdnap_epochs_at` without a covariance plane builds and flies each series' sets on the pool's threads, one thread a series, in chunks of 16 series, and every
 state and status is the calling thread's to the bit, but for the case below. A series holding a wide set (AP above e 0.05 in no resonance class, above e 0.3 in one) and a call with a
 covariance plane stay on the calling thread. A call runs in slices of at most 4,096 series, each reserving its room before its batch; no memory grows inside a
-batch, and a series that needed a growth is computed again on the calling thread. Such a series, or a set refused its caches inside a batch, answered a
-different state in 0.6.58 when it was an AP set that had been asked on both sides of its epoch before (one cache id for the brackets on both sides of a set's epoch; fixed in 0.6.59):
-under a millimeter in every class measured but strong drag, where 49.7 mm was measured on one of eight sets with perigee under about
-350 km. Which series are deferred depends on the threads' timing, so two runs of the same calls could differ by that much (SPEC 9). `sbrk` keeps the allocator's break and grows the memory by at least 4 MiB at a
+batch, and a series that needed a growth is computed again on the calling thread. Such a series, or a set refused its caches inside a batch, can answer a
+different state when it is an AP set that was asked on both sides of its epoch before (one cache id for the brackets on both sides of a set's epoch; pull
+request 86 removes it): under a millimeter in every class measured but strong drag, where 49.7 mm was measured on one of eight sets with perigee under about
+350 km. Which series are deferred depends on the threads' timing, so two runs of the same calls can differ by that much (SPEC 9). `sbrk` keeps the allocator's break and grows the memory by at least 4 MiB at a
 time, never serving pages a host grew. A pool thread's stack is 256 KiB, 192 KiB more of the instance a thread. `sdnap_pool_stats(out, count)` takes the number of
 doubles the caller has room for and writes at most 16 (among them the memory's growths, the epoch store's halved and serial slices, and the rows run on pool
 threads). After a batch taken for dead, `load_epochs` and `load_epochs_open` refuse `pool-dead` while a pool thread is active, leaving the store in place, and
