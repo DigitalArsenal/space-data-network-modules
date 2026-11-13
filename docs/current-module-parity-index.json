@@ -1,5 +1,5 @@
 {
-  "generatedAt": "2026-11-12T19:57:30.555Z",
+  "generatedAt": "2026-11-13T00:05:10.691Z",
   "moduleCount": 160,
   "parityScopeModuleCount": 60,
   "isomorphicWasmCount": 154,
@@ -7525,7 +7525,7 @@
       ],
       "cxxSourceFileCount": 1,
       "cSourceFileCount": 0,
-      "testFileCount": 200,
+      "testFileCount": 203,
       "parityScope": true,
       "action": "review-before-parity-use",
       "sourceFiles": [
@@ -7644,6 +7644,7 @@
         "test/lib/synthetic-truth.mjs",
         "test/lib/tess-frame-windows.mjs",
         "test/lib/tle.mjs",
+        "test/lib/zonal-long-period-truth.mjs",
         "test/long-period-moon-output.e2e.mjs",
         "test/long-period-perigee-step.e2e.mjs",
         "test/long-period-radiation.e2e.mjs",
@@ -7731,6 +7732,8 @@
         "test/vendor/orbit-accuracy-experiments-c89f2bc/harness/records.mjs",
         "test/vendor/orbit-accuracy-experiments-c89f2bc/harness/truth-gate.mjs",
         "test/wasmedge-parity.mjs",
+        "test/zonal-long-period-table.e2e.mjs",
+        "test/zonal-long-period.e2e.mjs",
         "test/zonal-radius-term.e2e.mjs"
       ]
     },
