@@ -1,11 +1,12 @@
 #!/usr/bin/env node
 // SPEC 19.6: the bytes of the frames at 100,000 objects. Two catalogs: the load probe's recipe (85 % low near-circular, 5 % medium, 5 % geosynchronous,
-// 5 % eccentric below 0.05) and the public catalog's shares (92.1 % of its objects served, the rest wide). Seeded sets with epochs spread over one window, so each
+// 5 % eccentric below 0.05) and the public catalog's shares (92.1 % of its objects have eccentricity at or under 0.05 and are served here; the rest are wide). Seeded sets with epochs spread over one window, so each
 // object's grid is anchored at its own epoch. Each catalog is loaded in parts of 1,000, the frames opened with the budget SPEC 19.6 states as a rule (850 bytes for
 // each object served, 32 bytes for each series, 1 MiB), every object filled at one instant, then the windows turned over (48 minutes in steps of one).
 // Asserted: the open grows the instance by the block and no more than 4 MiB; a full fill grows it by no more than 4 MiB (a thread's caches, made once);
 // every object the entry serves is served; no row is refused for room through the turn of the windows; the slab used stays under the stated figure; on the
-// recipe the instance, with the stored load of 100,000 sets with covariance (180,486,144 bytes), is under 300 MB decimal; the objects not served answer 2.
+// catalog the instance, the stored load of 100,000 sets with covariance (180,486,144 bytes) plus what open and the fill added here, is under 300 MB decimal;
+// the objects not served answer 2.
 // A run with another count is PARTIAL: it prints PARTIAL and exits 2, unless FRAMES_PARTIAL=1 (exit 0, still printing PARTIAL).
 //   node test/frames-memory.e2e.mjs   (about 7 minutes, 3 GB of the host's memory)
 import assert from "node:assert/strict";
@@ -72,10 +73,13 @@ for (const [name, plan] of Object.entries(plans)) {
   assert.equal(sf[STAT.full], 0, "no row refused for room while the windows turn over");
   assert.ok(sf[STAT.used] <= PER_SERVED * served, `slab used ${sf[STAT.used]} B after the windows turned over: over the stated ${PER_SERVED} B an object served`);
   out[name].afterTurn = { slabUsed: sf[STAT.used], bytesPerServed: +(sf[STAT.used] / served).toFixed(1), cells: sf[STAT.cells], cellBytes: sf[STAT.cellBytes], slackShare: +((sf[STAT.used] - 64 - sf[STAT.cellBytes]) / sf[STAT.used]).toFixed(4), compactions: sf[STAT.compactions], moved: sf[STAT.moved] };
-  const total = STORED_LOAD_BYTES + budget + (afterFill - afterOpen);
+  // the instance of a 100,000-set load with covariance holds STORED_LOAD_BYTES; this test's seeded records carry none, so its own load (afterLoad) is smaller:
+  // the instance a host holds is the stored load plus what open and the fill added to this one, measured here
+  assert.ok(afterLoad <= STORED_LOAD_BYTES * (N / FULL), `this test's load (${afterLoad} B) is not the smaller of the two`);
+  const total = STORED_LOAD_BYTES * (N / FULL) + (afterFill - afterLoad);
   out[name].totalWithStoredLoad = total;
   console.log(`${name}: slab used after a full turn of the windows ${sf[STAT.used]} B (${(sf[STAT.used] / served).toFixed(1)} B an object served), cells ${sf[STAT.cells]}, their own bytes ${sf[STAT.cellBytes]}; with the stored load ${(total / 1e6).toFixed(1)} MB`);
-  if (name === "recipe" && N === FULL) assert.ok(total < 300e6, `the recipe's instance ${total} B is not under 300 MB decimal`);
+  if (N === FULL) assert.ok(total < 300e6, `the ${name} instance ${total} B is not under 300 MB decimal`);
   f.close();
 }
 console.log(JSON.stringify(out));

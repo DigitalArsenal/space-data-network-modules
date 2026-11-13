@@ -23,6 +23,9 @@ export const KINDS = {
   crit: { hp: 700, e: 0.001, serves: true, incs: [63.4] }, polar: { hp: 700, e: 0.001, serves: true, incs: [90] }, retro: { hp: 700, e: 0.001, serves: true, incs: [140] },
   wide: { hp: 500, e: 0.3, serves: false }, decay: { hp: 170, e: 0.0005, serves: false, drag: true },  // `decay`: served at first, then AP refuses it
   shortrows: { hp: 600, e: 0.001, serves: true, rowsFrom: "2026-10-14" },  // weather rows from the day before the epoch: AP refuses two days before the epoch
+  // resonance-class sets above eccentricity 0.05 (1, 2 and 3 revolutions a day): served, the wide branch begins at 0.3 for them
+  geoE10: { hp: 31570, e: 0.1, serves: true, fixedE: true, incs: [5] }, res2E20: { hp: 14870, e: 0.2, serves: true, fixedE: true, incs: [55] }, res3E10: { hp: 11900, e: 0.1, serves: true, fixedE: true, incs: [55] },
+  underground: { hp: -230, e: 0.0005, serves: false, fixedE: true, incs: [55], refuses: true },  // 18 revolutions a day: the set loads and AP refuses it at every time
 };
 
 /** A seeded population: `plan` is a list of [kind, count]; norad ascending in plan order (the store's series order). `spreadMinutes`: epochs spread over that many minutes. */
@@ -37,7 +40,7 @@ export function population(plan, seed = 20261113, spreadMinutes = 0) {
       const a = (RE + spec.hp) / (1 - e);
       const incs = spec.incs ?? [20, 55, 70, 98];
       const inc = incs[Math.floor(rnd() * incs.length)];
-      const o = { kind, norad: 300000 + out.length, e, a, inc, raan: rnd() * 360, argp: rnd() * 360, ma: rnd() * 360, serves: spec.serves, drag: !!spec.drag, rowsFrom: spec.rowsFrom ?? null, epochOffsetMs: 0 };
+      const o = { kind, norad: 300000 + out.length, e, a, inc, raan: rnd() * 360, argp: rnd() * 360, ma: rnd() * 360, serves: spec.serves, drag: !!spec.drag, refuses: !!spec.refuses, rowsFrom: spec.rowsFrom ?? null, epochOffsetMs: 0 };
       if (spreadMinutes > 0) o.epochOffsetMs = Math.floor(rnd() * spreadMinutes * 60000);  // the epochs of a catalog are spread; each object's grid is anchored at its own
       out.push(o);
     }
@@ -76,14 +79,14 @@ export async function openFrames({ wasm = wasmPath, initialMemoryBytes, threads 
       if (priority.length) { p = x.sdnap_alloc(4 * priority.length); new Uint32Array(mem(), p, priority.length).set(priority); }
       if (failAt) x.sdnap_test_fail_at(failAt);  // armed after the host's own allocation: the call's own counted allocations are counted from here
       const rc = x.sdnap_frames_refill(w, f, aheadSeconds, maxRows, p, priority.length, result);
-      const r = Array.from(new Int32Array(mem(), result, 6));
+      const r = Array.from(new Int32Array(mem(), result, 7));
       if (p) x.sdnap_free(p);
-      return { rc, left: [r[0], r[1]], stored: r[2], tombstones: r[3], unstored: r[4], visits: r[5], due: r[0] + r[1] };
+      return { rc, left: [r[0], r[1]], stored: r[2], tombstones: r[3], unstored: r[4], visits: r[5], stalled: r[6], due: r[0] + r[1] };
     },
-    /** refill until a call leaves nothing to visit or stores nothing; returns the last result and the number of calls */
+    /** the host's loop of SPEC 19.1: continue while something is due and not (a row could not be stored and the call stored nothing); returns the last result and the number of calls */
     fill(ms, aheadSeconds = 180, maxRows = 5000, priority = []) {
       let calls = 0, r;
-      do { r = api.refill(ms, aheadSeconds, maxRows, priority); calls++; } while (r.due > 0 && r.stored + r.tombstones > 0);
+      do { r = api.refill(ms, aheadSeconds, maxRows, priority); calls++; } while (r.rc === 0 && r.due > 0 && !(r.unstored > 0 && r.stored + r.tombstones === 0));
       return { ...r, calls };
     },
     /** frames_at: { rc, status: Int32Array copy, planes: Float64Array copy (6 x count, or 3 x count with the position-only flag) } */

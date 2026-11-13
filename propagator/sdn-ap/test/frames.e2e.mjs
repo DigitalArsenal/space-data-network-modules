@@ -1,16 +1,19 @@
 #!/usr/bin/env node
 // SPEC 19, the frames: Chebyshev cells of AP's own states, served by sdnap_frames_*. Each assertion states one outcome (and counts, so that a run in which
 // nothing is served cannot pass):
-//  - the bound: for a seeded population of 25 objects across the regime (inclinations 0.3 to 140 degrees, eccentricity to 0.05, epochs spread over a day,
-//    strong drag, a decaying set, weather rows that start a day before the epoch), every served state is within 1 cm and 1e-4 m/s of AP's own, scanned
-//    every second over a day at 0 and 5 days from the epoch and every 17 s over a day at -1, 2 and 10 days (the build tolerance is 5 mm and 5e-5 m/s);
+//  - the bound: for a seeded population of 31 objects across the regime (27 served kinds, 2 wide, 2 the set AP refuses) (inclinations 0.3 to 140 degrees, eccentricity to 0.05, resonance-class sets to 0.2,
+//    epochs spread over a day, strong drag, decaying sets, weather rows that start a day before the epoch, a set AP refuses), every served state is within
+//    1 cm (3-D) and 1e-4 m/s (3-D) of AP's own, in every class, strong drag and decay included, scanned every second over a day at 0 and 5 days from the epoch
+//    and every 17 s over a day at -1, 2 and 10 days; a window that cannot meet it is a tombstone, and the edges of windows and the epoch instant are checked;
 //  - a status depends on the record and the time alone: AP's refusal before the epoch does not reach the times after it; refused and failing windows are tombstones;
-//  - purity: two instances that fill their cells in different orders, with different cadences and a jump of the clock, return the same bits and statuses;
+//  - purity: two instances that fill their cells in different orders, with different cadences and a jump of the clock, return the same bits and statuses; an
+//    instance that asks the epoch store in the order that moves AP's own states between its refills returns the cells of a clean instance;
 //    sdnap_epochs_at (TEME and Earth-fixed), sdnap_epochs_set_at (every set) and propagate_epochs are not changed by refills, in a threaded instance as well;
 //  - what the entry does not serve (wide, several sets, a forecast, a hand-over, a stock set) answers "not served by this entry" after a refill;
 //  - the slab: refused open by name and a refused open leaves the earlier frames standing; a slab filled to the figure of its own run survives turns of windows
-//    whose cells change size (compaction); a refill sliced at 8 rows stores the bits of one at 5,000, visiting each object once;
-//  - position-only mode writes three planes; every counted allocation of open and of a refill row failed in turn.
+//    whose cells change size (compaction); a refill sliced at 8 rows stores the bits of one at 5,000 and visits each object once; a clock that advances at every
+//    call serves every object; a changed priority list restarts the sweep;
+//  - position-only mode writes three planes and halves like the full mode; every counted allocation of open and of a refill row failed in turn.
 // The module under test is the one SDNAP_WASM names (the committed dist by default): build it first (SDM_MODULE_UNSIGNED_BUILD=1 node build.mjs).
 import assert from "node:assert/strict";
 import { buildDiagnostic, failureSeam, failureProbe } from "./lib/ap-diagnostic.mjs";
@@ -23,13 +26,14 @@ import { CLASSES, harness, carriedRecord } from "./lib/carried.mjs";
 process.env.SDM_MODULE_UNSIGNED_BUILD = "1";
 delete process.env.SDM_MODULE_SIGNING_KEYPAIR_PATH;
 const PLAN = [["leo500", 3], ["leo830", 2], ["leo1400", 2], ["drag300", 3], ["drag250", 1], ["ecc", 2], ["ecc05", 1], ["meo", 2], ["geo", 1], ["eqgeo", 1], ["crit", 1], ["polar", 1], ["retro", 1],
-  ["shortrows", 1], ["wide", 2], ["decay", 2]];
+  ["geoE10", 1], ["res2E20", 1], ["res3E10", 1], ["shortrows", 1], ["wide", 2], ["decay", 2], ["underground", 2]];
 const POP = population(PLAN, 20261113, 1440);
-assert.equal(POP.length, 26);
+assert.equal(POP.length, 31);
 const BUDGET = 8e6;
-const POS_BOUND = 0.01, VEL_BOUND = 1e-4;  // m, m/s
+const POS_BOUND = 0.01, VEL_BOUND = 1e-4;  // m (3-D), m/s (3-D)
 const iso = (ms) => new Date(ms).toISOString().replace("Z", "");
 const finish = (name, t0) => console.log(`${name}: ${((Date.now() - t0) / 1000).toFixed(0)} s`);
+const dist3 = (a, b, o, n, i) => Math.hypot(a[o] - b[o * n + i], a[o + 1] - b[(o + 1) * n + i], a[o + 2] - b[(o + 2) * n + i]);  // km or km/s, ap array against a plane array
 const T_START = Date.now();
 
 // ---------------------------------------------------------------------------------------------------------------- the bound
@@ -40,12 +44,15 @@ const T_START = Date.now();
   assert.equal(f.count, POP.length);
   assert.equal(f.open(BUDGET), 0);
   const kindOf = POP.map((o) => o.kind);
-  const strict = new Set(["leo500", "leo830", "leo1400", "ecc", "ecc05", "meo", "geo", "eqgeo", "crit", "polar", "retro"]);
+  const strict = new Set(["leo500", "leo830", "leo1400", "ecc", "ecc05", "meo", "geo", "eqgeo", "crit", "polar", "retro", "geoE10", "res2E20", "res3E10"]);
   const drag = new Set(["drag300", "drag250"]);
-  let totalServed = 0, decayAll = 0, dragAll = 0;
+  let totalServed = 0, worstAll = 0, worstVelAll = 0, coldChecked = 0;
+  const worstByKind = {}, tombstonePoints = {}, warmWorst = {}, shareKind = {};
+  const hasDragPass = new Set(["drag300", "drag250", "decay"]);
+  const cold = await openFrames();
   for (const [day, stride] of [[0, 1], [5, 1], [-1, 17], [2, 17], [10, 17]]) {
-    const t0s = EPOCH_MS + day * DAY + 5000 + 86400000 * 0;
-    let worstPos = 0, worstVel = 0, worstAt = "", decayWorst = 0, dragWorst = 0;
+    const coldEvery = stride === 1 ? 61 : 5;
+    const t0s = EPOCH_MS + day * DAY + 5000;
     const served = new Array(f.count).fill(0), asked = new Array(f.count).fill(0), refused = new Array(f.count).fill(0);
     for (let s = 0; s < 86400; s += stride) {
       const t = t0s + s * 1000;
@@ -56,49 +63,90 @@ const T_START = Date.now();
         const kind = kindOf[i];
         asked[i]++;
         if (kind === "wide") { assert.equal(q.status[i], STATUS.notServedHere, `wide object ${i} at ${s} s`); continue; }
+        if (kind === "underground") { assert.equal(q.status[i], STATUS.apRefuses, `a set AP refuses answers 3 at every time (object ${i})`); assert.equal(f.ap(i, t), null); refused[i]++; continue; }
         if (q.status[i] === STATUS.served) {
           served[i]++;
           const a = f.ap(i, t);
           assert.ok(a, `AP refuses where a frame is served: ${kind} ${i} at day ${day} + ${s} s`);
-          for (let c = 0; c < 3; c++) {
-            const dp = Math.abs(a[c] - q.planes[c * f.count + i]) * 1000, dv = Math.abs(a[3 + c] - q.planes[(3 + c) * f.count + i]) * 1000;
-            if (kind === "decay") { decayWorst = Math.max(decayWorst, dp); continue; }  // AP's own output steps by centimeters in the last hours before decay (SPEC 19.5)
-            if (drag.has(kind)) { dragWorst = Math.max(dragWorst, dp); worstVel = Math.max(worstVel, dv); continue; }  // strong drag: AP's own output steps by up to 10 mm
-            if (dp > worstPos) worstAt = `${kind} ${i} at ${s} s`;
-            worstPos = Math.max(worstPos, dp);
-            worstVel = Math.max(worstVel, dv);
+          const dp = dist3(a, q.planes, 0, f.count, i) * 1000, dv = dist3(a, q.planes, 3, f.count, i) * 1000;
+          if (!hasDragPass.has(kind)) {
+            assert.ok(dp <= POS_BOUND, `${kind} ${i} at day ${day} + ${s} s: ${dp} m from AP's state (3-D)`);
+            assert.ok(dv <= VEL_BOUND, `${kind} ${i} at day ${day} + ${s} s: ${dv} m/s from AP's velocity (3-D)`);
+            worstByKind[kind] = Math.max(worstByKind[kind] ?? 0, dp);
+            worstAll = Math.max(worstAll, dp); worstVelAll = Math.max(worstVelAll, dv);
+          } else {
+            // AP's own state in strong drag depends on how it was asked (SPEC 19.4): the asserted reference is AP asked cold at that time (a fresh instance, one ask),
+            // the comparison with AP asked every second is reported
+            warmWorst[kind] = Math.max(warmWorst[kind] ?? 0, dp);
+            if ((s / stride) % coldEvery === 0) {
+              await cold.load([POP[i]]);
+              const c = cold.ap(0, t);
+              assert.ok(c, `AP asked cold refuses where a frame is served: ${kind} ${i}`);
+              const cp = dist3(c, q.planes, 0, f.count, i) * 1000, cv = dist3(c, q.planes, 3, f.count, i) * 1000;
+              assert.ok(cp <= POS_BOUND, `${kind} ${i} at day ${day} + ${s} s: ${cp} m from AP asked cold (3-D)`);
+              assert.ok(cv <= VEL_BOUND, `${kind} ${i} at day ${day} + ${s} s: ${cv} m/s from AP asked cold (3-D)`);
+              worstByKind[kind] = Math.max(worstByKind[kind] ?? 0, cp);
+              worstAll = Math.max(worstAll, cp); worstVelAll = Math.max(worstVelAll, cv);
+              coldChecked++;
+            }
           }
         } else {
           assert.ok([STATUS.apRefuses, STATUS.builderFails].includes(q.status[i]), `object ${i} (${kind}) at day ${day} + ${s} s answered status ${q.status[i]}: after a refill every time is served or a tombstone`);
           refused[i]++;
+          tombstonePoints[kind] = (tombstonePoints[kind] ?? 0) + 1;
+          if (q.status[i] === STATUS.apRefuses) {  // AP refuses somewhere in the 3-minute window that holds the time (SPEC 19.1)
+            let refuses = false;
+            for (let k = -18; k <= 18 && !refuses; k++) refuses = f.ap(i, t + k * 10000) === null;
+            assert.ok(refuses, `status 3 for ${kind} ${i} at day ${day} + ${s} s, and AP serves every second within 3 minutes of it`);
+          }
         }
       }
     }
-    assert.ok(worstPos <= POS_BOUND, `day ${day}: worst position ${worstPos} m (${worstAt})`);
-    assert.ok(worstVel <= VEL_BOUND, `day ${day}: worst velocity ${worstVel} m/s`);
-    assert.ok(dragWorst <= 0.015, `day ${day}: the strong-drag sets' worst position ${dragWorst} m`);
-    dragAll = Math.max(dragAll, dragWorst);
-    assert.ok(decayWorst <= 0.05, `day ${day}: the decaying sets' worst position ${decayWorst} m`);
-    decayAll = Math.max(decayAll, decayWorst);
+    for (let i = 0; i < f.count; i++) { shareKind[kindOf[i]] ??= [0, 0]; shareKind[kindOf[i]][0] += served[i]; shareKind[kindOf[i]][1] += asked[i]; }
     for (let i = 0; i < f.count; i++) {
       const kind = kindOf[i];
       if (strict.has(kind)) assert.equal(served[i], asked[i], `object ${i} (${kind}) served at every scanned time of day ${day}`);
       if (drag.has(kind) && day <= 5) assert.ok(served[i] >= 0.95 * asked[i], `object ${i} (${kind}) served at ${served[i]} of ${asked[i]} times of day ${day}`);
-      if (kind === "shortrows") assert.equal(served[i] + refused[i], asked[i]);
+      // the set with short rows: AP serves it from the midnight that begins the rows' coverage; the 3-minute window that holds that midnight is a tombstone (SPEC 19.3)
+      if (kind === "shortrows") assert.ok(day >= 0 ? served[i] >= asked[i] - Math.ceil(180 / stride) : served[i] === 0, `the set with short rows is served from its first covered midnight on and refused before it (day ${day}: ${served[i]} of ${asked[i]})`);
       totalServed += served[i];
     }
     const nServedObjects = served.filter((v) => v > 0).length;
-    assert.ok(nServedObjects >= 18,`${nServedObjects} objects served on day ${day}`);
-    // the decaying sets: served while AP serves them, tombstones where it refuses
-    if (day >= 5) POP.forEach((o, i) => { if (o.kind === "decay") assert.ok(refused[i] > 0, `decaying set ${i} reaches a tombstone by day ${day}`); });
-    console.log(`bound day ${day}: ${served.reduce((a, b) => a + b, 0)} served points, worst ${worstPos.toExponential(2)} m, ${worstVel.toExponential(2)} m/s`);
+    assert.ok(nServedObjects >= 21, `${nServedObjects} objects served on day ${day}`);
+    console.log(`bound day ${day}: ${served.reduce((a, b) => a + b, 0)} served points`);
   }
   assert.ok(totalServed > 1.5e6, `${totalServed} served points in all`);
-  console.log(`the strong-drag sets (perigee 250 and 300 km): worst position ${dragAll.toExponential(2)} m against the bound of 1.5 cm`);
-  console.log(`the decaying sets: worst position ${decayAll.toExponential(2)} m while served (the 1 cm bound is not promised in the last hours before decay)`);
   const st = f.stats();
   assert.ok(st[STAT.apTombstones] > 0, "the decaying sets leave AP-refusal tombstones");
+  assert.ok(coldChecked > 2000, `${coldChecked} strong-drag points compared with AP asked cold`);
+  console.log(`share of the scanned times served: ${JSON.stringify(Object.fromEntries(["drag300", "drag250", "decay", "leo500", "ecc", "shortrows"].map((k) => [k, +(shareKind[k][0] / shareKind[k][1]).toFixed(4)])))}`);
+  console.log(`strong drag and decay: ${coldChecked} points against AP asked cold; against AP asked every second the worst is ${JSON.stringify(Object.fromEntries(Object.entries(warmWorst).map(([k, v]) => [k, +(v).toExponential(2)])))} m`);
+  console.log(`worst 3-D position ${(worstAll).toExponential(2)} m, velocity ${worstVelAll.toExponential(2)} m/s; by kind ${JSON.stringify(Object.fromEntries(Object.entries(worstByKind).map(([k, v]) => [k, +v.toExponential(2)])))}; points answered by a tombstone ${JSON.stringify(tombstonePoints)}`);
   finish("bound", t0);
+}
+
+// ---------------------------------------------------------------------------------------------------------------- the epoch instant and the edges of windows
+{
+  const t0 = Date.now();
+  const pop = population([["leo500", 2], ["drag300", 2], ["meo", 1], ["geo", 1]], 3, 0);
+  const f = await openFrames();
+  await f.load(pop);
+  assert.equal(f.open(BUDGET), 0);
+  let worst = 0, checked = 0;
+  for (const [ms, label] of [[0, "the epoch"], [48 * 60000 - 1, "the end of the first window"], [48 * 60000 + 1, "the start of the second"], [96 * 60000 - 1, "the end of the second"],
+    [-1, "just before the epoch"], [-48 * 60000, "the start of the window before the epoch"], [3 * 60000 + 1, "the start of the second 3-minute step"]]) {
+    f.fill(EPOCH_MS + ms, 0);
+    const q = f.at(EPOCH_MS + ms);
+    for (let i = 0; i < f.count; i++) {
+      assert.equal(q.status[i], STATUS.served, `${label}: object ${i}`);
+      const a = f.ap(i, EPOCH_MS + ms);
+      const d = dist3(a, q.planes, 0, f.count, i) * 1000;
+      assert.ok(d <= POS_BOUND, `${label}: object ${i} ${d} m`);
+      worst = Math.max(worst, d); checked++;
+    }
+  }
+  console.log(`edges: ${checked} states at the epoch and at window edges, worst ${worst.toExponential(2)} m`);
+  finish("edges", t0);
 }
 
 // ---------------------------------------------------------------------------------------------------------------- a status depends on the record and the time alone
@@ -121,18 +169,48 @@ const T_START = Date.now();
   assert.ok(a.ap(0, fwd) !== null);
   assert.deepEqual([Array.from(qaBack.status), Array.from(qaFwd.status)], [Array.from(qbBack.status), Array.from(qbFwd.status)], "the same statuses whatever the order");
   for (let q = 0; q < qaFwd.planes.length; q++) assert.ok(Object.is(qaFwd.planes[q], qbFwd.planes[q]), "the same bits whatever the order");
+  // every time from the epoch on is served where AP serves it
+  let servedAfter = 0;
+  for (let m = 0; m < 600; m += 7) {
+    const t = epoch + m * 60000;
+    a.fill(t, 180);
+    const s = a.at(t).status[0];
+    assert.equal(s, STATUS.served, `shortrows at ${m} min after the epoch`);
+    servedAfter++;
+  }
+  assert.ok(servedAfter > 80);
   // a time before the epoch that AP serves is served
   const near = epoch - 12 * 3600e3;
   a.fill(near, 180);
   const qn = a.at(near);
   assert.equal(qn.status[1], STATUS.served, "a time before the epoch is served like one after it");
-  for (let c = 0; c < 3; c++) assert.ok(Math.abs(a.ap(1, near)[c] - qn.planes[c * 2 + 1]) * 1000 <= POS_BOUND);
-  // a tombstone is not rebuilt: a second refill at the same time builds nothing
+  assert.ok(dist3(a.ap(1, near), qn.planes, 0, 2, 1) * 1000 <= POS_BOUND);
+  // a tombstone is not rebuilt: a second sweep builds nothing
   a.fill(back, 180);
-  const again = a.refill(back, 181);  // another sweep: the tombstone and the cells that cover the time are not rebuilt
+  const again = a.refill(back, 181);
   assert.equal(again.stored + again.tombstones, 0);
   assert.equal(a.at(back).status[0], STATUS.apRefuses);
   finish("status by record and time", t0);
+}
+
+// ---------------------------------------------------------------------------------------------------------------- a window that ends at a coverage cliff
+{
+  const t0 = Date.now();
+  const f = await openFrames();
+  const pop = population([["leo500", 1]], 8, 0);  // the epoch is a UTC midnight: every 48-minute window ends on one when it is a multiple of 30
+  await f.load(pop);
+  assert.equal(f.open(BUDGET), 0);
+  // the first midnight after which AP refuses: the end of the weather rows
+  let cliff = 0;
+  for (let d = 40; d < 70 && !cliff; d++) { const m = EPOCH_MS + d * DAY; if (f.ap(0, m - 1000) !== null && f.ap(0, m + 1000) === null) cliff = m; }
+  assert.ok(cliff > 0, "the weather rows end at a midnight");
+  for (const lead of [90 * 1000, 60 * 1000, 20 * 1000]) {
+    f.fill(cliff - lead, 0);
+    const q = f.at(cliff - lead);
+    assert.equal(q.status[0], STATUS.served, `${lead / 1000} s before the end of the rows`);
+    assert.ok(dist3(f.ap(0, cliff - lead), q.planes, 0, 1, 0) * 1000 <= POS_BOUND);
+  }
+  finish("coverage cliff", t0);
 }
 
 // ---------------------------------------------------------------------------------------------------------------- what the entry does not serve; the existing exports
@@ -165,13 +243,13 @@ const T_START = Date.now();
   };
   const before = snapshot();
   assert.equal(f.open(BUDGET), 0);
-  const eligible = f.stats()[STAT.eligible];
-  assert.equal(eligible, 2, "only the two plain AP sets can be served");
+  assert.equal(f.stats()[STAT.eligible], 2, "only the two plain AP sets can be served");
   const t = EPOCH_MS + 0.5 * DAY;
   const r = f.fill(t, 180);
-  assert.ok(r.stored >= 0 && r.calls >= 1);
+  assert.equal(r.due, 0);
   const q = f.at(t);
-  assert.deepEqual(Array.from(q.status), [STATUS.served, STATUS.served, ...[2, 2, 2, 2, 2]], "wide, two sets, stock, hand-over and forecast answer 'not served by this entry'");
+  assert.deepEqual(Array.from(q.status), [STATUS.served, STATUS.served, 2, 2, 2, 2, 2], "wide, two sets, stock, hand-over and forecast answer 'not served by this entry'");
+  assert.ok(Array.from(q.planes).slice(0, 2).every(Number.isFinite));
   const after = snapshot();
   assert.equal(after.length, before.length);
   for (let k = 0; k < before.length; k++) {
@@ -204,7 +282,7 @@ const T_START = Date.now();
   assert.equal(a.open(BUDGET), 0);
   assert.equal(b.open(BUDGET), 0);
   const all = Array.from({ length: live.length }, (_, i) => i);
-  let compared = 0, tombstones = 0;
+  let compared = 0;
   for (const day of [0, 5, -1]) {
     const base = EPOCH_MS + day * DAY + 3600e3;
     // a: the clock moves forward a minute at a time, objects in index order; b: three minutes at a time, objects in reverse priority, after a jump away and back
@@ -217,16 +295,13 @@ const T_START = Date.now();
       const qa = a.at(t), qb = b.at(t);
       for (let i = 0; i < live.length; i++) {
         assert.equal(qa.status[i], qb.status[i], `status ${i}`);
-        if (qa.status[i] !== STATUS.served) { if (qa.status[i] >= 3) tombstones++; continue; }
+        if (qa.status[i] !== STATUS.served) continue;
         for (let c = 0; c < 6; c++) assert.ok(Object.is(qa.planes[c * live.length + i], qb.planes[c * live.length + i]), `bits of object ${i} component ${c} at day ${day} minute ${m}`);
         compared++;
       }
-      // no ask of the epoch store between the refills: in this release a later ask at an earlier time moves AP's own states of medium-orbit sets, with no frames
-      // open (the history dependence of AP's flight, known; SPEC 19.4); the store is asked before the first refill and after the last, in the same order
     }
   }
   assert.ok(compared >= 9 * 40, `${compared} served states compared`);
-  assert.ok(tombstones >= 0);
   const after = [];
   for (const t of times) after.push(a.epochsAt(t), a.epochsAt(t, 3));
   for (let k = 0; k < before.length; k++) {
@@ -241,6 +316,46 @@ const T_START = Date.now();
   assert.ok((await a.propagateEpochs(live.slice(0, 6).map((o) => ocmOfObject(o)), isoTimes)).equals(propBefore), "propagate_epochs changed after a refill");
   console.log(`purity: ${compared} served states from two fill orders identical; epochs_at (TEME, Earth-fixed), set_at and propagate_epochs unchanged, the instance threaded, with pool batches before the first refill and after the last`);
   finish("purity", t0);
+}
+
+// ---------------------------------------------------------------------------------------------------------------- cells against AP's own history dependence
+{
+  const t0 = Date.now();
+  // AP's own states of some medium-orbit sets move when the store is asked at an earlier time after later ones (SPEC 19.4). Instance `a` asks the store in that
+  // order between its refills; instance `c` never asks. Their cells, built from cold sets, are compared bit for bit; AP's own shift in `a` is measured.
+  const live = population([["leo500", 20], ["leo830", 10], ["drag300", 6], ["meo", 4], ["geo", 4], ["ecc", 4], ["decay", 2]], 99, 1440);
+  const a = await openFrames({ threads: 4 }), c = await openFrames();
+  await a.load(live); await c.load(live);
+  assert.equal(a.open(BUDGET), 0); assert.equal(c.open(BUDGET), 0);
+  const first = [0.3, 1.7, 5.2].map((d) => EPOCH_MS + d * DAY);
+  const early = first.map((t) => a.epochsAt(t));
+  // the asks that move AP's own medium-orbit states: the store at other times, earlier ones after later ones
+  const trigger = () => { for (const day of [0, 5, -1]) for (const m of [30, 61, 90.5]) a.epochsAt(EPOCH_MS + day * DAY + 3600e3 + m * 60000); };
+  let compared = 0;
+  for (const day of [0, 2, 5]) {
+    const base = EPOCH_MS + day * DAY + 3600e3;
+    for (let m = 0; m <= 90; m += 6) {
+      const t = base + m * 60000;
+      a.refill(t, 180); c.refill(t, 180);
+      trigger();
+    }
+    const t = base + 45 * 60000;
+    a.fill(t, 180); c.fill(t, 180);
+    const qa = a.at(t), qc = c.at(t);
+    assert.deepEqual(Array.from(qa.status), Array.from(qc.status));
+    for (let i = 0; i < live.length; i++) {
+      if (qa.status[i] !== STATUS.served) continue;
+      for (let k = 0; k < 6; k++) assert.ok(Object.is(qa.planes[k * live.length + i], qc.planes[k * live.length + i]), `cell of object ${i} component ${k} differs after the store was asked in the order that moves AP's states`);
+      compared++;
+    }
+  }
+  assert.ok(compared >= 3 * 40);
+  const late = first.map((t) => a.epochsAt(t));
+  let shift = 0, moved = 0, values = 0;
+  early.forEach((e, k) => { for (let q = 0; q < e.planes.length; q++) { values++; const d = Math.abs(late[k].planes[q] - e.planes[q]); if (d > 0) { moved++; shift = Math.max(shift, d); } } });
+  assert.ok(moved > 0, "the asks of this block move AP's own states, as the block's claim needs");
+  console.log(`cells immune: ${compared} served states identical to a clean instance's; AP's own sdnap_epochs_at moved at ${moved} of ${values} values by up to ${(shift * 1000).toExponential(2)} m (planes are km: x 1000)`);
+  finish("cells against AP history dependence", t0);
 }
 
 // ---------------------------------------------------------------------------------------------------------------- the slab: budget, lifetime, compaction, slicing
@@ -261,10 +376,11 @@ const T_START = Date.now();
   assert.equal(f.at(EPOCH_MS).rc, 0, "leaves the earlier frames standing");
   assert.equal(f.open(-1), CODE.badArgument);
   assert.equal(f.open(1e9, 2), CODE.badArgument);
-  const bad = f.refill(NaN);
-  assert.equal(bad.rc, CODE.badArgument);
+  assert.equal(f.refill(NaN).rc, CODE.badArgument);
   assert.equal(f.refill(EPOCH_MS, Infinity).rc, CODE.badArgument);
   assert.equal(f.refill(EPOCH_MS, -1).rc, CODE.badArgument);
+  assert.equal(f.refill(EPOCH_MS, 180, 0).rc, CODE.badArgument, "max_rows under 1");
+  assert.equal(f.refill(EPOCH_MS, 180, 5, Array(f.count + 1).fill(0)).rc, CODE.badArgument, "more priority entries than objects");
   assert.equal(f.at(EPOCH_MS, 0, f.count + 1).rc, CODE.badArgument);
   assert.equal(f.at(EPOCH_MS, 0, 1, 1).rc, CODE.badArgument);
   f.close();
@@ -275,7 +391,7 @@ const T_START = Date.now();
   let q = f.at(t);
   POP.forEach((o, i) => assert.equal(q.status[i], o.kind === "wide" ? STATUS.notServedHere : STATUS.noSegment, `before a refill: ${o.kind}`));
   assert.ok(q.planes.every((v) => Number.isNaN(v)), "the planes of an unserved object are NaN");
-  const first = f.refill(t, 0, 1, [4, 99999]);  // one row, the object the host named first; an index past the end is skipped
+  const first = f.refill(t, 0, 1, [4, 29]);  // one row, the object the host named first
   assert.equal(first.rc, 0);
   assert.equal(first.stored + first.tombstones, 1);
   assert.ok(first.left[0] > 0);
@@ -286,21 +402,31 @@ const T_START = Date.now();
   assert.equal(rest.due, 0);
   q = f.at(t);
   const nServed = q.status.filter((s) => s === STATUS.served).length;
-  assert.ok(nServed >= POP.length - 5,`${nServed} objects served after a full fill`);
+  assert.ok(nServed >= POP.length - 7, `${nServed} objects served after a full fill`);
+  assert.equal(q.status.filter((s) => s === STATUS.apRefuses).length >= 2, true, "the sets AP refuses answer 3");
   // the Earth-fixed frame is AP's, rotated by the same function the epoch store uses
   const ecef = f.at(t, 0, f.count, 3), ref = f.epochsAt(t, 3);
   let ecefChecked = 0;
   for (let i = 0; i < f.count; i++) if (ecef.status[i] === STATUS.served) {
     ecefChecked++;
-    for (let c = 0; c < 6; c++) assert.ok(Math.abs(ecef.planes[c * f.count + i] - ref.planes[c * f.count + i]) <= (c < 3 ? 0.015 : VEL_BOUND), `ECEF ${i} ${c}`);
+    const dp = Math.hypot(ecef.planes[i] - ref.planes[i], ecef.planes[f.count + i] - ref.planes[f.count + i], ecef.planes[2 * f.count + i] - ref.planes[2 * f.count + i]);
+    assert.ok(dp <= POS_BOUND, `ECEF ${i}: ${dp} m`);
   }
   assert.equal(ecefChecked, nServed);
-  // ahead is clamped to one window: a day ahead stores no more than 48 minutes ahead would
+  // `ahead` is clamped to one window: a day ahead stores at most two cells an object
   const g = await openFrames();
   await g.load(POP);
   assert.equal(g.open(BUDGET), 0);
   g.fill(t, 86400);
   assert.ok(g.stats()[STAT.cells] <= 2 * POP.length);
+  // two clocks more than a window apart on one instance take the same two slots: each alternation rebuilds
+  const h = await openFrames();
+  await h.load(population([["leo500", 10]], 9, 0));
+  assert.equal(h.open(BUDGET), 0);
+  h.fill(t, 180);
+  let rebuilt = 0;
+  for (let k = 0; k < 4; k++) { rebuilt += h.fill(t + (k % 2 ? 0 : 3 * DAY), 180).stored > 0 ? 1 : 0; }
+  assert.ok(rebuilt >= 3, "two clocks a window apart rebuild at every alternation: frames serve one clock and its look-ahead to an instance");
   // a load replaces the store: every cell is dropped, the table read again
   await f.load(POP);
   q = f.at(t);
@@ -319,6 +445,7 @@ const T_START = Date.now();
   assert.equal(small.open(small.stats()[STAT.needed]), 0);
   const left = small.refill(t, 0);
   assert.equal(left.unstored, 1, "a row that cannot be stored ends the call");
+  assert.ok(left.stalled >= 0, "and names the object it stalled on");
   assert.ok(small.stats()[STAT.full] >= 1);
   assert.ok(small.at(t).status.some((s) => s === STATUS.noSegment));
   const again = small.refill(t, 0);
@@ -326,16 +453,16 @@ const T_START = Date.now();
   // compaction: a slab sized to the figure of an unconstrained run survives turns of windows whose cells change size
   const popC = population([["leo500", 20], ["leo830", 20], ["meo", 10], ["geo", 10], ["ecc", 10], ["drag300", 10]], 5, 48);
   const run = async (budget) => {
-    const h = await openFrames();
-    await h.load(popC);
-    assert.equal(h.open(budget), 0);
+    const hh = await openFrames();
+    await hh.load(popC);
+    assert.equal(hh.open(budget), 0);
     let maxLive = 0, full = 0, rows = 0;
     for (let m = 0; m <= 24 * 60; m += 3) {
-      const r = h.refill(EPOCH_MS + 3600e3 + m * 60000, 180);
+      const r = hh.refill(EPOCH_MS + 3600e3 + m * 60000, 180);
       full += r.unstored; rows += r.stored + r.tombstones;
-      maxLive = Math.max(maxLive, h.stats()[STAT.cellBytes]);
+      maxLive = Math.max(maxLive, hh.stats()[STAT.cellBytes]);
     }
-    return { h, maxLive, full, rows };
+    return { h: hh, maxLive, full, rows };
   };
   const free = await run(8e6);
   assert.ok(free.rows > 600 && free.full === 0);
@@ -346,52 +473,102 @@ const T_START = Date.now();
   assert.ok(st[STAT.compactions] > 0, "and it was compacted");
   assert.equal(tightRun.rows, free.rows, "the same rows");
   console.log(`compaction: ${st[STAT.compactions]} compactions, ${st[STAT.moved]} bytes moved, slab ${st[STAT.slab]} B, live cells ${free.maxLive} B`);
+  // a slab that cannot hold what a compaction would free does not compact for nothing
+  const noRoom = await openFrames();
+  await noRoom.load(popC);
+  assert.equal(noRoom.open(1), CODE.budgetTooSmall);
+  assert.equal(noRoom.open(noRoom.stats()[STAT.needed] + 1), 0);
+  noRoom.refill(EPOCH_MS + 3600e3, 180);
+  assert.equal(noRoom.stats()[STAT.compactions], 0, "a slab full of live cells is not compacted");
   // a sliced refill stores the bits of one big call, visiting each object once
   const popS = population([["leo500", 60], ["leo830", 40], ["meo", 20], ["geo", 20], ["ecc", 20], ["drag300", 20]], 6, 48);
   const sliced = async (maxRows) => {
-    const h = await openFrames();
-    await h.load(popS);
-    assert.equal(h.open(BUDGET * 2), 0);
+    const hh = await openFrames();
+    await hh.load(popS);
+    assert.equal(hh.open(BUDGET * 2), 0);
     let calls = 0, r;
-    do { r = h.refill(t, 180, maxRows); calls++; } while (r.due > 0);
-    return { h, calls, st: h.stats() };
+    do { r = hh.refill(t, 180, maxRows); calls++; } while (r.due > 0);
+    return { h: hh, calls, st: hh.stats() };
   };
   const s8 = await sliced(8), sBig = await sliced(5000);
   assert.ok(s8.calls >= popS.length / 8 && sBig.calls <= 2);
   const qa = s8.h.at(t), qb = sBig.h.at(t);
   assert.deepEqual(Array.from(qa.status), Array.from(qb.status));
-  for (let q = 0; q < qa.planes.length; q++) assert.ok(Object.is(qa.planes[q], qb.planes[q]), "sliced and unsliced fills store the same bits");
+  assert.ok(qa.status.filter((s) => s === STATUS.served).length >= popS.length - 2, "the sliced fill serves the objects");
+  for (let k = 0; k < qa.planes.length; k++) assert.ok(Object.is(qa.planes[k], qb.planes[k]), "sliced and unsliced fills store the same bits");
   assert.equal(s8.st[STAT.cells], sBig.st[STAT.cells]);
   assert.ok(s8.st[STAT.visits] <= 2 * popS.length + 2 * s8.calls, `${s8.st[STAT.visits]} visits for ${popS.length} objects in ${s8.calls} calls: one pass over the objects however it is sliced`);
   assert.ok(sBig.st[STAT.visits] <= 2 * popS.length + 2 * sBig.calls);
+  // a display's calls: a new clock every call (16 ms on), 8 rows a call: every object is served within 2 N / 8 + a few calls
+  {
+    const d = await openFrames();
+    await d.load(popS);
+    assert.equal(d.open(BUDGET * 2), 0);
+    let calls = 0, tt = t, r;
+    do { r = d.refill(tt, 180, 8); tt += 16; calls++; } while (r.due > 0 && calls < 1000);
+    assert.ok(calls <= (2 * popS.length) / 8 + 4, `${calls} calls with a new clock every call for ${popS.length} objects at 8 rows a call`);
+    assert.ok(d.at(tt).status.filter((s) => s === STATUS.served).length >= popS.length - 2);
+    // a place in the sweep is kept while only the clock advances: the visits stay linear
+    assert.ok(d.stats()[STAT.visits] <= 2 * popS.length + 2 * calls + 4, `${d.stats()[STAT.visits]} visits`);
+    // a changed priority list restarts the sweep: the objects the shorter list skipped are visited
+    const p = await openFrames();
+    await p.load(popS.slice(0, 40));
+    assert.equal(p.open(BUDGET), 0);
+    p.refill(t, 180, 4, [5, 6, 7]);
+    const rest = p.fill(t, 180, 5000, []);
+    assert.equal(rest.due, 0);
+    assert.ok(p.at(t).status.every((s, i) => s === STATUS.served || [2, 3, 4].includes(s)), "every object is served or answers for itself after the list shrank mid-sweep");
+    assert.equal(p.at(t).status.filter((s) => s === STATUS.served).length >= 38, true);
+  }
   finish("slab", t0);
+}
+
+// ---------------------------------------------------------------------------------------------------------------- sets AP refuses never stall a refill
+{
+  const t0 = Date.now();
+  const pop = population([["underground", 4], ["leo500", 4], ["underground", 2], ["leo830", 3]], 33, 0);
+  const f = await openFrames();
+  await f.load(pop);
+  assert.equal(f.open(BUDGET), 0);
+  const t = EPOCH_MS + 3600e3;
+  const r = f.fill(t, 180, 1);
+  assert.equal(r.due, 0, "sets AP refuses are made and answered once, and the others served");
+  const q = f.at(t);
+  pop.forEach((o, i) => assert.equal(q.status[i], o.kind === "underground" ? STATUS.apRefuses : STATUS.served, `${o.kind} ${i}`));
+  assert.equal(f.stats()[STAT.apTombstones], 12, "each of the 6 sets AP refuses at every time holds a tombstone for the window of `now` and one for the window of `now + ahead`");
+  finish("sets AP refuses", t0);
 }
 
 // ---------------------------------------------------------------------------------------------------------------- position only; the builder's own status
 {
   const t0 = Date.now();
-  const pop = population([["leo500", 3], ["leo830", 2], ["geo", 1]], 21, 1440);
+  const pop = population([["leo500", 3], ["leo830", 2], ["geo", 1], ["ecc", 2], ["drag300", 3], ["drag250", 1], ["meo", 1]], 21, 1440);
   const p = await openFrames(), v = await openFrames();
   await p.load(pop); await v.load(pop);
   assert.equal(p.open(BUDGET, 1), 0);
   assert.equal(v.open(BUDGET), 0);
-  const t = EPOCH_MS + 3600e3 + DAY;
-  p.fill(t, 180); v.fill(t, 180);
-  const qp = p.at(t), qv = v.at(t);
-  assert.equal(qp.planes.length, 3 * pop.length, "position-only writes three planes");
-  assert.equal(qv.planes.length, 6 * pop.length);
-  for (let i = 0; i < pop.length; i++) {
-    assert.equal(qp.status[i], STATUS.served);
-    for (let c = 0; c < 3; c++) {
-      assert.ok(Object.is(qp.planes[c * pop.length + i], qv.planes[c * pop.length + i]), "the positions are the same bits with and without velocity");
-      assert.ok(Math.abs(p.ap(i, t)[c] - qp.planes[c * pop.length + i]) * 1000 <= POS_BOUND);
+  for (const dayOffset of [0, 2]) {
+    const t = EPOCH_MS + 3600e3 + dayOffset * DAY;
+    p.fill(t, 180); v.fill(t, 180);
+    const qp = p.at(t), qv = v.at(t);
+    assert.equal(qp.planes.length, 3 * pop.length, "position-only writes three planes");
+    assert.equal(qv.planes.length, 6 * pop.length);
+    assert.deepEqual(Array.from(qp.status), Array.from(qv.status), "both modes halve alike: the same statuses");
+    let compared = 0;
+    for (let i = 0; i < pop.length; i++) {
+      if (qp.status[i] !== STATUS.served) continue;
+      compared++;
+      for (let c = 0; c < 3; c++) assert.ok(Object.is(qp.planes[c * pop.length + i], qv.planes[c * pop.length + i]), "the positions are the same bits with and without velocity");
+      assert.ok(dist3(p.ap(i, t), qp.planes, 0, pop.length, i) * 1000 <= POS_BOUND);
     }
+    assert.ok(compared >= pop.length - 1, `${compared} states compared`);
+    const ecef = p.at(t, 0, pop.length, 3), rv = v.at(t, 0, pop.length, 3);
+    for (let i = 0; i < pop.length; i++) if (qp.status[i] === STATUS.served) for (let c = 0; c < 3; c++) assert.ok(Object.is(ecef.planes[c * pop.length + i], rv.planes[c * pop.length + i]));
   }
-  const ecef = p.at(t, 0, pop.length, 3), rv = v.at(t, 0, pop.length, 3);
-  for (let q = 0; q < 3 * pop.length; q++) assert.ok(Object.is(ecef.planes[q], rv.planes[q]));
   // a build whose tolerance no window of 3 minutes holds: the builder's own status
   const wasm = buildDiagnostic("frames-tolerance", "", (s) => s, { "frames.inc": (s) => s.replace("constexpr double kTolPos = 5.0e-6;", "constexpr double kTolPos = 1.0e-15;") });
   const f = await openFrames({ wasm });
+  const t = EPOCH_MS + 3600e3 + DAY;
   await f.load(pop.slice(0, 2));
   assert.equal(f.open(BUDGET), 0);
   const r = f.fill(t, 0);
@@ -434,17 +611,19 @@ const T_START = Date.now();
     f.x.sdnap_test_fail_at(0);
     assert.ok(f.at(EPOCH_MS + 3600e3).status.every((s) => s === STATUS.served), "the earlier frames and their cells stand");
   }
-  // a refill row: the clean run first
+  // a refill row: the clean answer first
+  const ROW_ALLOCATIONS = [48, 48, 48];  // the counted allocations of one row of the leo500, geo and ecc objects: what xp_init allocates (the flight allocates none)
   for (const idx of [0, 1, 2]) {
     const t = EPOCH_MS + 2 * DAY + 600e3;
     const clean = await make();
     assert.equal(clean.open(BUDGET), 0);
     clean.refill(t, 0, 1, [idx], 1 << 30);  // armed at a count never reached: counts the row's allocations
     const rowCount = clean.x.sdnap_test_alloc_count();
-    assert.ok(rowCount >= 2);
+    assert.equal(rowCount, ROW_ALLOCATIONS[idx], `object ${idx}: counted allocations of a row`);
     clean.x.sdnap_test_fail_at(0);
     assert.equal(clean.fill(t, 0, 5000, [idx]).due, 0);
     const want = clean.at(t), wantStats = clean.stats();
+    assert.equal(want.status[idx], STATUS.served, "the clean run serves the object");
     for (let k = 1; k <= rowCount; k++) {
       const f = await make();
       assert.equal(f.open(BUDGET), 0);

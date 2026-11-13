@@ -4,7 +4,8 @@
 // record's epoch. A window that cannot be served is stored as a tombstone: a header-only cell with the reason. The store of cells is a slab
 // allocated at sdnap_frames_open through the counted allocator; a refill row allocates only its cold set, released inside the row (the first
 // row on a thread also makes that thread's caches, kept: SPEC 9). Nothing here is written to a record, and no export of the epoch store
-// reads a cell. One host thread: frames and refills are called one after the other, never during a batch of the pool.
+// reads a cell; the only write to the store is its short-day scratch field, which every export sets before it reads it (rows_cover).
+// One host thread: frames and refills are called one after the other, never during a batch of the pool.
 // -----------------------------------------------------------------------------
 
 namespace sdnap {
@@ -20,10 +21,14 @@ constexpr double kTailShare = 0.6;           ///< a truncation's dropped tail is
 constexpr double kFloatRel = 6.0e-8;         ///< the relative rounding of a float32 coefficient (2^-24 is 5.96e-8)
 constexpr double kTailLimPos = 3.0e-8;       ///< km: the float32 tail's rounding bound in position (3e-5 m)
 constexpr double kTailLimVel = 3.0e-10;      ///< km/s: the same in velocity (3e-7 m/s)
+constexpr double kEndGap = 1.0e-6;           ///< minutes: the last instant of a window that is checked and tested against the weather rows (a window ends where the next begins; a UTC midnight is the end of the rows)
 constexpr double kMaxAheadSeconds = kBaseMinutes * 60.0;  ///< refill clamps `ahead` to one base window
 constexpr uint32_t kHeaderBytes = 24;        ///< mid, half-span (doubles, minutes); np, nv, hp, hv (bytes); holder (u32: series << 1 | slot)
 constexpr uint32_t kClassBytes = 64;         ///< cells are cut in classes of this many bytes
-constexpr uint32_t kClasses = 65;            ///< class c holds c * kClassBytes bytes, c in [1, 64]
+constexpr uint32_t kClasses = 65;            ///< class c holds c * kClassBytes bytes, c in [1, 49] (the largest cell is 3,096 bytes); the table is sized 65
+constexpr int kDenseMult = 8;                ///< sets with a drag pass: the check has this many times the points
+constexpr double kLimit3D = 8.0e-6;          ///< km: no served state is farther than this (3-D) from AP's at a check point of a drag-pass set (2 mm under the 1 cm a dense scan allows between points)
+constexpr double kDragPerigeeKm = 500.0;     ///< a set whose mean perigee height is under this has a drag pass: its output steps (SPEC 19.5)
 constexpr uint32_t kMaxCellBytes = kHeaderBytes + 2 * 24 * kNodes;  ///< a cell with every coefficient in doubles
 constexpr uint32_t kFlagPositionOnly = 1;    ///< open: no velocity at all; frames_at writes three planes
 constexpr uint8_t kFreeMark = 0xFF;          ///< byte 16 of a cell on a free list (byte 17: its class)
@@ -55,6 +60,8 @@ struct Sweep {
   double w = 0, f = 0, ahead = 0;
   int pass = 0;                ///< 0: the cells `now` needs, 1: the cells `now + ahead` needs, 2: done
   uint32_t k = 0;              ///< the place in the sequence that follows the last one visited (the priority list, then the objects in index order)
+  uint32_t pc = 0;             ///< the priority list's length and its hash: a sweep belongs to one list
+  uint64_t ph = 0;
 };
 
 struct State {
@@ -66,7 +73,7 @@ struct State {
   uint8_t* block = nullptr;       ///< table, then slab
   Obj* obj = nullptr;
   uint8_t* slab = nullptr;
-  size_t block_bytes = 0, table_bytes = 0, slab_bytes = 0, used = 0;
+  size_t block_bytes = 0, table_bytes = 0, slab_bytes = 0, used = 0, free_bytes = 0;  ///< free_bytes: the bytes of the cells on the free lists
   uint32_t free_head[kClasses] = {};
   double needed = 0;
   Sweep sweep;
@@ -133,6 +140,7 @@ inline uint32_t slab_alloc(State& s, uint32_t bytes) {
   if (s.free_head[c] != 0) {
     const uint32_t off = s.free_head[c];
     std::memcpy(&s.free_head[c], s.slab + off, 4);
+    s.free_bytes -= static_cast<size_t>(c) * kClassBytes;
     return off;
   }
   const size_t need = static_cast<size_t>(c) * kClassBytes;
@@ -148,6 +156,7 @@ inline void slab_free(State& s, uint32_t off) {
   s.slab[off + 16] = kFreeMark;
   s.slab[off + 17] = static_cast<uint8_t>(c);
   s.free_head[c] = off;
+  s.free_bytes += static_cast<size_t>(c) * kClassBytes;
   --s.live;
   s.live_bytes -= bytes;
 }
@@ -171,6 +180,7 @@ inline void compact(State& s) {
   }
   for (uint32_t c = 0; c < kClasses; ++c) s.free_head[c] = 0;
   s.used = dst;
+  s.free_bytes = 0;
   ++s.compactions;
 }
 
@@ -204,6 +214,7 @@ inline void fill_table(State& s) {
   }
   for (uint32_t c = 0; c < kClasses; ++c) s.free_head[c] = 0;
   s.used = kClassBytes;
+  s.free_bytes = 0;
   s.live = 0;
   s.live_bytes = 0;
   s.sweep = Sweep{};
@@ -219,11 +230,23 @@ struct Built {
 
 /// 0: stored in g_cell (size in `bytes`); 1: AP refuses somewhere in the window; 2: the tolerance is not held.
 /// Samples and checks are taken ascending in time for a window after the epoch and descending for a window before it: the set is flown from the epoch toward the window.
+inline bool has_drag_pass(const epochs::Entry& en) {
+  const double n = en.row.mean_motion_rev_day * kTwoPi / 86400.0;  // rad/s
+  if (!(n > 0.0)) return false;
+  const double a = std::cbrt(398600.4418 / (n * n));
+  return a * (1.0 - en.row.eccentricity) - 6378.137 < kDragPerigeeKm;
+}
+
 inline int build_window(xpt::XpSat& xp, epochs::Store& st, const epochs::Entry& en, double a, double b, bool pos_only, uint32_t& bytes) {
   const double mid = 0.5 * (a + b), half = 0.5 * (b - a);
+  // The order of the flight is the one that is right on every build: a window lies on one side of the epoch (the grid is anchored on it), a row's cold set is
+  // flown toward the window from the epoch (ascending after it, descending before it), and no row's flight crosses the epoch within one set. A flight that
+  // crosses its set's epoch is asked on the bracket before it and then on the one after, and a build that keeps one cache for both can answer from a stale one.
   const bool down = b <= 0.0;
-  // the rows of the record's weather must hold every day between the epoch and the window's far end
-  if (epochs::rows_cover(st, en, en.epoch + std::fmin(a, 0.0)) != 0 || epochs::rows_cover(st, en, en.epoch + std::fmax(b, 0.0)) != 0) return 1;
+  const bool dense = has_drag_pass(en);
+  const int nchk = dense ? kChecks * kDenseMult : kChecks;
+  // the rows of the record's weather must hold every day between the epoch and the window's far end (the end of a window is the next window's first instant)
+  if (epochs::rows_cover(st, en, en.epoch + std::fmin(a, 0.0)) != 0 || epochs::rows_cover(st, en, en.epoch + (std::fmax(b, 0.0) - kEndGap)) != 0) return 1;
   double u[kNodes], f[6][kNodes];
   for (int j = 0; j < kNodes; ++j) {
     // node j (ascending in u) is Chebyshev point kNodes-1-j; a window before the epoch takes them descending
@@ -234,7 +257,7 @@ inline int build_window(xpt::XpSat& xp, epochs::Store& st, const epochs::Entry& 
     for (int c = 0; c < 3; ++c) { f[c][jj] = r[c]; f[3 + c][jj] = v[c]; }
   }
   Built bt;
-  const int groups = pos_only ? 3 : 6;
+  const int groups = 6;  // velocity is built and checked in a position-only build too: both modes halve alike, and drop it from storage only
   for (int c = 0; c < groups; ++c) for (int k = 0; k < kNodes; ++k) bt.coef[c][k] = 0.0;
   for (int j = 0; j < kNodes; ++j) {
     double T0 = 1.0, T1 = u[j];
@@ -255,7 +278,7 @@ inline int build_window(xpt::XpSat& xp, epochs::Store& st, const epochs::Entry& 
     return kNodes;
   };
   bt.np = cut(0, kTolPos);
-  bt.nv = pos_only ? 0 : cut(3, kTolVel);
+  bt.nv = cut(3, kTolVel);
   // the head in doubles, the tail in float32: from the first k where the rest's magnitudes times the float's rounding stay under the limit
   auto head_of = [&](int c0, int n, double lim) {
     int h = n;
@@ -273,7 +296,7 @@ inline int build_window(xpt::XpSat& xp, epochs::Store& st, const epochs::Entry& 
     }
     return h;
   };
-  const int hp = head_of(0, bt.np, kTailLimPos), hv = bt.nv > 0 ? head_of(3, bt.nv, kTailLimVel) : 0;
+  const int hp = head_of(0, bt.np, kTailLimPos), hv = head_of(3, bt.nv, kTailLimVel);
   bytes = bytes_of_cell(bt.np, bt.nv, hp, hv);
   if (bytes > sizeof g_cell) return 2;
   std::memset(g_cell, 0, bytes);
@@ -291,17 +314,31 @@ inline int build_window(xpt::XpSat& xp, epochs::Store& st, const epochs::Entry& 
       for (int k = 0; k < bt.nv; ++k) for (int a2 = 0; a2 < 3; ++a2) { if (k < hv) vh[k * 3 + a2] = bt.coef[3 + a2][k]; else vt[(k - hv) * 3 + a2] = static_cast<float>(bt.coef[3 + a2][k]); }
     }
   }
-  // the check: the stored cell against AP at points that are not the sample points, in the direction of the flight
-  for (int q = 0; q < kChecks; ++q) {
-    const int j = down ? kChecks - 1 - q : q;
-    const double uj = -0.98 + 1.96 * (static_cast<double>(j) + 0.31) / kChecks, t = mid + half * uj;
+  // the check: the stored cell against AP at points that are not the sample points, in the direction of the flight, then at the window's two ends (its first
+  // instant and the last instant before the next window's). A set without a drag pass: 96 points, each axis within 5 mm. A set with one (AP's output steps
+  // there, SPEC 19.5): 8 times the points, each within 8 mm in 3-D. Velocity: each axis within 5e-5 m/s at every point of either.
+  auto check_at = [&](double t) -> int {
     double r[3], v[3], rc[3], vc[3];
     if (xpt::xp_propagate(xp, t, r, v) != kPropOk) return 1;
     eval_cell(g_cell, t, rc, vc);
-    for (int c = 0; c < 3; ++c) {
-      if (!(std::fabs(rc[c] - r[c]) <= kTolPos)) return 2;
-      if (!pos_only && !(std::fabs(vc[c] - v[c]) <= kTolVel)) return 2;
-    }
+    const double dx = rc[0] - r[0], dy = rc[1] - r[1], dz = rc[2] - r[2];
+    if (dense) { if (!(std::sqrt(dx * dx + dy * dy + dz * dz) <= kLimit3D)) return 2; }
+    else if (!(std::fabs(dx) <= kTolPos && std::fabs(dy) <= kTolPos && std::fabs(dz) <= kTolPos)) return 2;
+    for (int c = 0; c < 3; ++c) if (!(std::fabs(vc[c] - v[c]) <= kTolVel)) return 2;
+    return 0;
+  };
+  for (int q = 0; q < nchk; ++q) {
+    const int j = down ? nchk - 1 - q : q;
+    const int rc = check_at(mid + half * (-0.98 + 1.96 * (static_cast<double>(j) + 0.31) / nchk));
+    if (rc != 0) return rc;
+  }
+  for (int e = 0; e < 2; ++e) {
+    const int rc = check_at(down == (e == 0) ? b - kEndGap : a);
+    if (rc != 0) return rc;
+  }
+  if (pos_only) {  // the velocity group was built and checked; the cell keeps positions alone
+    g_cell[17] = 0; g_cell[19] = 0;
+    bytes = bytes_of_cell(bt.np, 0, hp, 0);
   }
   return 0;
 }
@@ -364,15 +401,16 @@ inline bool covered(const State& s, const Obj& o, double t) {
 /// neither time of the call; they go back to the slab after the new cell is stored, or earlier when the slab is full without them. The slab is compacted when
 /// its bump fails. 0: no room (counted: stats[12]); the held cells are untouched unless they were droppable and the room was needed.
 inline bool place(State& s, uint32_t i, int slot, uint32_t bytes, int droppable) {
+  const size_t need = static_cast<size_t>(class_of(bytes)) * kClassBytes;
+  auto recoverable = [&]() { return (s.slab_bytes - s.used) + s.free_bytes >= need; };  // compaction can make room only if the free bytes and the bump's remainder hold the cell
   uint32_t at = slab_alloc(s, bytes);
-  if (at == 0) { compact(s); at = slab_alloc(s, bytes); }
+  if (at == 0 && recoverable()) { compact(s); at = slab_alloc(s, bytes); }
   if (at == 0 && droppable != 0) {
     Obj& o = s.obj[i];
     if (droppable & 1) { slab_free(s, o.cur); o.cur = 0; }
     if (droppable & 2) { slab_free(s, o.nxt); o.nxt = 0; }
     droppable = 0;
-    compact(s);
-    at = slab_alloc(s, bytes);
+    if (recoverable()) { compact(s); at = slab_alloc(s, bytes); }
   }
   if (at == 0) { ++s.full; return false; }
   std::memcpy(s.slab + at, g_cell, bytes);
@@ -481,17 +519,19 @@ int32_t sdnap_frames_at(double jd_whole, double jd_frac, uint32_t first, uint32_
 
 /// Builds the cells the time `now` needs (objects with none for it, `priority` first, in its order, then the others in index order), then the cells that
 /// `now + ahead_seconds` needs (`ahead` clamped to 48 minutes), at most `max_rows` rows (one row: one cold set, one cell or tombstone; the module imports no
-/// clock). A call resumes the sweep the last call left when `now`, `ahead` and the store are the same (give the same priority list), so a full fill in
-/// slices of any size visits each object once; a call with another `now` starts a sweep. A row that cannot be stored (the slab is full after a compaction, or a
-/// counted allocation failed) ends the call. `result`, 6 int32: [0] places of the sequence left to visit for `now`, [1] for `now + ahead`, [2] cells
-/// stored, [3] tombstones stored, [4] rows that could not be stored, [5] objects visited. Returns 0, or -1 (bad argument), -5 (not open), -6 (open again).
+/// clock). A call resumes the sweep the last call left when `ahead`, the priority list (length and contents) and the store are the same and `now` is the same
+/// or has advanced by at most a minute while the sweep is not done, so a full fill in slices of any size visits each object once; any other call starts a
+/// sweep. A row that cannot be stored (the slab cannot hold the cell even compacted, or a counted allocation failed) ends the call. `result`, 7 int32: [0] places
+/// of the sequence left to visit for `now`, [1] for `now + ahead`, [2] cells stored, [3] tombstones stored, [4] rows that could not be stored, [5] places visited,
+/// [6] the index of the object whose row could not be stored, or -1. Returns 0, or -1 (bad argument: a non-finite time, a negative `ahead`, `max_rows` under 1,
+/// more priority entries than objects), -5 (not open), -6 (open again).
 SDNAP_EXPORT("sdnap_frames_refill")
 int32_t sdnap_frames_refill(double now_whole, double now_frac, double ahead_seconds, uint32_t max_rows, const uint32_t* priority, uint32_t priority_count, int32_t* result) {
   using namespace sdnap::frames;
   State& s = state();
   if (!s.open) return kNotOpen;
-  if (!std::isfinite(now_whole) || !std::isfinite(now_frac) || !std::isfinite(ahead_seconds) || ahead_seconds < 0.0 || result == nullptr ||
-      (priority == nullptr && priority_count != 0))
+  if (!std::isfinite(now_whole) || !std::isfinite(now_frac) || !std::isfinite(ahead_seconds) || ahead_seconds < 0.0 || result == nullptr || max_rows < 1 ||
+      (priority == nullptr && priority_count != 0) || priority_count > s.objects)
     return kBadArgument;
   const sdnap::epochs::Store& st = sdnap::epochs::resident();
   if (st.generation != s.generation) {  // a load replaced the store: every cell is dropped, the table read again
@@ -500,9 +540,21 @@ int32_t sdnap_frames_refill(double now_whole, double now_frac, double ahead_seco
   }
   const double ahead = std::fmin(ahead_seconds, kMaxAheadSeconds);
   Sweep& sw = s.sweep;
-  if (!sw.valid || sw.w != now_whole || sw.f != now_frac || sw.ahead != ahead) { sw = Sweep{}; sw.valid = true; sw.w = now_whole; sw.f = now_frac; sw.ahead = ahead; }
+  // the key of a sweep: the length and the contents (FNV-1a) of the priority list, `ahead`, and the store; `now` too, except that a sweep not yet done goes on
+  // from its place when only `now` has advanced, by at most a minute (a display asks with a new time every frame): the cells stored do not depend on the order
+  // the objects are visited in, only on the record and the time of the window
+  uint64_t hash = 1469598103934665603ull;
+  for (uint32_t k = 0; k < priority_count; ++k) { hash ^= priority[k]; hash *= 1099511628211ull; }
+  const double advance = ((now_whole - sw.w) + (now_frac - sw.f)) * 86400.0;
+  const bool same_clock = sw.w == now_whole && sw.f == now_frac;
+  const bool goes_on = sw.valid && sw.pass < 2 && advance >= 0.0 && advance <= 60.0;
+  if (!sw.valid || sw.ahead != ahead || sw.pc != priority_count || sw.ph != hash || !(same_clock || goes_on)) {
+    sw = Sweep{}; sw.valid = true; sw.ahead = ahead; sw.pc = priority_count; sw.ph = hash;
+  }
+  sw.w = now_whole; sw.f = now_frac;
   const uint32_t total = priority_count + s.objects;
   uint32_t rows = 0, stored = 0, tombs = 0, unstored = 0, visits = 0;
+  int32_t stalled = -1;
   bool stop = false;
   while (sw.pass < 2 && !stop) {
     while (sw.k < total) {
@@ -530,9 +582,9 @@ int32_t sdnap_frames_refill(double now_whole, double now_frac, double ahead_seco
       ++rows;
       uint32_t bytes = 0;
       const int rc = row(s, i, t, bytes);
-      if (rc == 0) { ++unstored; stop = true; break; }
+      if (rc == 0) { ++unstored; stalled = static_cast<int32_t>(i); stop = true; break; }
       if (rc == 3) { ++sw.k; ++visits; continue; }
-      if (!place(s, i, slot, bytes, droppable)) { ++unstored; stop = true; break; }
+      if (!place(s, i, slot, bytes, droppable)) { ++unstored; stalled = static_cast<int32_t>(i); stop = true; break; }
       if (rc == 1) ++stored; else ++tombs;
       ++sw.k; ++visits;
     }
@@ -547,6 +599,7 @@ int32_t sdnap_frames_refill(double now_whole, double now_frac, double ahead_seco
   result[3] = static_cast<int32_t>(tombs);
   result[4] = static_cast<int32_t>(unstored);
   result[5] = static_cast<int32_t>(visits);
+  result[6] = stalled;
   return 0;
 }
 
@@ -554,7 +607,7 @@ int32_t sdnap_frames_refill(double now_whole, double now_frac, double ahead_seco
 /// [6] bytes of the block as allocated, [7] refill rows, [8] rows refused for memory, [9] cells stored, [10] windows halved, [11] bytes asked or needed by
 /// the last refused open, [12] rows that could not be stored for want of room, [13] windows AP refused in, stored as tombstones (an object whose set cannot be
 /// made counts once), [14] windows the builder failed at 3 minutes, stored as tombstones, [15] 1 when the store is the one read last, [16] the bytes the cells
-/// held take (their own sizes, before the slab's classes of 64 bytes), [17] compactions of the slab, [18] bytes they moved, [19] objects visited by refills.
+/// held take (their own sizes, before the slab's classes of 64 bytes), [17] compactions of the slab, [18] bytes they moved, [19] places visited by refills.
 SDNAP_EXPORT("sdnap_frames_stats")
 int32_t sdnap_frames_stats(double* out) {
   using namespace sdnap::frames;

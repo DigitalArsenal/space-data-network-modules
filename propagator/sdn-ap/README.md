@@ -665,20 +665,23 @@ Without the tesseral terms it costs 0.3 to 0.4 times.
 
 ## Frames (SPEC 19; `sdnap_frames_*`, `test/frames.e2e.mjs`)
 
-What gets worse: a frame state differs from AP's by up to 1 cm and 1e-4 m/s as tested (1.5 cm in strong drag, no promise in the
-last hours before decay; AP's 3e-5 m of noise is not in it); a first fill takes about 1 ms an object on one thread (92 s for
-100,000); wide sets (e above 0.05 with tesseral terms), series of several sets, sets with a forecast or a hand-over and SGP4
-sets are answered by AP's entries (47 % of the stored synthetic set is served, 92.1 % of a public catalog's objects); at
-100,000 objects the cells take 84 MB and the instance about 270 MB in all, while no wide object is flown in it (a wide set
-holds about 10 MB); the host runs its own refill loop (SPEC 19.1) and calls the frames from one thread, never during a pool batch.
+What gets worse: a served frame state is within 1 cm and 1e-4 m/s (3-D) of AP's state for that record and time asked of a fresh
+instance, in every class, strong drag and decay included; a window that cannot meet it is not served and the host asks AP's own
+entries; a first fill takes about 1 ms an object on one thread (SPEC 19.5 has the figure and the eccentric sets above e 0.03,
+which cost 11 ms a row); wide sets (e above 0.05 in the zero-revolution class, above 0.3 in the resonance classes, with tesseral
+terms), series of several sets, sets with a forecast or a hand-over and SGP4 sets are answered by AP's entries (47 % of the
+stored synthetic set is served; 92.1 % of a public catalog's objects have eccentricity at or under 0.05); at 100,000 objects the
+cells take 84 MB and the instance about 270 MB in all, while no wide object is flown in it (a wide set holds about 10 MB); the
+host runs its own refill loop (SPEC 19.1) and calls the frames from one thread, never during a pool batch.
 
 A frame of every object at one instant from short Chebyshev cells of AP's own states: 0.26 times the cost of SGP4 through
 `sdnap_epochs_at` for position and velocity at 20,000 and at 100,000 objects (`test/frames-cost.mjs`). `sdnap_frames_open(budget_bytes,
 flags)` reads the loaded store; `sdnap_frames_refill(now, ahead, max_rows, priority, count, result)` builds the cells that `now` and
 `now + ahead` need, one row (one cold set, one cell or tombstone) at a time on the calling thread, and says what is still due;
 `sdnap_frames_at` evaluates polynomials only and states one status for each object (served, no cell, not served by this entry,
-AP refuses here, the builder fails here). A cell is within 5 mm and 5e-5 m/s of AP's state at 96 checked points of its window;
-the existing exports return the same bits with a frame open. Position-only frames write three planes and no velocity.
+AP refuses here, the builder fails here). A cell is checked against AP at 96 points of its window (768 in 3-D for a set with a
+perigee under 500 km, where AP's output steps) and at its two ends; the existing exports return the same bits with a frame open.
+Position-only frames write three planes and no velocity.
 
 ## SGP4XP status
 

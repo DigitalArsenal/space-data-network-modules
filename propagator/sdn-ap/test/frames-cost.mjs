@@ -37,8 +37,9 @@ if (!flag("--skip-frame")) {
   await f.load(population(plan, 20261113, 48));
   if (f.open(N * 900 + N * 32 + (1 << 20)) !== 0) fail("open");
   const t = EPOCH_MS + 3600e3;
-  f.fill(t, 180, 5000);
+  if (f.fill(t, 180, 5000).due !== 0) fail("the fill did not complete");
   const x = f.x, pl = x.sdnap_alloc(48 * N), st = x.sdnap_alloc(4 * N), [w, fr] = f.jd(t);
+  { const q = f.at(t); const served = q.status.filter((s) => s === 0).length; if (served !== N) fail(`${served} of ${N} objects are served: the timed frames would not be full frames`); }
   // SGP4 records of the module (MEAN_ELEMENT_THEORY SGP4), the same count
   const g = await openFrames();
   const tt = new OCMT();
@@ -62,6 +63,15 @@ if (!flag("--skip-frame")) {
   };
   const names = Object.keys(kinds), res = Object.fromEntries(names.map((k) => [k, []]));
   for (let r = 0; r < ROUNDS; r++) for (let j = 0; j < names.length; j++) { const k = names[(j + r) % names.length]; const c0 = cpu(); const n = kinds[k](); res[k].push(((cpu() - c0) * 1000) / n); }
+  { // every timed frame was served: the last call of each kind is read back
+    x.sdnap_frames_at(w, fr, 0, N, 0, pl, st); const s = new Int32Array(f.mem(), st, N);
+    if (s.some((v) => v !== 0)) fail("a timed frame holds objects that are not served");
+  }
+  { // a refill that finds nothing to do (the cells hold the clock and its look-ahead), the clock advancing 16 ms a call, at N places: the cost of the scan
+    const c = [];
+    for (let k = 0; k < 9; k++) { const c0 = cpu(); const r = f.refill(t + 1000 + k * 16, 180, 8); c.push(cpu() - c0); if (r.rc !== 0) fail("refill"); }
+    out.idleRefillMs = +med(c).toFixed(2);
+  }
   const ratio = (a, b) => +med(res[a].map((v, r) => v / res[b][r])).toFixed(3);
   out.frame = { usPerState: Object.fromEntries(names.map((k) => [k, +med(res[k]).toFixed(4)])), teme: { ratioToSgp4: ratio("frames", "sgp4") }, earthFixed: { ratioToSgp4: ratio("framesEcef", "sgp4Ecef") } };
 }
@@ -90,6 +100,14 @@ if (!flag("--skip-rows")) {
       }
       out.rows[`${kind}@${d}d`] = { medianMs: +med(ms).toFixed(3), p95Ms: +quantile(ms, 0.95).toFixed(3), rowsThatHalved: halved, apStatesWorstRow: Math.max(...states) };
     }
+  }
+  // the refill CPU of 100,000 objects of the recipe's mix (30 % 500 km, 53 % 830 km and 17 % strong drag of its 85 % low; 5 % medium, 5 % geosynchronous, 5 % eccentric):
+  // 1.25 rows an hour of a 48-minute window for each object, at each class's median row; and the first fill, one row an object
+  const W = { leo500: 0.255, leo830: 0.4505, drag300: 0.1445, meo: 0.05, geo: 0.05, ecc: 0.05 };
+  out.mix = {};
+  for (const d of [0, 2, 5, 10]) {
+    const rowMs = Object.entries(W).reduce((a, [k, w]) => a + w * out.rows[`${k}@${d}d`].medianMs, 0);
+    out.mix[`${d}d`] = { meanRowMs: +rowMs.toFixed(3), coreSecondsAnHourAt100000: +((100000 * 1.25 * rowMs) / 1000).toFixed(0), firstFillSecondsAt100000: +((100000 * rowMs) / 1000).toFixed(0) };
   }
 }
 
