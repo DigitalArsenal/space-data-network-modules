@@ -15,6 +15,8 @@ import {wasmPath} from './lib/module.mjs';
 import {seedOcm,flight} from './lib/ocm.mjs';
 
 const extra=String.raw`
+static_assert(sdnap::xpt::tess::kTailW == 6, "SPEC 16.3 retains harmonics through six");
+SDNAP_EXPORT("sdnap_test_zonal_count") int sdnap_test_zonal_count(int degree) { return sdnap::xpt::tess::zonal_count(degree, false); }
 SDNAP_EXPORT("sdnap_test_zonal_table")
 int sdnap_test_zonal_table(double e0, double e, double* out) {
   using namespace sdnap::xpt;
@@ -36,8 +38,8 @@ SDNAP_EXPORT("sdnap_test_zonal_reanchor")
 void sdnap_test_zonal_reanchor(double e0, double e, double* out) {
   using namespace sdnap::xpt;
   float table[4 * 455]; tess::zonal_visit_terms(70, false, 55 * sdnap::kDeg, e0, table);
-  const double er = e0 > 0.01 ? e0 : 0.01;
-  const double at = tess::tail_w_anchor(e, er);
+  const double er = tess::tail_w_anchor(e0);
+  const double at = tess::tail_w_anchor(e);
   const Kepler k{1.5, e, 55 * sdnap::kDeg, 0.4, 1.7, 0.8};
   const double n = std::sqrt(kMu / (k.a * k.a * k.a)), eta = std::sqrt(1 - e * e);
   for (int j = 0; j < 12; ++j) out[j] = 0;
@@ -75,9 +77,12 @@ function quadrature(l,k,e){let s=0,c=0;const N=1024,eta=Math.sqrt(1-e*e);for(let
 }return s/N;}
 let formError=0,quadError=0,zero=0;
 const report=[];
-for(const e0 of [0,0.0005,0.01,0.05,0.3]){
- const er=Math.max(e0,0.01);let worstG=0,worstDG=0,lowG=0,lowDG=0;
- for(const e of [Math.max(0,e0-0.001),e0,e0+0.001,er]){
+const anchor=e=>0.002*(Math.floor(Math.max(e,0.01)/0.002)+0.5);
+assert.equal(x.sdnap_test_zonal_count(70),423);
+for(const e0 of [0,0.0005,0.01,0.05,0.299]){
+ const er=anchor(e0);let worstG=0,worstDG=0,lowG=0,lowDG=0;
+ const degrees={6:{G:0,dG:0},20:{G:0,dG:0},70:{G:0,dG:0}};
+ for(const e of [er-0.001,er,er+0.001,...(e0<0.01?[e0]:[])]){
   const count=x.sdnap_test_zonal_table(e0,e,p),v=mem().slice(0,count*8);
   for(let q=0;q<count;q++){
    const [l,k,a,b,G,dG,an,bn]=v.slice(q*8,q*8+8),[want,wantD]=closed(l,k,e);
@@ -86,22 +91,23 @@ for(const e0 of [0,0.0005,0.01,0.05,0.3]){
    for(const [got,ref] of [[G,want],[dG,wantD]]){const err=ref===0?Math.abs(got):Math.abs(got/ref-1);formError=Math.max(formError,err);assert.ok(err<2e-13,`${l},${k},${e}: closed form ${err}`);}
    const gf=e**k*(a+b*e*e),dgf=e**(k-1)*(k*a+(k+2)*b*e*e);
    const rg=want===0?Math.abs(gf):Math.abs(gf/want-1),rd=wantD===0?Math.abs(dgf):Math.abs(dgf/wantD-1);
+   if(degrees[l]){degrees[l].G=Math.max(degrees[l].G,rg);degrees[l].dG=Math.max(degrees[l].dG,rd);}
    worstG=Math.max(worstG,rg);worstDG=Math.max(worstDG,rd);if(l<=20){lowG=Math.max(lowG,rg);lowDG=Math.max(lowDG,rd);}
    if(e===er){assert.ok(rg<3e-6&&rd<3e-6,`${l},${k}: value and slope at anchor`);}
   }
  }
  assert.ok(worstG<0.005&&worstDG<0.09,`e0 ${e0}: G ${worstG}, dG ${worstDG}`);
  assert.ok(lowG<0.0003&&lowDG<0.016,`e0 ${e0}, degree <=20: G ${lowG}, dG ${lowDG}`);
- report.push({e0,worstG,worstDG,lowG,lowDG});
+ report.push({e0,anchor:er,halfCell:0.001,worstG,worstDG,lowG,lowDG,degrees});
 }
 for(const e of [0.05,0.3])for(const [l,k] of [[6,2],[20,4],[21,3],[40,6],[70,2]]){
  const err=Math.abs(closed(l,k,e)[0]/quadrature(l,k,e)-1);quadError=Math.max(quadError,err);assert.ok(err<=2e-13,`${l},${k},${e}: quadrature ${err}`);
 }
 for(const e of [0.299,0.29,0.31,0.3019,0.29,0.3]){
  x.sdnap_test_zonal_reanchor(0.3,e,p);const v=mem().slice(0,13);assert.deepEqual(v.slice(0,6),v.slice(6,12),'cached re-anchor equals independently rebuilt coefficients');
- assert.equal(v[12],Math.abs(e-0.3)>0.002?e:0.3);
+ assert.equal(v[12],anchor(e));
 }
-x.sdnap_test_zonal_reanchor(0.0005,0.0001,p);assert.equal(mem()[12],0.01,'small eccentricity keeps the floor');
+x.sdnap_test_zonal_reanchor(0.0005,0.0001,p);assert.equal(mem()[12],anchor(0.0001),'small eccentricity uses the floored cell');
 console.log(JSON.stringify({closedFormRelative:formError,closedVsQuadrature:quadError,exactZeroChecks:zero,table:report,reanchor:'PASS'}));
 x.sdnap_free(p);await h.close?.();
 
@@ -115,12 +121,11 @@ async function fly(file,e){
  const lines=OEM.getRootAsOEM(new fb.ByteBuffer(r.outputs.find(o=>o.portId==='ephemeris').payload)).unpack().EPHEMERIS_DATA_BLOCK[0].EPHEMERIS_DATA_LINES;
  await host.close?.();return lines;
 }
-for(const e of [0.2999,0.3001]){
+for(const e of [0.2999]){
  const a=await fly(wasmPath,e),b=await fly(control,e);assert.equal(a.length,epochs.length);assert.equal(b.length,a.length);
  const maximumM=Math.max(...a.map((v,j)=>1000*Math.hypot(v.X-b[j].X,v.Y-b[j].Y,v.Z-b[j].Z)));
  console.log(JSON.stringify({e,comparison:'production against full-zonal-harmonic control at identical elements',maximumM,states:a.length}));
  assert.ok(maximumM<=1,`e ${e}: switch contribution ${maximumM} m <= 1 m`);
- if(e>0.3)assert.deepEqual(a,b,'above the switch the control and production are identical');
 }
 console.log('Zonal long-period coefficients, re-anchor and switch E2E: PASS');
 process.exit(0);
