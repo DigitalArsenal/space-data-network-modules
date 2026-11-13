@@ -1796,17 +1796,16 @@ part counts and keys follow the cache's existing lock ownership. These shortcuts
 arithmetic in the bakes or the returned states.
 
 
-A warm record makes no bake when no bake key changes. Four alternating rounds comparing 0.6.48 with its warm-path
-port give the AP costs below, in microseconds per state, median [minimum, maximum], on identical saved fitted
-records over seven days. The load range was 14.47–20.94. These are measurements of 0.6.48 and its port, not a timing
-comparison against 0.6.50.
+A warm record makes no bake when no bake key changes. Four alternating rounds comparing 0.6.50 with 0.6.51 give
+the AP costs below, in microseconds per state, median [minimum, maximum], on identical saved fitted records over
+seven days at normal priority. The one-minute load range was 16.50–17.41.
 
-| Orbit | Spacing | 0.6.48 | Warm-path port |
+| Orbit | Spacing | 0.6.50 | 0.6.51 |
 |---|---|---:|---:|
-| 500 km | 60 s | 0.825 [0.820, 0.835] | 0.682 [0.674, 0.690] |
-| 500 km | 300 s | 1.398 [1.378, 1.407] | 0.861 [0.847, 0.866] |
-| 830 km | 60 s | 0.688 [0.680, 0.697] | 0.592 [0.583, 0.599] |
-| 830 km | 300 s | 0.946 [0.938, 0.959] | 0.693 [0.691, 0.696] |
+| 500 km | 60 s | 0.821 [0.812, 0.837] | 0.676 [0.658, 0.682] |
+| 500 km | 300 s | 1.365 [1.359, 1.400] | 0.839 [0.827, 0.864] |
+| 830 km | 60 s | 0.695 [0.694, 0.708] | 0.600 [0.587, 0.605] |
+| 830 km | 300 s | 0.965 [0.949, 0.971] | 0.694 [0.689, 0.718] |
 
 Test-build `sizeof` measurements against 0.6.50 give SetCaches 11,088 to 11,264 bytes (+176), MdailyEvalCache 4,704 to
 4,736 (+32), SpEvalCache 1,376 to 1,424 (+48), and AnchorMemo 136 bytes. At 1,000 AP sets, store and pool accounting
