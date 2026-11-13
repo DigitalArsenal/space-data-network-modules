@@ -185,6 +185,16 @@ inline bool g_reserve_off = false;
 /// `free(malloc(n))` left the memory as it was).
 inline void* volatile g_reserve_block = nullptr;
 
+/// Checks available room without recording a logical allocation failure.
+inline bool reserve_room(size_t bytes) {
+  if (bytes == 0) return true;
+  g_reserve_block = std::malloc(bytes);
+  const bool had = g_reserve_block != nullptr;
+  std::free(g_reserve_block);
+  g_reserve_block = nullptr;
+  return had;
+}
+
 // A chunk is claimed by compare-and-swap against the job's total, so a
 // thread that wakes late (or reads the counters across a job boundary)
 // never claims a chunk that is not in the current job.
@@ -299,7 +309,7 @@ inline int32_t start(int32_t requested) {
 /// are done: 0, or kBatchPoolDead when the calling thread polled dead_polls() times without a row completing (the
 /// pool is then not used again). A threaded batch is preceded by `reserve` bytes made free on the calling thread and runs with every
 /// growth of the memory refused; the rows a refusal stopped are left in j.deferred for the calling thread.
-inline int32_t run(uint32_t count, size_t reserve) {
+inline int32_t run(uint32_t count, size_t reserve, bool reserved = false) {
   Job& j = job();
   const uint32_t chunk = chunk_size(j);
   const int32_t chunks = static_cast<int32_t>((count + chunk - 1) / chunk);
@@ -310,7 +320,7 @@ inline int32_t run(uint32_t count, size_t reserve) {
   uint32_t pages = 0;
   if (threaded) {
     (void)warm_thread();  // the calling thread computes chunks too: its caches are made before the batch, as the workers' are
-    if (reserve > 0) {
+    if (reserve > 0 && !reserved) {
       g_reserve_block = sdnap::mem::malloc(reserve);
       std::free(g_reserve_block);
       g_reserve_block = nullptr;

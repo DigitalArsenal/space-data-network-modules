@@ -106,10 +106,13 @@ struct Candidate {
 };
 struct Batch {
   Candidate rows[kBatchRows];
+  RowOut retry;
   uint32_t count = 0, end = 0;
-  bool pos_only = false;
+  bool pos_only = false, pooled = false;
 };
 inline Batch* g_batch = nullptr;
+/// Diagnostic builds: select allocation failures by object and physical attempt.
+inline void (*g_attempt_hook)(uint32_t index, bool pooled) = nullptr;
 
 inline bool is_tombstone(const uint8_t* c) { return c[16] == 0; }
 inline uint32_t bytes_of_cell(int np, int nv, int hp, int hv) {
@@ -384,9 +387,11 @@ inline int build_window(xpt::XpSat& xp, epochs::Store& st, const epochs::Entry& 
 /// Result: 1 a cell, 2 a tombstone, 0 a counted allocation failed, 3 the set cannot be made.
 inline void build_row(epochs::Store& st, uint32_t i, double t, bool pos_only, RowOut& out) {
   out.bytes = 0; out.splits = 0; out.result = 0; out.tomb = 0;
+  xpt::g_alloc_refused = 0;
   const epochs::Series& se = st.series[i];
   const epochs::Entry& en = st.entries[se.first];
   const uint32_t mark = mem::thread_failures();
+  if (g_attempt_hook != nullptr) g_attempt_hook(i, xpt::batch_running());
   xpt::XpSat* xp = nullptr;
   int32_t err = kPropOk;
   {
@@ -398,7 +403,9 @@ inline void build_row(epochs::Store& st, uint32_t i, double t, bool pos_only, Ro
   }
   auto done = [&](int rc) {
     if (xp != nullptr) { xpt::xp_release(*xp); std::free(xp); }
-    out.result = rc;
+    if (xpt::g_alloc_refused) {
+      out.bytes = 0; out.splits = 0; out.tomb = 0; out.result = 4;
+    } else out.result = rc;
   };
   if (mem::thread_failures() != mark) return done(0);
   if (err != kPropOk) { out.tomb = kApRefuses; return done(3); }
@@ -465,18 +472,44 @@ inline void collect(const State& s, const Sweep& sw, double whole, double frac, 
   }
 }
 
+inline size_t batch_reserve(const Batch& b) {
+  if (pool::g_reserve_off) return 0;
+  const auto& st = epochs::resident();
+  int degree = 0;
+  for (uint32_t q = 0; q < b.count; ++q)
+    degree = std::max(degree, st.entries[st.series[b.rows[q].index].first].forces.tesseral);
+  degree = std::min(degree, xpt::tess::kFastCap);
+  const int extra = xpt::tess::kShallowMax;
+  const uint64_t table = static_cast<uint64_t>(xpt::tess::sp_comb_bound(degree, false, extra)) * sizeof(xpt::tess::SpCombCoef) +
+      (xpt::keep_sp_raw() ? static_cast<uint64_t>(xpt::tess::sp_bound(degree, false, extra)) * sizeof(xpt::tess::SpCoef) : 0);
+  const uint32_t builders = std::min(b.count, static_cast<uint32_t>(pool::job().threads + 1));
+  return static_cast<size_t>((8u << 20) + builders * ((64u << 10) + table + sizeof(xpt::tess::SpTermsScratch)));
+}
+
 /// Publishes bounded private outputs; placement and logical counters remain on the caller.
 inline int run_batch(Batch& b, double whole, double frac) {
+  b.pooled = false;
+  if (b.count < 2 || !pool::warm_thread()) {
+    b.count = 1; b.end = b.rows[0].place + 1;
+    return 0;
+  }
   (void)drag::table();
   (void)xpt::tess::egm_tables();
   double tt1, tt2;
   (void)utc_to_tt(whole, frac, tt1, tt2);
+  size_t reserve;
+  while (!pool::reserve_room(reserve = batch_reserve(b))) {
+    b.count = (b.count + 1) / 2;
+    b.end = b.rows[b.count - 1].place + 1;
+    if (b.count < 2) return 0;
+  }
   pool::Job& j = pool::job();
   j.kind = pool::kJobFrames;
   j.frames = &b;
   j.count = b.count;
   j.deferred = nullptr;
-  return pool::run(b.count, 16u << 20);
+  b.pooled = true;
+  return pool::run(b.count, reserve, true);
 }
 
 /// Every held cell that covers neither time of a call goes back to the slab: the room a stalled row needs. Returns the cells freed.
@@ -680,11 +713,12 @@ int32_t sdnap_frames_refill(double now_whole, double now_frac, double ahead_seco
     while (sw.k < total) {
       if (batch != nullptr && sw.k >= batch_end && rows < max_rows) {
         collect(s, sw, now_whole, now_frac, ahead_min, priority, priority_count, std::min(kBatchRows, max_rows - rows), *batch);
-        batch_end = batch->end; batch_row = 0;
+        batch_row = 0;
         if (batch->count > 0) {
           const int rc = run_batch(*batch, now_whole, now_frac);
           if (rc != 0) return rc;
         }
+        batch_end = batch->end;
       }
       const uint32_t i = sw.k < priority_count ? priority[sw.k] : sw.k - priority_count;
       Obj& o = s.obj[i < s.objects ? i : 0];
@@ -704,8 +738,14 @@ int32_t sdnap_frames_refill(double now_whole, double now_frac, double ahead_seco
       if (rows >= max_rows) { stop = true; break; }
       ++rows;
       RowOut serial;
-      RowOut& out = batch != nullptr ? batch->rows[batch_row++].out : serial;
-      if (batch == nullptr) build_row(sdnap::epochs::resident(), i, t, (s.flags & kFlagPositionOnly) != 0, out);
+      const bool pooled = batch != nullptr && batch->pooled;
+      RowOut* built = pooled ? &batch->rows[batch_row++].out : &serial;
+      if (pooled && built->result == 4) {
+        built = &batch->retry;
+        ++sdnap::xpt::batch_stats().deferred;
+        build_row(sdnap::epochs::resident(), i, t, (s.flags & kFlagPositionOnly) != 0, *built);
+      } else if (!pooled) build_row(sdnap::epochs::resident(), i, t, (s.flags & kFlagPositionOnly) != 0, *built);
+      RowOut& out = *built;
       commit_row(s, i, out);
       const int rc = out.result;
       if (rc == 0) { ++unstored; stalled = static_cast<int32_t>(i); stop = true; break; }  // a counted allocation failed: the memory, not this object

@@ -1572,10 +1572,7 @@ int32_t sdnap_epochs_at(double jd_whole, double jd_frac, uint32_t first, uint32_
       if (reserve == 0) break;
       // a reserve that cannot be had is not a failure of the call: not counted. Held through the volatile block, as
       // pool::run holds its own: a malloc freed at once is a pair an optimizing build may remove, and the test then never ran
-      sdnap::pool::g_reserve_block = std::malloc(reserve);
-      const bool had = sdnap::pool::g_reserve_block != nullptr;
-      std::free(sdnap::pool::g_reserve_block);
-      sdnap::pool::g_reserve_block = nullptr;
+      const bool had = sdnap::pool::reserve_room(reserve);
       if (had) break;
       if (len <= 2 * sdnap::pool::kEpochChunk) {
         batch = false;
@@ -1591,7 +1588,7 @@ int32_t sdnap_epochs_at(double jd_whole, double jd_frac, uint32_t first, uint32_
       a += len;
       continue;
     }
-    const int32_t rc = sdnap::pool::run(len, reserve);
+    const int32_t rc = sdnap::pool::run(len, reserve, true);
     if (rc != 0) {
       // a pool thread taken for dead may be only slow, still in its chunk: the store is refused from now on (Store::pool_dead)
       st.pool_dead = 1;
