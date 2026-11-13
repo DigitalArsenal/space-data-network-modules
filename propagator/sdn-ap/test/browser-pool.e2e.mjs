@@ -92,6 +92,7 @@ try { esbuild = await import("esbuild"); } catch (e) {
 
 // ---------------------------------------------------------------------------------------------------------------- the seeded inputs
 const fixture = new Uint8Array(fs.readFileSync(path.join(here, "fixtures", "ap-fit-0.6.42.ocm")));
+assert.equal(ocmOf(fixture).MEAN_ELEMENTS.MEAN_ELEMENT_THEORY, 5, "the input record declares AP");
 const epochText = ocmOf(fixture).MEAN_ELEMENTS.EPOCH;
 const epochMs = Date.parse(epochText.endsWith("Z") ? epochText : `${epochText}Z`);
 let seed = 20261113;
@@ -206,7 +207,7 @@ for (const t of THREADS) {
     assert.equal(p.threads, t, "the pool's running threads");
     assert.ok(p.batches >= 3, `${p.batches} threaded batches of rows at ${t} threads`);
     assert.deepEqual([p.refused, p.deferred, p.afterGrowth, p.dead], [0, 0, 0, 0], `rows: refused, deferred, after-growth and dead counts at ${t} threads`);
-    if (p.rowsOnPool >= 0) assert.ok(p.rowsOnPool > 0 && p.poolThreadsWithRows > 0, `rows completed on pool threads at ${t} threads: ${p.rowsOnPool} on ${p.poolThreadsWithRows}`);
+    if (p.rowsOnPool >= 0) assert.ok(p.rowsOnPool > 0 && p.poolThreadsWithRows > 1, `rows completed on pool threads at ${t} threads: ${p.rowsOnPool} on ${p.poolThreadsWithRows}`);
     const batches = b.ap.pool.batches - b.ap.poolBefore.batches;
     if (batches > 0) {
       pooledEpochs = true;

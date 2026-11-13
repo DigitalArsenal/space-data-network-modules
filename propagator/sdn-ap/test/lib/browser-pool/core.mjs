@@ -13,11 +13,30 @@ const grab = (ctx, ptr, bytes) => new Uint8Array(ctx.H.memory.buffer, ptr, bytes
 const mem = (ctx) => ctx.H.memory.buffer.byteLength;
 const concat = (a, b) => { const o = new Uint8Array(a.length + b.length); o.set(a, 0); o.set(b, a.length); return o; };
 
+// Validate the planes before hashing: equal bytes alone do not establish a useful result.
+export function assertPlane(ctx, ptr, count, name) {
+  const values = new Float64Array(ctx.H.memory.buffer, ptr, count);
+  if (!values.every(Number.isFinite) || !values.some((v) => v !== 0)) throw new Error(`${name}: expected finite, non-zero output`);
+}
+export function assertPool(ctx, stats, before = 0) {
+  // Older builds omit the two row counters; -1 identifies those absent counters.
+  if (ctx.threads > 0 && stats.rowsOnPool >= 0 && !(stats.rowsOnPool > before && stats.poolThreadsWithRows > 1))
+    throw new Error(`pool at ${ctx.threads} threads: expected rows on more than one pool thread`);
+}
+const apCaches = (ctx) => {
+  if (!ctx.x.sdnap_cache_stats) return null;
+  const p = ctx.x.sdnap_alloc(64);
+  ctx.x.sdnap_cache_stats(p);
+  const made = new Float64Array(ctx.H.memory.buffer, p, 8)[7];
+  ctx.x.sdnap_free(p);
+  return made;
+};
+
 /** sdnap_pool_stats: the doubles a build writes (an older build writes fewer: the rest read -1). */
 export function poolStats(ctx) {
   const p = ctx.x.sdnap_alloc(16 * 8);
   new Float64Array(ctx.H.memory.buffer, p, 16).fill(-1);
-  ctx.x.sdnap_pool_stats(p, 16);
+  if (ctx.x.sdnap_pool_stats) ctx.x.sdnap_pool_stats(p, 16);
   const v = Array.from(new Float64Array(ctx.H.memory.buffer, p, 16));
   ctx.x.sdnap_free(p);
   return { threads: v[0], batches: v[1], refused: v[2], deferred: v[3], afterGrowth: v[4], dead: v[5], growths: v[10], rowsOnPool: v[14], poolThreadsWithRows: v[15] };
@@ -72,17 +91,32 @@ export async function rowsJob(ctx, rowsBytes, n) {
     const [w, f] = jdOf(ctx.meta.epochMs + d * DAY);
     const rc = x.sdnap_propagate_soa(w, f, 0, n, 0, out, status);
     if (rc !== 0) throw new Error(`sdnap_propagate_soa returned ${rc}`);
+    assertPlane(ctx, out, 6 * n, "state");
     const s = grab(ctx, status, 4 * n);
     for (const c of new Int32Array(s.buffer)) if (c !== 0) nonzero++;
     digests.push(await sha256Hex(concat(grab(ctx, out, 48 * n), s)));
   }
+  assertPool(ctx, poolStats(ctx));
   return { n, digest: await sha256Hex(new TextEncoder().encode(digests.join(""))), nonzeroStatus: nonzero, pool: poolStats(ctx), spawn: spawnInfo(ctx) };
 }
 
 /** An AP catalog (records with a covariance) loaded in parts: all states at five instants, then once with the covariance planes. */
 export async function apJob(ctx, bytes, n) {
   const { x } = ctx;
+  const cachesBefore = apCaches(ctx);
   await loadParts(ctx, bytes, n);
+  if (x.sdnap_epochs_series) {
+    const info = x.sdnap_alloc(24);
+    try {
+      for (let i = 0; i < n; i++) {
+        if (x.sdnap_epochs_series(i, info, 0, 0) !== 0 || new Float64Array(ctx.H.memory.buffer, info, 3)[1] !== 4)
+          throw new Error("AP series: expected loaded non-SGP4 theory");
+      }
+    } finally { x.sdnap_free(info); }
+  }
+  // Series metadata uses the shared non-SGP4 enum; tesseral cache creation identifies AP execution.
+  // Builds without sdnap_cache_stats expose no tesseral execution counter.
+
   const out = x.sdnap_alloc(48 * n), status = x.sdnap_alloc(4 * n), cov = x.sdnap_alloc(288 * n);
   const before = poolStats(ctx), memBefore = mem(ctx);
   const digests = [];
@@ -91,15 +125,21 @@ export async function apJob(ctx, bytes, n) {
     const [w, f] = jdOf(ctx.meta.epochMs + days * DAY);
     const rc = x.sdnap_epochs_at(w, f, 0, n, 0, out, status, withCov ? cov : 0);
     if (rc !== 0) throw new Error(`sdnap_epochs_at returned ${rc} at ${days} d`);
+    assertPlane(ctx, out, 6 * n, "state");
     const s = grab(ctx, status, 4 * n);
     for (const c of new Int32Array(s.buffer)) if (c !== 0) nonzero++;
     let bytesOut = concat(grab(ctx, out, 48 * n), s);
-    if (withCov) bytesOut = concat(bytesOut, grab(ctx, cov, 288 * n));
+    if (withCov) {
+      assertPlane(ctx, cov, 36 * n, "covariance");
+      bytesOut = concat(bytesOut, grab(ctx, cov, 288 * n));
+    }
     return sha256Hex(bytesOut);
   };
   for (const d of [0, 0.5, 1, 2, 3]) digests.push(await ask(d, false));
   digests.push(await ask(2, true));
   const after = poolStats(ctx);
+  assertPool(ctx, after, before.rowsOnPool);
+  if (cachesBefore !== null && !(apCaches(ctx) > cachesBefore)) throw new Error("AP execution: no tesseral caches created");
   return { n, digest: await sha256Hex(new TextEncoder().encode(digests.join(""))), digests, nonzeroStatus: nonzero, poolBefore: before, pool: after, growthsDuringPasses: after.growths - before.growths,
     memBefore, memAfter: mem(ctx), spawn: spawnInfo(ctx) };
 }
@@ -132,6 +172,7 @@ export async function framesJob(ctx, n, sliceRows) {
     const [w, f] = jdOf(ctx.meta.epochMs + minutes * 60000);
     rc = x.sdnap_frames_at(w, f, 0, n, frame, out, status);
     if (rc !== 0) throw new Error(`sdnap_frames_at returned ${rc}`);
+    assertPlane(ctx, out, 6 * n, "state");
     const s = grab(ctx, status, 4 * n);
     for (const c of new Int32Array(s.buffer)) if (c !== 0) nonzero++;
     digests.push(await sha256Hex(concat(grab(ctx, out, 48 * n), s)));
