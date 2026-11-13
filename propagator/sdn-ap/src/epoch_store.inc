@@ -192,6 +192,7 @@ struct Store {
   Config cfg;
   Array<Entry> entries;
   Array<Series> series;
+  Array<uint32_t> plugin_order;  ///< plugin entity to raw series, in first accepted input order
   Stats stats;
   Array<std::unique_ptr<atm::Atmosphere>> atmospheres;  ///< the distinct row series and node vectors of the load
   uint32_t generation = 0;                                    ///< counts the store's replacements (clear, install): the frames (SPEC 19) drop their cells when it changes
@@ -216,7 +217,10 @@ inline void release(Slot& s) {
   s = Slot{};
 }
 
+inline Store& resident();
+
 inline void clear(Store& st) {
+  if (&st == &resident()) plugin_epochs_cleared();
   for (Series& s : st.series) {
     for (Slot& q : s.slots) release(q);
     delete s.slots.second;
@@ -225,6 +229,7 @@ inline void clear(Store& st) {
   // the buffers go back too: a cleared store (a refused load, the next load's start) holds nothing, and a later load is sized afresh
   st.entries.release();
   st.series.release();
+  st.plugin_order.release();
   st.stats = Stats{};
   ++st.generation;
   st.atmospheres.release();
@@ -474,8 +479,8 @@ inline int close(Store& st, Build& b) {
   // of the same epoch replaces)
   // `order` the input positions sorted into series and epochs; `kept` the input positions of the kept sets in series order and `starts` where each
   // series' sets begin in `kept` (and one past the last): the entries and the series are sized from what is kept, not from what was read (SPEC 1.6).
-  Array<uint32_t> order, kept, starts;
-  if (!order.reserve(recs.size()) || !kept.reserve(recs.size()) || !starts.reserve(recs.size() + 1)) {
+  Array<uint32_t> order, kept, starts, first_inputs;
+  if (!order.reserve(recs.size()) || !kept.reserve(recs.size()) || !starts.reserve(recs.size() + 1) || !first_inputs.reserve(recs.size())) {
     b.free_covs();
     return mem::refuse_if_out_of_memory(), 3;
   }
@@ -538,14 +543,19 @@ inline int close(Store& st, Build& b) {
       for (size_t q = drop; g0 + q < kept.size(); ++q) kept[g0 + q - drop] = kept[g0 + q];
       for (size_t q = 0; q < drop; ++q) kept.pop_back();
     }
-    if (kept.size() > g0) starts.push_back(static_cast<uint32_t>(g0));
+    if (kept.size() > g0) {
+      starts.push_back(static_cast<uint32_t>(g0));
+      uint32_t first_input = order[k];
+      for (uint32_t q = k + 1; q < e; ++q) first_input = std::min(first_input, order[q]);
+      first_inputs.push_back(first_input);
+    }
     k = e;
   }
   starts.push_back(static_cast<uint32_t>(kept.size()));
   // Now what is kept is known: the entries and the series are allocated at exactly that size, so a capped or theory-filtered load holds nothing for
   // the records it dropped and the store's byte count is its capacity.
   Array<uint8_t> live;  // which of the load's atmospheres a kept set reads, marked as the entries are installed
-  bool room = st.entries.reserve(kept.size()) && st.series.reserve(starts.size() - 1) && live.reserve(st.atmospheres.size());
+  bool room = st.plugin_order.reserve(first_inputs.size()) && st.entries.reserve(kept.size()) && st.series.reserve(starts.size() - 1) && live.reserve(st.atmospheres.size());
   for (size_t k = 0; room && k < st.atmospheres.size(); ++k) live.push_back(0);
   if (!room) {
     b.free_covs();
@@ -609,6 +619,9 @@ inline int close(Store& st, Build& b) {
   for (size_t k = 0; k < st.atmospheres.size(); ++k)
     if (live[k]) { if (used != k) st.atmospheres[used] = std::move(st.atmospheres[k]); ++used; }
   while (st.atmospheres.size() > used) st.atmospheres.pop_back();
+  for (uint32_t i = 0; i < st.series.size(); ++i) st.plugin_order.push_back(i);
+  if (!st.plugin_order.empty()) std::sort(st.plugin_order.begin(), st.plugin_order.end(),
+      [&](uint32_t a, uint32_t b) { return first_inputs[a] < first_inputs[b]; });
   st.stats.kept = static_cast<double>(st.entries.size());
   unwind.installed = true;
   ++st.generation;
@@ -1007,7 +1020,7 @@ inline uint64_t build_bytes(const Build& b) {
 
 inline uint64_t bytes_of(const Store& st) {
   // the arrays at their capacity: what the store holds, not what it uses
-  uint64_t b = st.entries.capacity() * sizeof(Entry) + st.series.capacity() * sizeof(Series) + st.atmospheres.capacity() * sizeof(std::unique_ptr<atm::Atmosphere>);
+  uint64_t b = st.plugin_order.capacity() * sizeof(uint32_t) + st.entries.capacity() * sizeof(Entry) + st.series.capacity() * sizeof(Series) + st.atmospheres.capacity() * sizeof(std::unique_ptr<atm::Atmosphere>);
   for (const Entry& e : st.entries) b += (e.cov != nullptr ? sizeof(cov::Set) + e.cov->C.size() * sizeof(double) : 0) + (e.track ? e.track->bytes() : 0);
   // the interned rows and nodes, one copy each
   for (const auto& a : st.atmospheres) b += sizeof(atm::Atmosphere) + a->days.size() * sizeof(atm::SpwDay) + a->dca_ms.size() * (sizeof(int64_t) + 2 * sizeof(double));
@@ -1068,6 +1081,7 @@ static int load_epochs_call(void) {
   epochs::Store& st = epochs::resident();
   if (const int rc = refuse_while_pool_dead(st)) return rc;
   epochs::Build& b = epochs::resident_build();
+  plugin_records_selected();
   epochs::begin(st, b, cfg);
   int rc = epochs::add(b, false);
   if (rc == 0) rc = epochs::close(st, b);
@@ -1095,6 +1109,7 @@ static int load_epochs_open_call(void) {
   if (const int rc = pcf::read(pcf::kEpochs, true)) return rc;
   epochs::Config cfg;
   if (const int rc = epochs::read_config(cfg)) return rc;
+  plugin_records_selected();
   epochs::begin(epochs::resident(), epochs::resident_build(), cfg);
   return 0;
 }

@@ -7,6 +7,17 @@
 
 namespace sdnap {
 
+// The record implementation follows the epoch and frame stores in this translation unit.
+inline bool plugin_records = false;
+bool plugin_can_release();
+void plugin_rows_selected();
+void plugin_records_selected();
+void plugin_epochs_cleared();
+void plugin_release();
+uint32_t plugin_record_count();
+int32_t plugin_record_state(double jd, uint32_t index, OrbProStateVector* out);
+int32_t plugin_record_batch(double jd, OrbProStateVector* out, uint32_t count);
+
 /// Theory an OrbProOMMRecord is read under: the struct path (plugin_init_omm, plugin_init) flies stock SGP4-XP only
 /// (Jacchia 1970 on the theory's flux model, no gravity terms); the record carries no theory and no forces, so an SGP4
 /// or AP set never enters here (OrbPro's host refuses to pack one). BTERM is in `bstar` and AGOM in
@@ -191,11 +202,13 @@ inline int32_t batch(int32_t kind, double jd_whole, double jd_frac, const double
 SDNAP_EXPORT("plugin_init_omm")
 int32_t plugin_init_omm(const OrbProOMMRecord* records, uint32_t count) {
   if (records == nullptr && count > 0) return ORBPRO_PROP_BAD_INPUT;
+  if (!sdnap::plugin_can_release()) return ORBPRO_PROP_BAD_INPUT;
   sdnap::ElementRow* rows = static_cast<sdnap::ElementRow*>(sdnap::mem::malloc(sizeof(sdnap::ElementRow) * (count ? count : 1)));
   if (rows == nullptr) return ORBPRO_PROP_BAD_INPUT;
   for (uint32_t i = 0; i < count; ++i) rows[i] = sdnap::row_of_omm(records[i], sdnap::omm_theory());
   const int32_t held = sdnap::store_init(rows, count);
   std::free(rows);
+  if (held >= 0) sdnap::plugin_rows_selected();
   return held < 0 ? ORBPRO_PROP_BAD_INPUT : held;
 }
 
@@ -208,6 +221,7 @@ int32_t plugin_init(const uint8_t* data, size_t len) {
 
 SDNAP_EXPORT("plugin_propagate")
 int32_t plugin_propagate(double julian_date, uint32_t entity_index, OrbProStateVector* out) {
+  if (sdnap::plugin_records) return sdnap::plugin_record_state(julian_date, entity_index, out);
   if (out == nullptr) return ORBPRO_PROP_NULL_OUTPUT;
   const sdnap::Store& st = sdnap::store();
   if (st.count == 0) return ORBPRO_PROP_NOT_INITIALIZED;
@@ -219,6 +233,7 @@ int32_t plugin_propagate(double julian_date, uint32_t entity_index, OrbProStateV
 
 SDNAP_EXPORT("plugin_propagate_batch")
 int32_t plugin_propagate_batch(double julian_date, OrbProStateVector* out, uint32_t count) {
+  if (sdnap::plugin_records) return sdnap::plugin_record_batch(julian_date, out, count);
   if (out == nullptr) return ORBPRO_PROP_NULL_OUTPUT;
   const sdnap::Store& st = sdnap::store();
   if (st.count == 0) return ORBPRO_PROP_NOT_INITIALIZED;
@@ -236,10 +251,10 @@ int32_t plugin_propagate_batch(double julian_date, OrbProStateVector* out, uint3
 }
 
 SDNAP_EXPORT("plugin_entity_count")
-int32_t plugin_entity_count(void) { return static_cast<int32_t>(sdnap::store().count); }
+int32_t plugin_entity_count(void) { return static_cast<int32_t>(sdnap::plugin_records ? sdnap::plugin_record_count() : sdnap::store().count); }
 
 SDNAP_EXPORT("plugin_destroy")
-void plugin_destroy(void) { sdnap::store_free(); }
+void plugin_destroy(void) { sdnap::plugin_release(); }
 
 // --- Structure-of-arrays batch entries ------------------------------------------
 

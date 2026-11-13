@@ -89,6 +89,7 @@
 #include "propagate.inc"
 #include "epoch_store.inc"
 #include "frames.inc"
+#include "plugin_records.inc"
 #include "fit_oem.inc"
 #include "export_omm.inc"
 #include "events_method.inc"
