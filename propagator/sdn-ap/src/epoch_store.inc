@@ -102,9 +102,11 @@ template <class T, size_t kBlock = 1024> class Blocks {
   void clear() {
     while (size_) { --size_; (*this)[size_].~T(); }
     for (T* b : blocks_) std::free(b);
-    blocks_.clear();
+    blocks_.release();  // the array of block pointers goes back too: a cleared set of blocks holds nothing
   }
   size_t size() const { return size_; }
+  /// The bytes held: the blocks (allocated whole) and the array of their pointers.
+  size_t bytes() const { return blocks_.size() * kBlock * sizeof(T) + blocks_.capacity() * sizeof(T*); }
   T& operator[](size_t k) { return blocks_[k / kBlock][k % kBlock]; }
   const T& operator[](size_t k) const { return blocks_[k / kBlock][k % kBlock]; }
   template <class B, class V> struct Iter {
@@ -974,6 +976,19 @@ inline bool any_labeled(const Store& st, const Series& s) {
   return false;
 }
 
+/// What the load open (load_epochs_open) holds, for the byte statistic: the decoded records (the blocks, their strings, covariance sets and kept forecasts),
+/// the weather pool and the arrays. Zero when no load is open, and during load_epochs's own decode (a load of one call has no calls between).
+inline uint64_t build_bytes(const Build& b) {
+  if (!b.open) return 0;
+  uint64_t n = b.recs.bytes() + b.pool.capacity() * sizeof(std::unique_ptr<atm::Atmosphere>);
+  auto heap = [](const std::string& s) -> uint64_t { return s.capacity() > sizeof(std::string) ? s.capacity() + 1 : 0; };
+  for (const Record& r : b.recs)
+    n += heap(r.object_id) + heap(r.originator) + heap(r.name) + (r.cov != nullptr ? sizeof(cov::Set) + r.cov->C.size() * sizeof(double) : 0) +
+         (r.track ? sizeof(std::shared_ptr<carried::Track>) + r.track->bytes() : 0);
+  for (const auto& a : b.pool) n += sizeof(atm::Atmosphere) + a->days.size() * sizeof(atm::SpwDay) + a->dca_ms.size() * (sizeof(int64_t) + 2 * sizeof(double));
+  return n;
+}
+
 inline uint64_t bytes_of(const Store& st) {
   // the arrays at their capacity: what the store holds, not what it uses
   uint64_t b = st.entries.capacity() * sizeof(Entry) + st.series.capacity() * sizeof(Series) + st.atmospheres.capacity() * sizeof(std::unique_ptr<atm::Atmosphere>);
@@ -1012,6 +1027,9 @@ extern "C" int load_epochs(void) {
 static int load_epochs_call(void) {
   using namespace sdnap;
   plugin_reset_output_state();
+  // a load in progress is abandoned by any load_epochs, accepted or refused (the store is empty while one is open); a store with no load open is left
+  // as it was by a load_epochs refused before it begins, as it always was
+  epochs::resident_build().drop();
   uint32_t frames = 0;
   if (const int rc = ocm::admit(frames)) return rc;
   if (const int rc = pcf::read(pcf::kEpochs, true)) return rc;
@@ -1039,6 +1057,10 @@ extern "C" int load_epochs_open(void) {
 static int load_epochs_open_call(void) {
   using namespace sdnap;
   plugin_reset_output_state();
+  // an open ALWAYS drops the load in progress and empties the store, whether or not its configuration is accepted: a non-zero status of any of the three
+  // methods means the load is closed and the store is empty
+  epochs::resident_build().drop();
+  epochs::clear(epochs::resident());
   if (const int rc = pcf::read(pcf::kEpochs, true)) return rc;
   epochs::Config cfg;
   if (const int rc = epochs::read_config(cfg)) return rc;
@@ -1314,12 +1336,13 @@ SDNAP_EXPORT("sdnap_epochs_count")
 uint32_t sdnap_epochs_count(void) { return static_cast<uint32_t>(sdnap::epochs::resident().series.size()); }
 
 /// The last load's counts, 8 doubles: records read, sets kept, dropped by CACHE_DAYS, by MAX_SETS_PER_OBJECT, by
-/// THEORIES, sets not centered on the Earth skipped, same-epoch duplicates replaced, and the store's bytes.
+/// THEORIES, sets not centered on the Earth skipped, same-epoch duplicates replaced, and the bytes held: the store's, and the load open's
+/// (load_epochs_open) decoded records, weather and arrays, so a host sees what a load in progress holds (SPEC 14.1.1).
 SDNAP_EXPORT("sdnap_epochs_stats")
 void sdnap_epochs_stats(double* out) {
   const auto& st = sdnap::epochs::resident();
   const auto& s = st.stats;
-  const double v[8] = {s.records, s.kept, s.aged, s.capped, s.theory, s.other_center, s.duplicate, static_cast<double>(sdnap::epochs::bytes_of(st))};
+  const double v[8] = {s.records, s.kept, s.aged, s.capped, s.theory, s.other_center, s.duplicate, static_cast<double>(sdnap::epochs::bytes_of(st) + sdnap::epochs::build_bytes(sdnap::epochs::resident_build()))};
   for (int k = 0; k < 8; ++k) out[k] = v[k];
 }
 

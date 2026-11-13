@@ -60,7 +60,7 @@ const q = (() => { const x = fresh.instance.exports, p = x.sdnap_alloc(1 << 16);
 const probeOf = h => { const x = h.instance.exports, p = x.sdnap_alloc(1 << 16); return {x, p, f64: (o, n) => new Float64Array(h.memory.buffer, o, n), i32: (o, n) => new Int32Array(h.memory.buffer, o, n)}; };
 const fingerprint = (pr = q) => {
   const {x, p, f64, i32} = pr, out = [];
-  x.sdnap_epochs_stats(p); out.push(Array.from(f64(p, 7)));
+  x.sdnap_epochs_stats(p); out.push(Array.from(f64(p, 8)));   // the eighth statistic, the bytes held, too: one copy of a weather series, the discard of an unused one
   const count = x.sdnap_epochs_count(); out.push(count);
   const ep = p + 4096, st = p + 8192, cov = p + 12288, one = p + 2048;
   for (let i = 0; i < count; ++i) {
@@ -71,6 +71,17 @@ const fingerprint = (pr = q) => {
       const at = jdOf(iso((epochs[2 * k] - 2440587.5 + epochs[2 * k + 1]) * DAY + 1800000));
       const rc = x.sdnap_epochs_set_at(i, k, at.whole, at.frac, one);
       out.push([rc, ...Array.from(f64(one, 6))]);
+    }
+    // every switch of a series of several sets: the selection (a, b, the weight), the blended state and the covariance mixture before, at and after the
+    // switch's midpoint, inside its blend window
+    for (let k = 0; k + 1 < info[2]; ++k) {
+      for (const off of [-600, 0, 600]) {
+        const whole = epochs[2 * k], frac = epochs[2 * k + 1] + ((epochs[2 * k + 2] - epochs[2 * k]) + (epochs[2 * k + 3] - epochs[2 * k + 1])) / 2 + off / 86400;
+        const sr = x.sdnap_epochs_select(i, whole, frac, p + 512);
+        out.push(['switch', k, off, sr, ...Array.from(f64(p + 512, 3))]);
+        const rc = x.sdnap_epochs_at(whole, frac, i, 1, 0, p + 1024, st, cov);
+        out.push(['switch-at', k, off, rc, i32(st, 1)[0], ...Array.from(f64(p + 1024, 6)), ...Array.from(f64(cov, 36))]);
+      }
     }
     for (const lag of [5400000, 4 * 3600000]) {   // two times: the covariance values are compared at both
       const at = jdOf(iso((epochs[0] - 2440587.5 + epochs[1]) * DAY + lag));
@@ -202,7 +213,8 @@ for (const [name, record] of Object.entries(bad)) {
   const records = [...good, clash];
   const w = await whole(fresh, records);
   assert.equal(w.errorCode, 'series-forces-differ');
-  const r = await inParts(fresh, records, [12, 12, 7]);
+  // the four sets of series 520010 (records 25 to 28) are in the second part, the clashing record of that series alone in the third
+  const r = await inParts(fresh, records, [24, 6, 1]);
   assert.deepEqual([r.statusCode, r.errorCode, r.errorMessage], [w.statusCode, w.errorCode, w.errorMessage], 'series-forces-differ arrives at the close');
   emptyStore('series-forces-differ');
   refused(await close(fresh), 'load-not-open', 'a close after series-forces-differ');
@@ -222,6 +234,7 @@ for (const [name, record] of Object.entries(bad)) {
 // ---- 3. misuse
 {
   assert.equal((await whole(fresh, catalog)).statusCode, 0);
+  fingerprint();   // flying the sets allocates their records, which the byte statistic counts: compare after that
   const loaded = fingerprint();
   refused(await part(fresh, [catalog.slice(0, 3)]), 'load-not-open', 'a part with no load open');
   refused(await close(fresh), 'load-not-open', 'a close with no load open');
@@ -230,7 +243,14 @@ for (const [name, record] of Object.entries(bad)) {
   assert.equal((await opened(fresh)).statusCode, 0);
   emptyStore('after an open');
   assert.equal((await part(fresh, [catalog.slice(0, 10)])).statusCode, 0);
-  emptyStore('after a part');
+  // the store holds no series and keeps no set; what the open load holds is in the byte statistic, growing with its parts and gone when it is closed
+  q.x.sdnap_epochs_stats(q.p);
+  const afterOne = q.f64(q.p, 8).slice();
+  assert.deepEqual([q.x.sdnap_epochs_count(), afterOne[0], afterOne[1]], [0, 0, 0], 'the store holds series or counts during a load');
+  assert.ok(afterOne[7] > 2000, `an open load holding 10 records reports ${afterOne[7]} bytes`);
+  assert.equal((await part(fresh, [catalog.slice(10, 20)])).statusCode, 0);
+  q.x.sdnap_epochs_stats(q.p);
+  assert.ok(q.f64(q.p, 8)[7] > afterOne[7], 'the byte statistic does not grow with the parts of an open load');   // the records' strings and covariances; the blocks are allocated whole
   const out = q.p + 40000;
   assert.equal(q.x.sdnap_epochs_series(0, q.p, 0, 0), -1);
   assert.equal(q.x.sdnap_epochs_select(0, 2460000.5, 0, out), -1);
@@ -257,7 +277,53 @@ for (const [name, record] of Object.entries(bad)) {
   assert.equal((await part(fresh, [catalog.slice(0, 3)])).statusCode, 0);
   assert.equal((await whole(fresh, catalog.slice(3, 8))).statusCode, 0);
   refused(await close(fresh), 'load-not-open', 'a close after load_epochs');
+  // any non-zero status of an open drops the load in progress and empties the store (the rule a host relies on), a bad configuration included
+  const badConfig = {CACHE_DAYS: -1};
+  assert.equal((await opened(fresh)).statusCode, 0);
+  assert.equal((await part(fresh, [catalog.slice(0, 3)])).statusCode, 0);
+  const badOpen = await opened(fresh, badConfig);
+  assert.equal(badOpen.statusCode, 3, 'an open with a bad configuration was accepted');
+  emptyStore('a refused open');
+  refused(await part(fresh, [catalog.slice(3, 6)]), 'load-not-open', 'a part after a refused open: the earlier load is still open');
+  refused(await close(fresh), 'load-not-open', 'a close after a refused open');
+  assert.equal((await whole(fresh, catalog)).statusCode, 0);
+  assert.equal((await opened(fresh, badConfig)).statusCode, 3);
+  emptyStore('a refused open of a loaded store');
+  // load_epochs refused while a load is open abandons it; refused with none open it leaves the store as it was (it always did)
+  assert.equal((await opened(fresh)).statusCode, 0);
+  assert.equal((await part(fresh, [catalog.slice(0, 3)])).statusCode, 0);
+  refused(await call(fresh, 'load_epochs', []), 'missing-ocm', 'load_epochs with no frame while a load is open');
+  refused(await part(fresh, [catalog.slice(3, 6)]), 'load-not-open', 'a part after a refused load_epochs');
+  emptyStore('load_epochs refused while a load is open');
+  assert.equal((await whole(fresh, catalog)).statusCode, 0);
+  fingerprint();
+  const kept = fingerprint();
+  refused(await call(fresh, 'load_epochs', []), 'missing-ocm', 'load_epochs with no frame');
+  assert.equal(fingerprint(), kept, 'a load_epochs refused before it began changed the store');
   console.log('misuse: refused by name, the store untouched or empty as stated');
+}
+
+// ---- 3b. a zero-length part, and a payload cut in the middle of a frame at a part boundary
+{
+  const empty = {portId: 'ocm', typeRef: T('OCM'), payload: Buffer.alloc(0)};
+  const w = await call(fresh, 'load_epochs', [empty]);
+  assert.equal(w.statusCode, 3);
+  assert.equal((await opened(fresh)).statusCode, 0);
+  assert.equal((await part(fresh, [catalog.slice(0, 4)])).statusCode, 0);
+  const z = await call(fresh, 'load_epochs_part', [empty]);
+  assert.deepEqual([z.statusCode, z.errorCode, z.errorMessage], [w.statusCode, w.errorCode, w.errorMessage], 'a zero-length part is refused as load_epochs refuses it');
+  emptyStore('a zero-length part');
+  refused(await close(fresh), 'load-not-open', 'a close after a zero-length part');
+  // the byte stream of five records cut in the middle of the third record: the first part ends inside a frame
+  const stream = Buffer.concat(catalog.slice(0, 5).map(prefix)), cut = prefix(catalog[0]).length * 2 + 100;
+  assert.equal((await opened(fresh)).statusCode, 0);
+  const head = await call(fresh, 'load_epochs_part', [{portId: 'ocm', typeRef: T('OCM'), payload: stream.subarray(0, cut)}]);
+  const wholeCut = await call(fresh, 'load_epochs', [{portId: 'ocm', typeRef: T('OCM'), payload: stream.subarray(0, cut)}]);
+  assert.deepEqual([head.statusCode, head.errorCode, head.errorMessage], [wholeCut.statusCode, wholeCut.errorCode, wholeCut.errorMessage], 'a part cut in a frame');
+  assert.equal(head.errorCode, 'invalid-ocm');
+  emptyStore('a part cut in a frame');
+  refused(await part(fresh, [catalog.slice(2, 3)]), 'load-not-open', 'the rest of a cut frame');
+  console.log('zero-length part and a frame cut at a part boundary: refused as load_epochs refuses them, the load closed, the store empty');
 }
 
 // ---- 4. allocation failure in any call of a load in parts
@@ -385,6 +451,31 @@ const staged = async (h, records, sizes) => {
   assert.equal(one.kept, parts.kept);
   assert.ok(parts.grown < 0.6 * one.grown, `3000 records in parts of 100 grew the instance by ${parts.grown} bytes, in one payload ${one.grown}`);
   console.log(`memory: 3000 records grew the instance by ${parts.grown} B in parts of 100 and ${one.grown} B in one payload`);
+}
+// ---- 6. memory returned after a refusal: repeated refused loads do not keep growing the instance
+{
+  const h = await open(wasmPath), x = h.instance.exports, p = x.sdnap_alloc(64);
+  const held = () => { x.sdnap_epochs_stats(p); return new Float64Array(h.memory.buffer, p, 8)[7]; };
+  const many = Array.from({length: 1500}, (_, k) => stock(700000 + k, 0, 15 + (k % 97) / 100));
+  const garbage = new Uint8Array([1, 2, 3, 4]);
+  const trial = async () => {
+    assert.equal((await opened(h)).statusCode, 0);
+    assert.equal((await part(h, [many.slice(0, 500)])).statusCode, 0);
+    assert.equal((await part(h, [many.slice(500, 1000)])).statusCode, 0);
+    const r = await part(h, [[garbage]]);   // refused: the load is dropped
+    assert.equal(r.statusCode, 3);
+    assert.equal(held(), 0, 'a refused load still holds bytes');
+    // the same through a close that refuses (series-forces-differ)
+    const c = await inParts(h, [...good, ap(520010, t => { at(5, t); t.PERTURBATIONS.MAXIMUM_TESSERAL_DEGREE = 20; })], [24, 6, 1]);
+    assert.equal(c.errorCode, 'series-forces-differ');
+    assert.equal(held(), 0, 'a refused close still holds bytes');
+  };
+  for (let k = 0; k < 3; ++k) await trial();   // warm-up: the high-water of one trial
+  const settled = h.memory.buffer.byteLength;
+  for (let k = 0; k < 12; ++k) await trial();
+  assert.ok(h.memory.buffer.byteLength - settled <= 1048576, `twelve more refused loads grew the instance from ${settled} to ${h.memory.buffer.byteLength}`);
+  console.log(`memory after refusals: the instance stays at ${h.memory.buffer.byteLength} B over 12 repeated refused loads`);
+  await h.destroy?.();
 }
 console.log(JSON.stringify({compared}));
 await command.destroy?.(); await fresh.destroy?.();
