@@ -4670,12 +4670,26 @@ inline int shallow_terms(int degree, double n, double e0, double i0, ShallowTerm
 /// A term's angle rate (rad/min) at the J2 secular rates: psi-dot = w omega-dot + j M-dot + m (Omega-dot - theta-dot).
 inline double slow_rate(const SecularRates& sr, int w, int j, int m) { return w * sr.argp + j * sr.mdot + m * (sr.node - kOmegaE); }
 
+/// The field magnitudes retain std::hypot's rounding, including its scaling.
+inline double slow_field_magnitude(int l, int m) {
+  struct Table { double value[71][71]{}; bool ready[71][71]{}; };
+  static thread_local Table table;
+  if (!table.ready[l][m]) {
+    table.value[l][m] = std::hypot(kEgmC[l][m], kEgmS[l][m]);
+    table.ready[l][m] = true;
+  }
+  return table.value[l][m];
+}
+
 /// A slow term's along-track amplitude through the mean motion (m): 3 |j| A / (a psi-dot^2), A = mu / a^(l+1) |F G| |C, S|
 /// (the potential's coefficient of the term), at the epoch elements.
-inline double slow_size_m(int l, int m, int j, double fg, double a, double psidot) {
-  double amp = kMu / a;
-  for (int k = 0; k < l; ++k) amp /= a;
-  const double A = amp * std::fabs(fg) * std::hypot(kEgmC[l][m], kEgmS[l][m]);
+inline double slow_size_m(int l, int m, int j, double fg, double a, double psidot, double amplitude = -1.0) {
+  double amp = amplitude;
+  if (amp < 0.0) {
+    amp = kMu / a;
+    for (int k = 0; k < l; ++k) amp /= a;
+  }
+  const double A = amp * std::fabs(fg) * slow_field_magnitude(l, m);
   const double pd = std::fabs(psidot) > 1e-15 ? std::fabs(psidot) : 1e-15;
   return 3.0 * std::abs(j) * A / (a * pd * pd) * kRe * 1e3;
 }
@@ -4684,10 +4698,13 @@ inline double slow_size_m(int l, int m, int j, double fg, double a, double psido
 /// mu / a^(l+1) |F dG/de| |C, S|, times 2 a (once per revolution along track; a radially). A term of q other than 0 has G of
 /// order e^|q|, so its size through the mean motion vanishes as e does while this one does not: at e 0 a q = +-1 term acts on
 /// the orbit through e and omega alone.
-inline double slow_size_e_m(int l, int m, double fdg, double a, double n, double psidot) {
-  double amp = kMu / a;
-  for (int k = 0; k < l; ++k) amp /= a;
-  const double A = amp * std::fabs(fdg) * std::hypot(kEgmC[l][m], kEgmS[l][m]);
+inline double slow_size_e_m(int l, int m, double fdg, double a, double n, double psidot, double amplitude = -1.0) {
+  double amp = amplitude;
+  if (amp < 0.0) {
+    amp = kMu / a;
+    for (int k = 0; k < l; ++k) amp /= a;
+  }
+  const double A = amp * std::fabs(fdg) * slow_field_magnitude(l, m);
   const double pd = std::fabs(psidot) > 1e-15 ? std::fabs(psidot) : 1e-15;
   return 2.0 * A / (n * a * pd) * kRe * 1e3;
 }
@@ -4833,6 +4850,9 @@ inline int slow_terms_low(int shallow_degree, double n, double e0, double i0, Sh
   const int qmax = slow_q_max() < 0 ? 0 : slow_q_max() > kSlowQMax ? kSlowQMax : slow_q_max();
   SlowGMemo gmemo;
   NormalizedFkSamples inclination;
+  double amplitudes[71];
+  amplitudes[0] = kMu / a;
+  for (int l = 1; l <= L; ++l) amplitudes[l] = amplitudes[l - 1] / a;
   double F[72], dF[72];
   for (int j = 1; j <= kSlowJMax; ++j)
     for (int m = 2; m <= L; ++m)
@@ -4856,7 +4876,7 @@ inline int slow_terms_low(int shallow_degree, double n, double e0, double i0, Sh
           double G, dG;
           gmemo.get(l, pp, q, j, e0, G, dG);
           // the larger of its size through the mean motion and through the eccentricity vector reaches the cut
-          if (slow_size_m(l, m, j, F[l] * G, a, psidot) < kSlowKeepM && slow_size_e_m(l, m, F[l] * dG, a, n, psidot) < kSlowKeepM) continue;
+          if (slow_size_m(l, m, j, F[l] * G, a, psidot, amplitudes[l]) < kSlowKeepM && slow_size_e_m(l, m, F[l] * dG, a, n, psidot, amplitudes[l]) < kSlowKeepM) continue;
           if (out.count >= kShallowMax) { ++out.over; continue; }  // counted: the diagnostic lists such a term as code 7
           res::ResCoef& c = out.c[out.count++];
           c.l = static_cast<int8_t>(l);
@@ -4891,6 +4911,9 @@ inline int slow_terms_wide(int degree, int cls, double n, double e0, double i0, 
   const SecularRates sr = secular_rates(n, e0, i0);
   const double a = std::pow(kKe / n, kX2o3), band = kShallowSelect * kShallowBand * n;
   const res::TermSet carried = res::class_terms(cls);
+  double amplitudes[71];
+  amplitudes[0] = kMu / a;
+  for (int l = 1; l <= L; ++l) amplitudes[l] = amplitudes[l - 1] / a;
   double F[72], dF[72];
   for (int m = 1; m <= L; ++m)
     for (int w = -L; w <= L; ++w) {
@@ -4919,7 +4942,7 @@ inline int slow_terms_wide(int degree, int cls, double n, double e0, double i0, 
           double G, dG;
           res::exact_G(l, pp, q, e0, G, dG);
           if (!std::isfinite(F[l] * G) || !std::isfinite(F[l] * dG) || !std::isfinite(dF[l] * G)) continue;
-          if (!(slow_size_m(l, m, j, F[l] * G, a, psidot) >= kSlowKeepM)) continue;
+          if (!(slow_size_m(l, m, j, F[l] * G, a, psidot, amplitudes[l]) >= kSlowKeepM)) continue;
           if (count == room) {
             room = room == 0 ? 256 : 2 * room;
             res::ResCoef* grown = static_cast<res::ResCoef*>(sdnap::mem::realloc(*out, static_cast<size_t>(room) * sizeof(res::ResCoef)));
