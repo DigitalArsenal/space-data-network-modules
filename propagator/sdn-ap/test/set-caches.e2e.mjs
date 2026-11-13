@@ -43,6 +43,7 @@ import { PCFT } from "spacedatastandards.org/lib/js/PCF/PCF.js";
 import { PCFOutputT } from "spacedatastandards.org/lib/js/PCF/PCFOutput.js";
 import { pcfOutputFrame } from "spacedatastandards.org/lib/js/PCF/pcfOutputFrame.js";
 import { ensureBuilt, wasmPath, elementRows, THEORY } from "./lib/module.mjs";
+import { guardExports, guardTesseral, warmCounts } from "./lib/warm-cache-guard.mjs";
 import { buildDiagnostic } from "./lib/ap-diagnostic.mjs";
 import { T, seedOcm, rowsThrough, repackOcm, ocmOf, flight, spwStream, AP_FORCES } from "./lib/ocm.mjs";
 import { OCMDynamicParameterT } from "spacedatastandards.org/lib/js/OCM/OCMDynamicParameter.js";
@@ -144,11 +145,29 @@ const testBuild = buildDiagnostic("set-caches-budget",
   '    sdnap::xpt::xp_release(x); sdnap::xpt::xp_init(sdnap::elements_of(rows[i]), x); sdnap::xpt::xp_set_pooled(x); }\n' +
   '  sdnap::xpt::tess::active() = sdnap::xpt::tess::Terms{};\n' +
   '  return n;\n' +
-  '}');
+  '}' + guardExports, s => s, { 'tesseral.inc': guardTesseral });
 const tiny = await open(testBuild);
 tiny.x.sdnap_test_cache_budget(1);
 check(tiny.stats()[0] === 2 ** 20 && shipped.stats()[0] === 256 * 2 ** 20, `budgets: the test build ${tiny.stats()[0]}, the shipped default ${shipped.stats()[0]}`);
 check(shipped.x.sdnap_test_cache_budget === undefined && shipped.x.sdnap_cache_budget === undefined, "the shipped build exports a budget setter");
+
+{
+  // TEME km and km/s at UTC epochs: zero tolerance because interleaving must not change any state bit.
+  // X, Y, X changes X's base key and exercises a resonant-only rebuild after Y's base bake.
+  const x = record(ORBITS["500 km"], 0), y = record(ORBITS["830 km"], 1);
+  const mixed = await open(testBuild), alone = await open(wasmPath);
+  await mixed.load([x, y]); await alone.load([x]);
+  mixed.at(0, times[0]); alone.at(0, times[0]);
+  for (let k = 1; k <= 240; ++k) {
+    const ms = times[0] + k * 60000;
+    mixed.at(1, ms + DAY);
+    check(same(mixed.at(0, ms), alone.at(0, ms)), `X,Y,X at minute ${k}: state differs from X alone`);
+  }
+  const counts = warmCounts(mixed);
+  check(counts[2] > 0 && counts[3] > 0 && counts[4] > 0 && counts[5] > 0, `X,Y,X: ${counts[2]} base and ${counts[3]} resonant-only coefficient rebuilds; after another set base: ${counts[4]} base and ${counts[5]} resonant-only`);
+  check(counts[1] === 0, `X,Y,X: ${counts[1]} coefficient mismatches`);
+  console.log(`X,Y,X guard: ${counts[2]} base, ${counts[3]} resonant-only rebuilds; after another set base: ${counts[4]} base, ${counts[5]} resonant-only; ${counts[1]} mismatches`);
+}
 
 for (const [name, o] of Object.entries(ORBITS)) {
   const one = [record(o, 0)], two = [record(o, 0), record(o, 1)];
@@ -249,6 +268,9 @@ for (const [name, o] of Object.entries(ORBITS)) {
       rcs.push(m.x.sdnap_propagate_soa(2461328.5, 0.5 + 0.25 * k, 0, n, 0, out, status));
       all.push([...new Float64Array(m.h.memory.buffer, out, 6 * n), ...new Int32Array(m.h.memory.buffer, status, n)]);
     }
+    const counts = warmCounts(m);
+    check(counts[0] > 0 && counts[1] === 0, `${threads} threads: coefficient reuse matches ${counts[0]}, mismatches ${counts[1]}`);
+    console.log(`coefficient guard: ${threads} threads, ${counts[0]} matches, ${counts[1]} mismatches`);
     m.x.sdnap_pool_stats(ps);
     return { all, rcs, storeMB, pool: Array.from(new Float64Array(m.h.memory.buffer, ps, 10)) };
   };

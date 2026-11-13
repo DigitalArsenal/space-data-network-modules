@@ -1,6 +1,6 @@
 # SGP4-XP: mathematical specification (clean room, side A)
 
-Version 0.6.50 (dist 382194fb).
+Version 0.6.51 (dist 1a300091).
 
 **License note.** The US Space Force Sgp4Prop library is used under the USSF open source agreement
 (`space-data-network-modules/propagator/sgp4-xp/third_party/ussf-sgp4/AGREEMENT.txt`; the 9.9 package carries the
@@ -1771,11 +1771,6 @@ What the exact state costs a single record, against 0.6.12, flown back to back i
 figures come from the minimum and the steady rounds: single-threaded rounds swung by up to 5 times on the shared
 machine, so a median means little.
 
-- One warm record in ascending order is 13 % slower at 500 km and 5 to 7 % at 830 km. MEO is equal; GEO is 2.3 times
-  faster and the transfer orbit 1.7 times.
-  - At 500 km the bracket-anchored bake bookkeeping at every state costs about 6 % (stack #441): bake points one
-    tolerance apart and counted once per bracket recovered 11 of 17 %.
-  - The node re-evaluation below costs about 4 % (stack #439).
 - The first state of a fresh record at 7 days is 25 to 28 % slower at 500 km and GEO (stack #439). Each node step
   evaluates node a's held rates (third body, drag, SRP, the zonal tail) again at the node's own state, which is what
   makes a step depend on its first node alone. Recovering it takes either carrying the held parts in each node (about
@@ -1784,6 +1779,39 @@ machine, so a median means little.
 - The full `propagate` call (GCRF, 7 days at 300 s) of a record fitted with covariance is 11 % slower at 500 km and 15 % at
   GEO; a seeded record is equal at 500 km and 13 % slower at GEO. The integration of the nominal's nodes carries the node
   re-evaluation.
+
+**The warm record's bakes (stack #441).** AP's compact tesseral cache reads block coefficients from the thread cache
+when both hold the same grouping id. An atomic counter assigns each grouping its id before coefficients are written;
+the compact copy preserves it. Otherwise a base bake rebuilds all block coefficients from the terms, and a resonant
+bake rebuilds only resonant blocks. The pool charges `sizeof` for these structures. A thread cache matched by `sp_matches` (table pointer, count, tag,
+a0, e0, and sentinel coefficients) is taken as the same table for grouping and coefficient reuse.
+
+AP memoizes a, e, and cos i at the bracket's two nodes, keyed byte for byte on n, af, ag, chi, and psi at both nodes.
+The memo belongs to the set while its cache lock is held, and to the thread otherwise. The propagation entry
+clears the anchor; epoch calls clear it without consulting the memo. SGP4XP computes its anchor directly.
+
+Inline tesseral and m-daily checks compare the bracket identity, first time, length, and each bake level's part key
+before calling the synchronization routines. The checks use the same part-key expression as the bakes. The stored
+part counts and keys follow the cache's existing lock ownership. These shortcuts reuse values without changing
+arithmetic in the bakes or the returned states.
+
+
+A warm record makes no bake when no bake key changes. Four alternating rounds comparing 0.6.50 with 0.6.51 give
+the AP costs below, in microseconds per state, median [minimum, maximum], on identical saved fitted records over
+seven days at normal priority. The one-minute load range was 16.50–17.41.
+
+| Orbit | Spacing | 0.6.50 | 0.6.51 |
+|---|---|---:|---:|
+| 500 km | 60 s | 0.821 [0.812, 0.837] | 0.676 [0.658, 0.682] |
+| 500 km | 300 s | 1.365 [1.359, 1.400] | 0.839 [0.827, 0.864] |
+| 830 km | 60 s | 0.695 [0.694, 0.708] | 0.600 [0.587, 0.605] |
+| 830 km | 300 s | 0.965 [0.949, 0.971] | 0.694 [0.689, 0.718] |
+
+Test-build `sizeof` measurements against 0.6.50 give SetCaches 11,088 to 11,264 bytes (+176), MdailyEvalCache 4,704 to
+4,736 (+32), SpEvalCache 1,376 to 1,424 (+48), and AnchorMemo 136 bytes. At 1,000 AP sets, store and pool accounting
+measure 176 additional bytes per pooled set before flight and 224 after W5 (one day at 300 s). Thread-owned
+structures add 216 bytes, excluding allocator and TLS alignment overhead; the instance's grouping counter adds
+8 shared bytes. The 10,000-set / 256 MB figures above were not re-measured.
 
 How room is shared:
 

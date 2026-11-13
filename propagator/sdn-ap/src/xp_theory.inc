@@ -5713,10 +5713,24 @@ struct NodeRun {
   bool ended = false;   ///< the grid ends after the last node (a node that is not a number or does not advance)
 };
 
+/// a, e and cos i at a bracket's two nodes (set_sp_anchor) with the ten mean components they are computed from (n, af,
+/// ag, chi and psi at each node): the bracket's later states read them back instead of computing them again (two pow a
+/// state, stack #441). Keyed on those components bit for bit, so it gives what they give, whatever was flown before.
+/// It is not the anchor: sp_anchored never reads it, and g_sp_anchor is set only by the call that brackets the time
+/// (xp_propagate_impl's AnchorScope clears it on entry).
+struct AnchorMemo {
+  bool valid = false;
+  double in[10]{};
+  double a_lo = 1.0, e_lo = 0.0, c_lo = 1.0, a_hi = 1.0, e_hi = 0.0, c_hi = 1.0;
+};
+/// The thread's, for a set flown without its caches.
+inline thread_local AnchorMemo g_anchor_memo{};
+
 struct SetCaches {
   ActiveBracket ab;
   tess::MdailyEvalCache md;
   tess::SpSetSlot sp;
+  AnchorMemo anchor;   ///< written only while the flying thread holds the set's cache_lock (SetScope)
   NodeRun run[2];      ///< forward, backward
   uint64_t stamp = 0;  ///< the pool's clock when the set was last flown
   uint64_t prev = 0;   ///< the stamp of the flight before
@@ -7024,8 +7038,27 @@ inline void set_sp_anchor(const XpSat& s, const Node& lo, const Node& hi) {
     const double t2 = q.y[kChi] * q.y[kChi] + q.y[kPsi] * q.y[kPsi];
     c = (1.0 - t2) / (1.0 + t2);
   };
-  at(lo, an.a_lo, an.e_lo, an.c_lo);
-  at(hi, an.a_hi, an.e_hi, an.c_hi);
+  if (!is_ap_ctx(s.ctx)) {
+    at(lo, an.a_lo, an.e_lo, an.c_lo);
+    at(hi, an.a_hi, an.e_hi, an.c_hi);
+  } else {
+    // AP's set memo while this thread holds its caches, else the thread's own
+    AnchorMemo& m = g_flown_set == &s && s.caches != nullptr ? s.caches->anchor : g_anchor_memo;
+    const double in[10] = {lo.y[kN], lo.y[kAf], lo.y[kAg], lo.y[kChi], lo.y[kPsi],
+                           hi.y[kN], hi.y[kAf], hi.y[kAg], hi.y[kChi], hi.y[kPsi]};
+    if (!m.valid || std::memcmp(m.in, in, sizeof in) != 0) {
+      at(lo, m.a_lo, m.e_lo, m.c_lo);
+      at(hi, m.a_hi, m.e_hi, m.c_hi);
+      std::memcpy(m.in, in, sizeof in);
+      m.valid = true;
+    }
+    an.a_lo = m.a_lo;
+    an.e_lo = m.e_lo;
+    an.c_lo = m.c_lo;
+    an.a_hi = m.a_hi;
+    an.e_hi = m.e_hi;
+    an.c_hi = m.c_hi;
+  }
   an.id = id;
   an.tlo = lo.t;
   an.h = hi.t - lo.t;
