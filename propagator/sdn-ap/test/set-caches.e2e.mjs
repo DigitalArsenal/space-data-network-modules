@@ -164,9 +164,9 @@ check(shipped.x.sdnap_test_cache_budget === undefined && shipped.x.sdnap_cache_b
     check(same(mixed.at(0, ms), alone.at(0, ms)), `X,Y,X at minute ${k}: state differs from X alone`);
   }
   const counts = warmCounts(mixed);
-  check(counts[2] > 0 && counts[3] > 0, `X,Y,X: ${counts[2]} base and ${counts[3]} resonant-only coefficient rebuilds`);
+  check(counts[2] > 0 && counts[3] > 0 && counts[4] > 0 && counts[5] > 0, `X,Y,X: ${counts[2]} base and ${counts[3]} resonant-only coefficient rebuilds; after another set base: ${counts[4]} base and ${counts[5]} resonant-only`);
   check(counts[1] === 0, `X,Y,X: ${counts[1]} coefficient mismatches`);
-  console.log(`X,Y,X guard: ${counts[2]} base, ${counts[3]} resonant-only rebuilds; ${counts[1]} mismatches`);
+  console.log(`X,Y,X guard: ${counts[2]} base, ${counts[3]} resonant-only rebuilds; after another set base: ${counts[4]} base, ${counts[5]} resonant-only; ${counts[1]} mismatches`);
 }
 
 for (const [name, o] of Object.entries(ORBITS)) {
