@@ -58,6 +58,8 @@ template <class T> class Array {
     new (p_ + size_++) T(std::move(value)); return true;
   }
   void clear() { while (size_) p_[--size_].~T(); }
+  /// The elements destroyed and the buffer given back (clear() keeps it).
+  void release() { clear(); std::free(p_); p_ = nullptr; capacity_ = 0; }
   void pop_back() { p_[--size_].~T(); }
   size_t size() const { return size_; }
   size_t capacity() const { return capacity_; }
@@ -206,10 +208,11 @@ inline void clear(Store& st) {
     delete s.slots.second;
   }
   for (Entry& e : st.entries) delete e.cov;
-  st.entries.clear();
-  st.series.clear();
+  // the buffers go back too: a cleared store (a refused load, the next load's start) holds nothing, and a later load is sized afresh
+  st.entries.release();
+  st.series.release();
   st.stats = Stats{};
-  st.atmospheres.clear();
+  st.atmospheres.release();
 }
 
 inline Store& resident() {
@@ -402,8 +405,10 @@ inline int build(Store& st, const Config& cfg) {
   }
   // the series: (NORAD_CAT_ID, INTERNATIONAL_DESIGNATOR, MEAN_ELEMENT_THEORY, ORIGINATOR), each by epoch (a later record
   // of the same epoch replaces)
-  Array<uint32_t> order, keep;
-  if (!order.reserve(recs.size()) || !keep.reserve(recs.size()) || !st.entries.reserve(recs.size()) || !st.series.reserve(recs.size())) {
+  // `order` the input positions sorted into series and epochs; `kept` the input positions of the kept sets in series order and `starts` where each
+  // series' sets begin in `kept` (and one past the last): the entries and the series are sized from what is kept, not from what was read (SPEC 1.6).
+  Array<uint32_t> order, kept, starts;
+  if (!order.reserve(recs.size()) || !kept.reserve(recs.size()) || !starts.reserve(recs.size() + 1)) {
     for (Record& r : recs) delete r.cov;
     return mem::refuse_if_out_of_memory(), 3;
   }
@@ -440,7 +445,7 @@ inline int build(Store& st, const Config& cfg) {
     while (e < order.size() && recs[order[e]].norad == head.norad && recs[order[e]].object_id == head.object_id &&
            recs[order[e]].met == head.met && recs[order[e]].originator == head.originator)
       ++e;
-    keep.clear();
+    const size_t g0 = kept.size();  // this series' kept sets are kept[g0..]
     for (uint32_t q = k; q < e; ++q) {
       Record& r = recs[order[q]];
       if (epoch_of(r) < oldest_kept) { ++st.stats.aged; delete r.cov; r.cov = nullptr; continue; }
@@ -448,67 +453,78 @@ inline int build(Store& st, const Config& cfg) {
       auto same_span = [](const Record& a, const Record& b) {
         return !a.track == !b.track && (!a.track || (a.track->start == b.track->start && a.track->stop == b.track->stop));
       };
-      if (!keep.empty() && epoch_of(recs[keep.back()]) == epoch_of(r) && same_span(recs[keep.back()], r)) {
+      if (kept.size() > g0 && epoch_of(recs[kept.back()]) == epoch_of(r) && same_span(recs[kept.back()], r)) {
         ++st.stats.duplicate;
-        delete recs[keep.back()].cov;
-        recs[keep.back()].cov = nullptr;
-        keep.back() = order[q];
+        delete recs[kept.back()].cov;
+        recs[kept.back()].cov = nullptr;
+        kept.back() = order[q];
         continue;
       }
-      keep.push_back(order[q]);
+      kept.push_back(order[q]);
     }
-    if (cfg.max_sets > 0 && keep.size() > cfg.max_sets) {
-      const size_t drop = keep.size() - cfg.max_sets;
-      for (size_t q = 0; q < drop; ++q) { delete recs[keep[q]].cov; recs[keep[q]].cov = nullptr; }
+    if (cfg.max_sets > 0 && kept.size() - g0 > cfg.max_sets) {
+      const size_t drop = kept.size() - g0 - cfg.max_sets;
+      for (size_t q = 0; q < drop; ++q) { delete recs[kept[g0 + q]].cov; recs[kept[g0 + q]].cov = nullptr; }
       st.stats.capped += static_cast<double>(drop);
-      for (size_t q = drop; q < keep.size(); ++q) keep[q - drop] = keep[q];
-      for (size_t q = 0; q < drop; ++q) keep.pop_back();
+      for (size_t q = drop; g0 + q < kept.size(); ++q) kept[g0 + q - drop] = kept[g0 + q];
+      for (size_t q = 0; q < drop; ++q) kept.pop_back();
     }
-    if (!keep.empty()) {
-      Series s;
-      s.norad = head.norad;
-      s.object_id = head.object_id;
-      s.originator = head.originator;
-      s.theory = head.row.theory;
-      s.met = head.met;
-      s.name = recs[keep.back()].name;
-      s.first = static_cast<uint32_t>(st.entries.size());
-      s.count = static_cast<uint32_t>(keep.size());
-      if (s.count > 1) {
-        s.slots.second = mem::counted(new (std::nothrow) Slot{});
-        if (s.slots.second == nullptr) {
-          for (Record& r : recs) delete r.cov;
-          return mem::refuse_if_out_of_memory(), 3;
-        }
-      }
-      for (uint32_t q : keep) {
-        Entry en;
-        en.row = recs[q].row;
-        en.epoch = epoch_of(recs[q]);
-        en.cov = recs[q].cov;
-        if (recs[q].track) {
-          carried::keep(*recs[q].track);  // a kept record's bytes, copied once (the call's are freed after it)
-          en.track = recs[q].track;
-          s.carried = true;
-        }
-        en.handover = recs[q].handover;
-        en.forces = recs[q].forces;
-        en.atmosphere = recs[q].atmosphere;
-        if (en.row.theory == kTheorySgp4Xp) {
-          ocm::Bind bind(en.forces, en.atmosphere);  // the set's own selection decides whether AP's switches exist
-          if (ap_selected()) {
-            const xpt::Branch b = row_branch(en.row);
-            en.branch = static_cast<uint8_t>(b.resonance) | (static_cast<uint64_t>(b.long_period) << 8) |
-                        (static_cast<uint64_t>(b.wide_tess) << 16) | (static_cast<uint64_t>(b.wide_e) << 24) |
-                        (static_cast<uint64_t>(b.series_e) << 32);
-          }
-        }
-        recs[q].cov = nullptr;
-        st.entries.push_back(en);
-      }
-      st.series.push_back(std::move(s));
-    }
+    if (kept.size() > g0) starts.push_back(static_cast<uint32_t>(g0));
     k = e;
+  }
+  starts.push_back(static_cast<uint32_t>(kept.size()));
+  // Now what is kept is known: the entries and the series are allocated at exactly that size, so a capped or theory-filtered load holds nothing for
+  // the records it dropped and the store's byte count is its capacity.
+  if (!st.entries.reserve(kept.size()) || !st.series.reserve(starts.size() - 1)) {
+    for (Record& r : recs) delete r.cov;
+    return mem::refuse_if_out_of_memory(), 3;
+  }
+  for (size_t g = 0; g + 1 < starts.size(); ++g) {
+    const size_t first = starts[g], last = starts[g + 1];
+    const Record& head = recs[kept[first]];  // the identity fields are those of the series' key, equal in every record of it
+    Series s;
+    s.norad = head.norad;
+    s.object_id = head.object_id;
+    s.originator = head.originator;
+    s.theory = head.row.theory;
+    s.met = head.met;
+    s.name = recs[kept[last - 1]].name;
+    s.first = static_cast<uint32_t>(st.entries.size());
+    s.count = static_cast<uint32_t>(last - first);
+    if (s.count > 1) {
+      s.slots.second = mem::counted(new (std::nothrow) Slot{});
+      if (s.slots.second == nullptr) {
+        for (Record& r : recs) delete r.cov;
+        return mem::refuse_if_out_of_memory(), 3;
+      }
+    }
+    for (size_t j = first; j < last; ++j) {
+      const uint32_t q = kept[j];
+      Entry en;
+      en.row = recs[q].row;
+      en.epoch = epoch_of(recs[q]);
+      en.cov = recs[q].cov;
+      if (recs[q].track) {
+        carried::keep(*recs[q].track);  // a kept record's bytes, copied once (the call's are freed after it)
+        en.track = recs[q].track;
+        s.carried = true;
+      }
+      en.handover = recs[q].handover;
+      en.forces = recs[q].forces;
+      en.atmosphere = recs[q].atmosphere;
+      if (en.row.theory == kTheorySgp4Xp) {
+        ocm::Bind bind(en.forces, en.atmosphere);  // the set's own selection decides whether AP's switches exist
+        if (ap_selected()) {
+          const xpt::Branch b = row_branch(en.row);
+          en.branch = static_cast<uint8_t>(b.resonance) | (static_cast<uint64_t>(b.long_period) << 8) |
+                      (static_cast<uint64_t>(b.wide_tess) << 16) | (static_cast<uint64_t>(b.wide_e) << 24) |
+                      (static_cast<uint64_t>(b.series_e) << 32);
+        }
+      }
+      recs[q].cov = nullptr;
+      st.entries.push_back(en);
+    }
+    st.series.push_back(std::move(s));
   }
   // Only atmospheres referenced by retained sets belong to the snapshot.
   size_t used = 0;
@@ -886,7 +902,8 @@ inline bool any_labeled(const Store& st, const Series& s) {
 }
 
 inline uint64_t bytes_of(const Store& st) {
-  uint64_t b = st.entries.size() * sizeof(Entry) + st.series.size() * sizeof(Series);
+  // the arrays at their capacity: what the store holds, not what it uses
+  uint64_t b = st.entries.capacity() * sizeof(Entry) + st.series.capacity() * sizeof(Series) + st.atmospheres.capacity() * sizeof(std::unique_ptr<atm::Atmosphere>);
   for (const Entry& e : st.entries) b += (e.cov != nullptr ? sizeof(cov::Set) + e.cov->C.size() * sizeof(double) : 0) + (e.track ? e.track->bytes() : 0);
   // the interned rows and nodes, one copy each
   for (const auto& a : st.atmospheres) b += sizeof(atm::Atmosphere) + a->days.size() * sizeof(atm::SpwDay) + a->dca_ms.size() * (sizeof(int64_t) + 2 * sizeof(double));

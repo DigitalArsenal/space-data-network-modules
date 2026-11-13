@@ -135,13 +135,23 @@ await same('records carrying a forecast, shuffled and capped', shuffle([...carri
 // the weather: sharing, and the discard of one nothing keeps
 const one = ap(520040, t => at(0, t)), sameWeather = ap(520040, t => at(-1, t)), otherWeather = ap(520040, t => { at(-2, t); t.PERTURBATIONS.SPACE_WEATHER = rows[1]; });
 const unused = ap(520041, t => { at(-9, t); t.PERTURBATIONS.SPACE_WEATHER = rows[2]; });                       // aged out: nothing keeps its rows
-const bytesFor = async records => { assert.equal((await load(fresh, records)).statusCode, 0); return bytesOf(pn); };
+const bytesFor = async (records, cfg = {}) => { assert.equal((await load(fresh, records, cfg)).statusCode, 0); return bytesOf(pn); };
 const b1 = await bytesFor([one]), b2same = await bytesFor([one, sameWeather]), b2other = await bytesFor([one, otherWeather]), bUnused = await bytesFor([one, unused]);
 const atmosphere = b2other - b2same;      // what a second distinct weather series costs beyond a second set
 assert.ok(atmosphere > 2000, `a distinct weather series costs ${atmosphere} B`);
 assert.ok(b2same - b1 < atmosphere / 2, `two sets of one weather series cost ${b2same - b1} B more than one: the rows are not shared`);
 assert.ok(bUnused - b1 < 100, `an aged-out record's weather stays resident: ${bUnused - b1} B beyond the kept set's`);
 console.log(`weather: one set ${b1} B; a second set of the same weather +${b2same - b1} B; of another weather +${b2other - b1} B; an unused weather +${bUnused - b1} B`);
+
+// what a capped or theory-filtered load drops holds no memory: the store's bytes are those of a load of what it kept alone
+const history = [];
+for (let k = 0; k < 150; ++k) for (let d = 0; d < 8; ++d) history.push(stock(540000 + k, -d, 15 + k / 100));
+const newest = [];
+for (let k = 0; k < 150; ++k) newest.push(stock(540000 + k, 0, 15 + k / 100));
+assert.equal(await bytesFor(history, {MAX_SETS_PER_OBJECT: 1}), await bytesFor(newest), 'a load capped at one set holds capacity for the sets it dropped');
+const filtered = await bytesFor([...catalog.slice(0, 12), ...catalog.slice(30)], {THEORIES: [pcfTheory.AP]});
+assert.equal(filtered, await bytesFor([...catalog.slice(0, 12), ...catalog.slice(30)].filter(r => ocmOf(r).MEAN_ELEMENTS.MEAN_ELEMENT_THEORY === 5)), 'a theory-filtered load holds capacity for the records it dropped');
+console.log(`capped and filtered loads hold exactly what a load of the kept records alone holds (${await bytesFor(newest)} B)`);
 
 // the refusals: each covariance refusal, several bad records, series-forces-differ; compared with the old build's code and message
 const good = catalog.slice(0, 30);
