@@ -56,7 +56,9 @@ Build: `npm run build` (module SDK compiler lane, clang `wasm32-wasip1-threads`,
   flights of the version before, and its record's bytes differ by that line alone.
 - Memory (SPEC 1.6, 16.11; `test/grid-cache.e2e.mjs`): a method during which one of the module's own allocations failed
   refuses with errorCode `out-of-memory` and emits nothing, never success nor another reason (a decay answer, SPEC 16.25,
-  included); `sdnap_fit` then gives status -1 and leaves its row as it came.
+  included); `sdnap_fit` then gives status -1 and leaves its row as it came. At its memory limit the module refuses a
+  state, never aborts (`test/memory-limit.e2e.mjs`): a thread's caches are made before its first state, and a state on a
+  thread that cannot make them answers the theory's refusal code.
   `sdnap_wide_grid_budget(bytes, out)` sets the grid cache's byte bound (512 MiB by default; live and idle grids, each at
   its allocated bytes, the least recently used idle grid freed first) when bytes is 1 or more (1 keeps no idle grid), and
   writes the bound, the bytes held, the grids held and those idle. The bound decides which grids are kept, never a state.

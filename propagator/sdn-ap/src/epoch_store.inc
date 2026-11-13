@@ -419,8 +419,8 @@ inline Slot& slot_of(Store& st, Series& s, uint32_t k, bool with_cov) {
   for (Slot& q : s.slots)
     if (q.index == static_cast<int32_t>(k)) {
       if (with_cov && q.cp == nullptr && st.entries[s.first + k].cov != nullptr && q.error == 0) {
-        q.cp = new cov::Propagator();
-        if (cov::prepare(*st.entries[s.first + k].cov, *q.cp) != 0) { delete q.cp; q.cp = nullptr; }
+        q.cp = sdnap::mem::counted(new (std::nothrow) cov::Propagator());  // none (counted): the state without covariance
+        if (q.cp != nullptr && cov::prepare(*st.entries[s.first + k].cov, *q.cp) != 0) { delete q.cp; q.cp = nullptr; }
       }
       return q;
     }
@@ -457,8 +457,8 @@ inline Slot& slot_of(Store& st, Series& s, uint32_t k, bool with_cov) {
     }
   }
   if (with_cov && q.error == kPropOk && en.cov != nullptr) {
-    q.cp = new cov::Propagator();
-    if (cov::prepare(*en.cov, *q.cp) != 0) { delete q.cp; q.cp = nullptr; }
+    q.cp = sdnap::mem::counted(new (std::nothrow) cov::Propagator());  // none (counted): the state without covariance
+    if (q.cp != nullptr && cov::prepare(*en.cov, *q.cp) != 0) { delete q.cp; q.cp = nullptr; }
   }
   return q;
 }

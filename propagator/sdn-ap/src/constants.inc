@@ -83,10 +83,10 @@ inline void* aligned_alloc(size_t align, size_t n) {
   if (p == nullptr && n > 0) note_failure(n);
   return p;
 }
-/// A nothrow new's result, counted when it failed.
+/// A nothrow new's result, counted when it failed (`n`: the bytes asked, an array's whole size).
 template <class T>
-inline T* counted(T* p) {
-  if (p == nullptr) note_failure(sizeof(T));
+inline T* counted(T* p, size_t n = sizeof(T)) {
+  if (p == nullptr) note_failure(n);
   return p;
 }
 inline uint32_t failures() { return __atomic_load_n(&g_failures, __ATOMIC_RELAXED); }

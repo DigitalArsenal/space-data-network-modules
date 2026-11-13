@@ -884,8 +884,13 @@ struct SpTermsScratch {
 // stack #497: the general table's rows are indexed by w + 17 and |w| for |w| up to its degree (kSpCap), the degrees to 70
 static_assert(kSpCap <= 17, "SpTermsScratch's w rows (35) and |w| rows (18) hold |w| up to kSpCap");
 inline thread_local SpTermsScratch* g_sp_terms_scratch_ptr = nullptr;
+/// Made by pool::warm_thread before the thread's first state or initialization (stack #600). False when it cannot be had.
+inline bool sp_terms_scratch_make() {
+  if (g_sp_terms_scratch_ptr == nullptr) g_sp_terms_scratch_ptr = sdnap::mem::counted(new (std::nothrow) SpTermsScratch{});
+  return g_sp_terms_scratch_ptr != nullptr;
+}
 inline SpTermsScratch& sp_terms_scratch() {
-  if (__builtin_expect(!g_sp_terms_scratch_ptr, 0)) g_sp_terms_scratch_ptr = new SpTermsScratch{};
+  if (__builtin_expect(!g_sp_terms_scratch_ptr, 0) && !sp_terms_scratch_make()) __builtin_trap();  // a thread warm_thread did not reach
   return *g_sp_terms_scratch_ptr;
 }
 
@@ -1591,13 +1596,17 @@ inline SpEvalCache* sp_compact_copy(const SpEvalCache& src) {
 }
 
 inline thread_local float* g_sp_blk_c = nullptr;
-/// The thread's blk_c storage (192 KiB), made on first use or ahead (pool::warm_thread: a pool thread makes its caches
-/// before any batch, stack #487).
-inline float* sp_blk_c_storage() {
-  if (__builtin_expect(!g_sp_blk_c, 0)) {
+/// The thread's blk_c storage (192 KiB), made ahead (pool::warm_thread: before the thread's first state or initialization,
+/// and before any batch on a pool thread, stacks #487 and #600). False when it cannot be had (the failure counted). Through
+/// 0.6.52 it was made at a set's first bake from its table again, a day or so into a flight, and aborted the module when
+/// the memory was full by then (stack #600).
+inline bool sp_blk_c_make() {
+  if (g_sp_blk_c == nullptr)
     g_sp_blk_c = static_cast<float*>(sdnap::mem::aligned_alloc(64, static_cast<size_t>(SpEvalCache::kMaxBlks) * 64 * sizeof(float)));
-    if (g_sp_blk_c == nullptr) std::abort();
-  }
+  return g_sp_blk_c != nullptr;
+}
+inline float* sp_blk_c_storage() {
+  if (__builtin_expect(!g_sp_blk_c, 0) && !sp_blk_c_make()) __builtin_trap();  // a thread warm_thread did not reach
   return g_sp_blk_c;
 }
 /// Rebuild block coefficients from F, zeroing empty vector positions. With `blocks`, write only those `count`
@@ -1638,8 +1647,13 @@ struct SpBuildScratch {
   uint16_t rem_items[2600]{};
 };
 inline thread_local SpBuildScratch* g_sp_build_scratch_ptr = nullptr;
+/// Made by pool::warm_thread before the thread's first state or initialization (stack #600). False when it cannot be had.
+inline bool sp_build_scratch_make() {
+  if (g_sp_build_scratch_ptr == nullptr) g_sp_build_scratch_ptr = sdnap::mem::counted(new (std::nothrow) SpBuildScratch{});
+  return g_sp_build_scratch_ptr != nullptr;
+}
 inline SpBuildScratch& sp_build_scratch() {
-  if (__builtin_expect(!g_sp_build_scratch_ptr, 0)) g_sp_build_scratch_ptr = new SpBuildScratch{};
+  if (__builtin_expect(!g_sp_build_scratch_ptr, 0) && !sp_build_scratch_make()) __builtin_trap();  // a thread warm_thread did not reach
   return *g_sp_build_scratch_ptr;
 }
 
@@ -1666,11 +1680,21 @@ void sp_pool_release(SpEvalCache* cache);
 
 /// A thread's own cache (kMaxBlks): where every set's terms are grouped, and the cache of the sets that hold none.
 inline thread_local SpEvalCache* g_sp_eval_cache_ptr = nullptr;
-inline SpEvalCache& sp_thread_cache() {
-  if (__builtin_expect(!g_sp_eval_cache_ptr, 0)) {
-    g_sp_eval_cache_ptr = new SpEvalCache{};
-    if (!sp_storage(*g_sp_eval_cache_ptr, SpEvalCache::kMaxBlks, SpEvalCache::kMaxRows, true)) std::abort();
+/// Made by pool::warm_thread before the thread's first state or initialization (stack #600), with its storage. False when
+/// either cannot be had (the failure counted; nothing kept).
+inline bool sp_thread_cache_make() {
+  if (g_sp_eval_cache_ptr != nullptr) return true;
+  SpEvalCache* c = sdnap::mem::counted(new (std::nothrow) SpEvalCache{});
+  if (c == nullptr) return false;
+  if (!sp_storage(*c, SpEvalCache::kMaxBlks, SpEvalCache::kMaxRows, true)) {
+    delete c;
+    return false;
   }
+  g_sp_eval_cache_ptr = c;
+  return true;
+}
+inline SpEvalCache& sp_thread_cache() {
+  if (__builtin_expect(!g_sp_eval_cache_ptr, 0) && !sp_thread_cache_make()) __builtin_trap();  // a thread warm_thread did not reach
   return *g_sp_eval_cache_ptr;
 }
 
@@ -3862,8 +3886,13 @@ struct HalfDayEvalCache {
   alignas(16) float b7[1152]{};
 };
 inline thread_local HalfDayEvalCache* g_half_day_eval_cache_ptr = nullptr;
+/// Made by pool::warm_thread before the thread's first state or initialization (stack #600). False when it cannot be had.
+inline bool half_day_eval_cache_make() {
+  if (g_half_day_eval_cache_ptr == nullptr) g_half_day_eval_cache_ptr = sdnap::mem::counted(new (std::nothrow) HalfDayEvalCache{});
+  return g_half_day_eval_cache_ptr != nullptr;
+}
 inline HalfDayEvalCache& half_day_eval_cache() {
-  if (__builtin_expect(!g_half_day_eval_cache_ptr, 0)) g_half_day_eval_cache_ptr = new HalfDayEvalCache{};
+  if (__builtin_expect(!g_half_day_eval_cache_ptr, 0) && !half_day_eval_cache_make()) __builtin_trap();  // a thread warm_thread did not reach
   return *g_half_day_eval_cache_ptr;
 }
 inline int32_t& fit_grid_depth();

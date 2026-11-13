@@ -139,8 +139,8 @@ integrator used, and the elements of later times do not follow from integrating 
 
 ### 1.6 Memory *[stack #497]*
 
-The module's own malloc, calloc, realloc and aligned_alloc calls, and its two nothrow news (the theories' tables and
-grids, the set caches, the fit's arrays, the stores), go through one accounting (`sdnap::mem`), which counts the
+The module's own malloc, calloc, realloc and aligned_alloc calls, and its nothrow news (the theories' tables and grids,
+the set caches, a thread's caches, the fit's arrays, the stores), go through one accounting (`sdnap::mem`), which counts the
 allocations that fail and the largest request.
 
 **A method during which one of them failed refuses with errorCode `out-of-memory` and emits nothing.** That holds for
@@ -174,8 +174,30 @@ initialization failed for want of memory answers that state with the theory's re
 initializes it again.
 
 **The resident exports**, which have no method error (`sdnap_epochs_*`, the row store's `sdnap_propagate_*`), answer a
-state whose set could not be initialized with the theory's refusal code, as before. `sdnap_wide_grid_cache` and
-`sdnap_wide_grid_budget` show the instance's grids and bytes.
+state whose set could not be initialized with the theory's refusal code, as before, and so a state on a thread whose caches
+cannot be made (below). `sdnap_wide_grid_cache` and `sdnap_wide_grid_budget` show the instance's grids and bytes.
+
+**A thread's caches** *[stack #600]*. A thread keeps nine caches for every set it flies, about 1.8 MB, fixed in size:
+- the short-period evaluator's thread cache and its 192 KiB coefficient block;
+- the grouping and term scratch;
+- the half-day cache and the covariance's step cache;
+- the Sun and Moon node store, the drift and GCRF node slots.
+
+They are made together, through the accounting, before the thread's first state or set initialization, and before any
+threaded batch. A state or an initialization on a thread where one cannot be had is refused with the theory's refusal code
+(in a method: `out-of-memory`); the set is left as it was, and the next state asks again. Where the node store or the node
+slots cannot be had, a node is computed at each use without them, to the same numbers.
+
+Through 0.6.52 each was made at its first use. The coefficient block is first used when a set's tesseral cache is baked
+again from its table, a day or so into a flight. When the memory was full by then, the module aborted there (a wasm
+`unreachable`): 547 AP sets at 500 km in an instance held to 128 MiB, flown a day and then two days after their epoch,
+aborted at the second pass's first set (test/memory-limit.e2e.mjs). Now 545 answer in each pass and 2 are refused, and
+every state answered equals the same state at the default maximum, bit for bit. 100,000 sets at the default 2,048 MiB,
+flown twice at one instant: 68,772 answer in each pass, and the rest are refused, where the second pass aborted at its
+9th set.
+
+The pool's list of the sets that hold caches (SPEC 9) grows through the accounting as well. When the list cannot grow, the
+set holds no caches and flies on the thread's.
 
 **Outside the rule** (no call mark; what each does when one of the module's allocations fails):
 - `sdnap_covariance_at` and `sdnap_covariance_full_at`: a covariance bank that cannot be prepared answers their existing
@@ -198,11 +220,11 @@ state whose set could not be initialized with the theory's refusal code, as befo
   - the $OMM sets, the burns, the $SPW rows;
   - a carried forecast's segments;
   - every output's FlatBufferBuilder.
-- The per-thread stores a thread allocates on its first use of AP's terms, fixed in size, not sized by any input: the GCRF
-  and drift node caches (`new`), the bodies' store (`new`) and the short-period evaluator's thread cache (it aborts).
+- A record's covariance as a load reads it (`load_epochs`, `new`), and a carried forecast's segment states.
 
-**Counted, then aborting when it fails:** the short-period evaluator's per-thread block (192 KiB, aligned_alloc through the
-accounting; the failure is counted, then the thread aborts).
+**Counted, then trapping when it fails:** a thread's caches on a path that reaches them before any state or set
+initialization on that thread: the diagnostic exports that read a set's mean state (`sdnap_xp_native`, `sdnap_rates_repeat`,
+`sdnap_shadow_margin`, `sdnap_drag_orbit_check`) on a thread that has flown no set.
 
 **The stack.** No array whose size follows the grid's anomalies or a degree lies on it: the grid builder's anomaly arrays
 (9 x 128 doubles) and the m-daily family's inclination functions are on the heap. The fixed-size arrays indexed by the
