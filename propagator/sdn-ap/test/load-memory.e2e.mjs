@@ -85,7 +85,7 @@ assert.equal((await invoke(old,shuffled)).statusCode,0);
 const oldBytes=old.memory.buffer.byteLength;
 assert.ok(oldBytes-2*1048576 >= shuffled.length*5000, `old load ${oldBytes} does not break bound`);
 // Refusals inserted inside a catalog preserve both the name and full message.
-const badRecords = [new Uint8Array([1,2,3,4]), repackOcm(records[1],t=>{t.MEAN_ELEMENTS.ECCENTRICITY=2;}),
+const badRecords = [new Uint8Array([1,2,3,4]), repackOcm(records[1],t=>{t.PERTURBATIONS.SPACE_WEATHER=[];}),
   repackOcm(records[1],t=>{t.PERTURBATIONS.MAXIMUM_ZONAL_DEGREE=19;})];
 for(const bad of badRecords){
   const mixed=[...records.slice(0,128),bad,...records.slice(128,256)];
@@ -99,7 +99,18 @@ assert.equal((await invoke(h,[records[0]])).statusCode,0);
 assert.equal(x.sdnap_epochs_count(),1);
 await h.destroy?.(); await old.destroy?.();
 // Force the first counted catalog-array request to fail; host staging still works.
-const failWasm=buildDiagnostic('load-memory-refusal','',s=>s,{'epoch_store.inc':s=>s.replace(
+const layoutProbe = `
+SDNAP_EXPORT("sdnap_test_load_layout") void sdnap_test_load_layout(double* out) {
+  using namespace sdnap::epochs;
+  const size_t values[] = {sizeof(Entry), sizeof(Series), sizeof(Slot), sizeof(sdnap::cov::Set),
+    offsetof(Entry,row), offsetof(Entry,epoch), offsetof(Entry,cov), offsetof(Entry,forces),
+    offsetof(Entry,atmosphere), offsetof(Entry,branch), offsetof(Entry,track), offsetof(Entry,handover),
+    offsetof(Series,norad), offsetof(Series,object_id), offsetof(Series,originator), offsetof(Series,name),
+    offsetof(Series,theory), offsetof(Series,met), offsetof(Series,first), offsetof(Series,count),
+    offsetof(Series,carried), offsetof(Series,slots), offsetof(Series,next)};
+  for(size_t k=0;k<sizeof(values)/sizeof(values[0]);++k) out[k]=values[k];
+}`;
+const failWasm=buildDiagnostic('load-memory-refusal',layoutProbe,s=>s,{'epoch_store.inc':s=>s.replace(
   'T* p = static_cast<T*>(mem::malloc(n * sizeof(T)));',
   'mem::note_failure(n * sizeof(T)); return false;\n    T* p = static_cast<T*>(nullptr);')});
 const refused=await open(failWasm);
@@ -108,6 +119,9 @@ assert.notEqual(failure.statusCode,0);
 assert.equal(failure.errorCode,'out-of-memory');
 assert.match(failure.errorMessage,/An allocation failed/);
 assert.equal(refused.instance.exports.sdnap_epochs_count(),0);
+const layoutPtr=refused.instance.exports.sdnap_alloc(23*8);
+refused.instance.exports.sdnap_test_load_layout(layoutPtr);
+console.log('layout '+JSON.stringify(Array.from(new Float64Array(refused.memory.buffer,layoutPtr,23))));
 await refused.destroy?.();
 console.log(JSON.stringify({records:shuffled.length,afterLoad,oldBytes,storeBytes:stats[7],refusal:failure.errorCode}));
 console.log('LOAD-MEMORY PASS');
