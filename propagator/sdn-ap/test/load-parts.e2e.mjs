@@ -1,0 +1,344 @@
+#!/usr/bin/env node
+// A load taken in parts (SPEC 14.1): load_epochs_open, load_epochs_part (any number of times), load_epochs_close.
+//   1. Partition equivalence: for every catalog of load-equivalence (shuffled, capped, theory-filtered, duplicates whichever part they fall in, SGP4, SGP4XP and
+//      AP sets, covariances, forecasts, shared and unused weather) the store built from one part, two, seven uneven parts (some of two frames) and one record
+//      a part equals the store load_epochs builds from the whole list: the counts and bytes, every series, every set's epoch and state, and the selected state
+//      and the covariance of every series, bit for bit.
+//   2. Refusals: a bad record in a middle part is refused with the code and message load_epochs gives on the whole list; the load is then closed and the store
+//      empty (a part or a close after it is refused load-not-open); series-forces-differ comes at the close, with the store empty.
+//   3. Misuse: a part or a close with no load open is refused load-not-open and leaves a loaded store as it was; a second open starts over; a close with no part
+//      is refused missing-ocm; the store is empty from the open to the close (a state asked of it is -1, no such series).
+//   4. Allocation failure: every counted allocation of every call of a three-part load is made to fail in turn (a test-only seam in the module's accounting);
+//      each is refused out-of-memory, the store is empty, and the load is closed.
+//   5. Memory: a catalog taken in parts of 100 grows the instance by a fraction of what the same catalog taken in one payload does.
+import assert from 'node:assert/strict';
+import fs from 'node:fs';
+import * as fb from 'flatbuffers';
+import {createStandaloneHarness} from 'space-data-module-sdk/testing/isomorphic';
+import {OMM} from 'spacedatastandards.org/lib/js/OMM/OMM.js';
+import {T, seedOcm, rowsThrough, repackOcm, ocmOf} from './lib/ocm.mjs';
+import {configuration, pcfTheory} from './lib/pcf.mjs';
+import {wasmPath} from './lib/module.mjs';
+import {jdOf} from './lib/frames.mjs';
+import {buildDiagnostic} from './lib/ap-diagnostic.mjs';
+import {CLASSES, carriedRecord, harness as commandHarness} from './lib/carried.mjs';
+const DAY = 86400000, MIB = 1048576;
+const fixture = new Uint8Array(fs.readFileSync(new URL('fixtures/ap-fit-0.6.43.ocm', import.meta.url)));
+const epoch = ocmOf(fixture).MEAN_ELEMENTS.EPOCH;
+const ms = Date.parse(epoch.endsWith('Z') ? epoch : epoch + 'Z');
+const iso = t => new Date(t).toISOString().replace('Z', '');
+const weather = value => rowsThrough(Array.from({length: 46}, (_, k) => ({DATE: iso(ms + (k - 5) * DAY).slice(0, 10), F107_OBS: value, F107_OBS_CENTER81: value + 2, AP_AVG: 4})));
+const rows = [weather(70), weather(75), weather(80)];
+const prefix = bytes => { const b = Buffer.alloc(bytes.length + 4); b.writeUInt32LE(bytes.length); b.set(bytes, 4); return b; };
+const open = (file, initial = 2) => createStandaloneHarness('browser', file, {surface: 'direct', maxThreads: 1, enableBrowserWasiThreads: false, initialMemoryBytes: initial * MIB});
+const frame = records => ({portId: 'ocm', typeRef: T('OCM'), payload: Buffer.concat(records.map(prefix))});
+const whole = (h, records, cfg = {}) => h.invoke({methodId: 'load_epochs', inputs: [frame(records), configuration({epochStore: cfg})]});
+const call = (h, methodId, inputs = []) => h.invoke({methodId, inputs});
+const opened = (h, cfg = {}) => call(h, 'load_epochs_open', [configuration({epochStore: cfg})]);
+const part = (h, chunks) => call(h, 'load_epochs_part', chunks.map(frame));
+const close = h => call(h, 'load_epochs_close');
+/** The load in parts: `sizes` records a part, the records of a part in frames of at most three. The first refusal is returned (and no call follows it). */
+const inParts = async (h, records, sizes, cfg = {}) => {
+  let r = await opened(h, cfg);
+  if (r.statusCode !== 0) return r;
+  let at = 0;
+  for (const size of sizes) {
+    const mine = records.slice(at, at + size); at += size;
+    const chunks = []; for (let k = 0; k < mine.length; k += 3) chunks.push(mine.slice(k, k + 3));
+    r = await part(h, chunks.length ? chunks : [[]]);
+    if (r.statusCode !== 0) return r;
+  }
+  assert.equal(at, records.length, 'the partition covers every record');
+  return close(h);
+};
+const evenly = (n, k) => Array.from({length: k}, (_, i) => Math.floor(n * (i + 1) / k) - Math.floor(n * i / k)).filter(s => s > 0);
+const uneven = n => { const cuts = [1, 2, 5, 9, 14, 22].map(c => Math.min(n, c)); const out = []; let prev = 0; for (const c of [...cuts, n]) { if (c > prev) out.push(c - prev); prev = Math.max(prev, c); } return out; };
+const partitions = n => [['one part', [n]], ['two parts', evenly(n, 2)], ['seven uneven parts', uneven(n).length >= 7 ? uneven(n) : evenly(n, 7)], ['one record a part', Array(n).fill(1)]];
+
+const fresh = await open(wasmPath);
+const q = (() => { const x = fresh.instance.exports, p = x.sdnap_alloc(1 << 16); return {x, p, f64: (o, n) => new Float64Array(fresh.memory.buffer, o, n), i32: (o, n) => new Int32Array(fresh.memory.buffer, o, n)}; })();
+const fingerprint = () => {
+  const {x, p, f64, i32} = q, out = [];
+  x.sdnap_epochs_stats(p); out.push(Array.from(f64(p, 7)));
+  const count = x.sdnap_epochs_count(); out.push(count);
+  const ep = p + 4096, st = p + 8192, cov = p + 12288, one = p + 2048;
+  for (let i = 0; i < count; ++i) {
+    assert.equal(x.sdnap_epochs_series(i, p, ep, 512), 0);
+    const info = Array.from(f64(p, 3)); out.push(info);
+    const epochs = Array.from(f64(ep, 2 * info[2])); out.push(epochs);
+    for (let k = 0; k < info[2]; ++k) {
+      const at = jdOf(iso((epochs[2 * k] - 2440587.5 + epochs[2 * k + 1]) * DAY + 1800000));
+      const rc = x.sdnap_epochs_set_at(i, k, at.whole, at.frac, one);
+      out.push([rc, ...Array.from(f64(one, 6))]);
+    }
+    for (const lag of [5400000, 4 * 3600000]) {   // two times: the covariance values are compared at both
+      const at = jdOf(iso((epochs[0] - 2440587.5 + epochs[1]) * DAY + lag));
+      const rc = x.sdnap_epochs_at(at.whole, at.frac, i, 1, 0, p + 1024, st, cov);
+      out.push([rc, i32(st, 1)[0], ...Array.from(f64(p + 1024, 6)), ...Array.from(f64(cov, 36))]);
+      x.sdnap_epochs_source_at(at.whole, at.frac, i, 1, st);
+      out.push(['source', i32(st, 1)[0]]);
+    }
+  }
+  return JSON.stringify(out, (k, v) => (typeof v === 'number' && !Number.isFinite(v) ? String(v) : v));
+};
+const emptyStore = what => { q.x.sdnap_epochs_stats(q.p); const s = q.f64(q.p, 8); assert.deepEqual([q.x.sdnap_epochs_count(), s[0], s[1], s[7]], [0, 0, 0, 0], `${what}: the store holds series, records, kept, bytes ${q.x.sdnap_epochs_count()}, ${s[0]}, ${s[1]}, ${s[7]}`); };
+const refused = (r, code, what) => { assert.equal(r.statusCode, 3, `${what}: status ${r.statusCode}`); assert.equal(r.errorCode, code, `${what}: ${r.errorCode}: ${r.errorMessage}`); };
+
+// ---- the catalogs of load-equivalence
+const command = await commandHarness(wasmPath);
+const sgp4 = async (norad, mm, mean = 0, when = epoch) => {
+  const b = new fb.Builder(256), e = b.createString(when);
+  OMM.startOMM(b); OMM.addEpoch(b, e); OMM.addNoradCatId(b, norad); OMM.addMeanMotion(b, mm); OMM.addEccentricity(b, 0.001); OMM.addInclination(b, 55); OMM.addMeanAnomaly(b, mean);
+  OMM.finishOMMBuffer(b, OMM.endOMM(b));
+  const r = await fresh.invoke({methodId: 'ingest_omm', inputs: [{portId: 'omm', typeRef: T('OMM'), payload: b.asUint8Array().slice()}]});
+  assert.equal(r.statusCode, 0, r.errorMessage);
+  return new Uint8Array(r.outputs[0].payload);
+};
+const ap = (norad, edit = () => {}) => repackOcm(fixture, t => { t.METADATA.NORAD_CAT_ID = norad; t.METADATA.OBJECT_NAME = `Q${norad}`; t.PERTURBATIONS.SPACE_WEATHER = rows[0]; edit(t); });
+const at = (days, t) => { t.MEAN_ELEMENTS.EPOCH = iso(ms + days * DAY); t.TRAJ_FRAME_EPOCH = iso(ms + days * DAY); };
+const stock = (norad, days, mm = 15.1) => seedOcm({epoch: iso(ms + days * DAY), n: mm, e: 0.001, i: 53, raan: 20, argp: 90, ma: 10, bterm: 0.0002, norad, name: `X${norad}`});
+const seedAp = (norad, days, rowsOf) => seedOcm({epoch: iso(ms + days * DAY), n: 15, e: 0.001, i: 55, raan: norad % 360, argp: 90, ma: 10, norad, name: `S${norad}`, msis: true, records: true, rows: rowsOf, tesseral: 31, zonal: 20});
+const catalog = [];
+for (let k = 0; k < 4; ++k) catalog.push(await sgp4(500000 + k, 15 + k / 50, k * 7));
+for (const d of [3, -2, 0, 1, -1]) catalog.push(await sgp4(500010, 15.2, d * 10, iso(ms + d * DAY)));
+for (let k = 0; k < 4; ++k) catalog.push(stock(510000 + k, 0, 15 + k / 10));
+for (const d of [2, -3, 0, -1, 1]) catalog.push(stock(510010, d));
+for (let k = 0; k < 6; ++k) catalog.push(ap(520000 + k, t => { t.PERTURBATIONS.SPACE_WEATHER = rows[k % 2]; }));
+for (const d of [-2, 1, 0, -1]) catalog.push(ap(520010, t => at(d, t)));
+for (let k = 0; k < 3; ++k) catalog.push(seedAp(530000 + k, 0, rows[k % 3]));
+const dupA = ap(520020, t => { t.MEAN_ELEMENTS.MEAN_ANOMALY = 100; }), dupB = ap(520020, t => { t.MEAN_ELEMENTS.MEAN_ANOMALY = 200; });
+catalog.push(dupA, dupB);
+catalog.push(ap(520021, t => { t.MEAN_ELEMENTS.MEAN_ANOMALY = 210; }), ap(520021, t => { t.MEAN_ELEMENTS.MEAN_ANOMALY = 110; }));
+catalog.push(await sgp4(500020, 15.3, 10), await sgp4(500020, 15.3, 99));
+catalog.push(ap(520030, t => at(-9, t)));
+catalog.push(repackOcm(catalog[0], t => { t.CENTER_NAME = 'MARS'; }));
+let seed = 20261113;
+const shuffle = list => { const s = list.slice(); for (let k = s.length - 1; k > 0; --k) { seed = (Math.imul(seed, 1664525) + 1013904223) >>> 0; const j = seed % (k + 1); [s[k], s[j]] = [s[j], s[k]]; } return s; };
+const shuffled = [shuffle(catalog), shuffle(catalog)];
+const carried = [];
+for (const [c, norad] of [[CLASSES[1], 99301], [CLASSES[0], 99302]]) carried.push((await carriedRecord(command, c, {norad})).ocm);
+const carriedEpoch = ocmOf(carried[0]).MEAN_ELEMENTS.EPOCH;
+const near = repackOcm(stock(99310, 0), t => { t.MEAN_ELEMENTS.EPOCH = carriedEpoch; });
+const withForecast = [...carried, near, await sgp4(99311, 15.4, 5, carriedEpoch)];
+const weatherCases = [ap(520040, t => at(0, t)), ap(520040, t => at(-1, t)), ap(520040, t => { at(-2, t); t.PERTURBATIONS.SPACE_WEATHER = rows[1]; }), ap(520041, t => { at(-9, t); t.PERTURBATIONS.SPACE_WEATHER = rows[2]; })];
+
+// ---- 1. partition equivalence
+let compared = 0;
+const equal = async (name, records, cfg = {}) => {
+  const w = await whole(fresh, records, cfg);
+  assert.equal(w.statusCode, 0, `${name}: load_epochs refused ${w.errorCode}`);
+  q.x.sdnap_epochs_stats(q.p);
+  const kept = q.f64(q.p, 8)[1], expect = fingerprint();
+  assert.ok(kept > 0);
+  for (const [label, sizes] of partitions(records.length)) {
+    const r = await inParts(fresh, records, sizes, cfg);
+    assert.equal(r.statusCode, 0, `${name}, ${label}: ${r.errorCode}: ${r.errorMessage}`);
+    assert.equal(fingerprint(), expect, `${name}, ${label}: the store differs from the one load_epochs builds`);
+    compared += 1;
+  }
+  console.log(`${name}: ${records.length} records, ${kept} kept, equal in ${partitions(records.length).length} partitions`);
+};
+await equal('catalog, as written', catalog);
+await equal('catalog, shuffled A', shuffled[0]);
+await equal('catalog, shuffled B', shuffled[1]);
+await equal('capped at 2 sets per object', catalog, {MAX_SETS_PER_OBJECT: 2});
+await equal('capped at 1 set per object, shuffled', shuffled[0], {MAX_SETS_PER_OBJECT: 1});
+await equal('SGP4 sets only', catalog, {THEORIES: [pcfTheory.SGP4]});
+await equal('AP sets only, shuffled', shuffled[1], {THEORIES: [pcfTheory.AP]});
+await equal('one-day cache', catalog, {CACHE_DAYS: 1});
+await equal('records carrying a forecast', withForecast);
+{
+  // the forecast is read from the part's bytes, which the host reuses: the last of the parts' stores answers from it
+  const r = await inParts(fresh, withForecast, Array(withForecast.length).fill(1));
+  assert.equal(r.statusCode, 0);
+  const staging = q.x.sdnap_alloc(1 << 20); new Uint8Array(fresh.memory.buffer, staging, 1 << 20).fill(0xA5);   // what a reused staging buffer would overwrite
+  assert.match(fingerprint(), /\["source",1\]/, 'no series answers from a carried forecast');
+}
+await equal('records carrying a forecast, shuffled and capped', shuffle(withForecast), {MAX_SETS_PER_OBJECT: 1});
+await equal('weather shared, distinct and unused', weatherCases);
+// a same-epoch duplicate whichever part it falls in: the two records of the pair are put in different parts, in both orders
+for (const [a, b] of [[dupA, dupB], [dupB, dupA]]) {
+  const records = [a, ...catalog.slice(0, 6), b];
+  const w = await whole(fresh, records);
+  assert.equal(w.statusCode, 0);
+  const expect = fingerprint();
+  const r = await inParts(fresh, records, [1, 6, 1]);
+  assert.equal(r.statusCode, 0);
+  assert.equal(fingerprint(), expect, 'a same-epoch duplicate across parts');
+  compared += 1;
+}
+console.log(`duplicates across parts: equal; ${compared} stores compared`);
+
+// ---- 2. refusals
+const good = catalog.slice(0, 30);
+const bad = {
+  'garbage': new Uint8Array([1, 2, 3, 4]),
+  'weather rows missing': ap(520050, t => { t.PERTURBATIONS.SPACE_WEATHER = []; }),
+  'propagation invariant': ap(520053, t => { t.COV_PROPAGATION.NOISE_NON_GRAVITATIONAL_RAD_DAY2 = t.COV_PROPAGATION.NOISE_NON_GRAVITATIONAL_RAD_DAY2 * 2 + 1; }),
+  'covariance size': ap(520054, t => { t.COV_SIZE = 5; }),
+};
+for (const [name, record] of Object.entries(bad)) {
+  const records = [...good.slice(0, 14), record, ...good.slice(14)];
+  const w = await whole(fresh, records);
+  assert.equal(w.statusCode, 3, `${name}: load_epochs answered the list with the bad record`);
+  emptyStore(`${name}, whole`);
+  // the bad record falls in the middle part: parts of 10 records, the record is the 15th (the second part's fifth)
+  const r = await inParts(fresh, records, [10, 10, 11]);
+  assert.deepEqual([r.statusCode, r.errorCode, r.errorMessage], [w.statusCode, w.errorCode, w.errorMessage], `${name}: the refusal of a middle part`);
+  emptyStore(`${name}, in parts`);
+  refused(await part(fresh, [good.slice(0, 2)]), 'load-not-open', `${name}: a part after the refusal`);
+  refused(await close(fresh), 'load-not-open', `${name}: a close after the refusal`);
+}
+{
+  const records = [...good.slice(0, 5), bad.garbage, ...good.slice(5, 20), bad['covariance size'], ...good.slice(20)];
+  const w = await whole(fresh, records);
+  const r = await inParts(fresh, records, [4, 8, 8, 8, 8]);   // the garbage is the sixth record, before the second bad one
+  assert.deepEqual([r.errorCode, r.errorMessage], [w.errorCode, w.errorMessage], 'several bad records: the first is reported');
+  emptyStore('several bad records');
+}
+{
+  const clash = ap(520010, t => { at(5, t); t.PERTURBATIONS.MAXIMUM_TESSERAL_DEGREE = 20; });
+  const records = [...good, clash];
+  const w = await whole(fresh, records);
+  assert.equal(w.errorCode, 'series-forces-differ');
+  const r = await inParts(fresh, records, [12, 12, 7]);
+  assert.deepEqual([r.statusCode, r.errorCode, r.errorMessage], [w.statusCode, w.errorCode, w.errorMessage], 'series-forces-differ arrives at the close');
+  emptyStore('series-forces-differ');
+  refused(await close(fresh), 'load-not-open', 'a close after series-forces-differ');
+}
+{
+  // a part of another type is refused by its type, as load_epochs refuses it
+  assert.equal((await opened(fresh)).statusCode, 0);
+  const omm = Buffer.alloc(40); omm.writeUInt32LE(36, 0); omm.write('$OMM', 8, 'latin1');
+  const r = await call(fresh, 'load_epochs_part', [{portId: 'ocm', typeRef: T('OCM'), payload: omm}]);
+  const w = await call(fresh, 'load_epochs', [{portId: 'ocm', typeRef: T('OCM'), payload: omm}]);
+  assert.deepEqual([r.statusCode, r.errorCode, r.errorMessage], [w.statusCode, w.errorCode, w.errorMessage]);
+  assert.equal(r.errorCode, 'omm-not-flown');
+  emptyStore('a part of another type');
+  refused(await close(fresh), 'load-not-open', 'after a part of another type');
+}
+
+// ---- 3. misuse
+{
+  assert.equal((await whole(fresh, catalog)).statusCode, 0);
+  const loaded = fingerprint();
+  refused(await part(fresh, [catalog.slice(0, 3)]), 'load-not-open', 'a part with no load open');
+  refused(await close(fresh), 'load-not-open', 'a close with no load open');
+  assert.equal(fingerprint(), loaded, 'a part or a close with no load open changed the store');
+  // an open empties the store, and the store stays empty until the close
+  assert.equal((await opened(fresh)).statusCode, 0);
+  emptyStore('after an open');
+  assert.equal((await part(fresh, [catalog.slice(0, 10)])).statusCode, 0);
+  emptyStore('after a part');
+  const out = q.p + 40000;
+  assert.equal(q.x.sdnap_epochs_series(0, q.p, 0, 0), -1);
+  assert.equal(q.x.sdnap_epochs_select(0, 2460000.5, 0, out), -1);
+  assert.equal(q.x.sdnap_epochs_at(2460000.5, 0, 0, 1, 0, out, 0, 0), -1);
+  assert.equal(q.x.sdnap_epochs_set_at(0, 0, 2460000.5, 0, out), -1);
+  // a second open starts over: what the first took is dropped
+  assert.equal((await opened(fresh)).statusCode, 0);
+  assert.equal((await part(fresh, [catalog.slice(10, 20)])).statusCode, 0);
+  assert.equal((await close(fresh)).statusCode, 0);
+  const second = fingerprint();
+  assert.equal((await whole(fresh, catalog.slice(10, 20))).statusCode, 0);
+  assert.equal(second, fingerprint(), 'a second open did not start over');
+  // a close with no part, and the load is closed
+  assert.equal((await opened(fresh)).statusCode, 0);
+  refused(await close(fresh), 'missing-ocm', 'a close with no part');
+  emptyStore('a close with no part');
+  refused(await close(fresh), 'load-not-open', 'a second close');
+  // a part with no frame
+  assert.equal((await opened(fresh)).statusCode, 0);
+  refused(await call(fresh, 'load_epochs_part', []), 'missing-ocm', 'a part with no frame');
+  emptyStore('a part with no frame');
+  // load_epochs while a load is open starts its own (the open one is dropped)
+  assert.equal((await opened(fresh)).statusCode, 0);
+  assert.equal((await part(fresh, [catalog.slice(0, 3)])).statusCode, 0);
+  assert.equal((await whole(fresh, catalog.slice(3, 8))).statusCode, 0);
+  refused(await close(fresh), 'load-not-open', 'a close after load_epochs');
+  console.log('misuse: refused by name, the store untouched or empty as stated');
+}
+
+// ---- 4. allocation failure in any call of a load in parts
+const seam = {
+  'constants.inc': s => s
+    .replace('inline uint32_t g_failures = 0;', 'inline uint32_t g_failures = 0;\ninline uint32_t g_test_fail_at = 0, g_test_count = 0;\ninline bool test_should_fail() { ++g_test_count; return g_test_fail_at != 0 && g_test_count == g_test_fail_at; }')
+    .replace('inline void* malloc(size_t n) {\n  void* p = std::malloc(n);', 'inline void* malloc(size_t n) {\n  if (test_should_fail()) { note_failure(n); return nullptr; }\n  void* p = std::malloc(n);')
+    .replace('inline void* calloc(size_t k, size_t n) {\n  void* p = std::calloc(k, n);', 'inline void* calloc(size_t k, size_t n) {\n  if (test_should_fail()) { note_failure(k * n); return nullptr; }\n  void* p = std::calloc(k, n);')
+    .replace('inline T* counted(T* p) {\n  if (p == nullptr) note_failure(sizeof(T));', 'inline T* counted(T* p) {\n  if (p != nullptr && test_should_fail()) { p->~T(); ::operator delete(p); p = nullptr; }\n  if (p == nullptr) note_failure(sizeof(T));'),
+};
+const probe = `
+SDNAP_EXPORT("sdnap_test_fail_at") void sdnap_test_fail_at(uint32_t n) { sdnap::mem::g_test_fail_at = n; sdnap::mem::g_test_count = 0; }
+SDNAP_EXPORT("sdnap_test_alloc_count") uint32_t sdnap_test_alloc_count(void) { return sdnap::mem::g_test_count; }`;
+{
+  const seamed = buildDiagnostic('load-parts-seam', probe, s => s, seam);
+  const h = await open(seamed), x = h.instance.exports, p = x.sdnap_alloc(64);
+  const stats = () => { x.sdnap_epochs_stats(p); return Array.from(new Float64Array(h.memory.buffer, p, 8)); };
+  const records = [...catalog.slice(0, 6), ...catalog.slice(14, 24), ...catalog.slice(30, 34), ...catalog.slice(34, 36)];
+  const sizes = evenly(records.length, 3);
+  // the calls of the load, as thunks: open, three parts, close
+  const calls = () => {
+    const out = [() => opened(h)];
+    let from = 0;
+    for (const s of sizes) { const mine = records.slice(from, from + s); from += s; out.push(() => part(h, [mine])); }
+    out.push(() => close(h));
+    return out;
+  };
+  const run = async (failCall, failAt) => {
+    const list = calls();
+    let r;
+    for (let c = 0; c < list.length; ++c) {
+      x.sdnap_test_fail_at(c === failCall ? failAt : 0);
+      r = await list[c]();
+      if (c === failCall) return {r, count: x.sdnap_test_alloc_count()};
+      assert.equal(r.statusCode, 0, `call ${c}: ${r.errorCode}`);
+    }
+  };
+  await run(-1, 0);   // the first load makes one-time allocations: count the second
+  const counts = [];
+  const ok = calls();
+  for (let c = 0; c < ok.length; ++c) { x.sdnap_test_fail_at(0); assert.equal((await ok[c]()).statusCode, 0); counts.push(x.sdnap_test_alloc_count()); }
+  assert.ok(stats()[1] > 10 && counts[4] > 5, `the load kept ${stats()[1]} sets; allocations per call ${counts}`);
+  let failed = 0;
+  for (let c = 1; c < ok.length; ++c) {   // the open allocates nothing worth failing; the three parts and the close are failed one allocation at a time
+    for (let n = 1; n <= counts[c]; ++n) {
+      const {r} = await run(c, n);
+      refused(r, 'out-of-memory', `allocation ${n} of ${counts[c]} of call ${c}`);
+      const s = stats();
+      assert.deepEqual([x.sdnap_epochs_count(), s[0], s[1], s[7]], [0, 0, 0, 0], `allocation ${n} of call ${c}: the store is not empty`);
+      refused(await part(h, [records.slice(0, 2)]), 'load-not-open', `allocation ${n} of call ${c}: the load is not closed`);
+      failed += 1;
+    }
+  }
+  // a load after the refusals is the new snapshot alone
+  x.sdnap_test_fail_at(0);
+  assert.equal((await opened(h)).statusCode, 0);
+  assert.equal((await part(h, [records.slice(0, 6)])).statusCode, 0);
+  assert.equal((await close(h)).statusCode, 0);
+  assert.equal(x.sdnap_epochs_count(), 5);   // four objects and a series of two sets
+  console.log(`allocation failure: ${failed} counted allocations of the parts and the close (${counts.join(', ')} per call) failed in turn, each refused out-of-memory with the store empty and the load closed`);
+  await h.destroy?.();
+}
+
+// ---- 5. memory: parts of 100 against one payload
+{
+  const many = Array.from({length: 3000}, (_, k) => stock(600000 + k, 0, 15 + (k % 97) / 100));
+  const grown = async sizes => {
+    const h = await open(wasmPath);
+    const before = h.memory.buffer.byteLength;
+    const r = sizes === null ? await whole(h, many) : await inParts(h, many, sizes);
+    assert.equal(r.statusCode, 0, r.errorMessage);
+    const x = h.instance.exports, p = x.sdnap_alloc(64); x.sdnap_epochs_stats(p);
+    const kept = new Float64Array(h.memory.buffer, p, 8)[1];
+    const out = {grown: h.memory.buffer.byteLength - before, kept};
+    await h.destroy?.();
+    return out;
+  };
+  const one = await grown(null), parts = await grown(Array(30).fill(100));
+  assert.equal(one.kept, parts.kept);
+  assert.ok(parts.grown < 0.6 * one.grown, `3000 records in parts of 100 grew the instance by ${parts.grown} bytes, in one payload ${one.grown}`);
+  console.log(`memory: 3000 records grew the instance by ${parts.grown} B in parts of 100 and ${one.grown} B in one payload`);
+}
+console.log(JSON.stringify({compared}));
+await command.destroy?.(); await fresh.destroy?.();
+console.log('LOAD-PARTS PASS');

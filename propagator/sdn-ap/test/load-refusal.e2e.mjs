@@ -37,7 +37,9 @@ const probe = `
 SDNAP_EXPORT("sdnap_test_fail_at") void sdnap_test_fail_at(uint32_t n) { sdnap::mem::g_test_fail_at = n; sdnap::mem::g_test_count = 0; }
 SDNAP_EXPORT("sdnap_test_alloc_count") uint32_t sdnap_test_alloc_count(void) { return sdnap::mem::g_test_count; }`;
 const guarded = buildDiagnostic('load-refusal', probe, s => s, seam);
-const unguarded = buildDiagnostic('load-refusal-control', probe, s => s, {...seam, 'epoch_store.inc': s => s.replace('~Unwind() { if (!installed) clear(s); }', '~Unwind() {}')});
+const unguarded = buildDiagnostic('load-refusal-control', probe, s => s, {...seam, 'epoch_store.inc': s => s
+  .replace('~Unwind() { if (!installed) clear(s); }', '~Unwind() {}')
+  .replace('  if (rc == 0) rc = epochs::close(st, b);\n  b.drop();\n  if (rc != 0) epochs::clear(st);\n  return rc;', '  if (rc == 0) rc = epochs::close(st, b);\n  b.drop();\n  return rc;')});
 
 // the catalog
 const records = [];
