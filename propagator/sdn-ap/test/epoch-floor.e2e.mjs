@@ -1,4 +1,7 @@
 #!/usr/bin/env node
+// The own-fit identity reference is the fixed added-zonal-term artifact at 3a5fb74c: the added terms move the five
+// reference fits by up to 10.906312 m / 12.294643 mm/s when both fits fly on this build at daily epochs over seven
+// days; historical floor-cure controls and every bound are retained.
 // E2E (SPEC 12.4, stack #551): an AP record's epoch floor is put on by the writer and taken off by the reader at the two-body
 // state of the record's own mean elements, so no change to a theory's epoch state moves what a reader takes off; an AP record
 // written before that has its covariance refused by name and its states fly.
@@ -81,7 +84,7 @@ import {scratchTemp} from './lib/scratch.mjs';
 ensureBuilt();
 const BASE = {version: '0.6.36', commit: '258d824d2c83da8aa0f9ad2325273cfe478ae5d8', sha256: '01f8fd18eb97107b4cd1e0d7694f31787bcddf7cbb61f44255d83e3f45f3f56f'};
 const MAIN = {version: '0.6.38', commit: 'f8fd3240fe360f7b7649e9daf9e4d7b09ba21bd0', sha256: '1933b5da4d2c3c4bca644a9f88e43584d85b8f6f455762879294a8cf1a66c75b'};
-const SELF_BASE = {version: '0.6.43', commit: 'a5293c54ba6ab58483d7fd7bb5e93d6212d532e7', sha256: 'f33e071fc77ccca6198ed7641c348957a947606460276fc9e8a926892a991935'};
+const SELF_BASE = { version: '0.6.48', commit: '3a5fb74c8e12f825160eea58624dbc85a2cbacc5', sha256: 'b2de5af7e03753e57aebf781c49c824552706a16c563ca60b1dbb71d1a2358c6' };
 const CURE = {version: '0.6.39', commit: '94351f345a32c659e0beec0d87dfb14100e2ea23', sha256: '7a857d632d044cd3830456cdcb8fbac5cb95a201087a417c530773f2e0bc295a'};
 const SELF = {ofLargest: 1e-11, along: 1e-10}, ACROSS = {ofLargest: 1e-3, along: 1e-3}, STATES_M = 0.001, MOVED_KM = 1e-4, IDENTITY = 1e-12;
 // the two-body state of TWO_BODY_SETS' mean elements, recorded on 0.6.38, the same on 0.6.39 (IEEE 754 hex, km and km/s)

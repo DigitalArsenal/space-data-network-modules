@@ -43,6 +43,7 @@
 #include <sched.h>
 
 #include <algorithm>
+#include <cassert>
 #include <cerrno>
 #include <cmath>
 #include <cstddef>

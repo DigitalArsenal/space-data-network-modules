@@ -1,4 +1,6 @@
 #!/usr/bin/env node
+// The AP identity reference is the fixed added-zonal-term artifact at 3a5fb74c: its seven-day flight moves 5.293514
+// m / 2.959278 mm/s from the prior AP reference; the original SGP reference and every bound are retained.
 // E2E (sdn-ap 0.6.5): WASM SIMD128 + fast-trig + stage-cached RK3 + analytic/SIMD covariance Jacobian
 // for AP (theory 5), preserving bit-for-bit identity on SGP4 (type 0) and SGP4XP (type 4) against 0.6.4
 // (commit cfd750eb8), sub-centimeter AP state agreement (<= 1 cm over 7 days, from 0.6.43 against the radial term's first
@@ -48,7 +50,7 @@ try {
   // fast side's first build with the band guard (git 258d824d, not a release; its own version string reads 0.6.36), and
   // from 0.6.43 the radial term's first build on 0.6.42 (git a5293c54, not a release; its own version string reads 0.6.43)
   // (history at step 4)
-  const STATE_BASE = { version: "0.6.43", commit: "a5293c54ba6ab58483d7fd7bb5e93d6212d532e7", sha256: "f33e071fc77ccca6198ed7641c348957a947606460276fc9e8a926892a991935" };
+  const STATE_BASE = { version: '0.6.48', commit: '3a5fb74c8e12f825160eea58624dbc85a2cbacc5', sha256: 'b2de5af7e03753e57aebf781c49c824552706a16c563ca60b1dbb71d1a2358c6' };
   const stateBaseBytes = execFileSync("git", ["-C", repoRoot, "show", `${STATE_BASE.commit}:propagator/sdn-ap/dist/isomorphic/module.wasm`], { maxBuffer: 1 << 26 });
   assert.equal(createHash("sha256").update(stateBaseBytes).digest("hex"), STATE_BASE.sha256, `${STATE_BASE.version} baseline sha256 mismatch`);
   const stateBasePath = path.join(scratch, `sdn-ap-${STATE_BASE.version}.wasm`);
@@ -188,7 +190,7 @@ try {
   // itself (ap-fit-0.6.42-0.6.43.cov; the 0.6.42 file went): 2.28e-6 of a time's largest entry from 0.6.42's, the bound kept.
   // The 0.6.4 dist still flies its own fit for the timing line, this build the stored record (two fits of the same arc).
   assert.ok(Buffer.from(ocmBaseBytes).equals(fs.readFileSync(path.join(here, "fixtures/ap-fit-0.6.4.ocm"))), "the 0.6.4 dist's fit is not ap-fit-0.6.4.ocm");
-  const recordedCov = new Float64Array(fs.readFileSync(path.join(here, "fixtures/ap-fit-0.6.42-0.6.43.cov")).buffer.slice(0));
+  const recordedCov = new Float64Array(fs.readFileSync(path.join(here, "fixtures/ap-fit-0.6.42-0.6.48.cov")).buffer.slice(0));
   const covTimes = [];
   for (let t = 0; t <= GRID.minutes; t += GRID.step / 60) covTimes.push(t);
   const evalCov = (harness, ocmBytes) => {

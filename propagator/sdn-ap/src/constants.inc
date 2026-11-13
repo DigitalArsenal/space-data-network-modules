@@ -89,6 +89,33 @@ inline T* counted(T* p, size_t n = sizeof(T)) {
   if (p == nullptr) note_failure(n);
   return p;
 }
+/// A fixed-length initialization table; allocation failure is counted and leaves no elements.
+template <class T> struct InitTable {
+  T* data = nullptr;
+  size_t count = 0;
+  InitTable() = default;
+  InitTable(const InitTable&) = delete;
+  InitTable& operator=(const InitTable&) = delete;
+  ~InitTable() { reset(); }
+  void reset() {
+    for (size_t i = 0; i < count; ++i) data[i].~T();
+    std::free(data); data = nullptr; count = 0;
+  }
+  bool allocate(size_t n) {
+    if (data) return count == n;
+    data = static_cast<T*>(mem::malloc(n * sizeof(T)));
+    if (!data) return false;
+    count = n;
+    for (size_t i = 0; i < n; ++i) new (data + i) T{};
+    return true;
+  }
+  size_t size() const { return count; }
+  bool empty() const { return count == 0; }
+  T& operator[](size_t i) { return data[i]; }
+  const T& operator[](size_t i) const { return data[i]; }
+  T* begin() { return data; }
+  T* end() { return data + count; }
+};
 inline uint32_t failures() { return __atomic_load_n(&g_failures, __ATOMIC_RELAXED); }
 /// The failures counted when the calling thread's method began.
 inline thread_local uint32_t g_call_mark = 0;
