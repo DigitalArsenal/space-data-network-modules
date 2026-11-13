@@ -15,6 +15,10 @@ query-order independence, and the e0 0.2999 full-harmonic control (0.796426 m, c
 the grid). The boundary-side residual difference is 0.004882 m over five days. SPEC 16.3 records the costs:
 measured hp300/i55 and hp800/i20 fits take 1.242354 and 1.755229 times 0.6.48; some cold calls also increase.
 
+## 0.6.53
+
+AP initialization shares eccentricity samples, inclination columns, division chains, and constant field magnitudes within their complete keys. Counted allocation failures refuse the call as `out-of-memory`. Scalar-reference and set-order tests cover the memo keys and four-thread flights. The force model and arithmetic order are unchanged.
+
 ## 0.6.52
 
 A stored AP set keeps only what a flight reads: the output table's raw term list is kept only where the field census builds the set, and the half-day class’s half-day table is kept at its count. Every state and every covariance element is unchanged (stack #583).
