@@ -20,6 +20,7 @@ result.budget = 32 * n + 850 * eligible * cells + 1048576;
 assert.equal(f.open(result.budget), 0); result.afterOpen = f.mem().byteLength;
 const time = EPOCH_MS + 3600000, ahead = cells === 1 ? 0 : 2880;
 assert.equal(f.refill(time, ahead, 32).rc, 0); result.afterFirstBatch = f.mem().byteLength;
+result.firstBatchPool = f.poolStats();
 assert.equal(f.fill(time, ahead, 5000).due, 0); result.afterFill = f.mem().byteLength;
 console.log(JSON.stringify({ stage: "filled", bytes: result.afterFill }));
 result.initialStats = f.stats();
