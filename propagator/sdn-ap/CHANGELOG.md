@@ -1,6 +1,6 @@
 # Changelog
 
-## Zonal long-period terms (stack #595)
+## 0.6.54 — Zonal long-period terms (stack #595)
 
 AP carries the zonal tail's long-period terms with 2 <= |w| <= 6 at epoch eccentricity at or below 0.3.
 Their finite Hansen coefficients use a value-and-slope match at the center of a 0.002 eccentricity cell,
