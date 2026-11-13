@@ -63,9 +63,11 @@ async function epochFlight(order,threads=0) {
  const {h,x}=await open(wasmPath,threads), out=x.sdnap_alloc(48);
  const r=await h.invoke({methodId:'load_epochs',inputs:[{portId:'ocm',typeRef:T('OCM'),payload:Buffer.concat(order.map(k=>prefix(records[k])))}]});
  assert.equal(r.statusCode,0,`${r.errorCode}: ${r.errorMessage}`);
+ const meta=x.sdnap_alloc(64), series=new Map();
+ for(let j=0;j<order.length;j++){x.sdnap_epochs_series(j,meta,0,0);series.set(new Float64Array(h.memory.buffer,meta,1)[0],j);}
  const result={};
  for(const k of order) result[k]=leads.map(t=>{
-  assert.equal(x.sdnap_epochs_set_at(order.indexOf(k),0,whole,t/1440,out),0,`${cases[k][0]} at ${t} min`);
+  assert.equal(x.sdnap_epochs_set_at(series.get(81000+k),0,whole,t/1440,out),0,`${cases[k][0]} at ${t} min`);
   return Array.from(new Float64Array(h.memory.buffer,out,6));
  });
  return result;
