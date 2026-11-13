@@ -91,6 +91,7 @@ assert.equal(x.get_orbital_period(99), 0); assert.ok(Number.isNaN(x.get_eccentri
 let samples = 0;
 for (const [index, step, count] of [[0, 20 / 86400, 360], [1, -20 / 86400, 8], [2, 0, 3], [3, 30 / 86400, 8], [6, 10 / 86400, 3]]) {
   assert.equal(x.plugin_propagate_path(index, jd, step, count, positions), count);
+  if (x.sdnap_test_plugin_slot_bytes) assert.equal(x.sdnap_test_plugin_slot_bytes(index), 0);
   const path = bytes(positions, 24 * count);
   for (let i = 0; i < count; ++i) {
     const [w, frac] = split(jd + i * step);
@@ -149,6 +150,12 @@ if (process.env.SDNAP_CONTROL_WASM) {
     new Uint8Array(memory(), ip, rows.length).set(rows); assert.equal(ex.sdnap_init_elements(ip, 3), 3); assert.equal(ex.plugin_propagate_batch(jd, op, 3), 0);
   }
   assert.deepEqual(bytes(structs, 192), Buffer.from(new Uint8Array(control.mem(), co, 192)));
+  const invalid = data.slice(); new DataView(invalid.buffer).setFloat64(88 + 16, 2, true);
+  for (const [ex, memory, ip, op] of [[x, mem, omm, structs], [cx, control.mem, ci, co]]) {
+    new Uint8Array(memory(), ip, invalid.length).set(invalid); assert.equal(ex.plugin_init_omm(ip, 3), 3);
+    assert.equal(ex.plugin_propagate_batch(jd, op, 3), -6);
+  }
+  assert.deepEqual(bytes(structs, 192), Buffer.from(new Uint8Array(control.mem(), co, 192)));
   cx.plugin_destroy(); cx.sdnap_free(ci); cx.sdnap_free(co); await control.h.destroy?.(); controlCompared = true;
 }
 // A multi-set identity stays one index, supports exact paths, and refuses ambiguous replacement.
@@ -171,6 +178,11 @@ if (x.sdnap_test_fail_at) {
     const saved = bulk();
     x.sdnap_test_fail_at(fail); const r = await call('replace_epoch', [input([changed])]); x.sdnap_test_fail_at(0);
     refusal(r, 'out-of-memory'); assert.deepEqual(bulk(), saved); ++failedAllocations;
+  }
+  const preserved = bulk();
+  for (const fail of [1, 2, 3]) {
+    x.sdnap_test_fail_at(fail); assert.equal(x.plugin_init_omm(omm, 3), -4); x.sdnap_test_fail_at(0);
+    assert.equal(x.plugin_entity_count(), 7); assert.deepEqual(bulk(), preserved);
   }
   x.sdnap_test_plugin_dead(1);
   refusal(await call('replace_epoch', [input([changed])]), 'pool-dead'); assert.equal(state(0).rc, -6);
