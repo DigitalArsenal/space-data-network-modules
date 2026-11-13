@@ -176,7 +176,14 @@ for (const name of names) {
   check(Hf > 0 && Hb > 0, `${name}: the probe found no first bracket on one side of the epoch (${Hf} min after, ${Hb} min before)`);
   check(uniq.length >= 10, `${name}: ${uniq.length} distinct times asked`);
   kept.set(name, { rec, ref, probeMin: Math.min(Hf, Hb) / 2, mirrored: FRACTIONS.filter((q) => q === 0.1 || q === 0.5).flatMap((q) => [ms(-q * Hb), ms(q * Hf)]).concat([EPOCH - 1, EPOCH + 1]) });
+  // a time-ordered flight across the epoch (what a catalog set asked at a clock time before and then past its epoch does): 300 states
+  // from one first bracket before the epoch to one after it, in time order; every 12th state after the crossing is compared with its cold state
+  const flight = Array.from({ length: 300 }, (_, k) => ms(-Hb + (k + 0.5) * (Hb + Hf) / 300));
+  const flightSamples = flight.filter((t, k) => t > EPOCH && k % 12 === 0);
+  for (const t of flightSamples) if (!ref.has(t)) { ref.set(t, await cold(shippedFile, [rec], 0, 0, t)); check(isState(ref.get(t)), `${name}: a cold reference of the flight is not a state`); }
+  check(flightSamples.length >= 10, `${name}: ${flightSamples.length} states of the flight compared after the crossing`);
   const orders = {
+    "flight across the epoch, every state in time order": flight,
     ascending: [...uniq].sort((p, q) => p - q), descending: [...uniq].sort((p, q) => q - p), "shuffled 1": shuffle(uniq), "shuffled 2": shuffle(uniq),
     "negative side then positive": [...uniq].sort((p, q) => (p < EPOCH) !== (q < EPOCH) ? (p < EPOCH ? -1 : 1) : p - q),
     "positive side then negative": [...uniq].sort((p, q) => (p < EPOCH) !== (q < EPOCH) ? (p < EPOCH ? 1 : -1) : q - p),
@@ -195,8 +202,9 @@ for (const name of names) {
       for (let i = 0; i < others.length + 1; ++i) if (m.series(i)[0] === 80000) idx = i;
       for (let j = 0; j < others.length + 1; ++j) if (j !== idx) m.at(j, 0, EPOCH + DAY);
       let differ = 0, maxM = 0;
-      for (const t of times_) { const got = m.at(idx, 0, t), r = ref.get(t); check(isState(got), `${name}, ${mode} caches, ${label}: a state asked is not a state (status ${got[0]})`); if (!same(got, r)) { ++differ; maxM = Math.max(maxM, sizeM(got, r)); } }
-      compared.set(name, (compared.get(name) ?? 0) + times_.length);
+      let nCompared = 0;
+      for (const t of times_) { const got = m.at(idx, 0, t), r = ref.get(t); check(isState(got), `${name}, ${mode} caches, ${label}: a state asked is not a state (status ${got[0]})`); if (r === undefined) continue; ++nCompared; if (!same(got, r)) { ++differ; maxM = Math.max(maxM, sizeM(got, r)); } }
+      compared.set(name, (compared.get(name) ?? 0) + nCompared);
       const missed = m.misses();
       if (missed !== null) check(missed === 0, `${name}, ${mode} caches, ${label}: ${missed} calls of drag_pass_rates whose window did not hold the time just bracketed (one thread flies a set at a time: 0 expected)`);
       report[mode][label] = { differ, of: times_.length, maxM };
