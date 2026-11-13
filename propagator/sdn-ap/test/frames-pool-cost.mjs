@@ -32,6 +32,7 @@ const hash = (f, t) => {
   return createHash("sha256").update(Buffer.from(q.planes.buffer)).update(Buffer.from(q.status.buffer)).digest("hex");
 };
 const samples = { first: [], rolling: [] }, totals = { first: [], rolling: [] };
+const currentTotals = [];
 const latencies = { first: [], rolling: [] };
 const summary = phase => {
   const ratios = samples[phase].map(s => (s[0].ms + s[3].ms) / (s[1].ms + s[2].ms));
@@ -72,6 +73,10 @@ for (let cycle = 0; cycle < 4; ++cycle) {
       const stats = models.map(f => f.stats());
       for (let k = 1; k < 4; ++k) assert.deepEqual(stats[k], stats[0]);
       samples[phase].push(run);
+      if (phase === "first" && r === rounds / 2 - 1) {
+        currentTotals.push([...elapsed]);
+        for (const f of models) assert.ok(f.at(t).status.every(s => s === 0 || s === 3 || s === 4), "the current frame is filled");
+      }
       console.log(JSON.stringify({ phase, cycle, round: r + 1, rows: run[0].rows, ratio: (run[0].ms + run[3].ms) / (run[1].ms + run[2].ms), load: os.loadavg() }));
     }
     totals[phase].push(elapsed);
@@ -87,6 +92,8 @@ for (let cycle = 0; cycle < 4; ++cycle) {
 const result = { n, threads, cells: 2, maxRows: 32, order: "A B B A", loadStart, loadEnd: os.loadavg(),
   controlSha256: createHash("sha256").update(fs.readFileSync(process.env.FRAMES_CONTROL)).digest("hex"),
   changedSha256: createHash("sha256").update(fs.readFileSync(process.env.SDNAP_WASM)).digest("hex"),
+  currentFrame: { rows: n, serialSeconds: median(currentTotals.flatMap(s => [s[0] / 1000, s[3] / 1000])),
+    pooledSeconds: median(currentTotals.flatMap(s => [s[1] / 1000, s[2] / 1000])) },
   first: summary("first"), rolling: summary("rolling"), pool: models[1].poolStats(), samples, totals,
   completeCatalog: n === 100000 };
 if (process.env.FRAMES_RESULT) fs.writeFileSync(process.env.FRAMES_RESULT, JSON.stringify(result, null, 2) + "\n");
