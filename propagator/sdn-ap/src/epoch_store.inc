@@ -1033,6 +1033,8 @@ inline uint64_t bytes_of(const Store& st) {
 /// After a dead batch over the store (Store::pool_dead) the store is emptied or replaced only once no pool thread is active:
 /// one still in its chunk reads and writes it. 0, or the refusal "pool-dead" (load_epochs and load_epochs_open).
 static int refuse_while_pool_dead(sdnap::epochs::Store& st) {
+  if (sdnap::pool::g_frames_quarantined)
+    return sdnap::ocm::refuse("pool-dead", "The frames instance is quarantined after a pool failure. Start a new instance.");
   if (st.pool_dead == 0) return 0;
   if (sdnap::pool::load(&sdnap::pool::job().active) != 0)
     return sdnap::ocm::refuse("pool-dead", "A threaded batch over the epoch store ended with a pool thread taken for dead, and a pool "

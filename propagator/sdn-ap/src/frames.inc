@@ -575,6 +575,7 @@ int32_t sdnap_frames_open(double budget_bytes, uint32_t flags) {
   using namespace sdnap::frames;
   State& s = state();
   const sdnap::epochs::Store& st = sdnap::epochs::resident();
+  if (sdnap::pool::g_frames_quarantined || st.pool_dead || sdnap::pool::load(&sdnap::pool::job().dead)) return sdnap::pool::kBatchPoolDead;
   if (!(budget_bytes >= 0.0) || budget_bytes > 4.0e9 || (flags & ~kFlagPositionOnly) != 0) return kBadArgument;
   const uint32_t n = static_cast<uint32_t>(st.series.size());
   const size_t table = (static_cast<size_t>(n) * sizeof(Obj) + 63u) & ~static_cast<size_t>(63u);
@@ -602,6 +603,7 @@ int32_t sdnap_frames_open(double budget_bytes, uint32_t flags) {
 SDNAP_EXPORT("sdnap_frames_close")
 void sdnap_frames_close(void) {
   using namespace sdnap::frames;
+  if (sdnap::pool::g_frames_quarantined) return;
   State& s = state();
   const double needed = s.needed;
   release_state(s);
@@ -670,6 +672,7 @@ SDNAP_EXPORT("sdnap_frames_refill")
 int32_t sdnap_frames_refill(double now_whole, double now_frac, double ahead_seconds, uint32_t max_rows, const uint32_t* priority, uint32_t priority_count, int32_t* result) {
   using namespace sdnap::frames;
   State& s = state();
+  if (sdnap::pool::g_frames_quarantined || sdnap::epochs::resident().pool_dead || sdnap::pool::load(&sdnap::pool::job().dead)) return sdnap::pool::kBatchPoolDead;
   if (!s.open) return kNotOpen;
   if (!std::isfinite(now_whole) || !std::isfinite(now_frac) || !std::isfinite(ahead_seconds) || ahead_seconds < 0.0 || result == nullptr || max_rows < 1 ||
       (priority == nullptr && priority_count != 0))
@@ -698,6 +701,7 @@ int32_t sdnap_frames_refill(double now_whole, double now_frac, double ahead_seco
   const double ahead_min = ahead / 60.0;
   uint32_t rows = 0, stored = 0, tombs = 0, unstored = 0, visits = 0;
   int32_t stalled = -1;
+  int32_t failure = 0;
   bool stop = false;
   uint32_t batch_end = sw.k, batch_row = 0;
   Batch* batch = nullptr;
@@ -716,7 +720,12 @@ int32_t sdnap_frames_refill(double now_whole, double now_frac, double ahead_seco
         batch_row = 0;
         if (batch->count > 0) {
           const int rc = run_batch(*batch, now_whole, now_frac);
-          if (rc != 0) return rc;
+          if (rc != 0) {
+            sdnap::pool::g_frames_quarantined = true;
+            sdnap::epochs::resident().pool_dead = 1;
+            failure = rc; stop = true;
+            break;
+          }
         }
         batch_end = batch->end;
       }
@@ -773,7 +782,7 @@ int32_t sdnap_frames_refill(double now_whole, double now_frac, double ahead_seco
   result[4] = static_cast<int32_t>(unstored);
   result[5] = static_cast<int32_t>(visits);
   result[6] = stalled;
-  return 0;
+  return failure;
 }
 
 /// Twenty doubles: [0] objects, [1] objects this entry can serve, [2] cells held (tombstones included), [3] slab bytes, [4] slab bytes used, [5] table bytes,

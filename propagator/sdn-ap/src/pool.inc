@@ -39,6 +39,9 @@ namespace epochs { struct Store; }
 namespace frames { struct Batch; }
 namespace pool {
 
+/// A frames batch without a join guarantee retains its descriptor and buffers for the instance's lifetime.
+inline bool g_frames_quarantined = false;
+
 constexpr int32_t kMaxThreads = 16;
 constexpr uint32_t kChunk = 512;
 constexpr uint32_t kEpochChunk = 16;
@@ -310,6 +313,7 @@ inline int32_t start(int32_t requested) {
 /// pool is then not used again). A threaded batch is preceded by `reserve` bytes made free on the calling thread and runs with every
 /// growth of the memory refused; the rows a refusal stopped are left in j.deferred for the calling thread.
 inline int32_t run(uint32_t count, size_t reserve, bool reserved = false) {
+  if (g_frames_quarantined) return kBatchPoolDead;
   Job& j = job();
   const uint32_t chunk = chunk_size(j);
   const int32_t chunks = static_cast<int32_t>((count + chunk - 1) / chunk);
