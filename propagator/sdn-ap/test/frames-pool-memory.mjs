@@ -22,7 +22,13 @@ await invoke("load_epochs_open");
 for (let k = 0; k < n; k += 1000) {
   const payload = Buffer.concat(pop.slice(k, k + 1000).map(o => {
     let u = ocmOfObject(o);
-    if (template) u = repackOcm(u, t => { for (const key of Object.keys(template)) if (key.startsWith("COV")) t[key] = template[key]; });
+    if (template) u = repackOcm(u, t => {
+      for (const key of Object.keys(template)) if (key.startsWith("COV")) t[key] = template[key];
+      t.ORBIT_DETERMINATION = template.ORBIT_DETERMINATION;
+      t.PROVENANCE = template.PROVENANCE;
+      const p = t.COV_PROPAGATION;
+      p.NOISE_NON_GRAVITATIONAL_RAD_DAY2 = p.NON_GRAVITATIONAL_SHARE * Math.abs(p.NON_GRAVITATIONAL_RATE_PER_DAY) * t.MEAN_ELEMENTS.MEAN_MOTION * 2 * Math.PI;
+    });
     const b = Buffer.alloc(4 + u.length); b.writeUInt32LE(u.length); b.set(u, 4); return b;
   }));
   const p = f.x.plugin_alloc(payload.length); assert.ok(p);
