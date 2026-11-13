@@ -48,17 +48,28 @@ SDNAP_EXPORT("test_cell_size") uint32_t test_cell_size(uint32_t p) {
   return sdnap::frames::bytes_of_cell(c[16], c[17], c[18], c[19]);
 }
 SDNAP_EXPORT("test_staging_bytes") uint32_t test_staging_bytes() { return sizeof(sdnap::frames::Batch); }
+SDNAP_EXPORT("test_warm") uint32_t test_warm(uint32_t site) {
+  sdnap::pool::test_warm_site = site;
+  return sdnap::pool::test_warm_max;
+}
 `;
 const wasm = process.env.FRAMES_POOL_DIAGNOSTIC ?? buildDiagnostic("frames-pool", probe, s => s, {
-  "constants.inc": s => once(once(s, "inline uint32_t g_failures = 0;", "inline uint32_t g_failures = 0;\ninline thread_local uint32_t test_failure = 0;"),
+  "constants.inc": s => once(once(once(once(s, "inline uint32_t g_failures = 0;", "inline uint32_t g_failures = 0;\ninline thread_local uint32_t test_failure = 0, test_warm_count = 0, test_warm_at = 0;\ninline thread_local bool test_warming = false;\ninline bool test_warm_refuse() { return test_warming && ++test_warm_count == test_warm_at; }"),
     "inline void* calloc(size_t k, size_t n) {\n  void* p = std::calloc(k, n);",
-    "inline void* calloc(size_t k, size_t n) {\n  if (test_failure) { note_failure(k * n); return nullptr; }\n  void* p = std::calloc(k, n);"),
+    "inline void* calloc(size_t k, size_t n) {\n  if (test_failure || test_warm_refuse()) { note_failure(k * n); return nullptr; }\n  void* p = std::calloc(k, n);"),
+    "inline void* malloc(size_t n) {\n  void* p = std::malloc(n);",
+    "inline void* malloc(size_t n) {\n  if (test_warm_refuse()) { note_failure(n); return nullptr; }\n  void* p = std::malloc(n);"),
+    "inline T* counted(T* p, size_t n = sizeof(T)) {\n  if (p == nullptr) note_failure(n);",
+    "inline T* counted(T* p, size_t n = sizeof(T)) {\n  if (p != nullptr && test_warm_refuse()) { if (n == sizeof(T)) { p->~T(); ::operator delete(p); } else ::operator delete[](p); p = nullptr; }\n  if (p == nullptr) note_failure(n);"),
   "frames.inc": s => once(once(once(s, "inline Batch* g_batch = nullptr;", "inline Batch* g_batch = nullptr;\ninline uint32_t test_staging_fail = 0;"),
     "void* memory = std::malloc(sizeof(Batch));", "void* memory = test_staging_fail ? nullptr : std::malloc(sizeof(Batch));"),
     "if (g_attempt_hook != nullptr) g_attempt_hook(i, xpt::batch_running());",
     "if (g_attempt_hook != nullptr) g_attempt_hook(i, xpt::batch_running());\n  if (mem::test_failure == 1 && ::sbrk(1u << 30) != reinterpret_cast<void*>(-1)) std::abort();"),
-  "pool.inc": s => once(s, "inline bool reserve_room(size_t bytes) {",
-    "inline uint32_t test_reserve_fail = 0, test_reserve_calls = 0;\ninline bool reserve_room(size_t bytes) {\n  ++test_reserve_calls;\n  if (test_reserve_fail) { --test_reserve_fail; return false; }")
+  "pool.inc": s => once(once(once(once(s, "inline bool reserve_room(size_t bytes) {",
+    "inline uint32_t test_reserve_fail = 0, test_reserve_calls = 0;\ninline bool reserve_room(size_t bytes) {\n  ++test_reserve_calls;\n  if (test_reserve_fail) { --test_reserve_fail; return false; }"),
+    "inline bool warm_thread() {", "inline uint32_t test_warm_site = 0, test_warm_max = 0;\ninline bool warm_thread() {"),
+    "  if (g_warm) return true;", "  if (g_warm) return true;\n  mem::test_warming = true; mem::test_warm_count = 0; mem::test_warm_at = test_warm_site;"),
+    "  return g_warm;", "  mem::test_warming = false;\n  if (mem::test_warm_count > test_warm_max) test_warm_max = mem::test_warm_count;\n  return g_warm;")
 });
 const pop = population([["leo500", 34], ["hp490", 2], ["ecc05", 2], ["geo", 2], ["underground", 2], ["wide", 2]], 20261113, 48);
 const open = async threads => { const f = await openFrames({ wasm, threads }); await f.load(pop); return f; };
@@ -78,8 +89,9 @@ const equal = (a, b, t) => {
   for (const dt of [0, 30000, 2880000]) assert.deepEqual(b.at(t + dt), a.at(t + dt), "frame bits");
 };
 let compared = 0;
-const deadOnly = process.argv.includes("--dead-only");
-const refusalOnly = process.argv.includes("--refusal-only");
+const warmOnly = process.argv.includes("--warm-only");
+const deadOnly = process.argv.includes("--dead-only") || warmOnly;
+const refusalOnly = process.argv.includes("--refusal-only") || warmOnly;
 for (const threads of deadOnly || refusalOnly ? [] : [4, 15]) {
   const a = await open(0), b = await open(threads);
   for (const flags of [0, 1]) for (const budget of [20000, 2e6]) {
@@ -158,4 +170,22 @@ for (const mode of refusalOnly ? [] : [1, 2]) {
   await f.h.destroy();
 }
 if (!refusalOnly) console.log("delayed and trapped pool claims: quarantine and stable committed reads pass");
+if (warmOnly || (!deadOnly && !refusalOnly)) {
+  const reference = await open(0), t = EPOCH_MS + DAY;
+  reference.open(2e6); const wanted = reference.refill(t, 2880, 32);
+  const probe = await openFrames({ wasm });
+  assert.equal(probe.x.sdnap_threads(4), 4);
+  const sites = probe.x.test_warm(0); assert.ok(sites >= 9);
+  await probe.h.destroy();
+  for (let site = 1; site <= sites; ++site) {
+    const f = await openFrames({ wasm });
+    f.x.test_warm(site); assert.equal(f.x.sdnap_threads(4), 4); f.x.test_warm(0);
+    await f.load(pop); f.open(2e6);
+    assert.deepEqual(f.refill(t, 2880, 32), wanted); equal(reference, f, t);
+    assert.equal(f.poolStats()[4], 0); await f.h.destroy();
+  }
+  console.log(`startup cache failures: ${sites} counted sites on each of four pool threads, exact recovered cells and counters`);
+  console.log(`bounded staging: ${reference.x.test_staging_bytes()} bytes`);
+  await reference.h.destroy();
+}
 console.log("FRAMES-POOL PASS");
