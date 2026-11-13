@@ -275,30 +275,33 @@ inline void cpow_uint(double cr, double ci, int n, double& out_r, double& out_i)
 
 /// AP initialization's samples at one eccentricity. The Hansen sum and each
 /// repeated multiplication retain the scalar evaluator's order.
+// Keyed by eccentricity and l; lives for one initialization call.
 struct HansenSamples {
   struct Sample { double roa, nu, M, ir; };
-  std::vector<Sample> samples;
-  std::vector<double> powers[71];
+  mem::InitTable<Sample> samples;
+  mem::InitTable<double> powers[71];
   explicit HansenSamples(double e) {
     const int N = e < 0.01 ? 32 : e < 0.1 ? 64 : e < 0.8 ? 128 : (e < 0.95 ? 512 : 4096);
     const double eta = std::sqrt(1.0 - e * e);
-    samples.reserve(N);
+    if (!samples.allocate(N)) return;
     for (int i = 0; i < N; ++i) {
       const double E = kTwoPi * (i + 0.5) / N;
       double sE, cE;
       fm::sincos(E, sE, cE);
       const double roa = 1.0 - e * cE;
-      samples.push_back({roa, std::atan2(eta * sE, cE - e), E - e * sE, 1.0 / roa});
+      samples[i] = {roa, std::atan2(eta * sE, cE - e), E - e * sE, 1.0 / roa};
     }
   }
   double get(int l, int p, int q) {
+    if (samples.empty()) return 0.0;
     auto& power = powers[l];
     if (power.empty()) {
-      power.reserve(samples.size());
-      for (const auto& v : samples) {
+      if (!power.allocate(samples.size())) return 0.0;
+      for (size_t i = 0; i < samples.size(); ++i) {
+        const auto& v = samples[i];
         double aor = v.ir;
         for (int m = 1; m <= l; ++m) aor *= v.ir;
-        power.push_back(aor);
+        power[i] = aor;
       }
     }
     const int j = l - 2 * p, k = l - 2 * p + q;
