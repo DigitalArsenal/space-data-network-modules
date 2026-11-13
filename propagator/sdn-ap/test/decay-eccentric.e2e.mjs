@@ -4,12 +4,12 @@
 // alone, rising or falling, with no decay: drag at perigee lowers the semi-major axis and the eccentricity together, so its own part of the
 // perigee's rate is about 0. Two made-up sets at e 0.9, their truth the numerical propagator (FFM, named below by its SHA-256) flown from AP's
 // own seeded GCRF state, EGM2008 70 x 70, the Sun and Moon, NRLMSISE-00 drag at constant weather, 120 h every 300 s:
-// - perigee 1,000 km, i 0.5: the truth's perigee never goes under 800 km (asserted);
-// - perigee 500 km, i 55: the truth's perigee RISES, more than 20 km in the first 24 h (asserted).
+// - mean perigee about 1,000 km, i 0.5: the truth's perigee never goes under 800 km (asserted);
+// - mean perigee about 500 km, i 55: the truth's perigee RISES, more than 20 km in the first 24 h (asserted).
 // Each is fitted by this build (not refused decayed-in-arc: the first form of the rule read the Sun's and the Moon's rate as decay and
 // refused them), the fit converges with an RMS under 0.25 km (a fit that converges somewhere else fails), and the record it writes is
 // propagated over its arc: every state answered, the perigee of the record's states following the truth's.
-// The other side: a set at e 0.9 whose truth DOES re-enter inside the span is still refused, by the floor test (b), at a time before the
+// The other side: a set at e 0.9 whose truth DOES re-enter inside the span is refused as decayed, at a time before the
 // truth's re-entry (its end of the numerical propagator), and no state after the refusal is answered.
 //   node test/decay-eccentric.e2e.mjs
 import assert from 'node:assert/strict';
@@ -33,10 +33,10 @@ import { configuration } from './lib/pcf.mjs';
 import { spwConstantText } from './lib/spw-constant.mjs';
 requireTruth('ea4576901f9e8dc21af2c24feb7887645706ef934488cb9756a0b5c21ab47934'); // FFM 2.3.0 (modules 48a00fd6)
 const CASES = [
-  { name: 'perigee 1,000 km, e 0.9, i 0.5', epoch: '2026-02-01T00:00:00.000', n: 0.433161637, e: 0.9007033, i: 0.596598, raan: 192.20718, argp: 153.97925, ma: 37.15461, floorKm: 800, rising: false },
-  { name: 'perigee 500 km, e 0.9, i 55 (the truth\'s perigee rises)', epoch: '2026-09-05T00:00:00.000', n: 0.481293675, e: 0.8991996, i: 55.095212, raan: 272.4614, argp: 301.26643, ma: 105.0206, floorKm: 400, rising: true },
-  // the other side: perigee 110 km at e 0.9, argument of perigee 90 degrees, BTERM 0.1; AP crosses at about 17.37 h,
-  // before the numerical truth descends below 100 km (re-entry) at about 40.48 h
+  { name: 'mean perigee about 1,000 km, e 0.9, i 0.5', epoch: '2026-02-01T00:00:00.000', n: 0.433161637, e: 0.9007033, i: 0.596598, raan: 192.20718, argp: 153.97925, ma: 37.15461, floorKm: 800, rising: false },
+  { name: 'mean perigee about 500 km, e 0.9, i 55 (the truth\'s perigee rises)', epoch: '2026-09-05T00:00:00.000', n: 0.481293675, e: 0.8991996, i: 55.095212, raan: 272.4614, argp: 301.26643, ma: 105.0206, floorKm: 400, rising: true },
+  // the other side: perigee 110 km at e 0.9, argument of perigee 90 degrees, BTERM 0.1. When written, this test printed
+  // AP refusal at 17.37 h and numerical truth re-entry at 40.48 h; these are measured outputs, not constants used by the test.
   { name: 'perigee 110 km, e 0.9, i 28.5, BTERM 0.1 (the truth re-enters)', epoch: '2026-10-29T00:00:00.000', n: 0.5253185593164899, e: 0.9, i: 28.5, raan: 40, argp: 90, ma: 0, b: 0.1, reenters: true },
 ];
 const TRUTH_B = 0.022, DAY = 864e5, MU = 398600.4418, iso = (ms) => new Date(ms).toISOString().replace('Z', '');
@@ -70,7 +70,7 @@ for (const c of CASES) {
   const fr = await ffm.invoke(rq);
   if (!c.reenters) assert.equal(fr.statusCode, 0, `${c.name}: FFM ${fr.errorCode}: ${fr.errorMessage}`);
   if (c.reenters) {
-    // the truth ends at its re-entry; this build refuses the record by the floor test at a time before it, answers every epoch up to
+    // the truth ends at its re-entry; this build refuses the record as decayed at a time before it, answers every epoch up to
     // the crossing and none after it
     assert.notEqual(fr.statusCode, 0, `${c.name}: the numerical propagator does not re-enter within the span`);
     const re = /at (\d{4}-\d\d-\d\dT\d\d:\d\d:\d\d)/.exec(String(fr.errorMessage));

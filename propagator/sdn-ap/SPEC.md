@@ -5136,11 +5136,8 @@ keeps its own.
   of the rates, SPEC 3.4, the same call the rates make). The gate uses the node's whole mean rates:
   (|da/dt (1 - e)| + |a de/dt|) max(P, h_next) > kDecayTestKm (5 km), in kilometers. A crossing calculation evaluates
   the earlier node's drag part for any positive gate value, including values below 5 km. The whole rates only gate the
-  evaluation; the drag-only loss decides the rule. The Sun and Moon open this gate on eccentric records that never decay,
-  adding a full drag evaluation at their nodes. A bound using only the magnitude of the node's da/dt is not established:
-  resonance contributes signed terms to that rate, and a multiplier alone does not bound cancellation with drag. The drag
-  quadrature also uses velocity relative to a rotating atmosphere, so a bound for acceleration opposite the inertial velocity
-  does not directly bound its rates. H is the scale height of the set's own
+  evaluation; the drag-only loss decides the rule. The gate reads the magnitudes of the whole rates' two perigee terms,
+  which on a highly eccentric record are the Sun's and Moon's, so on such a record the drag term is evaluated at every node. H is the scale height of the set's own
   atmosphere and weather at its mean perigee, from two density evaluations 1 km either side along the mean perigee's
   direction, made only once the loss passes 5 km. The test changes no step, rate or state: a time before the crossing is
   answered as before, to the bit.
@@ -5218,8 +5215,13 @@ keeps its own.
   it the flight had no end); a rule for these sets has to use the loss of orbital energy per perigee passage against the energy
   the orbit has left, or the numerical propagator's own crossing as the yardstick.
 - What gets worse: a decaying set loses its states from the crossing to the surface, its last revolutions, which the theory
-  does not describe (they were up to 31,250 km off).
-- `test/decay.e2e.mjs`: the two seeds decay at 70.140 h and 47.063 h (70.133 h and 47.064 h through 0.6.48: the rule reads drag's part of the perigee's rate, which moves the crossing by 0.01 %), every state before the crossing 0.6.45's bit for bit
+  does not describe (they were up to 31,250 km off). The first state after a load over a 7-day grid costs more on the
+  measured e 0.9 records. Two alternating rounds of `test/kernel-cost.mjs --repeats 5 --steps 300`, measured on a shared
+  machine under load, gave 0.6.48 / this build: long-period e 0.9, 153.437 / 255.893 ms and 152.621 / 190.424 ms
+  (+66.8 % and +24.8 %); THEMIS, 218.065 / 251.491 ms and 223.059 / 258.866 ms (+15.3 % and +16.1 %).
+  A state from a warm grid costs the same within 0.6 % on these records: long-period e 0.9, 87.798 / 87.830 µs and
+  89.264 / 89.715 µs; THEMIS, 114.692 / 115.388 µs and 115.554 / 115.832 µs.
+- `test/decay.e2e.mjs`: the two seeds decay at 70.140 h and 47.063 h (70.133 h and 47.064 h through 0.6.48: the rule reads drag's part of the perigee's rate, which moves the crossing by at most 0.01 %), every state before the crossing 0.6.45's bit for bit
   and the jump detector at most 2.88 m over them; the epoch store gives the same states before the crossing and status 4
   after it in time order, reversed and shuffled; sets at a 500 km perigee and at a 300 km perigee with e 0.3 fly 7 days
   bit for bit; `sdnap_covariance_at` returns 4 past a record's crossing.

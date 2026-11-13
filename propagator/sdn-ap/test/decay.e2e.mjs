@@ -212,7 +212,7 @@ for (const c of [{ name: 'perigee 500 km, e 0.001, BTERM 0.01', hp: 500, e: 0.00
       const blk3 = r3.statusCode === 0 ? OEM.getRootAsOEM(new fb.ByteBuffer(r3.outputs.find((o) => o.portId === 'ephemeris').payload)).unpack().EPHEMERIS_DATA_BLOCK[0] : null;
       check(String(blk3?.COMMENT ?? '').includes(`decayed:${cm[1]}`), `propagate_epochs on the same list names ${blk3?.COMMENT ?? r3.errorCode}, the crossing ${cm[1]}`);
     }
-    // a Hermite blend whose window ends past the nominal's crossing: the probe the blend makes at its window's end asks no covariance of
+    // a Hermite blend whose window ends past the nominal's crossing: the probe the blend makes at its window's end starts the covariance bank but evaluates no covariance of
     // its own, yet the crossing it names is the record's earliest (a moved set's, which is before the nominal's), the same as a call
     // that asks past the window. Two sets of one object (this record at its epoch and, four days later, again), BLEND_SHAPE 1 with a
     // 48 h window about the hand-over at day 3: an epoch at 06:00 of day 3 lies in the window and before both crossings
