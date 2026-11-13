@@ -59,7 +59,15 @@ if (which === "chromium") {
     const sdk = path.dirname(require.resolve("space-data-module-sdk/host/wasi-threads"));
     ({ resolveHeadlessShell: shell } = await import(pathToFileURL(path.join(sdk, "..", "testing", "headlessShell.js")).href));
     shell = await shell();
-  } catch (e) { skip(`no Chromium headless shell (${String(e.message).split("\n")[0]})`); }
+  } catch (e) {
+    if (e.message?.startsWith("browser lane: no Chromium headless shell found under the Playwright cache ")) skip("no Chromium headless shell in the Playwright cache");
+    throw e;
+  }
+  const realShell = fs.realpathSync(shell);
+  assert.ok(cacheRoots().some((root) => {
+    const relative = path.relative(path.resolve(root), realShell);
+    return !relative.startsWith("..") && !path.isAbsolute(relative) && /^chromium_headless_shell-\d+[/\\]/.test(relative);
+  }), "Chromium must be a headless shell inside the Playwright cache");
   launch = (url, profile) => ({ command: shell, args: ["--headless=new", "--disable-gpu", "--no-first-run", "--no-default-browser-check", "--disable-extensions", "--disable-background-networking", "--disable-sync", `--user-data-dir=${profile}`, url] });
 } else if (which === "firefox") {
   const bin = newest("firefox").flatMap((d) => [path.join(d, "firefox", "Nightly.app", "Contents", "MacOS", "firefox"), path.join(d, "firefox", "firefox")]).find((p) => fs.existsSync(p));
@@ -75,9 +83,12 @@ if (which === "chromium") {
   // the build's own binary, started directly (its wrapper script would leave the binary running when it is stopped)
   launch = (url, profile) => ({ command: path.join(dir, "Playwright.app", "Contents", "MacOS", "Playwright"), args: ["--headless", `--user-data-dir=${profile}`, url],
     env: { DYLD_FRAMEWORK_PATH: dir, DYLD_LIBRARY_PATH: dir } });
-} else skip(`SDNAP_BROWSER=${which} is not one of chromium, firefox, webkit`);
+} else throw new Error(`SDNAP_BROWSER=${which} is not one of chromium, firefox, webkit`);
 let esbuild;
-try { esbuild = await import("esbuild"); } catch { skip("esbuild is not installed (npm install in propagator/sdn-ap)"); }
+try { esbuild = await import("esbuild"); } catch (e) {
+  if (e.code === "ERR_MODULE_NOT_FOUND" && e.message.startsWith("Cannot find package 'esbuild'")) skip("esbuild is not installed (npm install in propagator/sdn-ap)");
+  throw e;
+}
 
 // ---------------------------------------------------------------------------------------------------------------- the seeded inputs
 const fixture = new Uint8Array(fs.readFileSync(path.join(here, "fixtures", "ap-fit-0.6.42.ocm")));
