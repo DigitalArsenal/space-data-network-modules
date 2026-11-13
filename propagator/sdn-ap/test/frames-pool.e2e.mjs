@@ -11,13 +11,13 @@ delete process.env.SDM_MODULE_SIGNING_KEYPAIR_PATH;
 const once = (s, a, b) => { assert.equal(s.split(a).length, 2, a); return s.replace(a, b); };
 const probe = String.raw`
 static uint32_t test_index = UINT32_MAX, test_mode = 0;
-static uint32_t test_hold = 0, test_held = 0, test_after = 0;
+static uint32_t test_hold = 0, test_held = 0;
 static void test_attempt(uint32_t i, bool pooled) {
   sdnap::mem::test_failure = i != test_index ? 0 : test_mode == 3 ? (pooled ? 1 : 2) : (pooled || test_mode == 2) ? test_mode : 0;
 }
 static void test_chunk(int32_t, bool pooled) {
   if (test_hold == 0) return;
-  if (test_after && sdnap::frames::state().rows < test_after) return;
+  if (sdnap::frames::test_after && sdnap::frames::state().rows < sdnap::frames::test_after) return;
   if (!pooled) { while (__atomic_load_n(&test_held, __ATOMIC_SEQ_CST) == 0) {} return; }
   uint32_t expected = 0;
   if (!__atomic_compare_exchange_n(&test_held, &expected, 1u, false, __ATOMIC_SEQ_CST, __ATOMIC_SEQ_CST)) return;
@@ -34,10 +34,10 @@ SDNAP_EXPORT("test_config") void test_config(uint32_t i, uint32_t mode, uint32_t
 SDNAP_EXPORT("test_hold") void test_hold_set(uint32_t mode) {
   __atomic_store_n(&test_hold, mode, __ATOMIC_SEQ_CST);
   sdnap::pool::g_chunk_hook = test_chunk;
-  sdnap::pool::dead_polls() = 100000;
+  sdnap::pool::dead_polls() = sdnap::frames::test_after ? sdnap::pool::kDeadPollsDefault : 100000;
 }
 SDNAP_EXPORT("test_active") int32_t test_active() { return sdnap::pool::load(&sdnap::pool::job().active); }
-SDNAP_EXPORT("test_after") void test_after_set(uint32_t rows) { test_after = rows; }
+SDNAP_EXPORT("test_after") void test_after_set(uint32_t rows) { sdnap::frames::test_after = rows; }
 SDNAP_EXPORT("test_reserves") uint32_t test_reserves() { return sdnap::pool::test_reserve_calls; }
 SDNAP_EXPORT("test_batch_rows") uint32_t test_batch_rows() { return sdnap::frames::g_batch ? sdnap::frames::g_batch->count : 0; }
 SDNAP_EXPORT("test_cell") uint32_t test_cell(uint32_t i, uint32_t slot) {
@@ -64,11 +64,12 @@ const wasm = process.env.FRAMES_POOL_DIAGNOSTIC ?? buildDiagnostic("frames-pool"
     "inline void* malloc(size_t n) {\n  if (test_warm_refuse()) { note_failure(n); return nullptr; }\n  void* p = std::malloc(n);"),
     "inline T* counted(T* p, size_t n = sizeof(T)) {\n  if (p == nullptr) note_failure(n);",
     "inline T* counted(T* p, size_t n = sizeof(T)) {\n  if (p != nullptr && test_warm_refuse()) { if (n == sizeof(T)) { p->~T(); ::operator delete(p); } else ::operator delete[](p); p = nullptr; }\n  if (p == nullptr) note_failure(n);"),
-  "frames.inc": s => once(once(once(once(s, "inline Batch* g_batch = nullptr;", "inline Batch* g_batch = nullptr;\ninline uint32_t test_staging_fail = 0, test_init_refuse = UINT32_MAX;"),
+  "frames.inc": s => once(once(once(once(once(s, "inline Batch* g_batch = nullptr;", "inline Batch* g_batch = nullptr;\ninline uint32_t test_staging_fail = 0, test_init_refuse = UINT32_MAX, test_after = 0;"),
     "void* memory = std::malloc(sizeof(Batch));", "void* memory = test_staging_fail ? nullptr : std::malloc(sizeof(Batch));"),
     "if (g_attempt_hook != nullptr) g_attempt_hook(i, xpt::batch_running());",
     "if (g_attempt_hook != nullptr) g_attempt_hook(i, xpt::batch_running());\n  if (mem::test_failure == 1 && ::sbrk(1u << 30) != reinterpret_cast<void*>(-1)) std::abort();"),
     "err = xp == nullptr ? kPropRefused : xpt::xp_init(e, *xp);", "err = i == test_init_refuse ? kPropRefused : (xp == nullptr ? kPropRefused : xpt::xp_init(e, *xp));"),
+    "inline int run_batch(Batch& b, double whole, double frac) {", "inline int run_batch(Batch& b, double whole, double frac) {\n  if (test_after && state().rows >= test_after) pool::dead_polls() = 100000;"),
   "pool.inc": s => once(once(once(once(s, "inline bool reserve_room(size_t bytes) {",
     "inline uint32_t test_reserve_fail = 0, test_reserve_calls = 0;\ninline bool reserve_room(size_t bytes) {\n  ++test_reserve_calls;\n  if (test_reserve_fail) { --test_reserve_fail; return false; }"),
     "inline bool warm_thread() {", "inline uint32_t test_warm_site = 0, test_warm_max = 0;\ninline bool warm_thread() {"),
