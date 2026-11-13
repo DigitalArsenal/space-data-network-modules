@@ -6573,6 +6573,11 @@ The descriptor, bounded outputs, resident records, and cell slab remain alive be
 the failure return. Later open/refill calls return -20, close has no effect, store replacement and descriptor reuse are
 refused, and pure reads of committed frames remain valid. The host terminates the instance's own browser threads and
 discards the instance. Quarantine has no serial fallback, including after a delayed claim finishes.
+The -20 return takes precedence over not-open (-5). On entry refusal, refill writes six zero result fields and
+stalled = -1 when the result pointer is nonnull. A failure during refill returns the committed prefix's result fields.
+Propagation batches and epoch batches fill every supplied row status with the pool-dead status (9); state output
+planes are unspecified on failure and must not be read. A frames identity mismatch increments the internal
+`g_identity_failures` diagnostic and quarantines the instance before that row is counted or placed.
 
 The host uses one dedicated browser execution thread for the instance and never calls `sdnap_frames_at` during refill.
 The display draws a previously copied or transferred frame and receives another between refill calls. Interactive calls

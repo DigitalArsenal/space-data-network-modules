@@ -140,7 +140,11 @@ inline size_t batch_reserve(uint32_t first, uint32_t count) {
 
 inline int32_t batch(int32_t kind, double jd_whole, double jd_frac, const double* minutes, uint32_t first,
                      uint32_t count, uint32_t frame, double* out, int32_t* status) {
-  if (pool::g_frames_quarantined) return pool::kBatchPoolDead;
+  if (pool::g_frames_quarantined || pool::load(&pool::job().dead)) {
+    if (status != nullptr)
+      for (uint32_t i = 0; i < count; ++i) status[i] = pool::kRowPoolDead;
+    return pool::kBatchPoolDead;
+  }
   const Store& st = store();
   if (st.count == 0) return ORBPRO_PROP_NOT_INITIALIZED;
   if (out == nullptr) return ORBPRO_PROP_NULL_OUTPUT;

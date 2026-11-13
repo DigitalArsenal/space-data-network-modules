@@ -673,7 +673,13 @@ SDNAP_EXPORT("sdnap_frames_refill")
 int32_t sdnap_frames_refill(double now_whole, double now_frac, double ahead_seconds, uint32_t max_rows, const uint32_t* priority, uint32_t priority_count, int32_t* result) {
   using namespace sdnap::frames;
   State& s = state();
-  if (sdnap::pool::g_frames_quarantined || sdnap::epochs::resident().pool_dead || sdnap::pool::load(&sdnap::pool::job().dead)) return sdnap::pool::kBatchPoolDead;
+  if (sdnap::pool::g_frames_quarantined || sdnap::epochs::resident().pool_dead || sdnap::pool::load(&sdnap::pool::job().dead)) {
+    if (result != nullptr) {
+      std::fill(result, result + 6, 0);
+      result[6] = -1;
+    }
+    return sdnap::pool::kBatchPoolDead;
+  }
   if (!s.open) return kNotOpen;
   if (!std::isfinite(now_whole) || !std::isfinite(now_frac) || !std::isfinite(ahead_seconds) || ahead_seconds < 0.0 || result == nullptr || max_rows < 1 ||
       (priority == nullptr && priority_count != 0))
