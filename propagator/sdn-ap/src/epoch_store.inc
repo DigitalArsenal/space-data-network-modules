@@ -34,6 +34,44 @@
 namespace sdnap {
 namespace epochs {
 
+/// Contiguous storage with an explicit, counted allocation refusal (SPEC 1.6).
+/// Callers reserve before inserting; insertion never allocates.
+template <class T> class Array {
+  T* p_ = nullptr;
+  size_t size_ = 0, capacity_ = 0;
+ public:
+  Array() = default;
+  Array(const Array&) = delete;
+  Array& operator=(const Array&) = delete;
+  ~Array() { clear(); std::free(p_); }
+  bool reserve(size_t n) {
+    if (n <= capacity_) return true;
+    if (n > SIZE_MAX / sizeof(T)) { mem::note_failure(SIZE_MAX); return false; }
+    T* p = static_cast<T*>(mem::malloc(n * sizeof(T)));
+    if (p == nullptr) return false;
+    for (size_t k = 0; k < size_; ++k) { new (p + k) T(std::move(p_[k])); p_[k].~T(); }
+    std::free(p_); p_ = p; capacity_ = n;
+    return true;
+  }
+  bool push_back(T value) {
+    if (size_ == capacity_) { mem::note_failure((size_ + 1) * sizeof(T)); return false; }
+    new (p_ + size_++) T(std::move(value)); return true;
+  }
+  void clear() { while (size_) p_[--size_].~T(); }
+  void pop_back() { p_[--size_].~T(); }
+  size_t size() const { return size_; }
+  bool empty() const { return size_ == 0; }
+  T* data() { return p_; }
+  const T* data() const { return p_; }
+  T* begin() { return p_; }
+  T* end() { return size_ ? p_ + size_ : p_; }
+  const T* begin() const { return p_; }
+  const T* end() const { return size_ ? p_ + size_ : p_; }
+  T& operator[](size_t k) { return p_[k]; }
+  const T& operator[](size_t k) const { return p_[k]; }
+  T& back() { return p_[size_ - 1]; }
+};
+
 struct Config {
   double cache_days = 7.0;
   uint32_t max_sets = 0;
@@ -84,10 +122,10 @@ struct Stats {
 
 struct Store {
   Config cfg;
-  std::vector<Entry> entries;
-  std::vector<Series> series;
+  Array<Entry> entries;
+  Array<Series> series;
   Stats stats;
-  std::vector<std::unique_ptr<atm::Atmosphere>> atmospheres;  ///< the distinct row series and node vectors of the load
+  Array<std::unique_ptr<atm::Atmosphere>> atmospheres;  ///< the distinct row series and node vectors of the load
   int32_t short_day = 0;                                      ///< the day a request found no row for (weather-rows-short)
 };
 
@@ -164,6 +202,7 @@ struct Record {
   cov::Set* cov = nullptr;
   Forces forces{};
   ocm::Weather weather;
+  const atm::Atmosphere* atmosphere = nullptr;
   std::shared_ptr<carried::Track> track;  ///< reading the call's bytes until the record is kept (carried::keep)
   double handover = HUGE_VAL;
 };
@@ -197,31 +236,39 @@ inline int decode_record(const uint8_t* p, uint32_t n, Record& r) {
     if (cr < 0 && cr != -4)
       return ocm::refuse(cr == -2 ? "cov-parameter-kind-unspecified" : cr == -3 ? "cov-propagation-invariant" : "invalid-covariance",
                          "A set's COVARIANCE_DATA, COV_PARAMETER_KINDS or COV_PROPAGATION are malformed."), -1;
-    if (cr == 1) r.cov = new cov::Set(c);
+    if (cr == 1) {
+      r.cov = mem::counted(new (std::nothrow) cov::Set(c));
+      if (r.cov == nullptr) return mem::refuse_if_out_of_memory(), -1;
+    }
   }
   return 1;
 }
 
 /// The store's one copy of a record's atmosphere (its rows and nodes, by content), or nullptr on the theory's own flux
 /// model.
-inline const atm::Atmosphere* intern(Store& st, const Record& r) {
+inline const atm::Atmosphere* intern(Store& st, Record& r) {
   if (r.forces.weather_source != pcfWeatherSource_RECORDS) return nullptr;
-  ocm::Set probe;
-  probe.forces = r.forces;
-  probe.weather = r.weather;
-  atm::Atmosphere a;
-  ocm::atmosphere_of(probe, a);
+  const int model = r.forces.msis ? atm::kNrlmsise00 : atm::kJacchia70;
   auto same_rows = [](const atm::SpwDay& x, const atm::SpwDay& y) {
     return x.mjd == y.mjd && x.f107_obs == y.f107_obs && x.f107_center81 == y.f107_center81 && x.ap_avg == y.ap_avg && x.data_type == y.data_type &&
            std::strcmp(x.date, y.date) == 0;
   };
   for (const auto& held : st.atmospheres) {
-    if (held->model != a.model || held->days.size() != a.days.size() || held->dca_ms != a.dca_ms || held->dca_s != a.dca_s) continue;
+    if (held->model != model || held->days.size() != r.weather.rows.size() || held->dca_ms != r.weather.node_ms || held->dca_s != r.weather.node_s) continue;
     bool same = true;
-    for (size_t k = 0; same && k < a.days.size(); ++k) same = same_rows(held->days[k], a.days[k]);
+    for (size_t k = 0; same && k < r.weather.rows.size(); ++k) same = same_rows(held->days[k], r.weather.rows[k]);
     if (same) return held.get();
   }
-  st.atmospheres.push_back(std::make_unique<atm::Atmosphere>(std::move(a)));
+  std::unique_ptr<atm::Atmosphere> a(mem::counted(new (std::nothrow) atm::Atmosphere{}));
+  if (!a) return nullptr;
+  a->model = model;
+  a->measured = true;
+  a->days = std::move(r.weather.rows);
+  a->dca_ms = std::move(r.weather.node_ms);
+  a->dca_s = std::move(r.weather.node_s);
+  for (int64_t ms : a->dca_ms) a->dca_d50.push_back(static_cast<double>(ms) / 86400000.0 + 7306.0);
+  if (!st.atmospheres.reserve(st.atmospheres.size() + 1)) return nullptr;
+  st.atmospheres.push_back(std::move(a));
   return st.atmospheres.back().get();
 }
 
@@ -250,7 +297,16 @@ inline bool each_record(const uint8_t* p, uint32_t n, Fn fn) {
 inline int build(Store& st, const Config& cfg) {
   clear(st);
   st.cfg = cfg;
-  std::vector<Record> recs;
+  // Count framing without decoding. Malformed input is still diagnosed in the original decode order.
+  size_t count = 0;
+  for (uint32_t i = 0; i < plugin_get_input_count(); ++i) {
+    const plugin_input_frame_t* f = plugin_get_input_frame(i);
+    if (f != nullptr && f->port_id != nullptr && std::strcmp(f->port_id, "ocm") == 0)
+      each_record(f->payload, f->payload_length, [&](const uint8_t*, uint32_t) { ++count; return true; });
+  }
+  Array<Record> recs;
+  if (!recs.reserve(count) || !st.entries.reserve(count) || !st.series.reserve(count))
+    return mem::refuse_if_out_of_memory(), 3;
   bool refused = false;
   for (uint32_t i = 0; i < plugin_get_input_count(); ++i) {
     const plugin_input_frame_t* f = plugin_get_input_frame(i);
@@ -262,6 +318,9 @@ inline int build(Store& st, const Config& cfg) {
       if (d < 0) { refused = true; return false; }
       if (d == 0) { ++st.stats.other_center; return true; }
       if (cfg.theories != 0 && (cfg.theories & theory_bit(r.met)) == 0) { ++st.stats.theory; delete r.cov; return true; }
+      r.atmosphere = intern(st, r);
+      if (mem::refuse_if_out_of_memory()) { delete r.cov; refused = true; return false; }
+      r.weather = ocm::Weather{};
       recs.push_back(std::move(r));
       return true;
     });
@@ -274,10 +333,14 @@ inline int build(Store& st, const Config& cfg) {
   }
   // the series: (NORAD_CAT_ID, INTERNATIONAL_DESIGNATOR, MEAN_ELEMENT_THEORY, ORIGINATOR), each by epoch (a later record
   // of the same epoch replaces)
-  std::vector<uint32_t> order(recs.size());
-  for (uint32_t k = 0; k < order.size(); ++k) order[k] = k;
+  Array<uint32_t> order, keep;
+  if (!order.reserve(recs.size()) || !keep.reserve(recs.size())) {
+    for (Record& r : recs) delete r.cov;
+    return mem::refuse_if_out_of_memory(), 3;
+  }
+  for (uint32_t k = 0; k < recs.size(); ++k) order.push_back(k);
   auto epoch_of = [&](const Record& r) { return minutes_of(r.row.epoch_jd_whole, r.row.epoch_jd_frac); };
-  std::stable_sort(order.begin(), order.end(), [&](uint32_t a, uint32_t b) {
+  if (!order.empty()) std::sort(order.begin(), order.end(), [&](uint32_t a, uint32_t b) {
     const Record &x = recs[a], &y = recs[b];
     if (x.norad != y.norad) return x.norad < y.norad;
     if (x.object_id != y.object_id) return x.object_id < y.object_id;
@@ -285,7 +348,8 @@ inline int build(Store& st, const Config& cfg) {
     if (x.originator != y.originator) return x.originator < y.originator;
     if (epoch_of(x) != epoch_of(y)) return epoch_of(x) < epoch_of(y);
     // SPEC 18.3: sets of one epoch carrying different spans (records split by day) by their span's start
-    return (x.track ? x.track->start : -HUGE_VAL) < (y.track ? y.track->start : -HUGE_VAL);
+    const double xs = x.track ? x.track->start : -HUGE_VAL, ys = y.track ? y.track->start : -HUGE_VAL;
+    return xs != ys ? xs < ys : a < b;  // original input position preserves stable ties without a sort allocation
   });
   // a series flies one force model: its sets' forces equal its first's
   for (uint32_t k = 1; k < order.size(); ++k) {
@@ -307,7 +371,7 @@ inline int build(Store& st, const Config& cfg) {
     while (e < order.size() && recs[order[e]].norad == head.norad && recs[order[e]].object_id == head.object_id &&
            recs[order[e]].met == head.met && recs[order[e]].originator == head.originator)
       ++e;
-    std::vector<uint32_t> keep;
+    keep.clear();
     for (uint32_t q = k; q < e; ++q) {
       Record& r = recs[order[q]];
       if (epoch_of(r) < oldest_kept) { ++st.stats.aged; delete r.cov; r.cov = nullptr; continue; }
@@ -328,7 +392,8 @@ inline int build(Store& st, const Config& cfg) {
       const size_t drop = keep.size() - cfg.max_sets;
       for (size_t q = 0; q < drop; ++q) { delete recs[keep[q]].cov; recs[keep[q]].cov = nullptr; }
       st.stats.capped += static_cast<double>(drop);
-      keep.erase(keep.begin(), keep.begin() + static_cast<std::ptrdiff_t>(drop));
+      for (size_t q = drop; q < keep.size(); ++q) keep[q - drop] = keep[q];
+      for (size_t q = 0; q < drop; ++q) keep.pop_back();
     }
     if (!keep.empty()) {
       Series s;
@@ -352,7 +417,7 @@ inline int build(Store& st, const Config& cfg) {
         }
         en.handover = recs[q].handover;
         en.forces = recs[q].forces;
-        en.atmosphere = intern(st, recs[q]);
+        en.atmosphere = recs[q].atmosphere;
         if (en.atmosphere != nullptr && !en.atmosphere->days.empty()) {
           en.first_day = en.atmosphere->days.front().mjd + 1;
           en.last_day = en.atmosphere->days.back().mjd;
