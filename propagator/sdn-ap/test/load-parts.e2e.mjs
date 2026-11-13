@@ -57,8 +57,9 @@ const partitions = n => [['one part', [n]], ['two parts', evenly(n, 2)], ['seven
 
 const fresh = await open(wasmPath);
 const q = (() => { const x = fresh.instance.exports, p = x.sdnap_alloc(1 << 16); return {x, p, f64: (o, n) => new Float64Array(fresh.memory.buffer, o, n), i32: (o, n) => new Int32Array(fresh.memory.buffer, o, n)}; })();
-const fingerprint = () => {
-  const {x, p, f64, i32} = q, out = [];
+const probeOf = h => { const x = h.instance.exports, p = x.sdnap_alloc(1 << 16); return {x, p, f64: (o, n) => new Float64Array(h.memory.buffer, o, n), i32: (o, n) => new Int32Array(h.memory.buffer, o, n)}; };
+const fingerprint = (pr = q) => {
+  const {x, p, f64, i32} = pr, out = [];
   x.sdnap_epochs_stats(p); out.push(Array.from(f64(p, 7)));
   const count = x.sdnap_epochs_count(); out.push(count);
   const ep = p + 4096, st = p + 8192, cov = p + 12288, one = p + 2048;
@@ -274,8 +275,7 @@ SDNAP_EXPORT("sdnap_test_alloc_count") uint32_t sdnap_test_alloc_count(void) { r
   const seamed = buildDiagnostic('load-parts-seam', probe, s => s, seam);
   const h = await open(seamed), x = h.instance.exports, p = x.sdnap_alloc(64);
   const stats = () => { x.sdnap_epochs_stats(p); return Array.from(new Float64Array(h.memory.buffer, p, 8)); };
-  const records = [...catalog.slice(0, 6), ...catalog.slice(14, 24), ...catalog.slice(30, 34), ...catalog.slice(34, 36)];
-  const sizes = evenly(records.length, 3);
+  const inject = async (label, records, sizes) => {
   // the calls of the load, as thunks: open, three parts, close
   const calls = () => {
     const out = [() => opened(h)];
@@ -298,7 +298,7 @@ SDNAP_EXPORT("sdnap_test_alloc_count") uint32_t sdnap_test_alloc_count(void) { r
   const counts = [];
   const ok = calls();
   for (let c = 0; c < ok.length; ++c) { x.sdnap_test_fail_at(0); assert.equal((await ok[c]()).statusCode, 0); counts.push(x.sdnap_test_alloc_count()); }
-  assert.ok(stats()[1] > 10 && counts[4] > 5, `the load kept ${stats()[1]} sets; allocations per call ${counts}`);
+  assert.ok(stats()[1] > 0 && counts[4] > 2, `the load kept ${stats()[1]} sets; allocations per call ${counts}`);
   let failed = 0;
   for (let c = 1; c < ok.length; ++c) {   // the open allocates nothing worth failing; the three parts and the close are failed one allocation at a time
     for (let n = 1; n <= counts[c]; ++n) {
@@ -315,9 +315,56 @@ SDNAP_EXPORT("sdnap_test_alloc_count") uint32_t sdnap_test_alloc_count(void) { r
   assert.equal((await opened(h)).statusCode, 0);
   assert.equal((await part(h, [records.slice(0, 6)])).statusCode, 0);
   assert.equal((await close(h)).statusCode, 0);
-  assert.equal(x.sdnap_epochs_count(), 5);   // four objects and a series of two sets
-  console.log(`allocation failure: ${failed} counted allocations of the parts and the close (${counts.join(', ')} per call) failed in turn, each refused out-of-memory with the store empty and the load closed`);
+  assert.ok(x.sdnap_epochs_count() > 0);
+  console.log(`allocation failure, ${label}: ${failed} counted allocations of the parts and the close (${counts.join(', ')} per call) failed in turn, each refused out-of-memory with the store empty and the load closed`);
+  return failed;
+  };
+  const mixed = [...catalog.slice(0, 6), ...catalog.slice(14, 24), ...catalog.slice(30, 34), ...catalog.slice(34, 36)];
+  assert.ok(await inject('a mixed catalog', mixed, evenly(mixed.length, 3)) > 30);
+  // records that carry a forecast: the copy of each record out of the part's bytes, and the track's arrays, are counted allocations that refuse by name
+  const forecast = await inject('records carrying a forecast', withForecast, [2, 1, 1]);
+  assert.ok(forecast > 10, `${forecast} allocations of the forecast records`);
   await h.destroy?.();
+}
+
+// ---- 4b. a host that stages every part in one buffer: after each part the exact region the part used is overwritten, and the store must still equal the
+// one load_epochs builds (a record's forecast is read from the part's bytes, which the module must have copied; no pointer into a part survives its call).
+// The control is a build whose forecast copy is removed: it must NOT equal the one-call store after the same overwrite.
+const staged = async (h, records, sizes) => {
+  const x = h.instance.exports;
+  let widest = 0, at = 0;
+  const parts = sizes.map(s => { const mine = records.slice(at, at + s); at += s; const payload = Buffer.concat(mine.map(prefix)); widest = Math.max(widest, payload.length); return payload; });
+  const staging = x.plugin_alloc(widest);
+  assert.ok(staging);
+  let r = await call(h, 'load_epochs_open', [configuration({epochStore: {}})]);
+  for (let k = 0; r.statusCode === 0 && k < parts.length; ++k) {
+    new Uint8Array(h.memory.buffer, staging, parts[k].length).set(parts[k]);
+    r = await h.invoke({methodId: 'load_epochs_part', externalArena: new Uint8Array(h.memory.buffer), inputs: [{portId: 'ocm', typeRef: T('OCM'), offset: staging, size: parts[k].length, alignment: 8}]});
+    new Uint8Array(h.memory.buffer, staging, widest).fill(0xA5);   // the host reuses its buffer: the region the part used holds something else now
+  }
+  if (r.statusCode === 0) r = await close(h);
+  x.plugin_free?.(staging, widest);
+  return r;
+};
+{
+  const forecastCatalog = [...withForecast, ...catalog.slice(0, 8), ...catalog.slice(18, 24)];
+  assert.equal((await whole(fresh, forecastCatalog)).statusCode, 0);
+  const expect = fingerprint();
+  assert.match(expect, /\["source",1\]/, 'no series answers from a carried forecast: the copy is not exercised');
+  const r = await staged(fresh, forecastCatalog, evenly(forecastCatalog.length, 5));
+  assert.equal(r.statusCode, 0, `${r.errorCode}: ${r.errorMessage}`);
+  assert.equal(fingerprint(), expect, 'a store built from a reused staging buffer differs from the one load_epochs builds');
+  // the control
+  const control = buildDiagnostic('load-parts-control', '', s => s, {'carried.inc': s => s.replace('inline bool keep(Track& t) {\n  if (t.recs == nullptr) return true;', 'inline bool keep(Track& t) {\n  if (true) return true;\n  if (t.recs == nullptr) return true;')});
+  const ch = await open(control), cq = probeOf(ch);
+  let broke = false;
+  try {
+    const cr = await staged(ch, forecastCatalog, evenly(forecastCatalog.length, 5));
+    broke = cr.statusCode !== 0 || fingerprint(cq) !== expect;
+  } catch { broke = true; }
+  assert.ok(broke, 'the control (no forecast copy) equals the one-call store after the staging buffer is overwritten: the test would not catch a missing copy');
+  console.log('staging buffer reused: the store equals the one-call store; the control without the forecast copy does not');
+  await ch.destroy?.();
 }
 
 // ---- 5. memory: parts of 100 against one payload

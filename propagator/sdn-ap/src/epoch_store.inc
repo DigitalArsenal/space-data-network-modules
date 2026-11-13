@@ -427,7 +427,7 @@ inline int add(Build& b, bool copy_tracks) {
       r.atmosphere = intern(b.pool, r);
       if (mem::refuse_if_out_of_memory()) { delete r.cov; refused = true; return false; }
       r.weather = ocm::Weather{};
-      if (copy_tracks && r.track) carried::keep(*r.track);
+      if (copy_tracks && r.track && !carried::keep(*r.track)) { delete r.cov; refused = true; mem::refuse_if_out_of_memory(); return false; }
       if (!recs.grow_one()) { delete r.cov; refused = true; mem::refuse_if_out_of_memory(); return false; }
       recs.push_back(std::move(r));
       return true;
@@ -564,7 +564,12 @@ inline int close(Store& st, Build& b) {
       en.epoch = epoch_of(recs[q]);
       en.cov = recs[q].cov;
       if (recs[q].track) {
-        carried::keep(*recs[q].track);  // a kept record's bytes, copied once (the call's are freed after it)
+        if (!carried::keep(*recs[q].track)) {  // a kept record's bytes, copied once (the call's are freed after it)
+          b.free_covs();
+          delete s.slots.second;  // this series is not in the store yet: its second slot is freed here
+          s.slots.second = nullptr;
+          return mem::refuse_if_out_of_memory(), 3;
+        }
         en.track = recs[q].track;
         s.carried = true;
       }
