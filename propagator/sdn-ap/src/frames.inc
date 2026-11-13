@@ -91,7 +91,12 @@ inline State& state() {
   return s;
 }
 
-alignas(8) inline uint8_t g_cell[4096];  ///< the cell under construction
+struct RowOut {
+  alignas(8) uint8_t cell[4096];
+  uint32_t bytes = 0, splits = 0;
+  int result = 0;
+  uint8_t tomb = 0;
+};
 
 inline bool is_tombstone(const uint8_t* c) { return c[16] == 0; }
 inline uint32_t bytes_of_cell(int np, int nv, int hp, int hv) {
@@ -245,9 +250,9 @@ inline bool needs_dense_check(const epochs::Entry& en) {
   return a * (1.0 - en.row.eccentricity) - 6378.137 < line;
 }
 
-/// 0: stored in g_cell (size in `bytes`); 1: AP refuses somewhere in the window; 2: the tolerance is not held.
+/// 0: stored in cell (size in `bytes`); 1: AP refuses somewhere in the window; 2: the tolerance is not held.
 /// Samples and checks are taken ascending in time for a window after the epoch and descending for a window before it: the set is flown from the epoch toward the window.
-inline int build_window(xpt::XpSat& xp, epochs::Store& st, const epochs::Entry& en, double a, double b, bool pos_only, uint32_t& bytes) {
+inline int build_window(xpt::XpSat& xp, epochs::Store& st, const epochs::Entry& en, double a, double b, bool pos_only, uint8_t (&cell)[4096], uint32_t& bytes) {
   const double mid = 0.5 * (a + b), half = 0.5 * (b - a);
   // The order of the flight is the one that is right on every build: a window lies on one side of the epoch (the grid is anchored on it), a row's cold set is
   // flown toward the window from the epoch (ascending after it, descending before it), and no row's flight crosses the epoch within one set. A flight that
@@ -314,19 +319,19 @@ inline int build_window(xpt::XpSat& xp, epochs::Store& st, const epochs::Entry& 
   };
   const int hp = head_of(0, bt.np, kTailLimPos), hv = head_of(3, bt.nv, kTailLimVel);
   bytes = bytes_of_cell(bt.np, bt.nv, hp, hv);
-  if (bytes > sizeof g_cell) return 2;
-  std::memset(g_cell, 0, bytes);
-  std::memcpy(g_cell, &mid, 8);
-  std::memcpy(g_cell + 8, &half, 8);
-  g_cell[16] = static_cast<uint8_t>(bt.np); g_cell[17] = static_cast<uint8_t>(bt.nv); g_cell[18] = static_cast<uint8_t>(hp); g_cell[19] = static_cast<uint8_t>(hv);
+  if (bytes > sizeof cell) return 2;
+  std::memset(cell, 0, bytes);
+  std::memcpy(cell, &mid, 8);
+  std::memcpy(cell + 8, &half, 8);
+  cell[16] = static_cast<uint8_t>(bt.np); cell[17] = static_cast<uint8_t>(bt.nv); cell[18] = static_cast<uint8_t>(hp); cell[19] = static_cast<uint8_t>(hv);
   {
-    double* ph = reinterpret_cast<double*>(g_cell + kHeaderBytes);
-    float* pt = reinterpret_cast<float*>(g_cell + kHeaderBytes + 24 * hp);
+    double* ph = reinterpret_cast<double*>(cell + kHeaderBytes);
+    float* pt = reinterpret_cast<float*>(cell + kHeaderBytes + 24 * hp);
     for (int k = 0; k < bt.np; ++k) for (int a2 = 0; a2 < 3; ++a2) { if (k < hp) ph[k * 3 + a2] = bt.coef[a2][k]; else pt[(k - hp) * 3 + a2] = static_cast<float>(bt.coef[a2][k]); }
     if (bt.nv > 0) {
       const uint32_t pos = (24u * hp + 12u * (bt.np - hp) + 7u) & ~7u;
-      double* vh = reinterpret_cast<double*>(g_cell + kHeaderBytes + pos);
-      float* vt = reinterpret_cast<float*>(g_cell + kHeaderBytes + pos + 24 * hv);
+      double* vh = reinterpret_cast<double*>(cell + kHeaderBytes + pos);
+      float* vt = reinterpret_cast<float*>(cell + kHeaderBytes + pos + 24 * hv);
       for (int k = 0; k < bt.nv; ++k) for (int a2 = 0; a2 < 3; ++a2) { if (k < hv) vh[k * 3 + a2] = bt.coef[3 + a2][k]; else vt[(k - hv) * 3 + a2] = static_cast<float>(bt.coef[3 + a2][k]); }
     }
   }
@@ -335,7 +340,7 @@ inline int build_window(xpt::XpSat& xp, epochs::Store& st, const epochs::Entry& 
   // check (needs_dense_check) has 8 times the points of the other, 96. The dense points are a uniform grid offset from the 96-point grid, not a superset of it.
   auto check_values = [&](double t, const double r[3], const double v[3]) -> int {
     double rc[3], vc[3];
-    eval_cell(g_cell, t, rc, vc);
+    eval_cell(cell, t, rc, vc);
     const double dx = rc[0] - r[0], dy = rc[1] - r[1], dz = rc[2] - r[2], wx = vc[0] - v[0], wy = vc[1] - v[1], wz = vc[2] - v[2];
     if (!(std::fabs(dx) <= kTolPos && std::fabs(dy) <= kTolPos && std::fabs(dz) <= kTolPos && std::sqrt(dx * dx + dy * dy + dz * dz) <= kLimit3D)) return 2;
     if (!(std::fabs(wx) <= kTolVel && std::fabs(wy) <= kTolVel && std::fabs(wz) <= kTolVel && std::sqrt(wx * wx + wy * wy + wz * wz) <= kLimitVel3D)) return 2;
@@ -354,7 +359,7 @@ inline int build_window(xpt::XpSat& xp, epochs::Store& st, const epochs::Entry& 
     if (rc != 0) return rc;
   }
   if (pos_only) {  // the velocity group was built and checked; the cell keeps positions alone
-    g_cell[17] = 0; g_cell[19] = 0;
+    cell[17] = 0; cell[19] = 0;
     bytes = bytes_of_cell(bt.np, 0, hp, 0);
   }
   return 0;
@@ -362,15 +367,13 @@ inline int build_window(xpt::XpSat& xp, epochs::Store& st, const epochs::Entry& 
 
 /// One refill row: the leaf cell of the dyadic window holding t (minutes from the epoch, before or after it) of object i, from a cold set of its record,
 /// released inside the row. A window AP refuses in, or that holds no tolerance, is halved down to 3 minutes; a window of 3 minutes that still fails
-/// is a tombstone (its reason in byte 17: kApRefuses or kBuilderFails). The cell, or the tombstone, is left in g_cell with its size in `bytes`.
-/// Returns 1 a cell, 2 a tombstone, 0 nothing (a counted allocation failed: rows_oom), 3 the set cannot be made (the object is marked kApRefuses).
-inline int row(State& s, uint32_t i, double t, uint32_t& bytes) {
-  epochs::Store& st = epochs::resident();
+/// is a tombstone (its reason in byte 17: kApRefuses or kBuilderFails). All cell bytes and logical counter deltas belong to out.
+/// Result: 1 a cell, 2 a tombstone, 0 a counted allocation failed, 3 the set cannot be made.
+inline void build_row(epochs::Store& st, uint32_t i, double t, bool pos_only, RowOut& out) {
+  out.bytes = 0; out.splits = 0; out.result = 0; out.tomb = 0;
   const epochs::Series& se = st.series[i];
   const epochs::Entry& en = st.entries[se.first];
-  Obj& o = s.obj[i];
-  const uint32_t mark = mem::failures();
-  ++s.rows;
+  const uint32_t mark = mem::thread_failures();
   xpt::XpSat* xp = nullptr;
   int32_t err = kPropOk;
   {
@@ -382,29 +385,37 @@ inline int row(State& s, uint32_t i, double t, uint32_t& bytes) {
   }
   auto done = [&](int rc) {
     if (xp != nullptr) { xpt::xp_release(*xp); std::free(xp); }
-    return rc;
+    out.result = rc;
   };
-  if (mem::failures() != mark) { ++s.rows_oom; return done(0); }
-  if (err != kPropOk) { o.kind = static_cast<uint8_t>(kApRefuses); ++s.tomb_ap; return done(3); }
-  const bool pos_only = (s.flags & kFlagPositionOnly) != 0;
+  if (mem::thread_failures() != mark) return done(0);
+  if (err != kPropOk) { out.tomb = kApRefuses; return done(3); }
   double len = kBaseMinutes;
   for (int level = 0;; ++level, len *= 0.5) {
     const double a = std::floor(t / len) * len, b = a + len;
-    const int rc = build_window(*xp, st, en, a, b, pos_only, bytes);
-    if (mem::failures() != mark) { ++s.rows_oom; return done(0); }
+    const int rc = build_window(*xp, st, en, a, b, pos_only, out.cell, out.bytes);
+    if (mem::thread_failures() != mark) return done(0);
     if (rc == 0) return done(1);
     if (len <= kMinWindowMinutes * 1.0001) {
       const double mid = 0.5 * (a + b), half = 0.5 * (b - a);
-      std::memset(g_cell, 0, kHeaderBytes);
-      std::memcpy(g_cell, &mid, 8);
-      std::memcpy(g_cell + 8, &half, 8);
-      g_cell[17] = static_cast<uint8_t>(rc == 1 ? kApRefuses : kBuilderFails);
-      bytes = kHeaderBytes;
-      (rc == 1 ? s.tomb_ap : s.tomb_builder) += 1;
+      std::memset(out.cell, 0, kHeaderBytes);
+      std::memcpy(out.cell, &mid, 8);
+      std::memcpy(out.cell + 8, &half, 8);
+      out.tomb = out.cell[17] = static_cast<uint8_t>(rc == 1 ? kApRefuses : kBuilderFails);
+      out.bytes = kHeaderBytes;
       return done(2);
     }
-    ++s.split;
+    ++out.splits;
   }
+}
+
+/// Applies one logical row's result on the caller, in sweep order.
+inline void commit_row(State& s, uint32_t i, const RowOut& out) {
+  ++s.rows;
+  s.split += out.splits;
+  if (out.result == 0) ++s.rows_oom;
+  if (out.result == 3) s.obj[i].kind = kApRefuses;
+  if (out.tomb == kApRefuses) ++s.tomb_ap;
+  if (out.tomb == kBuilderFails) ++s.tomb_builder;
 }
 
 inline bool covered(const State& s, const Obj& o, double t) {
@@ -430,11 +441,11 @@ inline uint32_t reclaim(State& s, double now_whole, double now_frac, double ahea
   return freed;
 }
 
-/// Stores g_cell (`bytes`) as object i's slot `slot` (0 current, 1 following). `droppable`: the held cells (bit 0 current, bit 1 following) that cover
+/// Stores cell (`bytes`) as object i's slot `slot` (0 current, 1 following). `droppable`: the held cells (bit 0 current, bit 1 following) that cover
 /// neither time of the call; they go back to the slab after the new cell is stored, or earlier when the slab is full without them. A plain allocation is
 /// tried first, a compaction only when it fails and the free bytes and the bump's remainder hold the cell. 0: no room (counted: stats[12]); the held cells are
 /// untouched unless they were droppable and the room was needed.
-inline bool place(State& s, uint32_t i, int slot, uint32_t bytes, int droppable) {
+inline bool place(State& s, uint32_t i, int slot, const uint8_t* cell, uint32_t bytes, int droppable) {
   const size_t need = static_cast<size_t>(class_of(bytes)) * kClassBytes;
   auto recoverable = [&]() { return (s.slab_bytes - s.used) + s.free_bytes >= need; };  // compaction can make room only if the free bytes and the bump's remainder hold the cell
   uint32_t at = slab_alloc(s, bytes);
@@ -448,7 +459,7 @@ inline bool place(State& s, uint32_t i, int slot, uint32_t bytes, int droppable)
     if (at == 0 && recoverable()) { compact(s); at = slab_alloc(s, bytes); }
   }
   if (at == 0) { ++s.full; return false; }
-  std::memcpy(s.slab + at, g_cell, bytes);
+  std::memcpy(s.slab + at, cell, bytes);
   const uint32_t owner = (i << 1) | static_cast<uint32_t>(slot);
   std::memcpy(s.slab + at + 20, &owner, 4);
   ++s.live; ++s.stored;
@@ -615,12 +626,14 @@ int32_t sdnap_frames_refill(double now_whole, double now_frac, double ahead_seco
       const int droppable = ((o.cur != 0 && !holds(o.cur, t0) && !holds(o.cur, ta)) ? 1 : 0) | ((o.nxt != 0 && !holds(o.nxt, t0) && !holds(o.nxt, ta)) ? 2 : 0);
       if (rows >= max_rows) { stop = true; break; }
       ++rows;
-      uint32_t bytes = 0;
-      const int rc = row(s, i, t, bytes);
+      RowOut out;
+      build_row(sdnap::epochs::resident(), i, t, (s.flags & kFlagPositionOnly) != 0, out);
+      commit_row(s, i, out);
+      const int rc = out.result;
       if (rc == 0) { ++unstored; stalled = static_cast<int32_t>(i); stop = true; break; }  // a counted allocation failed: the memory, not this object
       if (rc == 3) { ++sw.k; ++visits; continue; }
-      bool put = place(s, i, slot, bytes, droppable);
-      if (!put && reclaim(s, now_whole, now_frac, ahead_min) > 0) put = place(s, i, slot, bytes, droppable);  // one reclaim pass over all objects, one retry
+      bool put = place(s, i, slot, out.cell, out.bytes, droppable);
+      if (!put && reclaim(s, now_whole, now_frac, ahead_min) > 0) put = place(s, i, slot, out.cell, out.bytes, droppable);  // one reclaim pass over all objects, one retry
       if (!put) { ++unstored; stalled = static_cast<int32_t>(i); ++sw.k; ++visits; continue; }  // skipped and reported: the later objects are still visited
       if (rc == 1) ++stored; else ++tombs;
       ++sw.k; ++visits;
