@@ -2889,38 +2889,59 @@ end is 18's.
 d = x_b - x_a (the smoothstep weight for both shapes): the covariance of the two-component mixture (a blended switch,
 14.3).
 
-**A stored set's bank** *[stack #599]*. The nominal of 12.3's differences (the bank's set 0) is the stored set itself:
-- its elements are the record's own;
-- its term tables are borrowed from the store's set, one copy each (the store's set outlives the bank).
+**One record, one covariance** *[stack #599]*. Every entry that answers a stored record's covariance takes the record's
+own set as its bank's nominal (12.3's set 0), as `propagate` always has:
+- **The epoch store** (`sdnap_epochs_at`, `propagate_epochs`). Set 0 borrows the store's set's term tables, one copy each.
+  The store's set outlives the bank: a slot's release frees the bank first.
+- **`sdnap_covariance_at`, `sdnap_covariance_full_at` and `sdnap_test_epoch_floor`.** The record's own set is moved into
+  the bank.
 
-`propagate` takes the record's own set as set 0 the same way. Through 0.6.52 the store built set 0 again from the
-parameter vector (12.1's p, then back to elements):
-- that was a second copy of every table;
+The fit's covariance (12.1) keeps its own construction: its bank is the fit's parameter vector, whose J the fit solved
+with.
+
+Through 0.6.54 those entries built set 0 again from the parameter vector (12.1's p, then back to elements):
 - set 0's elements could differ from the record's in their last bits;
-- the moved sets then matched set 0 exactly in all six elements, so their differences took other paths (12.3's flags for a
+- the store held a second copy of every table;
+- the moved sets then matched set 0 exactly in all six elements, so their differences took other paths (12.3's flags of a
   moved set that shares the nominal's terms);
-- above e 0.048, set 0 held schedule-node grids of its own (16.11).
+- above e 0.048, set 0 held schedule-node grids of its own (16.11);
+- the three exports' returned state was set 0's.
 
-The measurement: the 942 stored AP records of the synthetic set. 938 of them give a covariance at some instant. Each was
-loaded alone and flown at its epoch and every 30 minutes for 120 hours, TEME, and compared with `propagate`'s covariance of
-the same record (test/store-covariance.e2e.mjs keeps four of them):
-- **Where both hold the same time,** the 81 instants every 90 minutes (the epochs are at midnight), every element is
-  equal to the bit on every record: 75,978 instants. Through 0.6.52, 48,138 of them were.
-- **At the other instants the two times differ in their last bits.** The caller's split Julian date, here made from
-  milliseconds, is off by up to 0.16 µs; `propagate` reads its ISO text. The covariance then differs by up to 1.4e-3 of
-  the matrix's largest element, on a 5,000 km perigee record at e 0.7. 161 records differ by more than 1e-6. Through
-  0.6.52 the difference reached 1.46 times that element, on a 5,000 km perigee record at e 0.9, and 215 records differed
-  by more than 1e-6.
-- **The borrowing alone changes nothing.** Against set 0 built from the record's elements with tables of its own, every
-  state and every covariance element is equal to the bit.
-- **Against 0.6.52**, flown in stores of 40 records, the states are equal. The covariance changes on 385 of the 942
-  records: on 86 by more than 1e-6 of the matrix's largest element, by up to 0.80 of it (a position variance at hour 103.5).
-- **At the family grids' limit,** in stores that reach the 256 family grids (16.11) with the covariance asked, 0.6.52
-  refused (code 1) states this build answers: set 0 now shares the slot's schedule-node grids.
+**The moved sets are built as before,** from p moved by h. A moved set shares a table that ap_init tests bit for bit
+(same_inc) only where the round trip through p reproduced the record's inclination. On 90 of the 942 stored records it
+does not: there, 1,079 moved sets that did not move the inclination own their output, m-daily and zonal tables, about
+27.6 KB each at 500 km. Building the moved sets' unmoved elements from the record's bits would bring the sharing back, but
+it moves `propagate`'s covariance on 412 records, by up to 6.2 times its largest element, through the noise of the BTERM
+column (below). It is not done.
 
-The moved sets still own the tables they cannot borrow from set 0: one whose inclination moved (chi, psi) owns its m-daily
-family, output and zonal tables. `_stats`' bytes count the bank, its bodies and every table and grid its sets own.
-Through 0.6.52 the count held the propagator alone, 2.9 KB of a bank of about 240 KB.
+**The measurement.** The 942 stored AP records of the synthetic set, of which 938 answer a covariance. Each was flown at
+its epoch and every 30 minutes for 120 hours, TEME; test/store-covariance.e2e.mjs keeps eight of them.
+- **One time to the bit.** The store's split Julian date is made as `propagate` makes it from its ISO text. The store's
+  covariance then equals `propagate`'s, every element, at every instant on every record (226,058 instants). So does
+  `sdnap_covariance_at`'s, given the minutes `propagate` computes.
+- **Times that differ in their last bits** (the caller's split Julian date made from milliseconds, up to 0.16 µs off):
+  - the store's covariance differs from `propagate`'s by up to 1.4e-3 of its largest element, with 161 records over 1e-6;
+  - through 0.6.54 it differed by up to 1.46, with 213 records over 1e-6;
+  - the remainder is the noise of the BTERM and AGOM difference columns on orbits that drag and radiation barely move:
+    zeroing those two columns brings every record under 1e-6 (stack #624).
+- **The borrowing changes nothing.** Against set 0 with tables of its own, every state, status and covariance element is
+  equal (227,022 states and 8,162,496 elements, in stores of 40).
+- **Against 0.6.54**, in stores of 40:
+  - states and statuses are equal;
+  - the store's covariance changes on 385 records: 86 by more than 1e-6 of its largest element, and up to 0.80 of it (a
+    position variance at hour 103.5 on a 5,000 km perigee record at e 0.9);
+  - `sdnap_covariance_at`'s and `sdnap_covariance_full_at`'s covariance changes on 381 records: 85 by more than 1e-6 of
+    its largest element, and up to 0.80 of it;
+  - their returned state changes on 378 records, by up to 0.15 m and 18 µm/s (47 over 1 mm); it is now the record's own
+    set's;
+  - `propagate`'s states and covariance are unchanged on every record.
+- **At the family grids' limit**, 0.6.54 refused (code 1) states this build answers: set 0 shares the slot's
+  schedule-node grids.
+- **At the epoch**, every entry's P(0) is 12.3's to within 3.2e-16 of its largest element.
+
+`_stats`' bytes count the bank: its bodies, and every table and grid its sets own, each holder of a grid its share.
+Through 0.6.54 the count held the propagator alone (2.9 KB of a bank of about 240 KB), and a copy reading its anchor's
+grid counted none of it.
 
 **14.5 Calls.** `load_epochs`; the resident exports `sdnap_epochs_count`, `_stats` (the load's counts and the store's
 bytes), `_series` (identity and epochs), `_select` (the sets and the weight at a time), `_set_at` (one set without
