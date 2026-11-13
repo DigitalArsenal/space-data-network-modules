@@ -6568,6 +6568,23 @@ use `max_rows <= 32`, with the host adjusting the limit from measured p50, p95, 
 skip scans, reclaim, and compaction have no hard time bound. JavaScript copies and a replacement instance count separately
 toward total browser memory.
 
+The 300,000,000-byte line applies to the measured configuration, not every thread count and cache history. A host that
+wants the deep look-ahead chooses between the line and the covariance in the same instance. A separate cache stress case
+loads 100,000 synthetic recipe records, with the first 32 at tesseral degree 70, eccentricity 0.299, and two revolutions per
+day. Each total below is one instance after the full fill and two window turns, with the three host rules of 19.6:
+
+| Pool threads | Cells per object | Covariance | Instance bytes | Bytes above 300,000,000 |
+| ---: | ---: | :---: | ---: | ---: |
+| 4 | 1 | yes | 266,469,376 | 0 |
+| 15 | 1 | yes | 310,640,640 | 10,640,640 |
+| 4 | 2 | no | 243,793,920 | 0 |
+| 15 | 2 | no | 296,091,648 | 0 |
+
+The first batch reserves 12,613,188 bytes at four threads and 21,907,264 bytes at fifteen. All cases have zero logical
+allocation failures, zero slab failures, and zero memory growth inside batches. The fifteen-thread covariance case exceeds
+the line even with one cell per object. These stress records exercise large caches; the table is not a universal upper
+bound for every accepted record or allocation history.
+
 `test/frames-pool.e2e.mjs` compares canonical cell bytes, frame bits, logical counters, and results at 0, 4, and 15 pool
 threads, including two slicings, duplicate priorities, tight slabs, position-only cells, refused growth, counted allocation
 failure, reserve halving, serial fallback, eight counted startup-cache failure sites, and delayed or trapped claims.
