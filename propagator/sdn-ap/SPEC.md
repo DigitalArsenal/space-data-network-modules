@@ -2861,6 +2861,26 @@ end is 18's.
 d = x_b - x_a (the smoothstep weight for both shapes): the covariance of the two-component mixture (a blended switch,
 14.3).
 
+**A stored set's bank** *[stack #599]*. The nominal of 12.3's differences (the bank's set 0) is the stored set itself:
+- its elements are the record's own;
+- its term tables are borrowed from the store's set, one copy each (the store's set outlives the bank).
+
+`propagate` takes the record's own set as set 0 the same way. Through 0.6.52 the store built set 0 again from the
+parameter vector (12.1's p, then back to elements). That was a second copy of every table, and set 0's elements could differ
+from the record's in their last bits. The moved sets then matched set 0 exactly in all six elements, so the differences
+took other paths (12.3's flags for a moved set that shares the nominal's terms).
+
+On the 60 stored AP records of the synthetic set that carry a covariance, flown 120 hours at 30 minutes:
+- **Against `propagate`'s covariance of the same record:** the store's differed by up to 7.9e-4 of the matrix's largest
+  element (a 300 km circular record at day 5). Now it differs by at most 3.7e-7, the difference both builds show on the
+  records this leaves alone.
+- **The borrowing alone changes nothing.** Against set 0 built from the record's elements with tables of its own, every
+  state and every covariance element is equal to the bit.
+
+The moved sets still own the tables they cannot borrow from set 0: one whose inclination moved (chi, psi) owns its m-daily
+family, output and zonal tables. `_stats`' bytes count the bank, its bodies and every table and grid its sets own.
+Through 0.6.52 the count held the propagator alone, 2.9 KB of a bank of about 240 KB.
+
 **14.5 Calls.** `load_epochs`; the resident exports `sdnap_epochs_count`, `_stats` (the load's counts and the store's
 bytes), `_series` (identity and epochs), `_select` (the sets and the weight at a time), `_set_at` (one set without
 selection) and `_at` (a batch of series at one time, TEME km, km/s or Earth-fixed m, m/s, with the covariance); and

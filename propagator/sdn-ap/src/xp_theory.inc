@@ -5809,6 +5809,27 @@ struct CovBankScope {
   CovBankScope& operator=(const CovBankScope&) = delete;
 };
 
+/// Stack #599: while a TableShareScope lives on a thread, a set initialized there outside a CovBankScope borrows its term
+/// tables from `tables`, a set of the same record, by ap_init's rules for a covariance's moved sets, and is no moved set
+/// itself (its own branch; is_cov_sigma 0). The epoch store's covariance bank initializes its set 0 so, from the slot's own
+/// set: the record's elements, so every table is borrowed, the same bytes (cov::init checks that every one was). The slot's
+/// set outlives the bank (epochs::release deletes the bank first).
+inline thread_local const XpSat* g_table_anchor = nullptr;
+struct TableShareScope {
+  const XpSat* prev;
+  explicit TableShareScope(const XpSat* tables) : prev(g_table_anchor) { g_table_anchor = tables; }
+  ~TableShareScope() { g_table_anchor = prev; }
+  TableShareScope(const TableShareScope&) = delete;
+  TableShareScope& operator=(const TableShareScope&) = delete;
+};
+/// The tables of s a set may borrow (ap_init's shared_mask bits): those s holds. res_epoch (bit 2) is never borrowed.
+inline uint8_t borrowable_mask(const XpSat& s) {
+  const RateContext& c = s.ctx;
+  return static_cast<uint8_t>((c.half_day != nullptr ? 1 : 0) | (c.res_taylor != nullptr ? 4 : 0) | (c.shallow != nullptr ? 8 : 0) |
+                              (c.zt != nullptr ? 16 : 0) | (c.mdaily != nullptr ? 32 : 0) | (c.sp_comb != nullptr ? 64 : 0) |
+                              (c.wide_slow != nullptr ? 128 : 0));
+}
+
 /// SPEC 16.7: while a BranchScope lives on a thread, a set initialized there takes this branch instead of its own epoch
 /// elements' (a covariance's moved set still takes its nominal's): every trial set of a fit (fit::run) flies one branch's
 /// theory, so the fit's objective is smooth.
@@ -5831,12 +5852,17 @@ inline bool ap_init(const Elements& e, double n0, int8_t res, XpSat& s) {
   s.ctx.hd_e0 = e.eo;
   s.ctx.hd_i0 = e.xincl;
   s.ctx.hd_a0 = s.ctx.a0;
-  XpSat* anchor = cov_bank_anchor();
+  const XpSat* anchor = cov_bank_anchor();
   if (anchor == &s) anchor = nullptr;
+  const bool sigma = anchor != nullptr;
+  // stack #599: outside a bank's moved sets, the set of the same record whose tables this one borrows (TableShareScope)
+  if (!sigma && g_table_anchor != &s) anchor = g_table_anchor;
   XpSat* grid_anchor = grid_share_anchor();
   if (grid_anchor == &s) grid_anchor = nullptr;
-  s.ctx.cov_anchor_id = anchor != nullptr ? anchor->ctx.ctx_id : s.ctx.ctx_id;
-  s.ctx.is_cov_sigma = anchor != nullptr ? 1 : 0;
+  // the id a borrowed table is cached under is its builder's: the anchor's own id, or the one it borrowed under (a bank's
+  // set 0 that borrowed every table from its slot's set, stack #599)
+  s.ctx.cov_anchor_id = anchor != nullptr ? anchor->ctx.cov_anchor_id : s.ctx.ctx_id;
+  s.ctx.is_cov_sigma = sigma ? 1 : 0;
   const bool same_res = anchor != nullptr && anchor->ctx.resonance == res && anchor->ctx.long_period == s.ctx.long_period;
   const bool within_share = same_res && std::fabs(e.eo - anchor->ctx.e0) <= tess::kShareE &&
                             std::fabs(e.xincl - anchor->ctx.i0) <= tess::kShareI &&
