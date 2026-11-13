@@ -193,12 +193,13 @@ struct Store {
   int32_t short_day = 0;                                      ///< the day a request found no row for (weather-rows-short)
 };
 
+/// The covariance bank first: its set 0 borrows the slot's set's term tables (stack #599), so they outlive it.
 inline void release(Slot& s) {
+  delete s.cp;
   if (s.xp != nullptr) xpt::xp_release(*s.xp);
   std::free(s.xp);
   std::free(s.sat);
   std::free(s.nodes);
-  delete s.cp;
   s = Slot{};
 }
 
@@ -597,8 +598,8 @@ inline Slot& slot_of(Store& st, Series& s, uint32_t k, bool with_cov) {
   for (Slot& q : s.slots)
     if (q.index == static_cast<int32_t>(k)) {
       if (with_cov && q.cp == nullptr && st.entries[s.first + k].cov != nullptr && q.error == 0) {
-        q.cp = new cov::Propagator();
-        if (cov::prepare(*st.entries[s.first + k].cov, *q.cp) != 0) { delete q.cp; q.cp = nullptr; }
+        q.cp = sdnap::mem::counted(new (std::nothrow) cov::Propagator());  // none (counted): the state without covariance
+        if (q.cp != nullptr && cov::prepare(*st.entries[s.first + k].cov, *q.cp, nullptr, q.xp) != 0) { delete q.cp; q.cp = nullptr; }
       }
       return q;
     }
@@ -635,8 +636,9 @@ inline Slot& slot_of(Store& st, Series& s, uint32_t k, bool with_cov) {
     }
   }
   if (with_cov && q.error == kPropOk && en.cov != nullptr) {
-    q.cp = new cov::Propagator();
-    if (cov::prepare(*en.cov, *q.cp) != 0) { delete q.cp; q.cp = nullptr; }
+    // the bank's set 0 borrows the slot's own term tables (stack #599): the slot's set outlives it (release)
+    q.cp = sdnap::mem::counted(new (std::nothrow) cov::Propagator());  // none (counted): the state without covariance
+    if (q.cp != nullptr && cov::prepare(*en.cov, *q.cp, nullptr, q.xp) != 0) { delete q.cp; q.cp = nullptr; }
   }
   return q;
 }
@@ -926,8 +928,10 @@ inline uint64_t bytes_of(const Store& st) {
     };
     b += string_bytes(s.object_id) + string_bytes(s.originator) + string_bytes(s.name);
     if (s.slots.second) b += sizeof(Slot);
-    // a set: its XpSat, the term tables it owns and its caches from the pool (xp_bytes)
-    for (const Slot& q : s.slots) b += (q.xp ? xpt::xp_bytes(*q.xp) : 0) + (q.sat ? sizeof(Sat) : 0) + (q.nodes ? 32u * kCheckpointNodes : 0) + (q.cp ? sizeof(cov::Propagator) + q.cp->s.C.size() * sizeof(double) : 0);
+    // a set: its XpSat, the term tables it owns and its caches from the pool (xp_bytes); its covariance's propagator with its
+    // copy of the epoch covariance, the bank's bodies and what they own (cov::bytes_of, stack #599: through 0.6.52 the
+    // propagator alone)
+    for (const Slot& q : s.slots) b += (q.xp ? xpt::xp_bytes(*q.xp) : 0) + (q.sat ? sizeof(Sat) : 0) + (q.nodes ? 32u * kCheckpointNodes : 0) + (q.cp ? cov::bytes_of(*q.cp) : 0);
   }
   return b;
 }

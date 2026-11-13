@@ -6,6 +6,10 @@
 // and SGP4XP and AP sets, AP sets with a covariance, a set carrying a forecast track, two distinct weather series (sharing and the discard of an unused one),
 // and the refusals: each covariance refusal, several bad records in one load (the first one is reported), series-forces-differ; each compared by status, code
 // and message with the old build's, and after every refusal the new build's store is empty (series, kept and bytes).
+// Two bases. The test compares what a load keeps. A covariance is not kept by the load: it is built from the kept set
+// when the store is asked for it, so the covariance's base must build it the way the build under test does. That base is
+// 91f56d37: the old build's loader, with stack #599's covariance (the bank on the record's own set). Everything else,
+// and every refusal, is compared with 796bacbe.
 import assert from 'node:assert/strict';
 import fs from 'node:fs';
 import path from 'node:path';
@@ -31,13 +35,16 @@ const open = file => createStandaloneHarness('browser', file, {surface: 'direct'
 const load = (h, records, cfg = {}) => h.invoke({methodId: 'load_epochs', inputs: [{portId: 'ocm', typeRef: T('OCM'), payload: Buffer.concat(records.map(prefix))}, configuration({epochStore: cfg})]});
 const oldPath = path.join(scratchDir('load-equivalence'), 'baseline.wasm');
 fs.writeFileSync(oldPath, execFileSync('git', ['-C', packageRoot, 'show', '796bacbe:propagator/sdn-ap/dist/isomorphic/module.wasm'], {maxBuffer: 1 << 24}));
-const fresh = await open(wasmPath), old = await open(oldPath);
+const covPath = path.join(scratchDir('load-equivalence'), 'covariance-base.wasm');
+fs.writeFileSync(covPath, execFileSync('git', ['-C', packageRoot, 'show', '91f56d37:propagator/sdn-ap/dist/isomorphic/module.wasm'], {maxBuffer: 1 << 24}));
+const fresh = await open(wasmPath), old = await open(oldPath), covBase = await open(covPath);
 const probe = h => { const x = h.instance.exports, p = x.sdnap_alloc(1 << 16); return {x, p, f64: (o, n) => new Float64Array(h.memory.buffer, o, n), i32: (o, n) => new Int32Array(h.memory.buffer, o, n)}; };
-const pn = probe(fresh), po = probe(old);
+const pn = probe(fresh), po = probe(old), pc = probe(covBase);
 
-// ---- the whole resident store, as numbers
-const fingerprint = (h, q) => {
-  const {x, p, f64, i32} = q, out = [];
+// ---- the whole resident store, as numbers: part 'store' everything but the covariances' values (whether each series has
+// one is kept), part 'covariance' those values alone
+const fingerprint = (h, q, part = 'store') => {
+  const {x, p, f64, i32} = q, out = [], covs = [];
   x.sdnap_epochs_stats(p); out.push(Array.from(f64(p, 7)));
   const count = x.sdnap_epochs_count(); out.push(count);
   const ep = p + 4096, st = p + 8192, cov = p + 12288, one = p + 2048;
@@ -52,15 +59,17 @@ const fingerprint = (h, q) => {
     }
     const at = jdOf(iso((epochs[0] - 2440587.5 + epochs[1]) * DAY + 5400000));
     const rc = x.sdnap_epochs_at(at.whole, at.frac, i, 1, 0, p + 1024, st, cov);
-    out.push([rc, i32(st, 1)[0], ...Array.from(f64(p + 1024, 6)), ...Array.from(f64(cov, 36))]);
+    const c = Array.from(f64(cov, 36));
+    out.push([rc, i32(st, 1)[0], ...Array.from(f64(p + 1024, 6)), c.every((v) => Number.isNaN(v)) ? 'no covariance' : 'covariance']);
+    covs.push([i, ...c]);
     x.sdnap_epochs_source_at(at.whole, at.frac, i, 1, st);   // SPEC 18.8: 1 where the state is the forecast the set carries
     out.push(['source', i32(st, 1)[0]]);
   }
-  return JSON.stringify(out, (k, v) => (typeof v === 'number' && !Number.isFinite(v) ? String(v) : v));
+  return JSON.stringify(part === 'store' ? out : covs, (k, v) => (typeof v === 'number' && !Number.isFinite(v) ? String(v) : v));
 };
 const bytesOf = q => { q.x.sdnap_epochs_stats(q.p); return q.f64(q.p, 8)[7]; };
 const emptyAfter = (q, what) => { q.x.sdnap_epochs_stats(q.p); const s = q.f64(q.p, 8); assert.deepEqual([q.x.sdnap_epochs_count(), s[1], s[7]], [0, 0, 0], `${what}: the store after a refusal holds series, kept, bytes ${q.x.sdnap_epochs_count()}, ${s[1]}, ${s[7]}`); };
-let compared = 0;
+let compared = 0, covMoved = 0;  // covMoved: catalogs whose covariances differ from 796bacbe's (stack #599)
 const same = async (name, records, cfg = {}) => {
   const a = await load(old, records, cfg), b = await load(fresh, records, cfg);
   assert.equal(b.statusCode, a.statusCode, `${name}: status ${b.statusCode} (${b.errorCode}) against the old build's ${a.statusCode} (${a.errorCode})`);
@@ -71,6 +80,11 @@ const same = async (name, records, cfg = {}) => {
     return b;
   }
   assert.equal(fingerprint(fresh, pn), fingerprint(old, po), `${name}: the store differs from the old build's`);
+  // the covariances against the base that builds them as this build does; that base's store is the old build's otherwise
+  assert.equal((await load(covBase, records, cfg)).statusCode, 0, `${name}: the covariance base refused the load`);
+  assert.equal(fingerprint(covBase, pc), fingerprint(old, po), `${name}: the covariance base's store is not the old build's`);
+  assert.equal(fingerprint(fresh, pn, 'covariance'), fingerprint(covBase, pc, 'covariance'), `${name}: the covariances differ from the covariance base's`);
+  if (fingerprint(fresh, pn, 'covariance') !== fingerprint(old, po, 'covariance')) covMoved += 1;
   compared += 1;
   const bn = bytesOf(pn), kept = pn.f64(pn.p, 8)[1], bo = bytesOf(po);
   console.log(`${name}: equal, ${pn.x.sdnap_epochs_count()} series, ${kept} kept, ${bn} B (old ${bo} B)`);
@@ -170,6 +184,6 @@ await same('refusal, the last record bad', [...good, bad['covariance size']]);
 await same('refusal, the first record bad', [bad['parameter kind unspecified'], ...good]);
 await same('refusal, series-forces-differ', [...good, ap(520010, t => { at(5, t); t.PERTURBATIONS.MAXIMUM_TESSERAL_DEGREE = 20; })]);
 await same('refusal, an empty frame', []);
-console.log(JSON.stringify({compared}));
-await command.destroy?.(); await fresh.destroy?.(); await old.destroy?.();
+console.log(JSON.stringify({compared, covMoved}));
+await command.destroy?.(); await fresh.destroy?.(); await old.destroy?.(); await covBase.destroy?.();
 console.log('LOAD-EQUIVALENCE PASS');

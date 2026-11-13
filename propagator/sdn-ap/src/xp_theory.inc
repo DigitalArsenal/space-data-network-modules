@@ -57,6 +57,18 @@ inline bool teme_drift_matrix(double epoch_whole, double epoch_frac, double t_mi
 inline void apply_drift(const double R[3][3], double r[3], double v[3]);
 inline int utc_to_tt(double whole, double frac, double& tt1, double& tt2);
 }  // namespace frames
+namespace pool {
+/// SPEC 1.6 (stack #600): the calling thread's caches (pool.inc) that a set's theory reads, all made: every state and every
+/// set's initialization asks for them first, so none is made part way through a flight. An AP set reads all nine
+/// (warm_thread); an SGP4XP set without AP's terms the covariance's step cache alone (its rates, warm_thread_xp). False
+/// when one could not be had (the failure counted): the state or the initialization is refused, and the next asks again.
+inline bool warm_thread();
+inline bool warm_thread_xp();
+inline thread_local bool g_warm = false, g_warm_xp = false;
+inline bool thread_ready(bool ap) {
+  return ap ? (__builtin_expect(g_warm, 1) || warm_thread()) : (__builtin_expect(g_warm_xp, 1) || warm_thread_xp());
+}
+}  // namespace pool
 namespace xpt {
 
 constexpr double kKe = 0.074366859954178854;     // SPEC 1.3
@@ -312,13 +324,17 @@ struct ApBodiesNode {
   Bodies b{};
 };
 inline thread_local ApBodiesNode* g_ap_bodies_store = nullptr;
-/// The thread's node store, made on first use or ahead (pool::warm_thread: a pool thread makes its caches before any
-/// batch, stack #487).
-inline void ap_bodies_store_make() {
-  if (g_ap_bodies_store == nullptr) g_ap_bodies_store = new ApBodiesNode[kApBodiesStoreSlots];
+/// The thread's node store, made ahead (pool::warm_thread: before the thread's first state or initialization, and before any
+/// batch on a pool thread, stacks #487 and #600) or on first use. False when it cannot be had (the failure counted).
+inline bool ap_bodies_store_make() {
+  if (g_ap_bodies_store == nullptr)
+    g_ap_bodies_store = sdnap::mem::counted(new (std::nothrow) ApBodiesNode[kApBodiesStoreSlots], kApBodiesStoreSlots * sizeof(ApBodiesNode));
+  return g_ap_bodies_store != nullptr;
 }
-inline const Bodies& ap_bodies_node(int64_t k) {
-  if (__builtin_expect(g_ap_bodies_store == nullptr, 0)) ap_bodies_store_make();
+/// Node k; without a store (none could be made) the node itself, the same numbers.
+inline Bodies ap_bodies_node(int64_t k) {
+  if (__builtin_expect(g_ap_bodies_store == nullptr, 0) && !ap_bodies_store_make())
+    return ap_bodies_at(static_cast<double>(k) * (kApBodiesNodeHours / 24.0));
   ApBodiesNode& s = g_ap_bodies_store[static_cast<uint64_t>(k) & (kApBodiesStoreSlots - 1)];
   if (s.key != k) {
     s.b = ap_bodies_at(static_cast<double>(k) * (kApBodiesNodeHours / 24.0));
@@ -3429,8 +3445,15 @@ struct CovGridCache {
   CovStepAux steps[2][kMaxCovSteps]{};
 };
 inline thread_local CovGridCache* g_cov_grid_cache_ptr = nullptr;
+/// Made by pool::warm_thread before the thread's first state or initialization (stack #600). False when it cannot be had.
+inline bool cov_grid_cache_make() {
+  if (g_cov_grid_cache_ptr == nullptr) g_cov_grid_cache_ptr = sdnap::mem::counted(new (std::nothrow) CovGridCache{});
+  return g_cov_grid_cache_ptr != nullptr;
+}
+/// Made here only on a path that begins with neither (a diagnostic export reading a set's mean state on a thread that has
+/// flown none), which traps as before when it cannot be had.
 inline CovGridCache& cov_grid_cache() {
-  if (__builtin_expect(!g_cov_grid_cache_ptr, 0)) g_cov_grid_cache_ptr = new CovGridCache{};
+  if (__builtin_expect(!g_cov_grid_cache_ptr, 0) && !cov_grid_cache_make()) __builtin_trap();
   return *g_cov_grid_cache_ptr;
 }
 
@@ -5791,6 +5814,27 @@ struct CovBankScope {
   CovBankScope& operator=(const CovBankScope&) = delete;
 };
 
+/// Stack #599: while a TableShareScope lives on a thread, a set initialized there outside a CovBankScope borrows its term
+/// tables from `tables`, a set of the same record, by ap_init's rules for a covariance's moved sets, and is no moved set
+/// itself (its own branch; is_cov_sigma 0). The epoch store's covariance bank initializes its set 0 so, from the slot's own
+/// set: the record's elements, so every table is borrowed, the same bytes (cov::init checks that every one was). The slot's
+/// set outlives the bank (epochs::release deletes the bank first).
+inline thread_local const XpSat* g_table_anchor = nullptr;
+struct TableShareScope {
+  const XpSat* prev;
+  explicit TableShareScope(const XpSat* tables) : prev(g_table_anchor) { g_table_anchor = tables; }
+  ~TableShareScope() { g_table_anchor = prev; }
+  TableShareScope(const TableShareScope&) = delete;
+  TableShareScope& operator=(const TableShareScope&) = delete;
+};
+/// The tables of s a set may borrow (ap_init's shared_mask bits): those s holds. res_epoch (bit 2) is never borrowed.
+inline uint8_t borrowable_mask(const XpSat& s) {
+  const RateContext& c = s.ctx;
+  return static_cast<uint8_t>((c.half_day != nullptr ? 1 : 0) | (c.res_taylor != nullptr ? 4 : 0) | (c.shallow != nullptr ? 8 : 0) |
+                              (c.zt != nullptr ? 16 : 0) | (c.mdaily != nullptr ? 32 : 0) | (c.sp_comb != nullptr ? 64 : 0) |
+                              (c.wide_slow != nullptr ? 128 : 0));
+}
+
 /// SPEC 16.7: while a BranchScope lives on a thread, a set initialized there takes this branch instead of its own epoch
 /// elements' (a covariance's moved set still takes its nominal's): every trial set of a fit (fit::run) flies one branch's
 /// theory, so the fit's objective is smooth.
@@ -5814,12 +5858,17 @@ inline bool ap_init(const Elements& e, double n0, int8_t res, XpSat& s) {
   s.ctx.hd_e0 = e.eo;
   s.ctx.hd_i0 = e.xincl;
   s.ctx.hd_a0 = s.ctx.a0;
-  XpSat* anchor = cov_bank_anchor();
+  const XpSat* anchor = cov_bank_anchor();
   if (anchor == &s) anchor = nullptr;
+  const bool sigma = anchor != nullptr;
+  // stack #599: outside a bank's moved sets, the set of the same record whose tables this one borrows (TableShareScope)
+  if (!sigma && g_table_anchor != &s) anchor = g_table_anchor;
   XpSat* grid_anchor = grid_share_anchor();
   if (grid_anchor == &s) grid_anchor = nullptr;
-  s.ctx.cov_anchor_id = anchor != nullptr ? anchor->ctx.ctx_id : s.ctx.ctx_id;
-  s.ctx.is_cov_sigma = anchor != nullptr ? 1 : 0;
+  // the id a borrowed table is cached under is its builder's: the anchor's own id, or the one it borrowed under (a bank's
+  // set 0 that borrowed every table from its slot's set, stack #599)
+  s.ctx.cov_anchor_id = anchor != nullptr ? anchor->ctx.cov_anchor_id : s.ctx.ctx_id;
+  s.ctx.is_cov_sigma = sigma ? 1 : 0;
   const bool same_res = anchor != nullptr && anchor->ctx.resonance == res && anchor->ctx.long_period == s.ctx.long_period;
   const bool within_share = same_res && std::fabs(e.eo - anchor->ctx.e0) <= tess::kShareE &&
                             std::fabs(e.xincl - anchor->ctx.i0) <= tess::kShareI &&
@@ -6108,6 +6157,13 @@ inline int32_t xp_init(const Elements& e, XpSat& s) {
   }
   const double n0 = e.xno;  // Brouwer (SPEC 1.1)
   s.ctx.selected_terms = tess::active();
+  // SPEC 1.6 (stack #600): the thread's caches the set's theory reads (AP's terms selected: all nine; otherwise the step
+  // cache), before its first table; a thread that cannot make them refuses the set (the failure counted: a method refuses as
+  // out-of-memory, an epoch-store slot initializes again at its next state)
+  if (!pool::thread_ready(s.ctx.selected_terms.tesseral > 0 || s.ctx.selected_terms.zonal > 0)) {
+    s.init_error = kPropRefused;
+    return kPropRefused;
+  }
   // the branch, once, from the epoch elements (SPEC 6 Bands, 16.7); a covariance's moved set (inside its nominal's
   // CovBankScope) takes its nominal's, so the columns difference one branch's theory (SPEC 12.3); a fit's trial set inside
   // a BranchScope takes the pinned one
@@ -6356,6 +6412,7 @@ inline int census_radiation_row(const RateContext& ctx, int count, double* rows,
 /// `cap` with the slow set (a fit's record), built as a flight builds it (ap_init) and released. -1 for elements it refuses.
 inline int field_census(int cap, double n, double e, double inc, double cut, double* rows, int max_rows) {
   if (!(n > 0.0) || !(e >= 0.0 && e < 1.0) || !(inc >= 0.0 && inc < kPi) || cap < 2 || cap > 70 || !(cut > 0.0)) return -1;
+  if (!pool::thread_ready(true)) return -1;  // SPEC 1.6: AP's tables are built with the thread's caches (stack #600)
   Elements el{};
   el.epoch_jd_whole = 2461000.5;
   el.xno = n;
@@ -6397,6 +6454,35 @@ inline bool try_lock(int32_t* word) {
   return __atomic_compare_exchange_n(word, &expected, 1, false, __ATOMIC_ACQUIRE, __ATOMIC_RELAXED);
 }
 
+/// A list of sets in the module's counted memory (SPEC 1.6, stack #600): a growth that cannot be had is counted and fails,
+/// never traps (as std::vector's did, a set's first flight adding it to the holders). Doubles from 64.
+struct SetList {
+  XpSat** p = nullptr;
+  size_t n = 0, cap = 0;
+  bool reserve(size_t want) {
+    if (want <= cap) return true;
+    XpSat** q = static_cast<XpSat**>(sdnap::mem::realloc(p, want * sizeof(XpSat*)));
+    if (q == nullptr) return false;
+    p = q;
+    cap = want;
+    return true;
+  }
+  bool push_back(XpSat* v) {
+    if (n == cap && !reserve(cap < 64 ? 64 : 2 * cap)) return false;
+    p[n++] = v;
+    return true;
+  }
+  size_t size() const { return n; }
+  size_t capacity() const { return cap; }
+  bool empty() const { return n == 0; }
+  void clear() { n = 0; }
+  void pop_back() { --n; }
+  XpSat*& operator[](size_t i) { return p[i]; }
+  XpSat* back() const { return p[n - 1]; }
+  XpSat** begin() const { return p; }
+  XpSat** end() const { return p + n; }
+};
+
 /// The sets' caches (SPEC 9): every SetCaches and the tesseral caches they hold count against one budget (default
 /// 256 MB; cache_budget_mb). The pool's clock ticks at every ask for room; a holder's stamp is the clock when it was
 /// last flown. A set that needs room takes free room, or reclaims the holders flown least recently, but only those not
@@ -6412,8 +6498,8 @@ struct CachePool {
   uint64_t floor = 0;  ///< no holder's stamp is below it (a lower bound, raised by each search for room)
   const XpSat* last = nullptr;  ///< the set that asked last
   uint64_t sp_holders = 0, reclaimed = 0, refused = 0, sp_refused = 0, sp_made = 0;
-  std::vector<XpSat*> holders;
-  std::vector<XpSat*> order;  ///< pool_reclaim_locked's scratch, its capacity kept with the holders' (pool_room)
+  SetList holders;
+  SetList order;  ///< pool_reclaim_locked's scratch, its capacity kept with the holders' (pool_room)
 };
 
 /// Stack #487 (SPEC 9): inside a threaded batch (pool::run, from the workers' wake to the last one done) the module's
@@ -6497,13 +6583,14 @@ inline bool pool_reclaim_locked(CachePool& p, uint64_t need, const XpSat* keep, 
   if (p.held + need <= p.budget) return true;
   if (p.floor >= before) return false;
   // the scratch's room is kept with the holders' (pool_room), so filling it never allocates; inside a threaded batch a
-  // candidate beyond its room is left out rather than grow anything (stack #487)
-  std::vector<XpSat*>& order = p.order;
+  // candidate beyond its room is left out rather than grow anything (stack #487), and so is one beyond a growth that
+  // cannot be had (stack #600)
+  SetList& order = p.order;
   order.clear();
   for (XpSat* v : p.holders)
     if (v->caches->stamp < before && v != keep) {
       if (order.size() == order.capacity() && batch_running()) break;
-      order.push_back(v);
+      if (!order.push_back(v)) break;
     }
   std::sort(order.begin(), order.end(), [](const XpSat* x, const XpSat* y) { return x->caches->stamp < y->caches->stamp; });
   const uint64_t target = p.budget - std::min(p.budget, std::max(need, p.budget / 8));
@@ -6551,8 +6638,10 @@ inline SetCaches* pool_caches_for(XpSat& s) {
   }
   lock(&p.lock);
   SetCaches* c = nullptr;
-  // inside a threaded batch the holders' list may not grow past the room kept for it (pool_room): no room, no caches
-  const bool listed = !(p.holders.size() == p.holders.capacity() && batch_running());
+  // room in the holders' list first: inside a threaded batch only the room kept for it (pool_room), outside one a growth by
+  // the counted allocator (stack #600: one that cannot be had is no caches, never a trap); no room, no caches
+  const size_t grown = p.holders.capacity() < 64 ? 64 : 2 * p.holders.capacity();
+  const bool listed = p.holders.size() < p.holders.capacity() || (!batch_running() && p.holders.reserve(grown));
   if (listed && pool_reclaim_locked(p, need, &s, before)) c = sdnap::mem::counted(new (std::nothrow) SetCaches{});
   if (c != nullptr) {
     c->bytes = need;
@@ -6561,7 +6650,7 @@ inline SetCaches* pool_caches_for(XpSat& s) {
     c->stamp = c->prev = before;
     p.held += need;
     s.pool_index = static_cast<int32_t>(p.holders.size());
-    p.holders.push_back(&s);
+    (void)p.holders.push_back(&s);  // within the room made above
     s.caches = c;
   } else {
     __atomic_add_fetch(&p.refused, 1, __ATOMIC_RELAXED);
@@ -6572,13 +6661,14 @@ inline SetCaches* pool_caches_for(XpSat& s) {
 
 /// Before a threaded batch, on the calling thread (stack #487): room in the pool's two lists for `more` sets, so that no
 /// worker grows them, and the bytes the pool may still take (its budget less what it holds), which bounds what the
-/// batch's sets can allocate for their caches.
+/// batch's sets can allocate for their caches. Room that cannot be had (counted) leaves the batch's later sets without
+/// caches: they fly on the thread's.
 inline uint64_t pool_room(size_t more) {
   CachePool& p = cache_pool();
   lock(&p.lock);
   const size_t want = p.holders.size() + more;
-  if (p.holders.capacity() < want) p.holders.reserve(want);
-  if (p.order.capacity() < p.holders.capacity()) p.order.reserve(p.holders.capacity());
+  (void)p.holders.reserve(want);
+  (void)p.order.reserve(p.holders.capacity());
   const uint64_t free = p.budget > p.held ? p.budget - p.held : 0;
   unlock(&p.lock);
   return free;
@@ -6604,7 +6694,9 @@ inline uint64_t xp_bytes(const XpSat& s) {
   // its grid of the tesseral families (SPEC 16.11) and the node grids it holds: each one block, shared among the sets
   // holding it (a grid of one exact key serves them all)
   double grids = 0.0;
-  if (c.wide != nullptr && c.wide_owned && c.wide_anchor == nullptr) grids += tess::wide_grid_share(c.wide);
+  // every holder its share, a copy that reads its anchor's grid as well (it holds a reference): the shares of one grid's
+  // holders sum to the grid once (through 0.6.52 a copy counted none, and the grid's count fell short by the copies' shares)
+  if (c.wide != nullptr && c.wide_owned) grids += tess::wide_grid_share(c.wide);
   for (const tess::WideGrid* g : s.wide_node) grids += tess::wide_grid_share(g);
   b += static_cast<uint64_t>(grids);
   if (s.caches != nullptr) b += s.caches->bytes + sp_cache_bytes(s.caches->sp.cache);
@@ -7298,6 +7390,9 @@ inline bool drag_pass_rates(XpSat& s, double t, const double* y, DragPassRates& 
 
 inline int32_t xp_propagate_impl(XpSat& s, double t, double r[3], double v[3], const Bodies* shared, bool local_sat) {
   if (s.init_error != 0) return kPropRefused;
+  // SPEC 1.6 (stack #600): a thread whose caches cannot be made answers the state with the theory's refusal code, before
+  // the set's caches or grids are touched (the failure counted: a method refuses as out-of-memory); the set is unchanged
+  if (!pool::thread_ready(is_ap_ctx(s.ctx))) return kPropRefused;
   SetScope set_scope(s);
   // the bracket this state's tesseral bakes are made on: set by mean_at, the caller's restored on return
   struct AnchorScope {
@@ -7726,7 +7821,8 @@ inline bool xp_propagate_cov_at(XpSat* sats, int np, const int* slot, const bool
     }
     return true;
   }
-  if (s0.init_error != 0) {
+  // SPEC 1.6 (stack #600): the thread's caches before the bank's first flight, as xp_propagate_impl
+  if (s0.init_error != 0 || !pool::thread_ready(true)) {
     if (nom_status != nullptr) *nom_status = kPropRefused;
     return false;
   }

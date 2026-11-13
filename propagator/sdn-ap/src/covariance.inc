@@ -313,7 +313,12 @@ inline void release(Bank& b) {
   for (bool& f : b.live) f = false;  // a second init on this bank starts from no started slot
 }
 
-inline bool init(const ElementRow& row, const fit::Options& o, Bank& b, xpt::XpSat* nominal = nullptr) {
+/// `nominal`: an AP set of `row`, freshly initialized, that becomes the bank's set 0 (moved in: the caller's is left empty).
+/// `tables` (stack #599): an AP set of `row` that outlives the bank (the epoch store's slot), whose term tables set 0
+/// borrows: set 0 is initialized from the row's own elements, as that set was, inside its TableShareScope, so it is the
+/// same set as `nominal` would be. When it could not borrow every table it holds, it is initialized again on its own.
+inline bool init(const ElementRow& row, const fit::Options& o, Bank& b, xpt::XpSat* nominal = nullptr,
+                 const xpt::XpSat* tables = nullptr) {
   release(b);
   b.o = o;
   b.np = kinds_of(o, b.kind);
@@ -324,6 +329,9 @@ inline bool init(const ElementRow& row, const fit::Options& o, Bank& b, xpt::XpS
   b.sats = static_cast<xpt::XpSat*>(sdnap::mem::calloc(static_cast<size_t>(total), sizeof(xpt::XpSat)));
   if (b.sats == nullptr) return false;
   drag::table();
+  // the moved sets come from the parameter vector (12.1's p moved by h), as through 0.6.52: with set 0 the record's own set,
+  // a moved set shares a table that ap_init tests bit for bit (same_inc) only where the round trip through p reproduced the
+  // record's inclination (SPEC 14.4)
   auto start = [&](const double* x, int slot) {
     ElementRow r = row;
     fit::row_of(x, o, r);
@@ -338,6 +346,20 @@ inline bool init(const ElementRow& row, const fit::Options& o, Bank& b, xpt::XpS
     b.count = 1;
     b.live[0] = true;
     if (b.sats[0].init_error != 0) return false;
+  } else if (tables != nullptr && tables->init_error == 0 && xpt::is_ap_ctx(tables->ctx)) {
+    b.count = 1;
+    b.live[0] = true;
+    bool ok;
+    {
+      xpt::TableShareScope borrow(tables);
+      ok = xpt::xp_init(elements_of(row), b.sats[0]) == kPropOk;
+    }
+    // every table or none: a moved set borrowing one of set 0's caches it under set 0's anchor's id (ap_init)
+    if (ok && b.sats[0].ctx.shared_mask != xpt::borrowable_mask(*tables)) {
+      xpt::xp_release(b.sats[0]);
+      ok = xpt::xp_init(elements_of(row), b.sats[0]) == kPropOk;
+    }
+    if (!ok) return false;
   } else {
     if (!start(b.x, 0)) return false;
   }
@@ -864,13 +886,34 @@ struct Propagator {
   ~Propagator() { release(b); }
 };
 
+/// What a propagator holds in memory (stack #599): itself, its copy of the set's epoch covariance, its bank's bodies (as the
+/// allocator holds them) and every term table, grid and cache its sets own (xp_bytes less each body; a table set 0 borrows
+/// counts with the set it borrows from).
+inline uint64_t bytes_of(const Propagator& p) {
+  uint64_t n = sizeof(Propagator) + p.s.C.size() * sizeof(double) + (p.b.sats != nullptr ? xpt::malloc_usable_size(p.b.sats) : 0u);
+  for (int i = 0; p.b.sats != nullptr && i < p.b.count; ++i) n += xpt::xp_bytes(p.b.sats[i]) - sizeof(xpt::XpSat);
+  return n;
+}
+
 /// 0 ready; -3 the theory refuses the set or a moved one; -5 the epoch columns are singular. The floor comes off the
 /// epoch covariance at the state the writer put it on at (SPEC 12.4: an AP set's at the two-body state of its mean
-/// elements); the floor at every time (eval) is the flown state's.
-inline int prepare(const Set& s, Propagator& p, xpt::XpSat* nominal = nullptr) {
+/// elements); the floor at every time (eval) is the flown state's. `nominal` and `tables`: init's.
+inline int prepare(const Set& s, Propagator& p, xpt::XpSat* nominal = nullptr, const xpt::XpSat* tables = nullptr);
+/// prepare with the record's own set as the bank's set 0, as `propagate` and the epoch store build it (SPEC 14.4): the set of
+/// s.row initialized here, under the caller's bindings, and moved into the bank. An SGP4XP set without AP's terms takes
+/// init's own set 0, as everywhere.
+inline int prepare_own(const Set& s, Propagator& p) {
+  drag::table();
+  xpt::XpSat nominal;
+  (void)xpt::xp_init(elements_of(s.row), nominal);  // a refusal is init's: set 0's init_error, -3
+  const int rc = prepare(s, p, &nominal);
+  xpt::xp_release(nominal);  // empty once moved into the bank; an SGP4XP set without AP's terms was not used
+  return rc;
+}
+inline int prepare(const Set& s, Propagator& p, xpt::XpSat* nominal, const xpt::XpSat* tables) {
   p.s = s;
   if (p.s.C.size() != static_cast<size_t>(s.np * s.np)) return -3;
-  if (!init(s.row, s.o, p.b, nominal)) return -3;
+  if (!init(s.row, s.o, p.b, nominal, tables)) return -3;
   const int np = p.b.np;
   double J[6 * kMaxAug], r0[3], v0[3];
   if (!at(p.b, 0.0, r0, v0, J)) return -3;
