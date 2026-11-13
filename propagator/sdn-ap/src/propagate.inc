@@ -93,7 +93,8 @@ static int propagate_call(void) {
       // SPEC 12: an SGP4XP or AP set carrying COVARIANCE_DATA gets its propagated covariance beside every state
       if (xs != nullptr) {
         cov::Set cs;
-        const int cr = cov::read(set.record, set.row, cs);
+        char note[240] = {};
+        const int cr = cov::read(set.record, set.row, cs, note, sizeof note);
         const int pr = cr == 1 ? cov::prepare(cs, cprop, xs) : 0;
         // SPEC 12.4: an AP record whose floor is at its writer's theory state flies its states, its covariance refused
         if (cr == -4) width_note = cov::kFloorRefusalNote;
@@ -115,7 +116,7 @@ static int propagate_call(void) {
                                     : "The set's covariance does not map onto its parameters (the theory refuses a moved set or the epoch columns are singular).");
         }
         with_cov = cr == 1;
-        if (with_cov) width_note = cs.width_note;
+        if (with_cov) width_note = note;
         if (with_cov && xs->init_error == 0 && xs->ctx.d50_epoch == 0.0 && cprop.b.count > 0 &&
             xpt::is_ap_ctx(cprop.b.sats[0].ctx)) {
           xs = nullptr;

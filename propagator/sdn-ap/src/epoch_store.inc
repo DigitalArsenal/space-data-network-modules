@@ -238,7 +238,10 @@ inline int decode_record(const uint8_t* p, uint32_t n, Record& r) {
                          "A set's COVARIANCE_DATA, COV_PARAMETER_KINDS or COV_PROPAGATION are malformed."), -1;
     if (cr == 1) {
       r.cov = mem::counted(new (std::nothrow) cov::Set(c));
-      if (r.cov == nullptr) return mem::refuse_if_out_of_memory(), -1;
+      if (r.cov == nullptr || r.cov->C.size() != c.C.size()) {
+        delete r.cov; r.cov = nullptr;
+        return mem::refuse_if_out_of_memory(), -1;
+      }
     }
   }
   return 1;
@@ -809,13 +812,13 @@ inline bool any_labeled(const Store& st, const Series& s) {
 
 inline uint64_t bytes_of(const Store& st) {
   uint64_t b = st.entries.size() * sizeof(Entry) + st.series.size() * sizeof(Series);
-  for (const Entry& e : st.entries) b += (e.cov != nullptr ? sizeof(cov::Set) : 0) + (e.track ? e.track->bytes() : 0);
+  for (const Entry& e : st.entries) b += (e.cov != nullptr ? sizeof(cov::Set) + e.cov->C.size() * sizeof(double) : 0) + (e.track ? e.track->bytes() : 0);
   // the interned rows and nodes, one copy each
   for (const auto& a : st.atmospheres) b += sizeof(atm::Atmosphere) + a->days.size() * sizeof(atm::SpwDay) + a->dca_ms.size() * (sizeof(int64_t) + 2 * sizeof(double));
   for (const Series& s : st.series) {
     b += s.object_id.capacity() + s.originator.capacity() + s.name.capacity();
     // a set: its XpSat, the term tables it owns and its caches from the pool (xp_bytes)
-    for (const Slot& q : s.slots) b += (q.xp ? xpt::xp_bytes(*q.xp) : 0) + (q.sat ? sizeof(Sat) : 0) + (q.nodes ? 32u * kCheckpointNodes : 0) + (q.cp ? sizeof(cov::Propagator) : 0);
+    for (const Slot& q : s.slots) b += (q.xp ? xpt::xp_bytes(*q.xp) : 0) + (q.sat ? sizeof(Sat) : 0) + (q.nodes ? 32u * kCheckpointNodes : 0) + (q.cp ? sizeof(cov::Propagator) + q.cp->s.C.size() * sizeof(double) : 0);
   }
   return b;
 }
