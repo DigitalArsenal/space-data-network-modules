@@ -139,7 +139,7 @@ struct Entry {
   Forces forces{};
   const atm::Atmosphere* atmosphere = nullptr;
   uint64_t branch = 0;        ///< the five branch identity bytes; the integration step is not part of equality
-  std::shared_ptr<const carried::Track> track;  ///< the forecast the record carries (SPEC 18), or none: read as flown
+  std::unique_ptr<const carried::Track> track;  ///< the forecast the record carries (SPEC 18), or none: read as flown (one counted allocation)
   double handover = HUGE_VAL;  ///< a hand-over set: the time it serves from, minutes from J2000 (SPEC 18.7); else HUGE_VAL
 };
 
@@ -278,7 +278,7 @@ struct Record {
   ocm::Weather weather;
   const atm::Atmosphere* atmosphere = nullptr;
   size_t atmosphere_index = 0;  ///< its place in Store::atmospheres (read only when atmosphere is not nullptr)
-  std::shared_ptr<carried::Track> track;  ///< reading the call's bytes until the record is kept (carried::keep)
+  std::unique_ptr<carried::Track> track;  ///< reading the call's bytes until the record is kept (carried::keep); one counted allocation, moved into the entry
   double handover = HUGE_VAL;
 };
 inline int decode_record(const uint8_t* p, uint32_t n, Record& r) {
@@ -300,7 +300,10 @@ inline int decode_record(const uint8_t* p, uint32_t n, Record& r) {
   {
     carried::Track track;  // on the stack: a record that carries no forecast (nearly all) makes no allocation for it
     if (carried::read(s.record, r.row, p, n, track) != 0) return -1;
-    if (!track.empty()) r.track = std::make_shared<carried::Track>(std::move(track));
+    if (!track.empty()) {
+      r.track.reset(mem::counted(new (std::nothrow) carried::Track(std::move(track))));  // counted: a failed allocation is refused out-of-memory
+      if (!r.track) return mem::refuse_if_out_of_memory(), -1;
+    }
     double from = 0.0;
     if (carried::handover_from(s.record, from)) r.handover = from;
   }
@@ -573,7 +576,7 @@ inline int close(Store& st, Build& b) {
           s.slots.second = nullptr;
           return mem::refuse_if_out_of_memory(), 3;
         }
-        en.track = recs[q].track;
+        en.track = std::move(recs[q].track);
         s.carried = true;
       }
       en.handover = recs[q].handover;
@@ -590,7 +593,7 @@ inline int close(Store& st, Build& b) {
         }
       }
       recs[q].cov = nullptr;
-      st.entries.push_back(en);
+      st.entries.push_back(std::move(en));
     }
     st.series.push_back(std::move(s));
   }
@@ -986,7 +989,7 @@ inline uint64_t build_bytes(const Build& b) {
   auto heap = [](const std::string& s) -> uint64_t { return s.capacity() > sizeof(std::string) ? s.capacity() + 1 : 0; };
   for (const Record& r : b.recs)
     n += heap(r.object_id) + heap(r.originator) + heap(r.name) + (r.cov != nullptr ? sizeof(cov::Set) + r.cov->C.size() * sizeof(double) : 0) +
-         (r.track ? sizeof(std::shared_ptr<carried::Track>) + r.track->bytes() : 0);
+         (r.track ? r.track->bytes() : 0);  // the pointer is a member of the record's block, counted there
   for (const auto& a : b.pool) n += sizeof(atm::Atmosphere) + a->days.size() * sizeof(atm::SpwDay) + a->dca_ms.size() * (sizeof(int64_t) + 2 * sizeof(double));
   return n;
 }
