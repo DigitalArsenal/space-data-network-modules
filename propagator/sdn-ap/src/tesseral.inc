@@ -364,7 +364,21 @@ inline void normalized_Fk3(int m, int k, int lmax, double i0, double h, double* 
     for (int l = 0; l <= lmax; ++l) outs[s][l] *= inv_N;
 }
 
-inline void normalized_Fk_dF(int m, int k, int lmax, double i0, double* F0, double* dF0) {
+struct NormalizedFkSamples {
+  struct Sample {
+    double col[104], dcol[104], x, alpha_x, cml, sml, dcml, dsml;
+    bool ready = false, derivative[2] = {false, false};
+  };
+  struct Column { int m, NF; std::vector<Sample> samples; };
+  std::vector<Column> columns;
+  std::vector<Sample>& get(int m, int NF, int count) {
+    for (auto& c : columns) if (c.m == m && c.NF == NF) return c.samples;
+    columns.push_back({m, NF, std::vector<Sample>(count)});
+    return columns.back().samples;
+  }
+};
+
+inline void normalized_Fk_dF(int m, int k, int lmax, double i0, double* F0, double* dF0, NormalizedFkSamples* shared = nullptr) {
   double si0, ci0;
   fm::sincos(i0, si0, ci0);
   if (std::fabs(ci0) < 1e-3) {
@@ -388,7 +402,7 @@ inline void normalized_Fk_dF(int m, int k, int lmax, double i0, double* F0, doub
   fm::sincos(du, sdu, cdu);
   fm::sincos(k * du, sdku, cdku);
   double su = 0.0, cu = 1.0, sku = 0.0, cku = 1.0;
-  double col[104], dcol[104];
+  auto* samples = shared ? &shared->get(m, NF, j_top + 1) : nullptr;
   for (int j = 0; j <= j_top; ++j) {
     if (j > 0) {
       const double nsu = su * cdu + cu * sdu;
@@ -398,19 +412,36 @@ inline void normalized_Fk_dF(int m, int k, int lmax, double i0, double* F0, doub
       cku = cku * cdku - sku * sdku;
       sku = nsku;
     }
-    const double w_j = (j == 0 || 2 * j == NF_HALF) ? 0.5 : 1.0;
-    const double x = si0 * su, c2 = 1.0 - x * x, c = std::sqrt(c2);
-    const double inv_c = 1.0 / c, inv_c2 = inv_c * inv_c;
-    legendre_column(L, x, c, col);
-    const double alpha_x = ci0 * su * inv_c2;
-    const double beta_phi = -m * x * cu * inv_c2;
-    dcol[m] = -alpha_x * (m * x * col[m]);
-    for (int l = m + 1; l <= lmax; ++l) dcol[l] = alpha_x * (L.d[l] * col[l - 1] - l * x * col[l]);
-    double sml = 0.0, cml = 1.0;
-    if (m > 0) complex_pow(cu * inv_c, ci0 * su * inv_c, m, cml, sml);
-    cml *= w_j;
-    sml *= w_j;
-    const double dcml = -beta_phi * sml, dsml = beta_phi * cml;
+    NormalizedFkSamples::Sample local;
+    auto& v = samples ? (*samples)[j] : local;
+    if (!v.ready) {
+      const double w_j = (j == 0 || 2 * j == NF_HALF) ? 0.5 : 1.0;
+      const double x = si0 * su, c2 = 1.0 - x * x, c = std::sqrt(c2);
+      const double inv_c = 1.0 / c, inv_c2 = inv_c * inv_c;
+      legendre_column(L, x, c, v.col);
+      v.x = x;
+      v.alpha_x = ci0 * su * inv_c2;
+      const double beta_phi = -m * x * cu * inv_c2;
+      double sml = 0.0, cml = 1.0;
+      if (m > 0) complex_pow(cu * inv_c, ci0 * su * inv_c, m, cml, sml);
+      cml *= w_j;
+      sml *= w_j;
+      v.cml = cml; v.sml = sml;
+      v.dcml = -beta_phi * sml; v.dsml = beta_phi * cml;
+      v.ready = true;
+    }
+    // Only the consumed parity is differentiated; another k can fill the other.
+    if (!v.derivative[l0 & 1]) {
+      const double x = v.x, alpha_x = v.alpha_x;
+      if ((l0 & 1) == (m & 1)) v.dcol[m] = -alpha_x * (m * x * v.col[m]);
+      int first = m + 1;
+      if ((first & 1) != (l0 & 1)) ++first;
+      for (int l = first; l <= lmax; l += 2) v.dcol[l] = alpha_x * (L.d[l] * v.col[l - 1] - l * x * v.col[l]);
+      v.derivative[l0 & 1] = true;
+    }
+    const double* col = v.col;
+    const double* dcol = v.dcol;
+    const double cml = v.cml, sml = v.sml, dcml = v.dcml, dsml = v.dsml;
     for (int l = l0; l <= lmax; l += 2) {
       const double Pl = col[l], dPl = dcol[l];
       const double f1 = Pl * cml, f2 = Pl * sml;
@@ -4801,6 +4832,7 @@ inline int slow_terms_low(int shallow_degree, double n, double e0, double i0, Sh
   const double a = std::pow(kKe / n, kX2o3), band = kShallowSelect * kShallowBand * n;
   const int qmax = slow_q_max() < 0 ? 0 : slow_q_max() > kSlowQMax ? kSlowQMax : slow_q_max();
   SlowGMemo gmemo;
+  NormalizedFkSamples inclination;
   double F[72], dF[72];
   for (int j = 1; j <= kSlowJMax; ++j)
     for (int m = 2; m <= L; ++m)
@@ -4816,7 +4848,7 @@ inline int slow_terms_low(int shallow_degree, double n, double e0, double i0, Sh
         // a family whose series the embedded field ends after one or two degrees (leading degree 69 or 70): left out, a limit of
         // the field, not of the method (AP and a numerical propagator at 70 x 70 would both hold a series the real field continues)
         if (l0 >= kSlowDegree - 1) continue;
-        normalized_Fk_dF(m, w, L, i0, F, dF);
+        normalized_Fk_dF(m, w, L, i0, F, dF, &inclination);
         for (int l = l0; l <= L; l += 2) {
           if (j == 1 && q == 0 && l <= shallow_degree) continue;  // the shallow set's own term
           const int pp = (l - w) / 2;
