@@ -1,5 +1,5 @@
 #!/usr/bin/env node
-// The load's COMMITTED claim: this build loads a catalog exactly as the build it replaced (5bbdc851, read with git) does, for every catalog and every refusal, and
+// The load's COMMITTED claim: this build loads a catalog exactly as the build it replaced (796bacbe, main at sdn-ap 0.6.54, read with git; its epoch store source is byte-identical to 5bbdc851's, the build before this branch, so the base holds none of this branch's load changes) does, for every catalog and every refusal, and
 // holds less. Both builds load the same bytes and the whole resident store is compared: the counts, every series' identity and set count, every set's epoch in
 // order, the state of every set at one time after its epoch (bit for bit, with the code), and the selected state and covariance of every series. The catalogs
 // cover the sets' order inside every series, a same-epoch duplicate with different content in both input orders, a capped load and theory-filtered loads, SGP4
@@ -30,7 +30,7 @@ const prefix = bytes => { const b = Buffer.alloc(bytes.length + 4); b.writeUInt3
 const open = file => createStandaloneHarness('browser', file, {surface: 'direct', maxThreads: 1, enableBrowserWasiThreads: false, initialMemoryBytes: 2 * 1048576});
 const load = (h, records, cfg = {}) => h.invoke({methodId: 'load_epochs', inputs: [{portId: 'ocm', typeRef: T('OCM'), payload: Buffer.concat(records.map(prefix))}, configuration({epochStore: cfg})]});
 const oldPath = path.join(scratchDir('load-equivalence'), 'baseline.wasm');
-fs.writeFileSync(oldPath, execFileSync('git', ['-C', packageRoot, 'show', '5bbdc851:propagator/sdn-ap/dist/isomorphic/module.wasm'], {maxBuffer: 1 << 24}));
+fs.writeFileSync(oldPath, execFileSync('git', ['-C', packageRoot, 'show', '796bacbe:propagator/sdn-ap/dist/isomorphic/module.wasm'], {maxBuffer: 1 << 24}));
 const fresh = await open(wasmPath), old = await open(oldPath);
 const probe = h => { const x = h.instance.exports, p = x.sdnap_alloc(1 << 16); return {x, p, f64: (o, n) => new Float64Array(h.memory.buffer, o, n), i32: (o, n) => new Int32Array(h.memory.buffer, o, n)}; };
 const pn = probe(fresh), po = probe(old);

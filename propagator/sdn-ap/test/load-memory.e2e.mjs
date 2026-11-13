@@ -79,7 +79,7 @@ for (let k = 0; k < N; ++k) {
 assert.ok(afterLoad - 2*1048576 < shuffled.length * 5000, `${afterLoad} bytes exceeds 5,000 B per record`);
 // Control: the committed old load must exceed this same bound on identical bytes.
 const oldPath=path.join(scratchDir('load-memory-control'),'baseline.wasm');
-fs.writeFileSync(oldPath,execFileSync('git',['-C',packageRoot,'show','5bbdc851:propagator/sdn-ap/dist/isomorphic/module.wasm'],{maxBuffer:1<<24}));
+fs.writeFileSync(oldPath,execFileSync('git',['-C',packageRoot,'show','796bacbe:propagator/sdn-ap/dist/isomorphic/module.wasm'],{maxBuffer:1<<24}));
 const old=await open(oldPath);
 assert.equal((await invoke(old,shuffled)).statusCode,0);
 const oldBytes=old.memory.buffer.byteLength;
