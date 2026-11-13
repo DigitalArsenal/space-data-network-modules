@@ -93,6 +93,7 @@ if (process.argv.includes('--case')) {
   assert.equal(pool[4], 0, 'memory grew during the batch');
   if (threads && !process.argv.includes('--single')) assert.equal(pool[1], 2);
   if (process.argv.includes('--refuse')) assert.ok(pool[2] > 0 && pool[3] > 0, 'no-reserve control must exercise deferral');
+  else { assert.equal(pool[2], 0, 'ordinary batch refused growth'); assert.equal(pool[3], 0, 'ordinary batch deferred series'); }
   const bytes = Buffer.concat(all), digest = createHash('sha256').update(bytes).digest('hex');
   fs.writeFileSync(path.join(root, label + '.bin'), bytes);
   console.log(JSON.stringify({ label, threads, count, sets: 3 * count, wide, good, refused, digest, pool, memoryBytes: h.memory.buffer.byteLength }));
