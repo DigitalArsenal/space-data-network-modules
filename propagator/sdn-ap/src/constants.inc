@@ -55,8 +55,10 @@ inline Gravity gravity_wgs72() {
 /// counted: under -fno-exceptions their failure traps, as before.
 namespace mem {
 inline uint32_t g_failures = 0;
+inline thread_local uint32_t g_thread_failures = 0;
 inline uint64_t g_largest_failed = 0;
 inline void note_failure(size_t n) {
+  ++g_thread_failures;
   __atomic_add_fetch(&g_failures, 1u, __ATOMIC_RELAXED);
   uint64_t cur = __atomic_load_n(&g_largest_failed, __ATOMIC_RELAXED);
   while (static_cast<uint64_t>(n) > cur &&

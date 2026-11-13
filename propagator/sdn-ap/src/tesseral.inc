@@ -137,7 +137,7 @@ struct Terms {
   bool slow = false;         ///< SPEC 16.18 (the low table): the slow set by size, to the field's degree (stack #477)
 };
 inline Terms& active() {
-  static Terms t;
+  static thread_local Terms t;
   return t;
 }
 constexpr int kMdailyCap = 12, kSpCap = 12, kShallowCap = 31;

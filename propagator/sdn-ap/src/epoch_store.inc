@@ -392,11 +392,11 @@ inline int32_t rows_cover(Store& st, const Entry& en, double t) {
     // every day from the first row's to the last's: the first day of a - 1 .. b without a row is before the first or after the last
     const int32_t first = d.front().mjd, last = d.back().mjd;
     if (a - 1 < first) {
-      st.short_day = a - 1;
+      __atomic_store_n(&st.short_day, a - 1, __ATOMIC_RELAXED);
       return kRowsShort;
     }
     if (b > last) {
-      st.short_day = a - 1 > last + 1 ? a - 1 : last + 1;
+      __atomic_store_n(&st.short_day, a - 1 > last + 1 ? a - 1 : last + 1, __ATOMIC_RELAXED);
       return kRowsShort;
     }
     return 0;
@@ -405,7 +405,7 @@ inline int32_t rows_cover(Store& st, const Entry& en, double t) {
   for (int32_t day = a - 1; day <= b; ++day) {
     while (k < d.size() && d[k].mjd < day) ++k;
     if (k >= d.size() || d[k].mjd != day) {
-      st.short_day = day;
+      __atomic_store_n(&st.short_day, day, __ATOMIC_RELAXED);
       return kRowsShort;
     }
   }
@@ -432,12 +432,12 @@ inline Slot& slot_of(Store& st, Series& s, uint32_t k, bool with_cov) {
   const Elements e = elements_of(en.row);
   // SPEC 1.6 (stack #497): a slot whose initialization failed for want of memory is not kept as refused: it answers this
   // call with the failure and is initialized again by the next
-  const uint32_t mem_mark = sdnap::mem::failures();
+  const uint32_t mem_mark = sdnap::mem::g_thread_failures;
   struct Retry {
     Slot& q;
     uint32_t mark;
     ~Retry() {
-      if (q.error != 0 && sdnap::mem::failures() != mark) q.index = -1;
+      if (q.error != 0 && sdnap::mem::g_thread_failures != mark) q.index = -1;
     }
   } retry{q, mem_mark};
   if (en.row.theory == kTheorySgp4Xp) {

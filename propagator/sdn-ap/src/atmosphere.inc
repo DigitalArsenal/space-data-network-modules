@@ -13,8 +13,8 @@
 //   - NRLMSISE-00 times exp(s(t)), s the open-DCA common mode of a $DCL.
 // Every set initialized during the call carries the call's atmosphere
 // (RateContext); one initialized elsewhere (the ABI, the epoch store) carries
-// none. NRLMSISE-00 keeps file-static state, so the atmosphere is evaluated on
-// the calling thread only: the invoke methods that select it are single-threaded.
+// none. The build gives NRLMSISE-00 mutable file state thread-local storage;
+// each thread binds and evaluates its own selected atmosphere.
 // -----------------------------------------------------------------------------
 
 #include "nrlmsise00.h"
@@ -51,7 +51,7 @@ struct Atmosphere {
 
 /// The atmosphere of the call in progress (nullptr: the theory's own); xp_init gives it to the set.
 inline const Atmosphere*& active() {
-  static const Atmosphere* a = nullptr;
+  static thread_local const Atmosphere* a = nullptr;
   return a;
 }
 
@@ -66,7 +66,7 @@ inline const SpwDay& row_at(const Atmosphere& a, int32_t mjd) {
     else hi = mid;
   }
   if (lo == 0) {
-    if (mjd >= a.min_driver_mjd) a.before_rows = true;
+    if (mjd >= a.min_driver_mjd) __atomic_store_n(&a.before_rows, true, __ATOMIC_RELAXED);
     return d[0];
   }
   return d[lo - 1];
