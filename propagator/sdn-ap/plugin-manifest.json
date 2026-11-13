@@ -264,6 +264,37 @@
       "drainPolicy": "drain-to-empty"
     },
     {
+      "methodId": "replace_epoch",
+      "displayName": "Replace one catalog record",
+      "description": "Replaces one record of a closed catalog by its existing series identity and theory. The series must hold one set. The plugin index and every other entity remain unchanged. Only the replaced entity loses its direct caches and frame cells. Every refusal preserves the old record. Refusals include records-not-loaded, replace-one-record, replace-identity-missing, replace-multiple-sets, pool-dead, record validation errors and out-of-memory.",
+      "inputPorts": [
+        {
+          "portId": "ocm",
+          "displayName": "ocm",
+          "minStreams": 0,
+          "maxStreams": 65535,
+          "required": false,
+          "description": "The part's frames, as load_epochs' 'ocm' port; a payload whose own file identifier is $OMM, $SPW, $DCL or $OEM is refused by its type.",
+          "acceptedTypeSets": [
+            {
+              "setId": "sds-ocm-element-sets",
+              "allowedTypes": [
+                {
+                  "schemaName": "OCM.fbs",
+                  "fileIdentifier": "$OCM",
+                  "rootTypeName": "OCM"
+                }
+              ],
+              "description": "Ratified SDS $OCM element sets; the module decodes the FlatBuffer itself."
+            }
+          ]
+        }
+      ],
+      "outputPorts": [],
+      "maxBatch": 65535,
+      "drainPolicy": "drain-to-empty"
+    },
+    {
       "methodId": "propagate_epochs",
       "displayName": "Propagate an epoch store",
       "description": "The epoch store of the call's own snapshot (as load_epochs builds it) at the $PCF OUTPUT times: one $OEM per series, each state from the selected set or, inside a handover window, the blend of two (SMOOTHSTEP: r = (1 - w) r_a + w r_b, v with the weight's derivative; HERMITE: the cubic Hermite of the two sets' states at the window's edges), with the covariance mixture where the sets carry COVARIANCE_DATA. SPEC 14, on $OCM: per series (NORAD_CAT_ID, INTERNATIONAL_DESIGNATOR, MEAN_ELEMENT_THEORY, HEADER.ORIGINATOR) the sets of the last CACHE_DAYS before the newest MEAN_ELEMENTS.EPOCH of the load, at most MAX_SETS_PER_OBJECT (the newest), of THEORIES (SGP4, SGP4XP, AP); sets not centered on the Earth are counted and not stored. Each set flies its own record's forces, SPACE_WEATHER rows and density-correction nodes (identical row series and node vectors held once, by content); two sets of one series whose forces differ (ATMOSPHERIC_MODEL, WEATHER_SOURCE, DENSITY_CORRECTION, the two gravity caps; rows and nodes are data) are refused (series-forces-differ). Refused by name: missing-ocm, invalid-ocm, omm-not-flown, spw-not-flown, dcl-not-flown, grid-not-flown, unsupported-center, mean-elements-missing, mean-element-theory-unspecified, theory-not-flown:<name>, elements-other-theory, orb-averaging-mismatch, frame-pairing-invalid, weather-source-unspecified, atmosphere-weather-mismatch, atmosphere-unsupported, solid-tides-unsupported, gravity-model-mismatch, parameter-repeated:ECOM2_Y0, parameter-invalid:ECOM2_Y0, parameter-not-modeled:<name>, radiation-model-superseded, radiation-model-mismatch, weather-rows-missing, weather-rows-unselected, weather-rows-invalid:<day>, weather-rows-short:<day>, density-correction-missing, density-correction-unselected, invalid-density-correction, density-correction-atmosphere-mismatch, density-correction-cid-missing, cov-parameter-kind-unspecified, cov-propagation-invariant, invalid-covariance, series-forces-differ, configuration-missing, configuration-refused, invalid-configuration, too-many-states, decayed:<time> (an AP series whose epochs all lie past its decay crossing, SPEC 16.25), propagation-failed, frame-failed, out-of-memory (an allocation failed, SPEC 1.6; through 0.6.47 reported as propagation-failed).",

@@ -177,3 +177,93 @@ double get_eccentricity(uint32_t index) {
   sdnap::plugin_metadata(index, period, eccentricity);
   return eccentricity;
 }
+
+namespace sdnap {
+inline bool plugin_same_atmosphere(const atm::Atmosphere& a, const atm::Atmosphere& b) {
+  if (a.model != b.model || a.days.size() != b.days.size() || a.dca_ms != b.dca_ms || a.dca_s.size() != b.dca_s.size()) return false;
+  if (!a.dca_s.empty() && std::memcmp(a.dca_s.data(), b.dca_s.data(), a.dca_s.size() * sizeof(double)) != 0) return false;
+  for (size_t i = 0; i < a.days.size(); ++i) {
+    const auto& x = a.days[i]; const auto& y = b.days[i];
+    if (x.mjd != y.mjd || x.f107_obs != y.f107_obs || x.f107_center81 != y.f107_center81 ||
+        std::memcmp(&x.ap_avg, &y.ap_avg, sizeof(double)) != 0 || x.data_type != y.data_type || std::strcmp(x.date, y.date) != 0) return false;
+  }
+  return true;
+}
+
+inline int plugin_replace_record() {
+  plugin_reset_output_state();
+  auto& st = epochs::resident();
+  if (!plugin_records || epochs::resident_build().open || st.series.empty())
+    return ocm::refuse("records-not-loaded", "Replacement requires a closed, nonempty record catalog.");
+  if (st.pool_dead != 0) return ocm::refuse("pool-dead", "Replacement cannot read an epoch store after a failed thread pool batch.");
+  uint32_t frames = 0;
+  if (const int rc = ocm::admit(frames)) return rc;
+  // Prepare the complete replacement separately. Every refusal leaves the resident entry and its cells intact.
+  epochs::Store prepared;
+  struct Cleanup { epochs::Store& st; ~Cleanup() { epochs::clear(st); } } cleanup{prepared};
+  if (const int rc = epochs::build(prepared, epochs::Config{})) return rc;
+  if (prepared.stats.records != 1 || prepared.series.size() != 1 || prepared.entries.size() != 1)
+    return ocm::refuse("replace-one-record", "Replacement accepts exactly one Earth-centered record.");
+  auto& incoming = prepared.series[0];
+  uint32_t raw = 0;
+  for (; raw < st.series.size(); ++raw) {
+    const auto& s = st.series[raw];
+    if (s.norad == incoming.norad && s.object_id == incoming.object_id && s.met == incoming.met && s.originator == incoming.originator) break;
+  }
+  if (raw == st.series.size()) return ocm::refuse("replace-identity-missing", "Replacement must match an existing series identity and theory.");
+  auto& series = st.series[raw];
+  if (series.count != 1) return ocm::refuse("replace-multiple-sets", "Replacement requires an existing series with one set.");
+  auto& old = st.entries[series.first];
+  auto& replacement = prepared.entries[0];
+  const atm::Atmosphere* atmosphere = nullptr;
+  bool append_atmosphere = false;
+  if (replacement.atmosphere) {
+    for (const auto& held : st.atmospheres)
+      if (plugin_same_atmosphere(*held, *replacement.atmosphere)) { atmosphere = held.get(); break; }
+    if (!atmosphere) {
+      if (!st.atmospheres.grow_one()) return mem::refuse_if_out_of_memory(), 3;
+      atmosphere = replacement.atmosphere;
+      append_atmosphere = true;
+    }
+  }
+  if (mem::refuse_if_out_of_memory()) return 3;
+  // Commit: moves and releases only, with no allocation or theory evaluation after this point.
+  const auto* previous_atmosphere = old.atmosphere;
+  const bool was_eligible = frames::eligible_entry(series, old);
+  if (append_atmosphere) st.atmospheres.push_back(std::move(prepared.atmospheres[0]));
+  for (auto& slot : series.slots) epochs::release(slot);
+  series.next = 0;
+  delete old.cov;
+  old = std::move(replacement);
+  replacement.cov = nullptr;
+  old.atmosphere = atmosphere;
+  series.name = std::move(incoming.name);
+  series.carried = bool(old.track);
+  auto& fs = frames::state();
+  if (fs.open && fs.generation == st.generation && raw < fs.objects) {
+    auto& object = fs.obj[raw];
+    frames::slab_free(fs, object.cur); frames::slab_free(fs, object.nxt);
+    object = frames::Obj{};
+    const bool eligible = frames::eligible_entry(series, old);
+    fs.eligible = fs.eligible - static_cast<uint32_t>(was_eligible) + static_cast<uint32_t>(eligible);
+    object.kind = eligible ? 0 : static_cast<uint8_t>(frames::kNotServedHere);
+    if (eligible) { object.ew = old.row.epoch_jd_whole; object.ef = old.row.epoch_jd_frac; }
+    fs.sweep = frames::Sweep{};
+  }
+  // Reclaim weather unique to the replaced entry; other records retain their shared atmosphere pointers.
+  if (previous_atmosphere && previous_atmosphere != atmosphere) {
+    bool used = false;
+    for (const auto& entry : st.entries) if (entry.atmosphere == previous_atmosphere) { used = true; break; }
+    if (!used) for (size_t i = 0; i < st.atmospheres.size(); ++i) if (st.atmospheres[i].get() == previous_atmosphere) {
+      if (i + 1 != st.atmospheres.size()) st.atmospheres[i] = std::move(st.atmospheres.back());
+      st.atmospheres.pop_back(); break;
+    }
+  }
+  return 0;
+}
+}  // namespace sdnap
+
+extern "C" int replace_epoch(void) {
+  sdnap::mem::CallMark call_mark;
+  return sdnap::mem::finish(sdnap::plugin_replace_record());
+}
