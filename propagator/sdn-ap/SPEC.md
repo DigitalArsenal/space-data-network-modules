@@ -1604,6 +1604,23 @@ acquire the shared 256-slot grids. Calls requesting covariance remain serial. Th
 NRLMSISE-00's mutable state belong to each thread. Constant drag, gravity and leap-second tables are initialized before
 the batch. The context identifier, short-period generation tag and grouping identifier are cache keys only.
 
+Two rules keep one lane's work out of another's:
+- **A set leaves the cache pool under the pool's lock.** A store's set releasing its caches does so under the pool's lock,
+  whether it still holds them or not. A reclaim on another lane drops a set's caches and stores the unlock of the set's
+  cache lock within one hold of that lock. A release that read the null left by such a drop without the lock could free
+  the set before the unlock landed in it.
+- **A slot names its set only once the set is built.** Until then it holds none.
+
+**After a dead batch** (a pool thread taken for dead, the batch's return -20, every status 9), a thread that was only
+slow may still be building, flying or replacing its series' slots. So the store is not read again:
+- `sdnap_epochs_at` answers -20 with every status 9, `sdnap_epochs_set_at` answers 9, and the store's byte count reads
+  NaN;
+- `load_epochs` refuses "pool-dead" while a pool thread is active, and replaces the store once none is. A thread that
+  trapped never stops being active.
+
+`test/epoch-pool-safety.e2e.mjs` holds both rules (256 series, a 1 MiB cache budget, slots replaced in every batch, 4
+and 15 threads) and the dead batch (one pool thread held in its first chunk).
+
 `test/epoch-pool.e2e.mjs` compares 2,048 mixed series (6,144 records, eight wide series, half carrying covariance), at
 one instant and a day later, on 0, 1, 4 and 15 threads, with poisoned table storage and with forced growth refusals.
 Every state and status byte equals the one-series serial entry and the 0.6.52 artifact. The 400-wide-series control

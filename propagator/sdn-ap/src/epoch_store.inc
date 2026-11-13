@@ -89,6 +89,10 @@ struct Store {
   Stats stats;
   std::vector<std::unique_ptr<atm::Atmosphere>> atmospheres;  ///< the distinct row series and node vectors of the load
   int32_t short_day = 0;                                      ///< the day a request found no row for (weather-rows-short)
+  /// A threaded batch over the store ended with the pool dead (pool::kBatchPoolDead): a pool thread only slow, not dead,
+  /// may still be building, flying or replacing its series' slots, so nothing reads or frees them again. Every later state
+  /// is refused (kRowPoolDead), and load_epochs refuses until no pool thread is active (one that trapped never is).
+  int32_t pool_dead = 0;
 };
 
 inline void release(Slot& s) {
@@ -430,20 +434,19 @@ inline Slot& slot_of(Store& st, Series& s, uint32_t k, bool with_cov) {
   Slot& q = s.slots[s.next];
   s.next ^= 1u;
   release(q);
-  q.index = static_cast<int32_t>(k);
   const Entry& en = st.entries[s.first + k];
   const Elements e = elements_of(en.row);
   if (g_init_hook != nullptr) g_init_hook();
-  // SPEC 1.6 (stack #497): a slot whose initialization failed for want of memory is not kept as refused: it answers this
-  // call with the failure and is initialized again by the next
+  // the slot names set k only once its build is complete (Valid, on every return): until then it holds no set (index -1),
+  // so nothing reads a half-built slot as set k. SPEC 1.6 (stack #497): a slot whose initialization failed for want of
+  // memory is not kept as refused: it answers this call with the failure and is initialized again by the next
   const uint32_t mem_mark = sdnap::mem::g_thread_failures;
-  struct Retry {
+  struct Valid {
     Slot& q;
+    int32_t k;
     uint32_t mark;
-    ~Retry() {
-      if (q.error != 0 && sdnap::mem::g_thread_failures != mark) q.index = -1;
-    }
-  } retry{q, mem_mark};
+    ~Valid() { q.index = q.error != 0 && sdnap::mem::g_thread_failures != mark ? -1 : k; }
+  } valid{q, static_cast<int32_t>(k), mem_mark};
   if (en.row.theory == kTheorySgp4Xp) {
     drag::table();
     q.xp = static_cast<xpt::XpSat*>(sdnap::mem::calloc(1, sizeof(xpt::XpSat)));
@@ -768,7 +771,15 @@ static int load_epochs_call(void) {
   if (const int rc = pcf::read(pcf::kEpochs, true)) return rc;
   epochs::Config cfg;
   if (const int rc = epochs::read_config(cfg)) return rc;
-  return epochs::build(epochs::resident(), cfg);
+  epochs::Store& st = epochs::resident();
+  // after a dead batch the old store is freed only once no pool thread is active: one still in its chunk reads and writes it
+  if (st.pool_dead != 0) {
+    if (pool::load(&pool::job().active) != 0)
+      return ocm::refuse("pool-dead", "A threaded batch over the epoch store ended with a pool thread taken for dead, and a pool "
+                                      "thread is still active: the store cannot be replaced until it is. Start a new instance.");
+    st.pool_dead = 0;
+  }
+  return epochs::build(st, cfg);
 }
 
 /// `propagate_epochs`: the store of the call's own snapshot at the $PCF OUTPUT times (EPOCHS, or START_TIME to STOP_TIME):
@@ -1003,7 +1014,9 @@ SDNAP_EXPORT("sdnap_epochs_stats")
 void sdnap_epochs_stats(double* out) {
   const auto& st = sdnap::epochs::resident();
   const auto& s = st.stats;
-  const double v[8] = {s.records, s.kept, s.aged, s.capped, s.theory, s.other_center, s.duplicate, static_cast<double>(sdnap::epochs::bytes_of(st))};
+  // the bytes read every slot: not after a dead batch over the store (Store::pool_dead), NaN
+  const double bytes = st.pool_dead != 0 ? std::numeric_limits<double>::quiet_NaN() : static_cast<double>(sdnap::epochs::bytes_of(st));
+  const double v[8] = {s.records, s.kept, s.aged, s.capped, s.theory, s.other_center, s.duplicate, bytes};
   for (int k = 0; k < 8; ++k) out[k] = v[k];
 }
 
@@ -1132,6 +1145,11 @@ SDNAP_EXPORT("sdnap_epochs_at")
 int32_t sdnap_epochs_at(double jd_whole, double jd_frac, uint32_t first, uint32_t count, int32_t frame, double* out, int32_t* status, double* cov) {
   auto& st = sdnap::epochs::resident();
   if (out == nullptr || first > st.series.size() || count > st.series.size() - first || (frame != 0 && frame != 3)) return -1;
+  // after a dead batch over the store (Store::pool_dead) nothing reads its slots, nor the batch's own arrays below, again
+  if (st.pool_dead != 0) {
+    if (status != nullptr) for (uint32_t k = 0; k < count; ++k) status[k] = sdnap::pool::kRowPoolDead;
+    return sdnap::pool::kBatchPoolDead;
+  }
   auto& j = sdnap::pool::job();
   const bool threaded = cov == nullptr && j.threads > 0 && count > sdnap::pool::kEpochChunk && sdnap::pool::load(&j.dead) == 0;
   if (!threaded) {
@@ -1161,6 +1179,8 @@ int32_t sdnap_epochs_at(double jd_whole, double jd_frac, uint32_t first, uint32_
   const size_t reserve = sdnap::epochs::series_reserve(st, j);
   const int32_t rc = sdnap::pool::run(count, reserve);
   if (rc != 0) {
+    // a pool thread taken for dead may be only slow, still in its chunk: the store is refused from now on (Store::pool_dead)
+    st.pool_dead = 1;
     if (status != nullptr) for (uint32_t k = 0; k < count; ++k) status[k] = sdnap::pool::kRowPoolDead;
     return rc;
   }
@@ -1189,6 +1209,7 @@ SDNAP_EXPORT("sdnap_epochs_set_at")
 int32_t sdnap_epochs_set_at(uint32_t i, uint32_t k, double jd_whole, double jd_frac, double* out) {
   auto& st = sdnap::epochs::resident();
   if (i >= st.series.size() || out == nullptr || k >= st.series[i].count) return -1;
+  if (st.pool_dead != 0) return sdnap::pool::kRowPoolDead;  // after a dead batch over the store (Store::pool_dead)
   bool have_p = false;
   const double jd[2] = {jd_whole, jd_frac};
   return sdnap::epochs::state_of(st, st.series[i], k, sdnap::epochs::minutes_of(jd_whole, jd_frac), out, out + 3, nullptr, have_p, jd);

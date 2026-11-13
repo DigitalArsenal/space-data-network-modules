@@ -6603,11 +6603,16 @@ inline uint64_t xp_bytes(const XpSat& s) {
 }
 
 /// Frees s's caches (xp_release).
+/// A store's set (pooled) reads its caches under the pool's lock, held or not: a reclaim on another lane of a threaded
+/// batch (pool_reclaim_locked) drops a set's caches and then stores the unlock of its cache_lock into it, both inside one
+/// hold of the pool's lock. Read without the lock, a null left by that drop let the caller go on to free the set before the
+/// unlock landed (a write into freed memory). Once this call has held the lock, no reclaim writes into s again: s is no
+/// longer listed, and the caller may free it. A set that is not a store's never holds caches and is never listed.
 inline void pool_release(XpSat& s) {
-  if (s.caches == nullptr) return;
+  if (!s.pooled) return;
   CachePool& p = cache_pool();
   lock(&p.lock);
-  pool_drop_locked(p, s);
+  if (s.caches != nullptr) pool_drop_locked(p, s);
   unlock(&p.lock);
 }
 
