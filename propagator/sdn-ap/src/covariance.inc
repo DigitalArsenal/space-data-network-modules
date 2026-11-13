@@ -511,12 +511,37 @@ inline bool epoch_floor(const ElementRow& row, bool ap, const double* floor, con
 
 /// A covariance-bearing set: the row, its parameter layout, the epoch covariance (COVARIANCE, 6 x 6, the floor
 /// included), the consider rows, the floor and the process noise.
+/// Full row-major storage at np x np. Copying preserves every element's bits, including
+/// any asymmetry produced by the fit; no triangular reconstruction changes a reader.
+class Matrix {
+  double* p_ = nullptr;
+  size_t n_ = 0;
+ public:
+  Matrix() = default;
+  ~Matrix() { std::free(p_); }
+  Matrix(const Matrix& other) { if (reset(other.n_)) std::memcpy(p_, other.p_, n_ * sizeof(double)); }
+  Matrix& operator=(const Matrix& other) {
+    if (this != &other && reset(other.n_)) std::memcpy(p_, other.p_, n_ * sizeof(double));
+    return *this;
+  }
+  bool reset(size_t n) {
+    std::free(p_); p_ = nullptr; n_ = 0;
+    if (n == 0) return true;
+    p_ = static_cast<double*>(mem::calloc(n, sizeof(double)));
+    if (p_ == nullptr) return false;
+    n_ = n; return true;
+  }
+  size_t size() const { return n_; }
+  double& operator[](size_t k) { return p_[k]; }
+  double operator[](size_t k) const { return p_[k]; }
+};
+
 struct Set {
   ElementRow row{};
   fit::Options o{};
   int np = 0;
   bool ap = false;  ///< SPEC 12.4: the record's MEAN_ELEMENT_THEORY is AP, so its epoch floor is at the two-body state
-  double C[kMaxAug * kMaxAug] = {};  ///< augmented epoch covariance (np x np): state block total, then the parameters
+  Matrix C;  ///< augmented epoch covariance (np x np): state block total, then the parameters
   double log_sigma[kMaxConsider] = {};  ///< of_fit: the posterior sigma of ln B ([0]), ln AGOM ([2]) where the fit estimated the log (else 0)
   double floor[6] = {};
   double noise[5] = {};              ///< s_e, s_i (1/day), s_l (dn/n), s_d (rad/day^2), the noise start t_a (min)
@@ -525,7 +550,6 @@ struct Set {
   int regime = 0;                    ///< 0 drag, 1 above (of_fit)
   int width_index = -1;              ///< read: BTERM's row where a named width rule's formal variance was recovered
   double width_stated = 0.0;         ///< read: the record's stated BTERM variance there (the augmented output's)
-  char width_note[240] = {};         ///< read: a width the reader maps as stated, and why (the flight's COMMENT)
 };
 
 /// The process noise of a set (SPEC 12.5): its regime (0 perigee below kDragRegimeKm, 1 above), the non-gravitational
@@ -654,6 +678,7 @@ inline bool of_fit(const ElementRow& row, const fit::Options& fitted, const doub
   s.row = row;
   s.o = o;
   s.np = np;
+  if (!s.C.reset(np * np)) return false;
   for (int i = 0; i < 6; ++i)
     for (int c = 6; c < np; ++c) {
       double jp = 0.0;
@@ -716,7 +741,7 @@ inline bool noise_invariant(const ElementRow& row, const Set& s) {
 /// kEpochFloorSince or by another producer, SPEC 12.4: its covariance refused by name, kFloorRefusal, its states flown).
 /// A row the theories have no sensitivity to (DRAG_AREA_OVER_MASS_RATE, IN_TRACK_ACCELERATION, OUTGASSING_ACCELERATION)
 /// is read as a constant parameter.
-inline int read(const OCM* o, const ElementRow& row, Set& s) {
+inline int read(const OCM* o, const ElementRow& row, Set& s, char* width_note = nullptr, size_t note_size = 0) {
   s = Set{};
   s.row = row;
   const OCMMeanElements* me = o->MEAN_ELEMENTS();
@@ -754,6 +779,7 @@ inline int read(const OCM* o, const ElementRow& row, Set& s) {
   int kind[fit::kMaxParams];
   s.np = kinds_of(s.o, kind);
   const int np = s.np;
+  if (!s.C.reset(np * np)) return -1;
   // the record's rows are the parameter vector's (params_of order: elements, then the fixed order)
   uint32_t q = 0;
   for (int i = 0; i < np; ++i)
@@ -822,7 +848,7 @@ inline int read(const OCM* o, const ElementRow& row, Set& s) {
           s.C[at * np + at] = b2 * var_f;
         }
       }
-      if (why != nullptr) std::snprintf(s.width_note, sizeof s.width_note, "covariance: %s: mapped as stated (%s)", id, why);
+      if (why != nullptr && width_note != nullptr) std::snprintf(width_note, note_size, "covariance: %s: mapped as stated (%s)", id, why);
       break;
     }
   // SPEC 12.4: an AP record's floor at its writer's theory state cannot be taken off at this build's
@@ -843,6 +869,7 @@ struct Propagator {
 /// elements); the floor at every time (eval) is the flown state's.
 inline int prepare(const Set& s, Propagator& p, xpt::XpSat* nominal = nullptr) {
   p.s = s;
+  if (p.s.C.size() != static_cast<size_t>(s.np * s.np)) return -3;
   if (!init(s.row, s.o, p.b, nominal)) return -3;
   const int np = p.b.np;
   double J[6 * kMaxAug], r0[3], v0[3];
