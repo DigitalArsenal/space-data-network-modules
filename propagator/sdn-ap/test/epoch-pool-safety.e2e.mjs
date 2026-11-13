@@ -14,9 +14,11 @@
 //    Every batch: no mark seen; reclaims and slot replacements both happen within one batch (counted); every state and
 //    status equal to the bit to the same batches on the calling thread alone.
 // 2. A dead batch. The same store on 4 pool threads, the batch's dead-poll count lowered, one pool thread's first chunk
-//    held for seconds: the batch is taken for dead (-20, every status 9). Then the store is refused: sdnap_epochs_at
-//    answers -20 with status 9, sdnap_epochs_set_at 9, and load_epochs "pool-dead" while that thread is still in its
-//    chunk; once it has left, load_epochs replaces the store and its states equal a fresh instance's to the bit.
+//    held for seconds (the calling thread goes on only once a pool thread holds it, so the hold is certain): the batch is
+//    taken for dead (-20, every status 9). Then the store is refused: sdnap_epochs_at answers -20 with status 9,
+//    sdnap_epochs_set_at and sdnap_drag_orbit_check 9, the store's bytes NaN, and load_epochs "pool-dead" while that
+//    thread is still in its chunk; once it has left, load_epochs replaces the store and its states equal a fresh
+//    instance's to the bit.
 // JS moves bytes and compares numbers the module produced.
 //   node test/epoch-pool-safety.e2e.mjs [--dead-only]
 import assert from "node:assert/strict";
@@ -50,7 +52,12 @@ static void test_reclaim_hook(sdnap::xpt::XpSat& v) {
   __atomic_store_n(&sdnap::xpt::g_test_reclaim_target, static_cast<sdnap::xpt::XpSat*>(nullptr), __ATOMIC_SEQ_CST);
 }
 static void test_chunk_hook(int32_t, bool pool_thread) {
-  if (!pool_thread || g_test_hold_first == 0) return;
+  if (g_test_hold_first == 0) return;
+  // the calling thread goes on only once a pool thread holds its first chunk: the hold is certain, whoever claims first
+  if (!pool_thread) {
+    while (__atomic_load_n(&g_test_held, __ATOMIC_SEQ_CST) == 0) {}
+    return;
+  }
   uint32_t expected = 0;
   if (!__atomic_compare_exchange_n(&g_test_held, &expected, 1u, false, __ATOMIC_SEQ_CST, __ATOMIC_SEQ_CST)) return;
   for (volatile uint32_t i = 0; i < g_test_hold_first; i = i + 1) {}
@@ -93,7 +100,7 @@ async function open(threads) {
     const rc = x.sdnap_epochs_at(W, f, 0, SERIES, 0, out, status, 0);
     return { rc, bytes: Buffer.concat([Buffer.from(new Uint8Array(mem(), out, 48 * SERIES)), Buffer.from(new Uint8Array(mem(), status, 4 * SERIES))]) };
   };
-  return { x, seams, load, at, setAt: (i, k, f) => x.sdnap_epochs_set_at(i, k, W, f, probe) };
+  return { x, mem, buffer: x.sdnap_alloc(96), seams, load, at, setAt: (i, k, f) => x.sdnap_epochs_set_at(i, k, W, f, probe) };
 }
 
 // 1. reclaim against release (--dead-only: only 2)
@@ -139,6 +146,9 @@ const after = m.at(FRACTIONS[1]);
 assert.equal(after.rc, -20, `a call after the dead batch: ${after.rc}, the store read again`);
 assert.ok(statuses(after.bytes).every((s) => s === 9), "a call after the dead batch: every status 9");
 assert.equal(m.setAt(0, 0, FRACTIONS[1]), 9, "sdnap_epochs_set_at after the dead batch");
+assert.equal(m.x.sdnap_drag_orbit_check(0, 60, 16, m.buffer), 9, "sdnap_drag_orbit_check after the dead batch");
+m.x.sdnap_epochs_stats(m.buffer);
+assert.ok(Number.isNaN(new Float64Array(m.mem(), m.buffer, 8)[7]), "the store's bytes after the dead batch: not NaN");
 const early = m.seams(0, 0);
 assert.equal(early.held, 1, "the held thread is still in its chunk");
 const refused = await m.load();

@@ -149,14 +149,21 @@ series of more than one set. A covariance matrix that cannot be allocated refuse
 `invalid-covariance`.
 
 **The memory grows in steps of at least 4 MiB.** The allocator grows its heap through `sbrk` a few 64 KiB pages at a
-time, and each growth of the memory costs about 0.3 ms. Through 0.6.56 `sbrk` grew the memory by exactly what the
-allocator asked. A serial first pass of 20,000 AP series then spent a third of its time growing it: 774 µs an object,
-against 501 with the memory grown beforehand. `sbrk` now keeps the allocator's break itself, at or below the memory's end
-(`sbrk(0)` answers the break). A request below the end moves the break. One past the end grows the memory by at least a
-step (64 pages, 4 MiB). When a step does not fit under the memory's maximum, it grows by exactly what the request lacks,
-and only then refuses. So the instance may hold up to one step more than the allocator has asked for, and it refuses
-only where the request itself does not fit. `sdnap_pool_stats` counts the growths and the pages they added
-(`test/memory-step.e2e.mjs`: a test build with the step 0 gives the same bytes and answers the same sets at a limit).
+time, and each growth of the memory costs about 0.3 ms. Grown by exactly what the allocator asks, a serial first pass of
+20,000 AP series spends a third of its time growing it: 774 µs an object, against 501 with the memory grown beforehand.
+So `sbrk` keeps the allocator's break itself, at or below the end of the memory it has grown (`sbrk(0)` answers the
+break):
+- A request below that end moves the break.
+- One past it grows the memory by at least a step (64 pages, 4 MiB). When a step does not fit under the memory's maximum,
+  it grows by exactly what the request lacks, and only then refuses.
+- Pages found beyond that end were grown by another party (a host's buffer). They are never served: the break moves past
+  them.
+- Nothing is served at or past 4 GiB, the end of the address space. Such a request is refused, never wrapped.
+
+So the instance may hold up to one step more than the allocator has asked for, and it refuses only where the request
+itself does not fit. `sdnap_pool_stats` counts the growths and the pages they added. `test/memory-step.e2e.mjs` probes
+the break directly. Against a test build with the step 0 it shows the same bytes and the same sets answered at a
+limit, a host's pages intact, and at most 100 growths where the step-0 build makes thousands.
 
 **A method during which one of them failed refuses with errorCode `out-of-memory` and emits nothing.** That holds for
 `propagate`, `propagate_epochs`, `load_epochs`, `fit`, `maneuver`, `ingest_omm` and `export_omm`, whatever the method
@@ -170,8 +177,8 @@ The message names how many allocations failed since the method began and the lar
 A method's mark counts every thread's failures, because its batch spans the pool. A step that runs on one thread
 compares that thread's own count (`mem::thread_failures`). That covers a set's initialization (AP's tables, the slow
 terms, the odd zonal G1 table) and an epoch-store slot's build. On a pool lane, another lane's refused growth never fails
-it. Merged with 0.6.53's initialization, which compared the instance's count, it had: a set no growth had refused was
-refused, not deferred, and its slot kept the refusal.
+it. Compared with the instance's count, it would: a set no growth had refused would be refused, not deferred, and its
+slot would keep the refusal (the no-reserve case of `test/epoch-pool.e2e.mjs` shows it).
 
 **AP initialization storage (0.6.53).** Shared sample arrays use counted allocations; each memo is local to one
 initialization and retains the scalar evaluator's operation order. An inclination column is keyed by inclination,
@@ -179,10 +186,18 @@ degree, order, and quadrature size; a changed inclination or degree rebuilds its
 allocator peak for one synthetic 15.2 rev/day, e = 0.001, i = 97.4 degree set with tesseral degree 70, zonal degree 20,
 and slow terms is 31,888 versus 1,340,432 bytes after shared caches are warm. Both builds retain 31,888 bytes for that
 set and release them all. In a fresh instance both peak at 1,342,912 bytes because persistent caches dominate.
-The added 71 by 71 field-magnitude table occupies 45,376 bytes per thread. The largest measured initialization
-stack frame is half_day_terms at 25,936 bytes; ap_init uses 3,664 bytes, against the pool thread's 65,536-byte stack.
-These are individual compiler frame sizes, not a bound on accumulated call depth. The invoking thread builds row
-sets and lazy epoch slots; pool threads fly the prepared row sets.
+The added 71 by 71 field-magnitude table occupies 45,376 bytes per thread. The largest initialization stack frame is
+half_day_terms at 25,936 bytes; ap_init uses 3,664 bytes.
+
+**Where sets are built, and the stack they take.** The calling thread builds the row store's sets (`sdnap_init_elements`,
+`ingest_omm`), a fit's trial sets and a covariance's moved sets. Pool threads fly the row store's prepared sets. In the
+epoch store's threaded call they also build the sets of the series they own: slot_of, xp_init, ap_init, every table
+build, the decay probe with drag and NRLMSISE-00, and the flight. A pool thread's stack is 256 KiB
+(`pthread_attr_setstacksize`). `test/pool-stack.e2e.mjs` paints each pool thread's stack and reads how deep it wrote,
+over a store of every class: low orbit at 500 and 290 km, the half-day and one-day classes and e 0.2, each at degree 31
+and at 70 with the slow set, plus a decaying set and SGP4XP. The deepest is 31,192 bytes, a margin of 8.4 (2.1 on
+wasi-libc's default 64 KiB). The test holds every thread under half its stack. A thread's thread-local block is 343,956
+bytes. With the stack it fits the 1 MiB room the pool makes free before it creates the thread.
 
 Through 0.6.47 such a call answered one of five ways:
 - the theory's refusal of the elements (`element-set-refused`);
@@ -1684,19 +1699,29 @@ Two rules keep one lane's work out of another's:
 
 **After a dead batch** (a pool thread taken for dead, the batch's return -20, every status 9), a thread that was only
 slow may still be building, flying or replacing its series' slots. So the store is not read again:
-- `sdnap_epochs_at` answers -20 with every status 9, `sdnap_epochs_set_at` answers 9, and the store's byte count reads
-  NaN;
+- `sdnap_epochs_at` answers -20 with every status 9, `sdnap_epochs_set_at` and `sdnap_drag_orbit_check` answer 9, and
+  the store's byte count reads NaN;
 - `load_epochs` refuses "pool-dead" while a pool thread is active, and replaces the store once none is. A thread that
   trapped never stops being active.
+- The other readers of the store (`sdnap_epochs_count`, `_series`, `_select`, `_source_at`) read only its entries and
+  series, which no lane writes.
+
+**A pool thread that traps while it holds a lock** (the module's locks are spin locks with no owner: the cache pool's,
+a set's cache lock, the family grids', sbrk's break) leaves it held. The calling thread's next call that needs that lock
+spins without end, which on a browser's main thread is a hang. A host that sees a pool thread trap, or a batch taken
+for dead, discards the instance and starts a new one.
 
 `test/epoch-pool-safety.e2e.mjs` holds both rules (256 series, a 1 MiB cache budget, slots replaced in every batch, 4
-and 15 threads) and the dead batch (one pool thread held in its first chunk).
+and 15 threads) and the dead batch (one pool thread held in its first chunk, the calling thread going on only once a
+pool thread holds it).
 
 Three more rules for the lanes:
 - **No lane waits on a static's first use.** The calling thread and every pool thread make, before any batch, each guarded
   static a lane can first touch (pool::warm_thread: the thread's caches and NRLMSISE-00's flag table).
 - **The cache pool sorts copies.** A reclaim picks its victims from stamps read once under the pool's lock (an owner
-  moves its stamp under its own cache lock alone, atomically), ordered by stamp and then by address.
+  moves its stamp under its own cache lock alone, atomically). It orders them by stamp alone, with 0.6.56's comparator
+  over the holders in 0.6.56's order. Equal stamps are common, since consecutive cached flights share one, and a serial
+  reclaim keeps 0.6.56's choice among them: the choice can move a half-day-class state (stack #626).
 - **The missing weather day is a note, not a result.** `Store::short_day` is written by the thread that flew the state
   that found no row. `propagate_epochs` reads it on the calling thread right after that state. After a threaded
   `sdnap_epochs_at` it names some series' missing day; each series' own status is in its status code.
@@ -1706,13 +1731,17 @@ of 1 and 2 (slots replaced inside the batch), then set 2 alone. The store holds 
 NRLMSISE-00 at node heights under and over 325 km and on Jacchia 1970, two force sets and two weather tables
 alternating, covariance on half, and eight wide series flown on the calling thread.
 - The reference is each series alone on the calling thread. Its digest is the one sdn-ap 0.6.56 gives.
-- On 0, 1, 4 and 15 threads, with poisoned table storage on each, and in slices of 100 series: every state and status
-  byte equals the reference.
-- With no reserve (every series that needs memory inside a batch is deferred): every status equals the reference. Every
-  state equals the reference, or, for a series deferred at that instant, the serial state with its slots dropped just
-  before its flight. The two differ only for a set whose state depends on what it was flown at before (stack #626: one
-  cache id for the brackets on both sides of a set's epoch in the tesseral and m-daily bake caches and the drag-pass
-  cache's key). This allowance goes when #626 is fixed; the no-reserve case is then held to the reference like the rest.
+- On 0, 1, 4 and 15 threads, in slices of 100 series, and with each building thread's scratch and its half-day
+  evaluation cache's values poisoned before every set: every state and status byte equals the reference. Every state is
+  answered.
+- After the threaded instants, every series' covariance in one call equals the reference's to the bit. A call with a
+  covariance plane runs no batch.
+- Counted per thread: at least a quarter of the rows, slot replacements and NRLMSISE-00 evaluations (on each side of
+  325 km) are on pool threads, and more than one lane flies at 4 and 15 threads.
+- With no reserve (every growth of the memory inside a batch refused; the case still refuses and defers): every status
+  equals the reference. Every state equals the reference, or, for a series deferred at that instant, the serial state
+  with its slots dropped just before its flight. That allowance covers stack #626 alone: one cache id for the brackets
+  on both sides of a set's epoch in the tesseral and m-daily bake caches, and the drag-pass cache's key.
 - The test build's counters show every path taken.
 
 The 400-wide-series control at 0 and 15 threads also keeps every refusal in the same series.
@@ -1759,8 +1788,20 @@ The pool and the memory (stack #487). A threaded batch grows nothing, and a pool
 - Outside a batch only the calling thread grows the memory, so its view is its own. The one exception is a pool
   thread's once-per-thread caches, made as it starts, one thread at a time. That thread publishes its size, and the
   calling thread goes on once its own view covers it.
-- sdnap_pool_stats (12 doubles) counts the batches, refusals, deferred rows, batches that grew inside (0) and the view
-  waits, and the memory's growths and the pages they added (1.6).
+- `sdnap_pool_stats(out)` writes 14 doubles (112 bytes). 0.6.56 wrote the first 10, so a host with a smaller buffer is
+  overrun and must give it 112 bytes:
+  - [0] the threads running;
+  - [1] the threaded batches run;
+  - [2] the growths of the memory refused inside them (every thread);
+  - [3] the rows deferred to the calling thread after them;
+  - [4] the batches after which the calling thread saw a larger memory (the invariant: 0);
+  - [5] whether the pool was taken for dead (1);
+  - [6] the polls without a completed row a waiting caller allows a batch;
+  - [7] the last batch's reserve in bytes;
+  - [8] the waits for a thread's view of the memory that had to yield, and [9] the most yields one took;
+  - [10] the memory's growths since the instance started (sbrk's, 1.6), and [11] the 64 KiB pages they added;
+  - [12] the epoch store's slices halved for want of their reserve, and [13] its slices run on the calling thread
+    because even the smallest slice's reserve could not be had.
 
 Why. Measured on Node 25.4.0 (V8 14.1.146.11), through the module SDK's wasi-threads glue:
 - A thread can trap (memory access out of bounds) when it bulk-fills or bulk-copies a block in pages another thread has
@@ -3430,7 +3471,7 @@ rates only: section 8's output map has no added zonal-tail term. SGP4XP and SGP4
 `test/zonal-long-period.e2e.mjs`, `test/zonal-long-period-table.e2e.mjs`, `test/zonal-cell.e2e.mjs` and
 `test/zonal-cell-placements.e2e.mjs` cover the model pairs, finite sum, half-cell envelope, switch, crossing,
 query order, sharing and epoch seed placements. Shared per-set tables are immutable; re-anchoring changes
-only the calling thread's caches.
+only the evaluating thread's caches.
 
 **16.4 Frame.** Frame policy is selected once, by `ap_init`, from the record's gravity terms. With d or z above 0,
 every AP set carries its epoch-axis states to TEME of date by M(t) M(t0)^T: from 0.6.34 the long-period regime's class 0

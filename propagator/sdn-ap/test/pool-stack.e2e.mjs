@@ -20,6 +20,8 @@ import { ensureBuilt } from "./lib/module.mjs";
 import { buildDiagnostic } from "./lib/ap-diagnostic.mjs";
 import { T, seedOcm, rowsThrough } from "./lib/ocm.mjs";
 
+// a failure ends the process: the pool's threads would keep it alive
+process.on("uncaughtException", (e) => { console.error(e); process.exit(1); });
 ensureBuilt();
 const DAY = 86400000, EPOCH = Date.parse("2026-06-15T00:00:00Z"), MU = 398600.4418, RE = 6378.137;
 const iso = (ms) => new Date(ms).toISOString().replace("Z", "");

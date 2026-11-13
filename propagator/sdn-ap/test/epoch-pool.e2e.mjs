@@ -15,21 +15,23 @@
 // - its digest equals MAIN_DIGEST, the same reference made by sdn-ap 0.6.56 (modules 85bc764c), the module this change is
 //   made on: the state, theory and status of every series are 0.6.56's;
 // - the whole store a call on 0, 1, 4 and 15 pool threads; on a test build (same sources, seams below) on 0, 1, 4 and 15
-//   with each initializing thread's table scratch poisoned, and on 4 with slices of 100 series (21 batches a call): each
-//   equal to the reference, byte for byte;
-// - on 4 with no reserve (every growth inside a batch refused, every such series deferred to the calling thread): every
-//   status the reference's, and every state the reference's, byte for byte, except that a series deferred at an instant
-//   may instead equal, byte for byte, the dropped control there: the serial state with the series' two slots released just
-//   before its flight, which is what a deferral does. They differ only where a set's state depends on what it was flown at
-//   before (stack #626: AP sets of the half-day class, 250 states up to 0.22 mm here), and the store must hold such states.
-//   THIS TOLERANCE IS STACK #626'S AND GOES WITH ITS FIX: its cause (found with controls on the geo2 lane) is one cache id for
-//   the brackets on both sides of a set's epoch in the tesseral and m-daily bake caches, and the same fault in the drag-pass
-//   cache's key. When that fix lands, a deferred series equals the reference too: remove the dropped control and the
-//   history assertion below, and hold the no-reserve case to the reference byte for byte like the others.
-// The test build counts what each case took, asserted: series flown on pool threads and on the calling thread before a
-// batch (the wide branch), slots replaced, NRLMSISE-00 evaluations on each side of 325 km, states of each family (SGP4,
-// SGP4XP, AP), batches and slices, deferred series; the pool's own counts (no growth inside a batch, refusals and deferrals
-// only where the reserve is off).
+//   with each initializing thread's scratch (the table, terms, shallow, half-day, build and trigonometry scratch) and its
+//   half-day evaluation cache's values poisoned before every set it builds, and on 4 with slices of 100 series (21 batches
+//   a call): each equal to the reference, byte for byte;
+// - after the three instants, every series' covariance at 24 h in one call (a call with a covariance plane runs on the
+//   calling thread: no batch, asserted), equal to the bit to the reference's, which asks it one series at a time; every
+//   series that carries a covariance answers one;
+// - on 4 with no reserve (every growth of the memory inside a batch refused; up to one step of slack is still served, and
+//   the case still refuses and defers, asserted): every status the reference's, and every state the reference's, byte for
+//   byte, except that a series deferred at an instant may instead equal, byte for byte, the dropped control there: the
+//   serial state with the series' two slots released just before its flight, which is what a deferral does. This
+//   allowance covers stack #626 alone: an AP set of the half-day class answers differently once it was flown before (one
+//   cache id for the brackets on both sides of a set's epoch in the tesseral and m-daily bake caches, and the same fault
+//   in the drag-pass cache's key; 250 states up to 0.22 mm here), and the store must hold such states.
+// The test build counts, per thread, what each case took, asserted: rows, slots replaced and NRLMSISE-00 evaluations on
+// each side of 325 km on the pool's threads (at least a quarter of each), more than one lane at 4 and 15 threads, the wide
+// branch's rows on the calling thread, states of each family (SGP4, SGP4XP, AP), every state answered; the pool's own
+// counts (no growth inside a batch, refusals and deferrals only where the reserve is off).
 //   node test/epoch-pool.e2e.mjs [--count N]
 import assert from 'node:assert/strict';
 import fs from 'node:fs';
@@ -47,8 +49,7 @@ import { buildDiagnostic } from './lib/ap-diagnostic.mjs';
 const arg = (name, fallback) => { const i = process.argv.indexOf(name); return i < 0 ? fallback : process.argv[i + 1]; };
 const here = path.dirname(fileURLToPath(import.meta.url));
 const count = Number(arg('--count', 2048));
-// the reference's digest as sdn-ap 0.6.56 (modules 85bc764c, wasm 98694e70) made it, for the default store (2,048 series);
-// 0.6.52 (modules 5bbdc851) gave e3c54c96..., before 0.6.54's zonal long-period terms
+// the reference's digest as sdn-ap 0.6.56 (modules 85bc764c, wasm 98694e70) made it, for the default store (2,048 series)
 const MAIN_DIGEST = '1ca816ba472e78b0b385cad6bc56c17feba3fce835b4131640e015819c6fd5e8';
 const epoch = Date.parse('2026-06-15T00:00:00Z'), day = 86400000;
 const iso = t => new Date(t).toISOString().replace('Z', '');
@@ -110,7 +111,7 @@ if (process.argv.includes('--case')) {
   assert.equal(x.sdnap_epochs_count(), count);
   const mode = process.argv.includes('--refuse') ? 2 : 1;
   if (x.sdnap_test_epoch_mode) x.sdnap_test_epoch_mode(mode, Number(arg('--slice', 0)));
-  const out = x.sdnap_alloc(48 * count), status = x.sdnap_alloc(4 * count), stats = x.sdnap_alloc(112), counts = x.sdnap_alloc(96);
+  const out = x.sdnap_alloc(48 * count), status = x.sdnap_alloc(4 * count), stats = x.sdnap_alloc(112), counts = x.sdnap_alloc(8 * 17 * 8);
   const all = [], deferredAt = [];
   const drop = process.argv.includes('--drop');
   const taken = x.sdnap_test_deferred_take ? x.sdnap_alloc(4 * 65536) : 0;
@@ -138,35 +139,78 @@ if (process.argv.includes('--case')) {
   }
   if (taken) fs.writeFileSync(path.join(root, label + '-deferred.json'), JSON.stringify(deferredAt));
   x.sdnap_pool_stats(stats);
-  const pool = Array.from(new Float64Array(h.memory.buffer, stats, 10));
+  const pool = Array.from(new Float64Array(h.memory.buffer, stats, 14));
   let seams = null;
   if (x.sdnap_test_epoch_counts) {
     x.sdnap_test_epoch_counts(counts);
-    const v = Array.from(new Float64Array(h.memory.buffer, counts, 12));
-    seams = { poolRows: v[0], widePrePass: v[1], replaced: v[2], msisLow: v[3], msisHigh: v[4], sgp4: v[5], xp: v[6], ap: v[7], halved: v[8], serialSlices: v[9] };
+    const v = Array.from(new Float64Array(h.memory.buffer, counts, 17 * 8));
+    const sum = (k, from = 0) => v.reduce((a, c, q) => a + (q % 8 === k && q >= 8 * from ? c : 0), 0);
+    // totals over every thread, the same on the pool's threads alone (not the calling thread), and the lanes with rows
+    seams = { rows: sum(0), widePrePass: sum(1), replaced: sum(2), msisLow: sum(3), msisHigh: sum(4), sgp4: sum(5), xp: sum(6), ap: sum(7),
+      poolRows: sum(0, 1), poolReplaced: sum(2, 1), poolMsisLow: sum(3, 1), poolMsisHigh: sum(4, 1),
+      lanes: Array.from({ length: 16 }, (_, t) => v[8 * (t + 1)]).filter((n) => n > 0).length };
   }
+  // a covariance after the threaded instants (SPEC 9: a call with a covariance plane runs on the calling thread): every
+  // series' covariance at 24 h, one call over the store (one call a series in the reference), and the batches it ran
+  const covInstant = 1.0, cov = x.sdnap_alloc(36 * 8 * count), covParts = [];
+  const batchesBefore = pool[1];
+  if (process.argv.includes('--single')) {
+    const planesC = new Float64Array(6 * count), codesC = new Int32Array(count), covs = new Float64Array(36 * count);
+    for (let k = 0; k < count; ++k) {
+      assert.equal(x.sdnap_epochs_at(2461206.5, covInstant, k, 1, 0, out, status, cov), 0);
+      const v = new Float64Array(h.memory.buffer, out, 6);
+      for (let c = 0; c < 6; ++c) planesC[c * count + k] = v[c];
+      codesC[k] = new Int32Array(h.memory.buffer, status, 1)[0];
+      covs.set(new Float64Array(h.memory.buffer, cov, 36), 36 * k);
+    }
+    covParts.push(Buffer.from(planesC.buffer), Buffer.from(codesC.buffer), Buffer.from(covs.buffer));
+  } else {
+    assert.equal(x.sdnap_epochs_at(2461206.5, covInstant, 0, count, 0, out, status, cov), 0);
+    covParts.push(Buffer.from(new Uint8Array(h.memory.buffer, out, 48 * count)), Buffer.from(new Uint8Array(h.memory.buffer, status, 4 * count)),
+      Buffer.from(new Uint8Array(h.memory.buffer, cov, 36 * 8 * count)));
+  }
+  x.sdnap_pool_stats(stats);
+  const covBatches = new Float64Array(h.memory.buffer, stats, 2)[1] - batchesBefore;
+  const covs = new Float64Array(Uint8Array.from(covParts[2]).buffer);
+  const covAnswered = Array.from({ length: count }, (_, k) => Number.isFinite(covs[36 * k])).filter(Boolean).length;
+  fs.writeFileSync(path.join(root, label + '-cov.bin'), Buffer.concat(covParts));
   assert.equal(pool[4], 0, 'memory grew during the batch');
   if (process.argv.includes('--refuse')) assert.ok(pool[2] > 0 && pool[3] > 0, 'no-reserve control must exercise deferral');
   else { assert.equal(pool[2], 0, 'ordinary batch refused growth'); assert.equal(pool[3], 0, 'ordinary batch deferred series'); }
   const bytes = Buffer.concat(all), digest = createHash('sha256').update(bytes).digest('hex');
   fs.writeFileSync(path.join(root, label + '.bin'), bytes);
-  console.log(JSON.stringify({ label, threads, count, sets: 3 * count, wide, good, refused, digest, pool, seams,
+  console.log(JSON.stringify({ label, threads, count, sets: 3 * count, wide, good, refused, digest, pool, seams, covBatches, covAnswered,
     deferredPerInstant: taken ? deferredAt.map((d) => d.length) : null, memoryBytes: h.memory.buffer.byteLength }));
   process.exit(0);
 }
 ensureBuilt();
 // the test build: poison (each initializing thread's table scratch), no reserve, slices of a given size, and counters
 const extra = String.raw`
-static uint64_t g_test_counts[12] = {};
-void sdnap_test_count(int k) { __atomic_add_fetch(&g_test_counts[k], 1u, __ATOMIC_RELAXED); }
+// per thread (pool::g_beat_slot: 0 the calling thread, 1 to 16 the pool's), per counter
+static uint64_t g_test_counts[17][8] = {};
+void sdnap_test_count(int k) {
+  const int32_t t = sdnap::pool::g_beat_slot;
+  __atomic_add_fetch(&g_test_counts[t >= 0 && t < 17 ? t : 16][k], 1u, __ATOMIC_RELAXED);
+}
+// the initializing thread's scratch and its evaluation caches' values, poisoned before every set it builds: a set built
+// on a thread reads none of what an earlier set left there
 void sdnap_test_epoch_poison() {
-  auto& t = sdnap::xpt::tess::sp_terms_scratch();
+  using namespace sdnap::xpt::tess;
+  auto& t = sp_terms_scratch();
   std::memset(&t, 0xff, sizeof(t));
-  auto& sh = sdnap::xpt::tess::shallow_scratch();
+  auto& sh = shallow_scratch();
   std::memset(&sh, 0xff, sizeof(sh));
-  auto& s = sdnap::xpt::tess::g_sp_table_scratch;
+  auto& s = g_sp_table_scratch;
   if (s.comb) std::memset(s.comb, 0xff, s.comb_cap * sizeof(*s.comb));
   if (s.raw) std::memset(s.raw, 0xff, s.raw_cap * sizeof(*s.raw));
+  auto& hd = g_half_day_scratch;
+  if (hd.grid) std::memset(hd.grid, 0xff, hd.grid_cap * sizeof(*hd.grid));
+  if (hd.values) std::memset(hd.values, 0xff, hd.values_cap * sizeof(*hd.values));
+  if (hd.raw) std::memset(hd.raw, 0xff, hd.raw_cap * sizeof(*hd.raw));
+  std::memset(&sp_build_scratch(), 0xff, sizeof(SpBuildScratch));
+  std::memset(&g_sp_trig_scratch, 0xff, sizeof(g_sp_trig_scratch));
+  auto& hc = half_day_eval_cache();
+  for (float* b : {hc.b0, hc.b1, hc.b2, hc.b3, hc.b4, hc.b5, hc.b6, hc.b7}) std::memset(b, 0xff, sizeof(hc.b0));
 }
 SDNAP_EXPORT("sdnap_test_epoch_mode")
 void sdnap_test_epoch_mode(int32_t mode, int32_t slice) {
@@ -174,11 +218,11 @@ void sdnap_test_epoch_mode(int32_t mode, int32_t slice) {
   sdnap::pool::g_reserve_off = mode == 2;
   if (slice > 0) sdnap::pool::epoch_slice_ref() = static_cast<uint32_t>(slice);
 }
+// 17 x 8 doubles: thread t's counter k at 8 t + k
 SDNAP_EXPORT("sdnap_test_epoch_counts")
 void sdnap_test_epoch_counts(double* out) {
-  for (int k = 0; k < 8; ++k) out[k] = static_cast<double>(__atomic_load_n(&g_test_counts[k], __ATOMIC_RELAXED));
-  out[8] = static_cast<double>(sdnap::xpt::batch_stats().reserves_halved);
-  out[9] = static_cast<double>(sdnap::xpt::batch_stats().slices_serial);
+  for (int t = 0; t < 17; ++t)
+    for (int k = 0; k < 8; ++k) out[8 * t + k] = static_cast<double>(__atomic_load_n(&g_test_counts[t][k], __ATOMIC_RELAXED));
 }
 // the series the calling thread computed again after a batch (sdnap_epochs_at's deferral), in the order it did
 static uint32_t g_test_deferred[1u << 16];
@@ -201,8 +245,8 @@ void sdnap_test_epoch_drop(uint32_t k) {
 }
 `;
 const once = (text, from, to) => { assert.equal(text.split(from).length, 2, `the seam's anchor ${JSON.stringify(from)} is not unique`); return text.replace(from, to); };
-// counters: 0 rows on pool threads (and the calling thread's chunks), 1 the wide pre-pass, 2 slots replaced, 3 and 4
-// NRLMSISE-00 at or under 325 km and over it, 5 6 7 states flown per family
+// counters, per thread: 0 rows of a batch, 1 the wide pre-pass, 2 slots replaced, 3 and 4 NRLMSISE-00 evaluations at or
+// under 325 km and over it (over it also each lane of the batched high-altitude evaluation), 5 6 7 states flown per family
 const declare = 'void sdnap_test_count(int k);\n';
 const diagnostic = arg('--diagnostic', null) ?? buildDiagnostic('epoch-pool-poison', extra, (s) => s, {
   'epoch_store.inc': (t) => once(once(once(once(once('void sdnap_test_deferred(uint32_t k);\n' + declare + t,
@@ -213,7 +257,9 @@ const diagnostic = arg('--diagnostic', null) ?? buildDiagnostic('epoch-pool-pois
     '  const int32_t e = sdnap::epochs::at(st, st.series[first + k], t, r, v, cov != nullptr ? P : nullptr, have_p, jd);\n',
     '  const int32_t e = sdnap::epochs::at(st, st.series[first + k], t, r, v, cov != nullptr ? P : nullptr, have_p, jd);\n' +
     '  { const auto& en0 = st.entries[st.series[first + k].first]; sdnap_test_count(en0.row.theory == kTheorySgp4 ? 5 : (en0.forces.tesseral > 0 || en0.forces.zonal > 0) ? 7 : 6); }\n'),
-  'atmosphere.inc': (t) => once(once(declare + t,
+  'atmosphere.inc': (t) => once(once(once(declare + t,
+    '    const float* __restrict ctloc_in, const double* __restrict h_in, int n_lanes, double* __restrict rho_out) {\n',
+    '    const float* __restrict ctloc_in, const double* __restrict h_in, int n_lanes, double* __restrict rho_out) {\n  for (int q = 0; q < n_lanes; ++q) sdnap_test_count(4);\n'),
     '  if (h > 325.0) {\n    double c, s, stloc, ctloc, slong, clong;\n', '  sdnap_test_count(h > 325.0 ? 4 : 3);\n  if (h > 325.0) {\n    double c, s, stloc, ctloc, slong, clong;\n'),
     '  const double sec_hr = sec * (1.0 / 3600.0);\n', '  const double sec_hr = sec * (1.0 / 3600.0);\n  sdnap_test_count(h > 325.0 ? 4 : 3);\n'),
 });
@@ -234,7 +280,7 @@ assert.ok(sliced.bytes.equals(reference.bytes), 'slices of 100 series');
 // A deferred series is computed again from its records: its two slots released, its sets built again. An AP set of the
 // half-day class answers differently, by up to 0.22 mm here, once it was flown before (stack #626: one cache id for the
 // brackets on both sides of its epoch in the tesseral and m-daily bakes and the drag-pass cache's key), so the control for
-// a deferred series is the serial state with its slots dropped just before its flight. Remove with #626's fix (header).
+// a deferred series is the serial state with its slots dropped just before its flight (the allowance of the header).
 const dropped = run('dropped', diagnostic, 0, ['--single', '--drop']);
 const deferred = run('deferred', diagnostic, 4, ['--refuse']);
 const deferredAt = JSON.parse(fs.readFileSync(path.join(root, 'deferred-deferred.json'), 'utf8'));
@@ -260,12 +306,31 @@ for (let n = 0; n < INSTANTS.length; ++n) {
 assert.ok(history > 0, 'the store holds no state its set\'s history moves');
 assert.ok(deferredStates > 0, 'the no-reserve case deferred no series');
 console.log(JSON.stringify({ historyMoved: history, deferredStates, deferredTookDropped: tookDropped }));
-// the coverage: every path taken, on the threaded cases
+// the coverage: every path taken, on the threaded cases, and taken on the pool's threads (not only the calling thread):
+// at least a quarter of the rows, of the slots replaced and of the NRLMSISE-00 evaluations on each side of 325 km there,
+// on more than one lane at 4 and 15 threads; every state answered
 for (const r of [...seamed.filter((q) => q.threads > 0), sliced.r, deferred.r]) {
   const s = r.seams;
-  assert.ok(s.poolRows > 0 && s.widePrePass >= 3 * wide && s.replaced > 0, `${r.label}: rows on the pool ${s.poolRows}, wide pre-pass ${s.widePrePass}, slots replaced ${s.replaced}`);
+  assert.equal(r.good, 3 * count, `${r.label}: ${r.good} of ${3 * count} states answered`);
+  assert.ok(s.widePrePass >= 3 * wide && s.replaced >= count - wide, `${r.label}: wide pre-pass ${s.widePrePass}, slots replaced ${s.replaced}`);
   assert.ok(s.msisLow > 0 && s.msisHigh > 0, `${r.label}: NRLMSISE-00 at or under 325 km ${s.msisLow}, over it ${s.msisHigh}`);
   assert.ok(s.sgp4 > 0 && s.xp > 0 && s.ap > 0, `${r.label}: states of each family: SGP4 ${s.sgp4}, SGP4XP ${s.xp}, AP ${s.ap}`);
+  assert.ok(4 * s.poolRows >= 3 * (count - wide), `${r.label}: rows on pool threads ${s.poolRows} of ${3 * (count - wide)}`);
+  assert.ok(4 * s.poolReplaced >= count - wide, `${r.label}: slots replaced on pool threads ${s.poolReplaced} of ${s.replaced}`);
+  assert.ok(4 * s.poolMsisLow >= s.msisLow && 4 * s.poolMsisHigh >= s.msisHigh,
+    `${r.label}: NRLMSISE-00 on pool threads ${s.poolMsisLow} of ${s.msisLow} at or under 325 km, ${s.poolMsisHigh} of ${s.msisHigh} over`);
+  assert.ok(r.threads < 4 || s.lanes >= 2, `${r.label}: ${s.lanes} pool threads flew rows`);
+}
+for (const r of results.filter((q) => q.label.startsWith('threads-') || q.label.startsWith('poison-')))
+  assert.equal(r.good, 3 * count, `${r.label}: ${r.good} of ${3 * count} states answered`);
+// the covariance after the threaded instants: the reference's to the bit, on the calling thread (no batch), answered for
+// every series that carries one
+const covRef = fs.readFileSync(path.join(root, 'single-cov.bin'));
+const carrying = Array.from({ length: count }, (_, k) => k % 2 === 0 && (k < wide || (k % 10 !== 1 && k % 10 !== 2))).filter(Boolean).length;
+assert.equal(reference.r.covAnswered, carrying, `the reference's covariances: ${reference.r.covAnswered} of the ${carrying} series that carry one`);
+for (const r of results.filter((q) => q.label.startsWith('threads-') || q.label.startsWith('poison-') || q.label === 'sliced')) {
+  assert.ok(fs.readFileSync(path.join(root, r.label + '-cov.bin')).equals(covRef), `${r.label}: the covariances after the threaded instants`);
+  assert.equal(r.covBatches, 0, `${r.label}: a call with a covariance plane ran ${r.covBatches} threaded batches`);
 }
 assert.ok(sliced.r.pool[1] >= 3 * Math.ceil(count / 100) - 3, `slices of 100: ${sliced.r.pool[1]} batches over three instants`);
 assert.ok(deferred.r.pool[3] > 0, 'the deferred case deferred series');

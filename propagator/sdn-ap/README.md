@@ -49,7 +49,8 @@ The output map and the terms above e 0.3 retain their definitions.
   vz) of `count` doubles, TEME km and km/s or Earth-fixed m and m/s. `sdnap_threads(n)` starts the pool; results are
   the same bytes at any thread count. A threaded batch grows no memory (SPEC 9, stack #487). A batch whose pool thread
   stops returns -20, with every status 9, and later batches run on the calling thread. `sdnap_pool_stats(out)` reads
-  the pool's counts and the memory's growths (12 doubles; the memory grows in steps of at least 4 MiB, SPEC 1.6). Before 0.6.31 a pool thread could trap on a block in pages another thread had just grown, and
+  the pool's counts and the memory's growths: 14 doubles, so the buffer is 112 bytes (0.6.56 wrote 10; SPEC 9 gives
+  the layout; the memory grows in steps of at least 4 MiB, SPEC 1.6). Before 0.6.31 a pool thread could trap on a block in pages another thread had just grown, and
   the calling thread then waited forever. On a loaded machine that happened in AP batches of a test build, never in the
   shipped build with SGP4XP rows (0 of 40 processes).
 - The epoch store's state-only `sdnap_epochs_at` initializes and flies series on the pool in chunks of 16. Each series'

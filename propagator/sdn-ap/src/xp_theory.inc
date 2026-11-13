@@ -6607,10 +6607,9 @@ inline bool pool_reclaim_locked(CachePool& p, uint64_t need, const XpSat* keep, 
       if (!order.push_back(PoolVictim{stamp, v})) break;
     }
   }
-  // a strict weak order on the copies (equal stamps by holder address, so the order is a function of the candidates alone)
-  std::sort(order.begin(), order.end(), [](const PoolVictim& x, const PoolVictim& y) {
-    return x.stamp != y.stamp ? x.stamp < y.stamp : x.v < y.v;
-  });
+  // a strict weak order on the copies, by stamp alone, as 0.6.56 sorted the holders: equal stamps (consecutive cached
+  // flights share one) keep the order that sort gives them, so a serial reclaim picks 0.6.56's victims
+  std::sort(order.begin(), order.end(), [](const PoolVictim& x, const PoolVictim& y) { return x.stamp < y.stamp; });
   const uint64_t target = p.budget - std::min(p.budget, std::max(need, p.budget / 8));
   for (const PoolVictim& victim : order) {
     XpSat* const v = victim.v;
