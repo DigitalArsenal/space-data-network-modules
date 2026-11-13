@@ -1,7 +1,8 @@
 #!/usr/bin/env node
 // The state reference is the fixed added-zonal-term artifact at 3a5fb74c: the two decaying flights move 10.086909
 // and 99.241236 m before decay, and the two seven-day flights move 10.341851 and 978.629193 m (maximum velocity
-// change 409.566420 mm/s); every bound is retained.
+// change 409.566420 mm/s); every bound is retained. The later-set blend comparison reads the same artifact; it read the
+// 0.6.48 build without the added terms (01c5fc32), whose day 9 state the terms move.
 // E2E (stack #564, SPEC 16.25): an AP flight ends at its decay crossing, refused by name, and no state before it changes.
 // The rule, on the theory's own grid nodes: (a) more perigee radius lost BY DRAG over one revolution or over the grid's next step,
 // whichever is longer, than one density scale height at the mean perigee; (b) a mean perigee height under 100 km.
@@ -56,11 +57,6 @@ const basePath = path.join(scratch, 'module-0.6.48.wasm');
 fs.writeFileSync(basePath, baseBytes);
 const now = await createStandaloneHarness('browser', wasmPath, { surface: 'direct' });
 const base = await createStandaloneHarness('browser', basePath, { surface: 'direct' });
-const mainBytes = execFileSync('git', ['-C', modulesRoot, 'show', '01c5fc32:propagator/sdn-ap/dist/isomorphic/module.wasm'], { maxBuffer: 1 << 26 });
-check(crypto.createHash('sha256').update(mainBytes).digest('hex') === '7abf32de5eadbf21fd6b2992b0eb8e113ed20b3cf6efe7a56d2f2f9ee6565e39', 'the 0.6.48 control hash');
-const mainPath = path.join(scratch, 'module-0.6.48.wasm');
-fs.writeFileSync(mainPath, mainBytes);
-const main = await createStandaloneHarness('browser', mainPath, { surface: 'direct' });
 
 const fly = async (h, seed, secs) => {
   const r = await h.invoke({ methodId: 'propagate', inputs: flight([seed], { output: { EPOCHS: secs.map(iso), FRAME: pcfOutputFrame.GCRF } }) });
@@ -260,7 +256,7 @@ for (const c of [{ name: 'perigee 500 km, e 0.001, BTERM 0.01', hp: 500, e: 0.00
         const endMs = (msOf(own) + msOf(nominalName)) / 2, laterMs = msOf('2026-10-08T00:00:00');
         const windowSeconds = Math.round(2 * (endMs - laterMs) / 1000);
         const askMid = (h, day) => h.invoke({ methodId: 'propagate_epochs', inputs: flight([stable, laterDecay], { epochStore: { SELECTION: 1, BLEND_SHAPE: 1, BLEND_WINDOW_SECONDS: windowSeconds }, output: { EPOCHS: [at(day)], FRAME: pcfOutputFrame.GCRF } }) });
-        const rm = await askMid(now, 9), control = await askMid(main, 9);
+        const rm = await askMid(now, 9), control = await askMid(base, 9);
         const bm = rm.statusCode === 0 ? OEM.getRootAsOEM(new fb.ByteBuffer(rm.outputs.find((o) => o.portId === 'ephemeris').payload)).unpack().EPHEMERIS_DATA_BLOCK[0] : null;
         const bc = control.statusCode === 0 ? OEM.getRootAsOEM(new fb.ByteBuffer(control.outputs.find((o) => o.portId === 'ephemeris').payload)).unpack().EPHEMERIS_DATA_BLOCK[0] : null;
         check(rm.statusCode === 0 && !/decayed/.test(bm?.COMMENT ?? ''), `an epoch before every crossing, in a window ending between a moved set's crossing and the nominal's: ${rm.statusCode === 0 ? 'answered' : rm.errorCode}`);
@@ -338,7 +334,6 @@ for (const c of [{ name: 'perigee 500 km, e 0.001, BTERM 0.01', hp: 500, e: 0.00
 
 await now.close?.();
 await base.close?.();
-await main.close?.();
 fs.rmSync(scratch, { recursive: true, force: true });
 if (failures.length) {
   for (const f of failures) console.error(`FAIL ${f}`);
