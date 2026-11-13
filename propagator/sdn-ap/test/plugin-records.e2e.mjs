@@ -159,7 +159,7 @@ assert.equal(x.plugin_propagate_path(0, jd, 0, 1, positions), 1);
 const [w, frac] = split(jd); assert.equal(x.sdnap_epochs_at(w, frac, 0, 1, 3, planes, statuses, 0), 0);
 assert.deepEqual(bytes(positions, 24), bytes(planes, 24));
 // Theory-filtered input leaves only surviving entities, ordered by their first occurrences.
-ok(await call('load_epochs', [configuration({ epochStore: { THEORIES: [0] } }), input(records)]));
+ok(await call('load_epochs', [configuration({ epochStore: { THEORIES: [1] } }), input(records)]));
 assert.equal(x.plugin_entity_count(), 1); assert.equal(state(0).rc, 0);
 await load(); fill();
 let failedAllocations = 0;
