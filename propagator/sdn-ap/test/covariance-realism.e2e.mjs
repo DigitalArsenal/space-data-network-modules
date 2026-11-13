@@ -28,8 +28,8 @@
 //   sample of the day, and the shares within 1 and 3 sigma.
 // Asserts: the DRAG row and the floors as above; the factor and the share's step; the rows' s_i is the DRAG row's; every
 // judged cell equals the registered cell (test/fixtures/covariance-judged-31-70.json, MEDIAN_RELATIVE); the cells outside the
-// band [0.603, 0.754] are exactly the registered ones, each named with its cause. Realism is not met: 14 of the 42 judged
-// cells are inside the band (3 on 0.6.43, 8 on 0.6.42). JS moves
+// band [0.603, 0.754] are exactly the registered ones, each named with its cause. Realism is not met: 12 of the 42 judged
+// cells are inside the band (14 before the zonal long-period terms, 3 on 0.6.43, 8 on 0.6.42). JS moves
 // bytes, rotates the module's covariance onto the truth's axes and takes medians; every state and covariance is the module's.
 // Until 0.6.42 the test judged 0.6.0's flights of held-out windows re-weighted with the build's variances. On 0.6.42 (git
 // b7a7191e, wasm f771420f; main 0.6.41's test, git afdd1568, run on it), whose floors follow its closer fit, those cells read
@@ -62,13 +62,16 @@ import { packOem, rfm } from "./lib/frames.mjs";
 
 // the registered rows (stacks #477, #531, #568): 0.6.43's own flights, records at tesseral 31 / zonal 70, each sample with the
 // s_i term's and the drag rate's term's share of its variance, and the build they were flown on
-const ROWS = { path: "/opt/data/sdn-archive/operator-theory/covariance-coverage-f33e071fc77c/rows-31-70-si-drag-terms.jsonl", sha256: "6b8e460eff61540cf688b806b51d47b392e0b292be0636a3a145b7b7081cf022" };
-const ROWS_BUILD = { commit: "217233cab56052072297fa15223be0fcd821e20d", sha256: "f33e071fc77ccca6198ed7641c348957a947606460276fc9e8a926892a991935" };
+// (the zonal long-period fix: the rows are this build's own flights, so the rows' build is this build and nothing is re-weighted)
+const ROWS = { path: "/opt/data/sdn-archive/operator-theory/covariance-coverage-d59d334463f9/rows-si-drag/rows-31-70-si-drag-terms.jsonl", sha256: "485604451b2e5198ae4b92418acbd52c09dee70ded315d840363bb2d1174a760" };
+const ROWS_BUILD = { commit: "7246ef4b0e80fa59e3c2536c131c7d40db3de32b", sha256: "d59d334463f936ae1fb0b66574d56e4fd46a1dbe24add650a076309718f29b9f" };
 // SPEC 12.5's kFloorRadialFastSide, the radial floor's sigma factor in the low table's fast side (DRAG regime), and the one the
 // rows' build carried, which the rows were flown with
 const RADIAL_FACTOR = Math.exp(0.095), ROWS_FACTOR = Math.exp(0.095);
 // SPEC 12.5's kSiZonal70 (0.6.45, stack #531): the DRAG row's s_i factor at a record's stated zonal degree 70, and the DRAG row's s_i
 const SI_FACTOR = 0.11080315836233387, DRAG_SI = 1.12761105007012e-6;
+// the s_i the rows' build writes (DRAG_SI times SI_FACTOR; the rows carry it, so no s_i re-weighting)
+const ROWS_SI = 1.2494286575203709e-7;
 // SPEC 12.5's kDragShareStrong (0.6.45, stack #568): the DRAG row's share c times 1 + (K - 1) S(|r|) on the low table's fast
 // side, S the cos^2 step in log10 (|r| / 1.35e-6) of half-width 0.25 decade (0 at or below 7.6e-7 per day, 1 at or above 2.4e-6)
 const DRAG_SHARE_STRONG = 1.1618342427282831, DRAG_KEY_MID = 1.35e-6, DRAG_KEY_HALF = 0.25;
@@ -234,7 +237,7 @@ check(!!now && !!rowsCp && iss["0.6.1"].elements === iss.rows.elements, "the ISS
 if (now && rowsCp) {
   const f = RADIAL_FACTOR / ROWS_FACTOR, want = { FLOOR_UU_KM2: f * f, FLOOR_VU_KM2: f, FLOOR_WU_KM2: f, FLOOR_VV_KM2: 1, FLOOR_WV_KM2: 1, FLOOR_WW_KM2: 1 };
   for (const [k, w] of Object.entries(want)) check(Math.abs(now[k] / rowsCp[k] / w - 1) <= 1e-12, `${k}: this build / the rows' build ${now[k] / rowsCp[k]}, the factor's ${w}`);
-  const g = shareFactor(rowsCp.NON_GRAVITATIONAL_RATE_PER_DAY);
+  const g = 1; // the rows' build is this build: its share already carries the step
   check(Math.abs(now.NON_GRAVITATIONAL_SHARE / rowsCp.NON_GRAVITATIONAL_SHARE / g - 1) <= 1e-12, `the share: this build / the rows' build ${now.NON_GRAVITATIONAL_SHARE / rowsCp.NON_GRAVITATIONAL_SHARE}, the step's ${g}`);
   console.log(`the radial floor factor: FLOOR_UU_KM2 x ${(now.FLOOR_UU_KM2 / rowsCp.FLOOR_UU_KM2).toFixed(6)}, FLOOR_VU_KM2 x ${(now.FLOOR_VU_KM2 / rowsCp.FLOOR_VU_KM2).toFixed(6)}, FLOOR_WU_KM2 x ${(now.FLOOR_WU_KM2 / rowsCp.FLOOR_WU_KM2).toFixed(6)} against the rows' build (f / the rows' factor ${f.toFixed(6)})`);
 }
@@ -249,9 +252,9 @@ for (const l of String(rowsText).split("\n")) {
   const w = JSON.parse(l);
   if (w.set !== "judged") continue;
   windows += 1;
-  check(Object.is(w.cp.NOISE_INCLINATION_PER_DAY, DRAG_SI), `window ${w.id}: the rows' s_i ${w.cp.NOISE_INCLINATION_PER_DAY}, the DRAG row's ${DRAG_SI}`);
-  const floorOff = w.cp.FLOOR_UU_KM2 / (ROWS_FACTOR * ROWS_FACTOR), k2 = SI_FACTOR * SI_FACTOR - 1;
-  const g = shareFactor(w.cp.NON_GRAVITATIONAL_RATE_PER_DAY), g2 = g * g - 1;
+  check(Object.is(w.cp.NOISE_INCLINATION_PER_DAY, ROWS_SI), `window ${w.id}: the rows' s_i ${w.cp.NOISE_INCLINATION_PER_DAY}, the DRAG row's ${ROWS_SI}`);
+  const floorOff = w.cp.FLOOR_UU_KM2 / (ROWS_FACTOR * ROWS_FACTOR), k2 = 0; // rows flown on this build: the s_i factor is in them
+  const g = 1, g2 = 0; // and the drag share's step
   for (const [sec, eR, eI, eC, vR, vI, vC, sR, sI, sC, dR, dI, dC] of w.samples) {
     const day = Math.ceil(sec / 86400), e = [eR, eI, eC];
     const v = [vR + (RADIAL_FACTOR * RADIAL_FACTOR - ROWS_FACTOR * ROWS_FACTOR) * floorOff + k2 * sR + g2 * dR, vI + k2 * sI + g2 * dI, vC + k2 * sC + g2 * dC];

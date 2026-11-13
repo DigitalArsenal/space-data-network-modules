@@ -1,6 +1,6 @@
 # SGP4-XP: mathematical specification (clean room, side A)
 
-Version 0.6.52 (dist d18fbf73).
+Version 0.6.56 (dist 2131db19).
 
 **License note.** The US Space Force Sgp4Prop library is used under the USSF open source agreement
 (`space-data-network-modules/propagator/sgp4-xp/third_party/ussf-sgp4/AGREEMENT.txt`; the 9.9 package carries the
@@ -139,9 +139,14 @@ integrator used, and the elements of later times do not follow from integrating 
 
 ### 1.6 Memory *[stack #497]*
 
-The module's own malloc, calloc, realloc and aligned_alloc calls, and its two nothrow news (the theories' tables and
-grids, the set caches, the fit's arrays, the stores), go through one accounting (`sdnap::mem`), which counts the
-allocations that fail and the largest request.
+The module's own malloc, calloc, realloc and aligned_alloc calls, and its counted nothrow news (the theories' tables and
+grids, the set caches, a thread's caches, the fit's arrays, the stores), go through one accounting (`sdnap::mem`), which
+counts the allocations that fail and the largest request. The epoch store's allocations are among them: the blocks of 1,024
+decoded records a load fills (one allocated when the one before it is full, so a load's memory follows the records
+decoded, never the frame count the payload claims), the arrays of kept sets, entries and series (sized from the kept
+count), the weather pool (which at least doubles when full), each set's covariance matrix, and the second slot of a
+series of more than one set. A covariance matrix that cannot be allocated refuses `out-of-memory`, not
+`invalid-covariance`.
 
 **A method during which one of them failed refuses with errorCode `out-of-memory` and emits nothing.** That holds for
 `propagate`, `propagate_epochs`, `load_epochs`, `fit`, `maneuver`, `ingest_omm` and `export_omm`, whatever the method
@@ -151,6 +156,18 @@ would otherwise have answered. That includes the decay answers of SPEC 16.25:
 - a record whose last pass stopped on a column it could not difference.
 
 The message names how many allocations failed since the method began and the largest.
+
+**AP initialization storage (0.6.53).** Shared sample arrays use counted allocations; each memo is local to one
+initialization and retains the scalar evaluator's operation order. An inclination column is keyed by inclination,
+degree, order, and quadrature size; a changed inclination or degree rebuilds its columns. Against 0.6.52, the measured
+allocator peak for one synthetic 15.2 rev/day, e = 0.001, i = 97.4 degree set with tesseral degree 70, zonal degree 20,
+and slow terms is 31,888 versus 1,340,432 bytes after shared caches are warm. Both builds retain 31,888 bytes for that
+set and release them all. In a fresh instance both peak at 1,342,912 bytes because persistent caches dominate.
+The added 71 by 71 field-magnitude table occupies 45,376 bytes per thread. The largest measured initialization
+stack frame is half_day_terms at 25,936 bytes; ap_init uses 3,664 bytes, against the pool thread's 65,536-byte stack.
+These are individual compiler frame sizes, not a bound on accumulated call depth. The invoking thread builds row
+sets and lazy epoch slots; pool threads fly the prepared row sets.
+
 Through 0.6.47 such a call answered one of five ways:
 - the theory's refusal of the elements (`element-set-refused`);
 - a state not reached (`propagation-failed`);
@@ -174,8 +191,42 @@ initialization failed for want of memory answers that state with the theory's re
 initializes it again.
 
 **The resident exports**, which have no method error (`sdnap_epochs_*`, the row store's `sdnap_propagate_*`), answer a
-state whose set could not be initialized with the theory's refusal code, as before. `sdnap_wide_grid_cache` and
-`sdnap_wide_grid_budget` show the instance's grids and bytes.
+state whose set could not be initialized with the theory's refusal code, as before, and so a state on a thread whose caches
+cannot be made (below). `sdnap_wide_grid_cache` and `sdnap_wide_grid_budget` show the instance's grids and bytes.
+
+**A thread's caches** *[stack #600]*. A thread keeps nine caches, fixed in size, 1,796,968 B (1.71 MiB) together:
+- the short-period evaluator's thread cache with its storage (614,288 B) and its 196,608 B coefficient block;
+- the grouping and term scratch (22,816 and 84,896 B);
+- the half-day cache (45,024 B) and the covariance's step cache (645,432 B);
+- the Sun and Moon node store (18,432 B), the drift and GCRF node slots (163,840 and 5,632 B).
+
+A set's theory reads some or all of them:
+- an AP set reads all nine;
+- an SGP4XP set without AP's terms reads the step cache alone (its rates).
+
+What a set reads is made, through the accounting, before the thread's first state or initialization of such a set: all
+nine for AP, and before any threaded batch; the step cache alone for an SGP4XP flight, where 0.6.55 made it, in the set's
+first rates. A state or an initialization on a thread where one cannot be had is refused with the theory's refusal code (in
+a method: `out-of-memory`). An epoch-store slot is left as it was, and the next state asks again. A row-store row
+(`sdnap_init_elements`, `ingest_omm`) whose set was refused at its initialization holds that refusal until the store is
+built again. Where the node store or the node slots cannot be had, a node is computed at each use without them, to the
+same numbers.
+
+Through 0.6.55 each was made at its first use. The coefficient block is first used when a set's tesseral cache is baked
+again from its table, a day or so into a flight. When the memory was full by then, the module aborted there (a wasm
+`unreachable`). Take 547 AP sets at 500 km in an instance held to 128 MiB, flown a day and then two days after their
+epoch (test/memory-limit.e2e.mjs):
+- 0.6.55 answers 543 of them in the first pass, then aborts at the second pass's first set;
+- now 541 answer in each pass and 6 are refused (the coefficient block, made first, takes two sets' room);
+- every state answered equals the same state at the default maximum, bit for bit.
+
+The same test holds three other entries at their limits, every answer the default maximum's bit for bit:
+- the store's covariance (400 copies of a fitted record, 128 MiB): 69 covariances answered, the rest NaN or refused;
+- a threaded row-store batch (2,000 AP rows, two pool threads, 128 MiB);
+- 6,000 SGP4XP sets without AP's terms at 80 MiB: 2,480 answer, the sets 0.6.55 answers and no other.
+
+The pool's list of the sets that hold caches (SPEC 9) grows through the accounting as well. When the list cannot grow, the
+set holds no caches and flies on the thread's.
 
 **Outside the rule** (no call mark; what each does when one of the module's allocations fails):
 - `sdnap_covariance_at` and `sdnap_covariance_full_at`: a covariance bank that cannot be prepared answers their existing
@@ -198,11 +249,15 @@ state whose set could not be initialized with the theory's refusal code, as befo
   - the $OMM sets, the burns, the $SPW rows;
   - a carried forecast's segments;
   - every output's FlatBufferBuilder.
-- The per-thread stores a thread allocates on its first use of AP's terms, fixed in size, not sized by any input: the GCRF
-  and drift node caches (`new`), the bodies' store (`new`) and the short-period evaluator's thread cache (it aborts).
+- A record's covariance as a load reads it (`load_epochs`, `new`), and a carried forecast's segment states.
+- The row store's threaded batch's list of deferred rows (`batch`, a `static std::vector` resized to the batch's count
+  before it starts).
 
-**Counted, then aborting when it fails:** the short-period evaluator's per-thread block (192 KiB, aligned_alloc through the
-accounting; the failure is counted, then the thread aborts).
+**Counted, then trapping when it fails:** a thread's caches on a path that reaches them before any state or set
+initialization on that thread: the diagnostic exports that read a set's mean state (`sdnap_xp_native`, `sdnap_rates_repeat`,
+`sdnap_shadow_margin`, `sdnap_drag_orbit_check`) on a thread that has flown no set.
+
+**Not memory:** `sbrk`'s abort on a negative or non-page increment (a malformed call from the allocator).
 
 **The stack.** No array whose size follows the grid's anomalies or a degree lies on it: the grid builder's anomaly arrays
 (9 x 128 doubles) and the m-daily family's inclination functions are on the heap. The fixed-size arrays indexed by the
@@ -2875,8 +2930,12 @@ one (NORAD_CAT_ID, OBJECT_ID, theory, ORIGINATOR). Kept, per series and by epoch
 the newest epoch of the load, the clock being the data's (no wall clock: the store is a function of its input); at
 most MAX_SETS_PER_OBJECT (0: no cap), the newest; THEORIES (empty: both). Two records of one series at one epoch:
 the later in the snapshot replaces the earlier. Sets not centered on the Earth are counted and
-not stored. A record's theory record (SGP4 Sat or SGP4XP integrator) is made when first needed, two per
-series held at a time.
+not stored. A record's theory record (SGP4 Sat or SGP4XP integrator) is made when first needed. A series
+of one set holds one slot, and a series of more than one holds two (the second is allocated with the series, counted,
+and a load that cannot allocate it is refused `out-of-memory`); of those, the two sets last used hold a theory record
+at a time. Two series that carry equal weather share one copy of it: equal means every row, node and node value the
+same in every bit, so which of two series is kept never depends on their order. A load that fails, for want of memory
+or any refusal, leaves no snapshot: the store is empty and its arrays are freed.
 
 **14.2 Selection.** With E_0 < ... < E_{n-1} a series' epochs and t the request time: NEAREST takes the set whose
 epoch is nearest t (switch between E_i and E_{i+1} at tau_i = (E_i + E_{i+1}) / 2); LATEST_BEFORE the latest set at or
@@ -2913,10 +2972,76 @@ end is 18's.
 d = x_b - x_a (the smoothstep weight for both shapes): the covariance of the two-component mixture (a blended switch,
 14.3).
 
+**One record, one covariance** *[stack #599]*. Every entry that answers a stored record's covariance takes the record's
+own set as its bank's nominal (12.3's set 0), as `propagate` always has:
+- **The epoch store** (`sdnap_epochs_at`, `propagate_epochs`). Set 0 borrows the store's set's term tables, one copy each.
+  The store's set outlives the bank: a slot's release frees the bank first.
+- **`sdnap_covariance_at`, `sdnap_covariance_full_at` and `sdnap_test_epoch_floor`.** The record's own set is moved into
+  the bank.
+
+The fit's covariance (12.1) keeps its own construction: its bank is the fit's parameter vector, whose J the fit solved
+with.
+
+Through 0.6.55 those entries built set 0 again from the parameter vector (12.1's p, then back to elements):
+- set 0's elements could differ from the record's in their last bits;
+- the store held a second copy of every table;
+- the moved sets then matched set 0 exactly in all six elements, so their differences took other paths (12.3's flags of a
+  moved set that shares the nominal's terms);
+- above e 0.048, set 0 held schedule-node grids of its own (16.11);
+- the three exports' returned state was set 0's.
+
+**The moved sets are built as before,** from p moved by h. A moved set shares a table that ap_init tests bit for bit
+(same_inc) only where the round trip through p reproduced the record's inclination. On 90 of the 942 stored records it
+does not: there, 1,079 moved sets that did not move the inclination own their output, m-daily and zonal tables, about
+27.6 KB each at 500 km. Building the moved sets' unmoved elements from the record's bits would bring the sharing back, but
+it moves `propagate`'s covariance on 412 records, by up to 6.2 times its largest element, through the noise of the BTERM
+column (below). It is not done.
+
+**The measurement.** The 942 stored AP records of the synthetic set, of which 938 answer a covariance. Each was flown at
+its epoch and every 30 minutes for 120 hours, TEME; test/store-covariance.e2e.mjs keeps eight of them.
+- **One time to the bit.** The store's split Julian date is made as `propagate` makes it from its ISO text. The store's
+  covariance then equals `propagate`'s, every element, at every instant on every record (226,058 instants). So does
+  `sdnap_covariance_at`'s, given the minutes `propagate` computes.
+- **Times that differ in their last bits** (the caller's split Julian date made from milliseconds, up to 0.16 µs off):
+  - the store's covariance differs from `propagate`'s by up to 1.4e-3 of its largest element, with 161 records over 1e-6;
+  - through 0.6.55 it differed by up to 1.46, with 213 records over 1e-6;
+  - the remainder is the noise of the BTERM and AGOM difference columns on orbits that drag and radiation barely move:
+    zeroing those two columns brings every record under 1e-6 (stack #624).
+- **The borrowing changes nothing.** Against set 0 with tables of its own, every state, status and covariance element is
+  equal (227,022 states and 8,162,496 elements, in stores of 40).
+- **Against 0.6.55**, in stores of 40:
+  - states and statuses are equal;
+  - the store's covariance changes on 385 records: 86 by more than 1e-6 of its largest element, and up to 0.80 of it (a
+    position variance at hour 103.5 on a 5,000 km perigee record at e 0.9);
+  - `sdnap_covariance_at`'s and `sdnap_covariance_full_at`'s covariance changes on 381 records: 85 by more than 1e-6 of
+    its largest element, and up to 0.80 of it;
+  - their returned state changes on 378 records, by up to 0.15 m and 18 µm/s (47 over 1 mm); it is now the record's own
+    set's;
+  - `propagate`'s states and covariance are unchanged on every record.
+- **At the family grids' limit** (stores of 150), 0.6.55 refuses (code 1) 11,636 states on 51 records that this build
+  answers, because set 0 shares the slot's schedule-node grids. Every state both builds answer is equal.
+- **At the epoch**, every entry's P(0) is 12.3's to within 3.2e-16 of its largest element.
+
+`_stats`' bytes count the bank: its bodies, and every table and grid its sets own, each holder of a grid its share.
+Through 0.6.55 the count held the propagator and its copy of the epoch covariance alone (2.2 KB of a bank of about
+233 KB: 1,000 copies of a fitted 500 km record at 31/70, README), and a copy reading its anchor's grid counted none of it.
+
 **14.5 Calls.** `load_epochs`; the resident exports `sdnap_epochs_count`, `_stats` (the load's counts and the store's
 bytes), `_series` (identity and epochs), `_select` (the sets and the weight at a time), `_set_at` (one set without
 selection) and `_at` (a batch of series at one time, TEME km, km/s or Earth-fixed m, m/s, with the covariance); and
 `propagate_epochs`, the store of the call's own snapshot on a grid, one $OEM per series (stateless).
+
+**Catalog memory.** A host loading a catalog should start its imported memory at 2 MiB,
+subject to the module's declared minimum, and allow growth for its payload and stored sets.
+The host's initial memory is a page setting, independent of the module and its store budget.
+Each additional MiB of initial memory costs 1,048,576 bytes per instance; at 100,000 objects
+that is 10.48576 bytes per object. The SDK harness reserves that initial region before the
+module's allocations, so reducing 64 MiB to 2 MiB saves 62 MiB in these catalog loads.
+WebAssembly memory retains its high-water size after payload and temporary storage are freed.
+The load holds one decoded weather series at a time, interns equal rows and nodes, holds its decoded records in
+blocks that grow with the records actually decoded, and sizes its entry and series arrays from the count it keeps. The host's staged payload remains part
+of the load's high-water: repeated weather on the wire still occupies bytes for every record.
+
 
 ---
 
@@ -3194,12 +3319,96 @@ What is left at 4 x 4 is AP's analytic Moon (stack #446): 7.3 to 8.0 m cross-tra
 `test/one-day-resonant-tail.e2e.mjs` checks the 20 x 20 against the 4 x 4 level (0.5 m); `test/one-day-moon-floor.e2e.mjs`
 is #446's known defect.
 
-**16.3 Zonal tail.** J6 to Jz in the rates: the secular terms of even l (p = l/2, q = 0) and the long-period terms of odd l
-(w = +-1, q = -w), first order, F and dF/di at the epoch inclination and G linearized at the epoch eccentricity.
-For e0 at or below 0.3 the zonal tail carries, for even degrees, the secular term only; it omits their cos 2 omega pair, which
-is of the same order in e in the perigee rate and 50 to 78 % of the term kept. The perigee rate is short by 2.0e-5 rad/day at
-800 x 1,100 km, e 0.0206, i 49.8 deg: a radial error growing 3.1 m/day there, and 6 to 54 m/day at e 0.1 between 500 and
-1,200 km. Above e0 0.3 the zonal tail carries every long-period term (16.11).
+**16.3 Zonal tail.** J6 to Jz in the rates, first order, with F and dF/di at the epoch inclination. At epoch eccentricity
+e0 at or below 0.3 the tail carries the secular terms of even l (w = l - 2p = 0, q = 0), the w = +-1 long-period terms
+of odd l, and the long-period terms with 2 <= |w| <= 6 (q = -w, even w on even degrees and odd w on odd degrees).
+The secular and w = +-1 terms retain their epoch linearization. Each added term has G = e^k (a + b e^2), k = |w|,
+matching the value and analytic slope of the finite Hansen sum at its eccentricity anchor:
+
+X_0^{-(l+1),k}(e) = (1 - e^2)^-(l - 1/2) sum_d C(l-1, 2d+k) C(2d+k, d) (e/2)^(2d+k), 2d+k <= l-1.
+
+G and its derivative are exactly zero when k > l - 1, including J6 at |w| = 6. The factor e^k preserves the circular
+limit. The cell width is 0.002 and anchor(e) = 0.002 (floor(max(e, 0.01) / 0.002) + 0.5), a function of the state
+alone. The immutable table stores a and b at anchor(e0). A state in that cell reads them; a state in another cell
+uses coefficients at its own cell center. The coefficients are cached independently of semimajor axis and inclination,
+so changing a does not repeat the closed-form Hansen calculation. The largest eccentricity offset is half a cell,
+0.001, for e >= 0.01; smaller e uses the floor cell. Value and slope are exact at the anchor before float rounding.
+
+At anchor 0.299, the full half-cell tests give these maximum relative errors against the closed form (all retained
+harmonics; the worst degree in the 6 through 70 sweep is 70):
+
+| Degree | Value error | Slope error |
+| --- | ---: | ---: |
+| 6 | 0.000008764 | 0.001664251 |
+| 20 | 0.000211703 | 0.015332648 |
+| 70 | 0.004325949 | 0.086896650 |
+
+A five-day crossing flight starts at hp300 km, e0 0.04999, i55, BTERM 0.0064 m²/kg, with zonal70/tesseral0 and
+Jacchia70. The mean e crosses 0.05 at 604.281828 minutes. Its one-second position second difference is 8.918317 m;
+ten seconds away on either side it is 8.915952 and 8.920569 m. The excess against their vector average is 0.000682 m
+(bound 0.01 m). All 1,441 five-minute states are identical in time, reverse and fixed shuffled order.
+The hp400/i55 same-field pair with seed e0 at 0.049, 0.04999999 and 0.05000001 has maximum 3D errors
+14.494390, 14.519855 and 14.519963 m. Across the boundary placements the maximum difference of AP-minus-FFM residual
+vectors is 0.004882 m over five days (bound 0.1 m); removing each truth's physical displacement isolates the residual.
+These are seed placements for forecast-span fits, not assertions about the fitted record's eccentricity.
+
+A covariance bank's moved sets read the nominal's table. Its |w| <= 1 entries are linearized at the nominal's e0.
+At the same inclination and e0 2e-4 apart, that legacy dependence changes a five-day flight by up to 1.854 m compared
+with a separately built table; restoring only the moved set's legacy entries removes the difference to the bit.
+The |w| >= 2 contribution depends on the state's cell alone: the probe asserts identical bits under both owners
+and in their borrowing sets, including states outside an owner's epoch cell. Shared inclination functions do not
+change with the owner eccentricity.
+
+The cutoff at |w| = 6 is tested near e 0.3 (stack #595): keeping only |w| <= 2 left 15 to 19 m in the earlier controlled
+measurement. The five-day e0 0.2999 comparison with a full-zonal-harmonic control at identical elements is 0.796426 m
+(bound 1 m); the explicit kTailW assertion also fixes the retained range. This control comparison increased from
+0.270331 m before the cell grid because the value-and-slope form can start half a cell from its anchor at the epoch.
+There is no above-switch comparison of the wide path with itself.
+At e 0.3 and degree 70, G7/G6 is 0.664618 and G8/G6 is 0.415383: neglected Hansen factors can be 40 to 66 percent
+of the last retained factor. Parity selects the allowed harmonics. Their small orbital effect depends on the degree
+weight (R/a)^(l+1), not on G alone. On identical unfitted hp400/e0.05/i55 and hp300/e0.01/i55 elements, the final grid
+and the full-zonal control differ by at most 0.312826 and 0.265429 m over five days. These figures, and the 0.796426 m
+near-switch figure, include both the coefficient approximation and harmonic truncation; they are not a measurement
+of omitted terms alone.
+
+The same-field hp400/e0.05/i55 pair is fitted over days 0 to 5 with degree70/order0, solid tide, drag and radiation off.
+The numerical truth also carries Sun, Moon and relativity. Compared with the module before this change, day-1/day-5
+once-per-revolution in-track amplitudes fall from 97.971729/101.574079 to 2.979972/2.126085 m, and maximum 3D error
+from 126.299846 to 14.515642 m. For hp300/e0.01/i55 the amplitudes fall from 36.806399/39.517290 to
+3.315113/2.893981 m and 3D error from 50.914278 to 15.180303 m. The same-field tests use pinned FFM 2.3.0 truths,
+GCRF, UTC and 300 s sampling; their bounds are 10 m for day-1/day-5 amplitudes and 20 m for maximum 3D error.
+
+Cost increases in the measured fits and some cold calls. At degree70 the low-e table grows from 97 to 423 entries
+(confirmed by zonal_count), four floats per entry: 1,552 to 6,768 bytes per set, an increase of 5,216 bytes.
+The cell coefficient cache holds two float arrays indexed by degree and harmonic, plus its anchor and degree,
+3,992 bytes per thread. The inclination work array is 16,128 bytes; the rate cache holds 123 doubles plus keys.
+Alternating 0.6.48 and this build twice on identical five-day, degree70/order31 FFM fits with drag and radiation
+constrained to zero gives hp300/e0.01/i55 0.984052 to 1.222542 s (1.242354 times, 26 to 27 iterations) and
+hp800/e0.05/i20 10.376655 to 18.213401 s (1.755229 times, 25 to 23 iterations). These timings do not isolate
+closed-form calculation from other fit work.
+
+State costs below compare 0.6.48 with this build: two alternating rounds, five repetitions per round, the mean of
+round medians. Warm times use process CPU time for a seven-day sweep; cold times use wall time for a first call
+after loading the record. Both use zonal20, NRLMSISE00 and synthetic quiet weather; near-circular cases use
+tesseral31. The final case has BTERM 0.0064 m²/kg, AGOM zero, i55 and tesseral0; its semimajor axis decreases and
+e rises from 0.04999 to 0.050267301 over seven days, leaving anchor 0.049 for 0.051 by day one.
+The host was under load; especially the cold wall times include scheduling variability. No general zero-cost
+claim follows from these measurements.
+
+| Orbit | Warm 300 s, µs/state | Warm 60 s, µs/state | Cold day 1, µs | Cold day 7, µs |
+| --- | ---: | ---: | ---: | ---: |
+| 300 km, e 0.001 | 0.970 → 0.991 | 0.888 → 0.817 | 1357.375 → 1396.875 | 5634.438 → 7724.271 |
+| 830 km, e 0.001 | 0.883 → 0.866 | 0.769 → 0.746 | 1027.375 → 600.667 | 1017.208 → 1082.062 |
+| hp500 km, e 0.05, tesseral 0 | 0.410 → 0.372 | 0.368 → 0.368 | 464.750 → 504.625 | 2715.313 → 2794.354 |
+| hp500 km, e 0.2, tesseral 31 | 29.139 → 32.124 | 29.051 → 29.101 | 595.563 → 609.646 | 5251.751 → 2919.167 |
+| hp300 km, e 0.04999, decaying | 0.364 → 0.390 | 0.334 → 0.336 | 594.021 → 632.708 | 3697.333 → 6262.855 |
+
+Above e0 0.3 every long-period term and its existing linearized G remain as 16.11 defines them. These are mean-element
+rates only: section 8's output map has no added zonal-tail term. SGP4XP and SGP4 select no AP zonal tail.
+`test/zonal-long-period.e2e.mjs`, `test/zonal-long-period-table.e2e.mjs`, `test/zonal-cell.e2e.mjs` and
+`test/zonal-cell-placements.e2e.mjs` cover the model pairs, finite sum, half-cell envelope, switch, crossing,
+query order, sharing and epoch seed placements. Shared per-set tables are immutable; re-anchoring changes
+only the calling thread's caches.
 
 **16.4 Frame.** Frame policy is selected once, by `ap_init`, from the record's gravity terms. With d or z above 0,
 every AP set carries its epoch-axis states to TEME of date by M(t) M(t0)^T: from 0.6.34 the long-period regime's class 0
@@ -3363,7 +3572,8 @@ drag passage, 16.3 and 16.12; above 0.3 the class's G about e0, 6.4). Each switc
 its limit, so a set at the limit itself is on the below side (from 0.6.40; through 0.6.39 the class's G about e0 began
 at 0.3 itself, and a set at exactly 0.3 was on a branch of its own). When drag or a resonance carries the mean
 motion across a class limit, the epoch class's terms stay in the rates, with F and G at the current elements (16.2), and
-out of the output table; no table is rebuilt during a flight. A record's output is therefore continuous in time: one
+out of the output table; their membership is fixed during a flight (16.3's eccentricity re-anchor changes coefficients only).
+A record's output is therefore continuous in time: one
 seeded set at each of the five mean motions that decide a class (e 0.001, i 55 deg), flown 2 days at 10 s, has a second
 difference of position less the two-body term of at most 0.002, 0.003, 0.004, 0.012 and 0.035 m at 0.8022, 1.2033,
 1.6045, 2.4067 and 3.6100 rev/day (0.6.5, whose tables followed the current mean motion: 89.9, 135.5, 13.7, 0.012 and

@@ -1,6 +1,6 @@
 # sdn-ap-propagator
 
-Version 0.6.52 (dist d18fbf73).
+Version 0.6.56 (dist 2131db19).
 
 General-perturbations propagation of whole catalogs in one isomorphic WASM module (browser and WasmEdge), with two
 theories and AP, an advanced propagator that builds on the entire history of astrodynamics ($PCF FORCES selects its drag
@@ -21,6 +21,22 @@ and the corrections AIAA 2006-6753 documents); [NOTICE](NOTICE) names what the b
 
 Build: `npm run build` (module SDK compiler lane, clang `wasm32-wasip1-threads`, no exception handling) writes
 `dist/isomorphic/module.wasm`; it reads ERFA from this repository. No build data is fetched.
+
+AP's zonal tail at epoch eccentricity at or below 0.3 carries long-period harmonics through |w| = 6 in its mean-element
+rates (SPEC 16.3, stack #595). Finite Hansen coefficients use a 0.002 eccentricity grid whose cell center depends on
+the state alone, with a floor at e 0.01. The largest offset above the floor is 0.001. The five-day crossing test's
+excess second difference is 0.000682 m; the boundary-side same-field residual difference is 0.004882 m.
+The original hp400/e0.05/i55 and hp300/e0.01/i55 pairs have maximum 3D errors of 14.515642 and 15.180303 m,
+within the 20 m bound, and day-1/day-5 once-per-revolution amplitudes below 10 m. The e0 0.2999 control comparison
+is 0.796426 m, including approximation and truncation. SPEC 16.3 gives the value/slope envelopes and controls.
+
+The degree70 table costs 6,768 bytes per set versus 1,552 before the added harmonics. A 3,992-byte per-thread cache
+holds cell coefficients independently of semimajor axis. Alternating degree70/order31 five-day fits against 0.6.48
+cost 1.242354 times as much at hp300/e0.01/i55 and 1.755229 times at hp800/e0.05/i20. Warm and cold state costs
+are tabulated in SPEC 16.3; cold day-7 calls for the measured decaying orbit cost 6,262.855 versus 3,697.333 µs.
+A covariance bank shares the nominal table: legacy |w| <= 1 entries depend on nominal e0 (a measured 1.854 m
+five-day difference for a set 2e-4 away); the added contribution is bit-identical under either owner.
+The output map and the terms above e 0.3 retain their definitions.
 
 ## Interface
 
@@ -64,7 +80,9 @@ Build: `npm run build` (module SDK compiler lane, clang `wasm32-wasip1-threads`,
   flights of the version before, and its record's bytes differ by that line alone.
 - Memory (SPEC 1.6, 16.11; `test/grid-cache.e2e.mjs`): a method during which one of the module's own allocations failed
   refuses with errorCode `out-of-memory` and emits nothing, never success nor another reason (a decay answer, SPEC 16.25,
-  included); `sdnap_fit` then gives status -1 and leaves its row as it came.
+  included); `sdnap_fit` then gives status -1 and leaves its row as it came. At its memory limit the module refuses a
+  state, never aborts (`test/memory-limit.e2e.mjs`): a thread's caches are made before its first state, and a state on a
+  thread that cannot make them answers the theory's refusal code.
   `sdnap_wide_grid_budget(bytes, out)` sets the grid cache's byte bound (512 MiB by default; live and idle grids, each at
   its allocated bytes, the least recently used idle grid freed first) when bytes is 1 or more (1 keeps no idle grid), and
   writes the bound, the bytes held, the grids held and those idle. The bound decides which grids are kept, never a state.
@@ -587,6 +605,13 @@ and 13,252 in MEO; 1 GB holds 14,658 and 53,008 (SPEC 9 has every orbit). Sets b
 the same states. A host that screens a catalog flies it object by object: at 10,000 sets at 500 km, 0.93 µs a state at
 the default budget (0.85 times SGP4-XP), against 9.1 µs time-major (7.8 times; 2.25 µs, 1.9 times, when 1 GB holds them
 all), measured at a 1-minute load of 10 to 14 on the 28-core build machine.
+
+A stored set asked for its covariance also holds its bank (SPEC 14.4): 1,000 copies of a fitted 500 km record (tesseral 31,
+zonal 70), each flown a day at 300 s, take 356 KB a set with the covariance against 122 KB for states alone, and the
+store's count reads 353 KB. The bank's set 0 borrows the stored set's tables; through 0.6.55 it held its own, 391 KB a set,
+and the count read 122 KB. Its nominal is the record's own set, so the store's covariance is `propagate`'s: equal to the
+bit where both hold the same time (`test/store-covariance.e2e.mjs`). Through 0.6.55 the nominal was rebuilt from the
+parameter vector, and the store's covariance could differ from `propagate`'s by more than the matrix's largest element.
 
 Above e 0.048 with tesseral terms, each set holds a grid of its tesseral families of about 4.9 MB (with 0.6.14's slopes),
 and a node grid while it is flown: 10 MB a set flown when every set has its own elements (4.8 MB when 100 sets share one

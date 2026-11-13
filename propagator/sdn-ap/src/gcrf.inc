@@ -73,26 +73,35 @@ struct GcrfNodeSlot {
   double m[3][3];
 };
 inline thread_local GcrfNodeSlot* g_gcrf_node_cache_ptr = nullptr;
-/// The thread's node slots made ahead (pool::warm_thread: a pool thread makes its caches before any batch, stack #487).
-inline void gcrf_node_cache_make() {
-  if (g_gcrf_node_cache_ptr == nullptr) g_gcrf_node_cache_ptr = new GcrfNodeSlot[64]{};
+/// The thread's node slots, made ahead (pool::warm_thread: before the thread's first state or initialization, and before
+/// any batch on a pool thread, stacks #487 and #600) or on first use. False when they cannot be had (the failure counted).
+inline bool gcrf_node_cache_make() {
+  if (g_gcrf_node_cache_ptr == nullptr)
+    g_gcrf_node_cache_ptr = sdnap::mem::counted(new (std::nothrow) GcrfNodeSlot[64]{}, 64 * sizeof(GcrfNodeSlot));
+  return g_gcrf_node_cache_ptr != nullptr;
 }
-inline const GcrfNodeSlot& gcrf_node(int64_t k) {
-  if (__builtin_expect(!g_gcrf_node_cache_ptr, 0)) g_gcrf_node_cache_ptr = new GcrfNodeSlot[64]{};
-  GcrfNodeSlot& s = g_gcrf_node_cache_ptr[static_cast<uint64_t>(k) & 63u];
-  if (s.key_p1 != k + 1) {
-    const double whole = std::floor(static_cast<double>(k) / 4.0), frac = (static_cast<double>(k) - 4.0 * whole) / 4.0;
-    double tai1, tai2, tt1, tt2;
-    const int j = eraUtctai(whole, frac, &tai1, &tai2);
-    s.status = j;
-    if (j >= 0) {
-      eraTaitt(tai1, tai2, &tt1, &tt2);
-      eraPnm06a(tt1, tt2, s.m);
-      const double gast = eraGst06(whole, frac, tt1, tt2, s.m);
-      eraRz(gast - gmst82_unrounded(whole, frac), s.m);
-    }
-    s.key_p1 = k + 1;
+/// Node k's matrix, into s.
+inline void gcrf_node_fill(GcrfNodeSlot& s, int64_t k) {
+  const double whole = std::floor(static_cast<double>(k) / 4.0), frac = (static_cast<double>(k) - 4.0 * whole) / 4.0;
+  double tai1, tai2, tt1, tt2;
+  const int j = eraUtctai(whole, frac, &tai1, &tai2);
+  s.status = j;
+  if (j >= 0) {
+    eraTaitt(tai1, tai2, &tt1, &tt2);
+    eraPnm06a(tt1, tt2, s.m);
+    const double gast = eraGst06(whole, frac, tt1, tt2, s.m);
+    eraRz(gast - gmst82_unrounded(whole, frac), s.m);
   }
+  s.key_p1 = k + 1;
+}
+/// Node k from the thread's slots; in `spare` when they cannot be had (the same numbers, made again at every call).
+inline const GcrfNodeSlot& gcrf_node(int64_t k, GcrfNodeSlot& spare) {
+  if (__builtin_expect(!g_gcrf_node_cache_ptr, 0) && !gcrf_node_cache_make()) {
+    gcrf_node_fill(spare, k);
+    return spare;
+  }
+  GcrfNodeSlot& s = g_gcrf_node_cache_ptr[static_cast<uint64_t>(k) & 63u];
+  if (s.key_p1 != k + 1) gcrf_node_fill(s, k);
   return s;
 }
 
@@ -102,9 +111,10 @@ inline int gcrf_to_teme_output(double whole, double frac, double m[3][3]) {
   const int64_t k = static_cast<int64_t>(fa) + static_cast<int64_t>(fb);
   const double t = b - fb;
   const GcrfNodeSlot* n[6];
+  GcrfNodeSlot spare[6];
   int status = 0;
   for (int q = 0; q < 6; ++q) {
-    n[q] = &gcrf_node(k - 2 + q);
+    n[q] = &gcrf_node(k - 2 + q, spare[q]);
     if (n[q]->status < 0) return gcrf_to_teme(whole, frac, m);
     if (n[q]->status > status) status = n[q]->status;
   }
@@ -156,8 +166,16 @@ struct alignas(16) DriftSpanSlot {
   uint8_t valid;
 };
 inline thread_local DriftNodeSlot* g_drift_node_cache_ptr = nullptr;
+/// The thread's slots, made ahead (pool::warm_thread: before the thread's first state or initialization, and before any
+/// batch on a pool thread, stacks #487 and #600) or on first use. False when they cannot be had (the failure counted).
+inline bool drift_node_cache_make() {
+  if (g_drift_node_cache_ptr == nullptr)
+    g_drift_node_cache_ptr = sdnap::mem::counted(new (std::nothrow) DriftNodeSlot[2048]{}, 2048 * sizeof(DriftNodeSlot));
+  return g_drift_node_cache_ptr != nullptr;
+}
+/// nullptr when the slots cannot be had: drift_node then makes the node at every call (the same numbers).
 inline DriftNodeSlot* drift_node_cache() {
-  if (__builtin_expect(!g_drift_node_cache_ptr, 0)) g_drift_node_cache_ptr = new DriftNodeSlot[2048]{};
+  if (__builtin_expect(!g_drift_node_cache_ptr, 0)) drift_node_cache_make();
   return g_drift_node_cache_ptr;
 }
 inline thread_local DriftEpochSlot g_drift_epoch_slot{};
@@ -165,7 +183,12 @@ inline thread_local DriftSpanSlot g_drift_mat_slot{};
 inline thread_local DriftSpanSlot g_drift_vec_slot{};
 
 inline bool drift_node(int64_t k, double out[3][3]) {
-  DriftNodeSlot& s = drift_node_cache()[static_cast<uint64_t>(k) & 2047u];
+  DriftNodeSlot* const slots = drift_node_cache();
+  if (__builtin_expect(slots == nullptr, 0)) {
+    const double whole = std::floor(static_cast<double>(k) / 2.0), frac = (static_cast<double>(k) - 2.0 * whole) / 2.0;
+    return gcrf_to_teme(whole, frac, out) >= 0;
+  }
+  DriftNodeSlot& s = slots[static_cast<uint64_t>(k) & 2047u];
   const int64_t kp1 = k + 1;
   if (s.key_p1 != kp1) {
     const double whole = std::floor(static_cast<double>(k) / 2.0), frac = (static_cast<double>(k) - 2.0 * whole) / 2.0;

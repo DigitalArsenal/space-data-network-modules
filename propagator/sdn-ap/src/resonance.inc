@@ -273,6 +273,47 @@ inline void cpow_uint(double cr, double ci, int n, double& out_r, double& out_i)
   }
 }
 
+/// AP initialization's samples at one eccentricity. The Hansen sum and each
+/// repeated multiplication retain the scalar evaluator's order.
+// Keyed by eccentricity and l; lives for one initialization call.
+struct HansenSamples {
+  struct Sample { double roa, nu, M, ir; };
+  mem::InitTable<Sample> samples;
+  mem::InitTable<double> powers[71];
+  explicit HansenSamples(double e) {
+    const int N = e < 0.01 ? 32 : e < 0.1 ? 64 : e < 0.8 ? 128 : (e < 0.95 ? 512 : 4096);
+    const double eta = std::sqrt(1.0 - e * e);
+    if (!samples.allocate(N)) return;
+    for (int i = 0; i < N; ++i) {
+      const double E = kTwoPi * (i + 0.5) / N;
+      double sE, cE;
+      fm::sincos(E, sE, cE);
+      const double roa = 1.0 - e * cE;
+      samples[i] = {roa, std::atan2(eta * sE, cE - e), E - e * sE, 1.0 / roa};
+    }
+  }
+  double get(int l, int p, int q) {
+    if (samples.empty()) return 0.0;
+    auto& power = powers[l];
+    if (power.empty()) {
+      if (!power.allocate(samples.size())) return 0.0;
+      for (size_t i = 0; i < samples.size(); ++i) {
+        const auto& v = samples[i];
+        double aor = v.ir;
+        for (int m = 1; m <= l; ++m) aor *= v.ir;
+        power[i] = aor;
+      }
+    }
+    const int j = l - 2 * p, k = l - 2 * p + q;
+    double sum = 0.0;
+    for (size_t i = 0; i < samples.size(); ++i) {
+      const auto& v = samples[i];
+      sum += power[i] * std::cos(j * v.nu - k * v.M) * v.roa;
+    }
+    return sum / static_cast<int>(samples.size());
+  }
+};
+
 /// Kaula's eccentricity function G_lpq(e) itself, the Hansen coefficient
 /// X_{l-2p+q}^{-(l+1), l-2p}(e) = (1/2 pi) Int (a/r)^(l+1) cos((l-2p) f - (l-2p+q) M) dM,
 /// by the trapezoid rule in eccentric anomaly (geometric convergence: the
@@ -408,10 +449,10 @@ struct GTaylor {
   double g0, g1, g2, g3;
 };
 constexpr double kSeriesE = 0.3;  ///< below it AP takes G from the Maclaurin polynomial (exact to rounding)
-inline GTaylor g_taylor(int l, int p, int q, double e0) {
+inline GTaylor g_taylor(int l, int p, int q, double e0, HansenSamples* samples = nullptr) {
   const double h = 5e-4;
-  const double gm2 = hansen_G(l, p, q, e0 - 2.0 * h), gm1 = hansen_G(l, p, q, e0 - h), g0 = hansen_G(l, p, q, e0);
-  const double gp1 = hansen_G(l, p, q, e0 + h), gp2 = hansen_G(l, p, q, e0 + 2.0 * h);
+  const double gm2 = (samples ? samples[0].get(l, p, q) : hansen_G(l, p, q, e0 - 2.0 * h)), gm1 = (samples ? samples[1].get(l, p, q) : hansen_G(l, p, q, e0 - h)), g0 = (samples ? samples[2].get(l, p, q) : hansen_G(l, p, q, e0));
+  const double gp1 = (samples ? samples[3].get(l, p, q) : hansen_G(l, p, q, e0 + h)), gp2 = (samples ? samples[4].get(l, p, q) : hansen_G(l, p, q, e0 + 2.0 * h));
   GTaylor out;
   out.g0 = g0;
   out.g1 = (gm2 - 8.0 * gm1 + 8.0 * gp1 - gp2) / (12.0 * h);

@@ -256,15 +256,20 @@ async function diff() {
       const row = { regime: r.name, theory, states: count, refusedBefore: refused, refusedFromStart: !Array.isArray(ref[0]) };
       for (const [order, ks] of [["time", null], ["reverse", reversed], ["shuffled", shuffled]]) {
         if (ks) await after.load();
-        let dr = 0, dv = 0, mismatch = 0;
+        let dr = 0, dv = 0, mismatch = 0, bitMismatch = 0, firstBitDifference = null;
         for (let j = 0; j < (ks ? ks.length : count); ++j) {
           const k = ks ? ks[j] : j;
           const s = after.state(W[k], F[k]);
           if (!Array.isArray(s) || !Array.isArray(ref[k])) { if (Array.isArray(s) !== Array.isArray(ref[k]) || s !== ref[k]) ++mismatch; continue; }
+          for (let component = 0; component < 6; ++component) if (!Object.is(s[component], ref[k][component])) {
+            ++bitMismatch;
+            firstBitDifference ??= { state: k, jd: [W[k], F[k]], component, before: ref[k][component], after: s[component],
+              beforeNegativeZero: Object.is(ref[k][component], -0), afterNegativeZero: Object.is(s[component], -0) };
+          }
           dr = Math.max(dr, Math.hypot(s[0] - ref[k][0], s[1] - ref[k][1], s[2] - ref[k][2]) * 1000);
           dv = Math.max(dv, Math.hypot(s[3] - ref[k][3], s[4] - ref[k][4], s[5] - ref[k][5]) * 1000);
         }
-        row[order] = { maxPositionM: dr, maxVelocityMps: dv, statusMismatch: mismatch };
+        row[order] = { maxPositionM: dr, maxVelocityMps: dv, statusMismatch: mismatch, bitMismatch, firstBitDifference };
       }
       rows.push(row);
       const c = (o) => `${o} ${row[o].maxPositionM.toExponential(2)} m ${row[o].maxVelocityMps.toExponential(2)} m/s${row[o].statusMismatch ? ` (${row[o].statusMismatch} status differ)` : ""}`;
@@ -281,8 +286,8 @@ if (DIFF && BOUND) {
   // another code), and a flight that answers nothing at all on the reference build fail the diff
   const orders = ["time", "reverse", "shuffled"];
   const nothing = (r) => r.refusedBefore === r.states;
-  const over = result.rows.filter((r) => nothing(r) || orders.some((o) => r[o].maxPositionM > BOUND[0] || r[o].maxVelocityMps > BOUND[1] || r[o].statusMismatch > 0));
-  for (const r of over) console.log(`OVER ${r.regime} ${r.theory}: ${orders.map((o) => `${o} ${r[o].maxPositionM} m, ${r[o].maxVelocityMps} m/s, ${r[o].statusMismatch} status`).join("; ")}${nothing(r) ? "; answers nothing" : ""}`);
+  const over = result.rows.filter((r) => nothing(r) || orders.some((o) => r[o].maxPositionM > BOUND[0] || r[o].maxVelocityMps > BOUND[1] || r[o].statusMismatch > 0 || (BOUND[0] === 0 && BOUND[1] === 0 && r[o].bitMismatch > 0)));
+  for (const r of over) console.log(`OVER ${r.regime} ${r.theory}: ${orders.map((o) => `${o} ${r[o].maxPositionM} m, ${r[o].maxVelocityMps} m/s, ${r[o].statusMismatch} status, ${r[o].bitMismatch} unequal components, first ${JSON.stringify(r[o].firstBitDifference)}`).join("; ")}${nothing(r) ? "; answers nothing" : ""}`);
   const fromStart = result.rows.filter((r) => r.refusedFromStart).length;
   console.log(`flights refused from their first state: ${fromStart} of ${result.rows.length}`);
   console.log(over.length ? `KERNEL-COST DIFF FAIL: ${over.length} of ${result.rows.length} over ${BOUND[0]} m or ${BOUND[1]} m/s, differing in status or answering nothing` : `KERNEL-COST DIFF PASS: every state of ${result.rows.length} flights within ${BOUND[0]} m and ${BOUND[1]} m/s in time order, in reverse and shuffled`);

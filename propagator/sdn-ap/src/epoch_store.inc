@@ -34,6 +34,89 @@
 namespace sdnap {
 namespace epochs {
 
+/// Contiguous storage with an explicit, counted allocation refusal (SPEC 1.6).
+/// Callers reserve before inserting; insertion never allocates.
+template <class T> class Array {
+  T* p_ = nullptr;
+  size_t size_ = 0, capacity_ = 0;
+ public:
+  Array() = default;
+  Array(const Array&) = delete;
+  Array& operator=(const Array&) = delete;
+  ~Array() { clear(); std::free(p_); }
+  bool reserve(size_t n) {
+    if (n <= capacity_) return true;
+    if (n > SIZE_MAX / sizeof(T)) { mem::note_failure(SIZE_MAX); return false; }
+    T* p = static_cast<T*>(mem::malloc(n * sizeof(T)));
+    if (p == nullptr) return false;
+    for (size_t k = 0; k < size_; ++k) { new (p + k) T(std::move(p_[k])); p_[k].~T(); }
+    std::free(p_); p_ = p; capacity_ = n;
+    return true;
+  }
+  bool push_back(T value) {
+    if (size_ == capacity_) { mem::note_failure((size_ + 1) * sizeof(T)); return false; }
+    new (p_ + size_++) T(std::move(value)); return true;
+  }
+  void clear() { while (size_) p_[--size_].~T(); }
+  /// The elements destroyed and the buffer given back (clear() keeps it).
+  void release() { clear(); std::free(p_); p_ = nullptr; capacity_ = 0; }
+  void pop_back() { p_[--size_].~T(); }
+  size_t size() const { return size_; }
+  size_t capacity() const { return capacity_; }
+  bool empty() const { return size_ == 0; }
+  /// Room for one more: the capacity at least doubles, so n insertions make O(log n) allocations (SPEC 1.6: counted, refused by name).
+  bool grow_one() { return size_ < capacity_ || reserve(capacity_ ? capacity_ * 2 : 16); }
+  T* data() { return p_; }
+  const T* data() const { return p_; }
+  T* begin() { return p_; }
+  T* end() { return size_ ? p_ + size_ : p_; }
+  const T* begin() const { return p_; }
+  const T* end() const { return size_ ? p_ + size_ : p_; }
+  T& operator[](size_t k) { return p_[k]; }
+  const T& operator[](size_t k) const { return p_[k]; }
+  T& back() { return p_[size_ - 1]; }
+};
+
+/// Elements held in blocks of kBlock, each block allocated (counted, SPEC 1.6) when the one before it is full: the memory follows the elements
+/// actually stored, never a count read from the payload's framing (a payload of minimal frames names up to a twelfth of its length in records), and
+/// no element moves when it grows (a doubling array would hold the old and the new array at once). Callers make room (grow_one) before push_back.
+template <class T, size_t kBlock = 1024> class Blocks {
+  Array<T*> blocks_;
+  size_t size_ = 0;
+ public:
+  Blocks() = default;
+  Blocks(const Blocks&) = delete;
+  Blocks& operator=(const Blocks&) = delete;
+  ~Blocks() { clear(); }
+  bool grow_one() {
+    if (size_ < blocks_.size() * kBlock) return true;
+    if (!blocks_.grow_one()) return false;
+    T* b = static_cast<T*>(mem::malloc(kBlock * sizeof(T)));
+    if (b == nullptr) return false;
+    blocks_.push_back(b);
+    return true;
+  }
+  void push_back(T value) { new (&(*this)[size_]) T(std::move(value)); ++size_; }
+  void clear() {
+    while (size_) { --size_; (*this)[size_].~T(); }
+    for (T* b : blocks_) std::free(b);
+    blocks_.clear();
+  }
+  size_t size() const { return size_; }
+  T& operator[](size_t k) { return blocks_[k / kBlock][k % kBlock]; }
+  const T& operator[](size_t k) const { return blocks_[k / kBlock][k % kBlock]; }
+  template <class B, class V> struct Iter {
+    B* b; size_t k;
+    V& operator*() const { return (*b)[k]; }
+    Iter& operator++() { ++k; return *this; }
+    bool operator!=(const Iter& o) const { return k != o.k; }
+  };
+  Iter<Blocks, T> begin() { return {this, 0}; }
+  Iter<Blocks, T> end() { return {this, size_}; }
+  Iter<const Blocks, const T> begin() const { return {this, 0}; }
+  Iter<const Blocks, const T> end() const { return {this, size_}; }
+};
+
 struct Config {
   double cache_days = 7.0;
   uint32_t max_sets = 0;
@@ -51,13 +134,12 @@ struct Entry {
   cov::Set* cov = nullptr;
   Forces forces{};
   const atm::Atmosphere* atmosphere = nullptr;
-  int32_t first_day = 0, last_day = 0;  ///< RECORDS: the MJDs it flies through (its first row's day + 1, its last row's day)
-  xpt::Branch branch{};                 ///< an AP set's branch (SPEC 14.3, 16.7); every other set the default
+  uint64_t branch = 0;        ///< the five branch identity bytes; the integration step is not part of equality
   std::shared_ptr<const carried::Track> track;  ///< the forecast the record carries (SPEC 18), or none: read as flown
   double handover = HUGE_VAL;  ///< a hand-over set: the time it serves from, minutes from J2000 (SPEC 18.7); else HUGE_VAL
 };
 
-/// An initialized record of one set (the lazy cache: two per series).
+/// An initialized record of one set (the lazy cache: one slot for a series of one set, two for a series of more).
 struct Slot {
   int32_t index = -1;         ///< the series' set index held, -1 none
   xpt::XpSat* xp = nullptr;
@@ -67,6 +149,26 @@ struct Slot {
   int32_t error = 0;
 };
 
+/// The first cache slot is inline; only a series with multiple sets owns a second.
+struct Slots {
+  Slot first;
+  Slot* second = nullptr;
+  size_t size() const { return second ? 2 : 1; }
+  Slot& operator[](size_t k) { return k == 0 ? first : *second; }
+  const Slot& operator[](size_t k) const { return k == 0 ? first : *second; }
+  template <class S> struct Iterator {
+    S* slots;
+    size_t index;
+    auto& operator*() const { return (*slots)[index]; }
+    Iterator& operator++() { ++index; return *this; }
+    bool operator!=(const Iterator& other) const { return index != other.index; }
+  };
+  Iterator<Slots> begin() { return {this, 0}; }
+  Iterator<Slots> end() { return {this, size()}; }
+  Iterator<const Slots> begin() const { return {this, 0}; }
+  Iterator<const Slots> end() const { return {this, size()}; }
+};
+
 struct Series {
   uint32_t norad = 0;
   std::string object_id, originator, name;
@@ -74,7 +176,7 @@ struct Series {
   int32_t met = 0;            ///< MEAN_ELEMENT_THEORY
   uint32_t first = 0, count = 0;  ///< into Store::entries, by epoch
   bool carried = false;           ///< a set carries a forecast (SPEC 18.3: selection prefers a span holding t)
-  Slot slots[2];
+  Slots slots;
   uint32_t next = 0;              ///< the slot replaced next
 };
 
@@ -84,10 +186,10 @@ struct Stats {
 
 struct Store {
   Config cfg;
-  std::vector<Entry> entries;
-  std::vector<Series> series;
+  Array<Entry> entries;
+  Array<Series> series;
   Stats stats;
-  std::vector<std::unique_ptr<atm::Atmosphere>> atmospheres;  ///< the distinct row series and node vectors of the load
+  Array<std::unique_ptr<atm::Atmosphere>> atmospheres;  ///< the distinct row series and node vectors of the load
   /// the day a request found no row for (weather-rows-short), written by the thread that flew that state. propagate_epochs
   /// reads it on its own store, on the calling thread, right after the state that wrote it. After a threaded
   /// sdnap_epochs_at it holds some series' missing day, not a given one (that export answers each series' status alone).
@@ -98,23 +200,27 @@ struct Store {
   int32_t pool_dead = 0;
 };
 
+/// The covariance bank first: its set 0 borrows the slot's set's term tables (stack #599), so they outlive it.
 inline void release(Slot& s) {
+  delete s.cp;
   if (s.xp != nullptr) xpt::xp_release(*s.xp);
   std::free(s.xp);
   std::free(s.sat);
   std::free(s.nodes);
-  delete s.cp;
   s = Slot{};
 }
 
 inline void clear(Store& st) {
-  for (Series& s : st.series)
+  for (Series& s : st.series) {
     for (Slot& q : s.slots) release(q);
+    delete s.slots.second;
+  }
   for (Entry& e : st.entries) delete e.cov;
-  st.entries.clear();
-  st.series.clear();
+  // the buffers go back too: a cleared store (a refused load, the next load's start) holds nothing, and a later load is sized afresh
+  st.entries.release();
+  st.series.release();
   st.stats = Stats{};
-  st.atmospheres.clear();
+  st.atmospheres.release();
 }
 
 inline Store& resident() {
@@ -171,6 +277,8 @@ struct Record {
   cov::Set* cov = nullptr;
   Forces forces{};
   ocm::Weather weather;
+  const atm::Atmosphere* atmosphere = nullptr;
+  size_t atmosphere_index = 0;  ///< its place in Store::atmospheres (read only when atmosphere is not nullptr)
   std::shared_ptr<carried::Track> track;  ///< reading the call's bytes until the record is kept (carried::keep)
   double handover = HUGE_VAL;
 };
@@ -201,34 +309,52 @@ inline int decode_record(const uint8_t* p, uint32_t n, Record& r) {
     cov::Set c;
     const int cr = cov::read(s.record, r.row, c);
     // SPEC 12.4: an AP record whose floor is at its writer's theory state is stored without its covariance (cr -4)
+    if (cr < 0 && cr != -4 && mem::refuse_if_out_of_memory()) return -1;  // a matrix that could not be allocated is out-of-memory, not malformed
     if (cr < 0 && cr != -4)
       return ocm::refuse(cr == -2 ? "cov-parameter-kind-unspecified" : cr == -3 ? "cov-propagation-invariant" : "invalid-covariance",
                          "A set's COVARIANCE_DATA, COV_PARAMETER_KINDS or COV_PROPAGATION are malformed."), -1;
-    if (cr == 1) r.cov = new cov::Set(c);
+    if (cr == 1) {
+      r.cov = mem::counted(new (std::nothrow) cov::Set(c));
+      if (r.cov == nullptr || r.cov->C.size() != c.C.size()) {
+        delete r.cov; r.cov = nullptr;
+        return mem::refuse_if_out_of_memory(), -1;
+      }
+    }
   }
   return 1;
 }
 
 /// The store's one copy of a record's atmosphere (its rows and nodes, by content), or nullptr on the theory's own flux
 /// model.
-inline const atm::Atmosphere* intern(Store& st, const Record& r) {
+///
+/// Two atmospheres are one when every row, node and node value is bit-for-bit the same (memcmp on the doubles that may be -0.0 or NaN: a value that
+/// compares equal to another but differs in bits is a different series), so the copy that is kept never depends on which of them came first.
+inline const atm::Atmosphere* intern(Store& st, Record& r) {
   if (r.forces.weather_source != pcfWeatherSource_RECORDS) return nullptr;
-  ocm::Set probe;
-  probe.forces = r.forces;
-  probe.weather = r.weather;
-  atm::Atmosphere a;
-  ocm::atmosphere_of(probe, a);
+  const auto model = r.forces.msis ? atm::kNrlmsise00 : atm::kJacchia70;
   auto same_rows = [](const atm::SpwDay& x, const atm::SpwDay& y) {
-    return x.mjd == y.mjd && x.f107_obs == y.f107_obs && x.f107_center81 == y.f107_center81 && x.ap_avg == y.ap_avg && x.data_type == y.data_type &&
+    return x.mjd == y.mjd && x.f107_obs == y.f107_obs && x.f107_center81 == y.f107_center81 && std::memcmp(&x.ap_avg, &y.ap_avg, sizeof(double)) == 0 && x.data_type == y.data_type &&
            std::strcmp(x.date, y.date) == 0;
   };
-  for (const auto& held : st.atmospheres) {
-    if (held->model != a.model || held->days.size() != a.days.size() || held->dca_ms != a.dca_ms || held->dca_s != a.dca_s) continue;
+  for (size_t h = 0; h < st.atmospheres.size(); ++h) {
+    const auto& held = st.atmospheres[h];
+    if (held->model != model || held->days.size() != r.weather.rows.size() || held->dca_ms != r.weather.node_ms || held->dca_s.size() != r.weather.node_s.size() ||
+        (!held->dca_s.empty() && std::memcmp(held->dca_s.data(), r.weather.node_s.data(), held->dca_s.size() * sizeof(double)) != 0)) continue;
     bool same = true;
-    for (size_t k = 0; same && k < a.days.size(); ++k) same = same_rows(held->days[k], a.days[k]);
-    if (same) return held.get();
+    for (size_t k = 0; same && k < r.weather.rows.size(); ++k) same = same_rows(held->days[k], r.weather.rows[k]);
+    if (same) { r.atmosphere_index = h; return held.get(); }
   }
-  st.atmospheres.push_back(std::make_unique<atm::Atmosphere>(std::move(a)));
+  std::unique_ptr<atm::Atmosphere> a(mem::counted(new (std::nothrow) atm::Atmosphere{}));
+  if (!a) return nullptr;
+  a->model = model;
+  a->measured = true;
+  a->days = std::move(r.weather.rows);
+  a->dca_ms = std::move(r.weather.node_ms);
+  a->dca_s = std::move(r.weather.node_s);
+  for (int64_t ms : a->dca_ms) a->dca_d50.push_back(static_cast<double>(ms) / 86400000.0 + 7306.0);
+  if (!st.atmospheres.grow_one()) return nullptr;  // doubles: n distinct series make O(log n) allocations
+  r.atmosphere_index = st.atmospheres.size();
+  st.atmospheres.push_back(std::move(a));
   return st.atmospheres.back().get();
 }
 
@@ -257,7 +383,17 @@ inline bool each_record(const uint8_t* p, uint32_t n, Fn fn) {
 inline int build(Store& st, const Config& cfg) {
   clear(st);
   st.cfg = cfg;
-  std::vector<Record> recs;
+  // SPEC 1.6 and 14.1: a load refused for ANY reason leaves no snapshot (the old one is gone and no part of the new one stays). The store is
+  // built in place, so every return but the last clears it: a refusal after some series were installed (a second slot or a matrix that
+  // could not be allocated), a decode refusal after weather was interned, and series-forces-differ. The guard builds nothing and the
+  // high-water is the single store's, as before (a local store swapped on success would hold two at the swap).
+  struct Unwind {
+    Store& s;
+    bool installed = false;
+    ~Unwind() { if (!installed) clear(s); }
+  } unwind{st};
+  // The decoded records are held in blocks allocated as they arrive: no allocation follows a count read from the payload's framing (SPEC 1.6).
+  Blocks<Record> recs;
   bool refused = false;
   for (uint32_t i = 0; i < plugin_get_input_count(); ++i) {
     const plugin_input_frame_t* f = plugin_get_input_frame(i);
@@ -269,6 +405,10 @@ inline int build(Store& st, const Config& cfg) {
       if (d < 0) { refused = true; return false; }
       if (d == 0) { ++st.stats.other_center; return true; }
       if (cfg.theories != 0 && (cfg.theories & theory_bit(r.met)) == 0) { ++st.stats.theory; delete r.cov; return true; }
+      r.atmosphere = intern(st, r);
+      if (mem::refuse_if_out_of_memory()) { delete r.cov; refused = true; return false; }
+      r.weather = ocm::Weather{};
+      if (!recs.grow_one()) { delete r.cov; refused = true; mem::refuse_if_out_of_memory(); return false; }
       recs.push_back(std::move(r));
       return true;
     });
@@ -281,10 +421,18 @@ inline int build(Store& st, const Config& cfg) {
   }
   // the series: (NORAD_CAT_ID, INTERNATIONAL_DESIGNATOR, MEAN_ELEMENT_THEORY, ORIGINATOR), each by epoch (a later record
   // of the same epoch replaces)
-  std::vector<uint32_t> order(recs.size());
-  for (uint32_t k = 0; k < order.size(); ++k) order[k] = k;
+  // `order` the input positions sorted into series and epochs; `kept` the input positions of the kept sets in series order and `starts` where each
+  // series' sets begin in `kept` (and one past the last): the entries and the series are sized from what is kept, not from what was read (SPEC 1.6).
+  Array<uint32_t> order, kept, starts;
+  if (!order.reserve(recs.size()) || !kept.reserve(recs.size()) || !starts.reserve(recs.size() + 1)) {
+    for (Record& r : recs) delete r.cov;
+    return mem::refuse_if_out_of_memory(), 3;
+  }
+  for (uint32_t k = 0; k < recs.size(); ++k) order.push_back(k);
+  // The comparison is a strict weak order because no key is NaN: an epoch comes from omm::epoch, which parses digits only (finite), and a span's
+  // start is refused when NaN or not increasing (carried.inc, the track's start and stop check), so every `<` and `!=` below is on finite numbers.
   auto epoch_of = [&](const Record& r) { return minutes_of(r.row.epoch_jd_whole, r.row.epoch_jd_frac); };
-  std::stable_sort(order.begin(), order.end(), [&](uint32_t a, uint32_t b) {
+  if (!order.empty()) std::sort(order.begin(), order.end(), [&](uint32_t a, uint32_t b) {
     const Record &x = recs[a], &y = recs[b];
     if (x.norad != y.norad) return x.norad < y.norad;
     if (x.object_id != y.object_id) return x.object_id < y.object_id;
@@ -292,7 +440,8 @@ inline int build(Store& st, const Config& cfg) {
     if (x.originator != y.originator) return x.originator < y.originator;
     if (epoch_of(x) != epoch_of(y)) return epoch_of(x) < epoch_of(y);
     // SPEC 18.3: sets of one epoch carrying different spans (records split by day) by their span's start
-    return (x.track ? x.track->start : -HUGE_VAL) < (y.track ? y.track->start : -HUGE_VAL);
+    const double xs = x.track ? x.track->start : -HUGE_VAL, ys = y.track ? y.track->start : -HUGE_VAL;
+    return xs != ys ? xs < ys : a < b;  // original input position preserves stable ties without a sort allocation
   });
   // a series flies one force model: its sets' forces equal its first's
   for (uint32_t k = 1; k < order.size(); ++k) {
@@ -314,7 +463,7 @@ inline int build(Store& st, const Config& cfg) {
     while (e < order.size() && recs[order[e]].norad == head.norad && recs[order[e]].object_id == head.object_id &&
            recs[order[e]].met == head.met && recs[order[e]].originator == head.originator)
       ++e;
-    std::vector<uint32_t> keep;
+    const size_t g0 = kept.size();  // this series' kept sets are kept[g0..]
     for (uint32_t q = k; q < e; ++q) {
       Record& r = recs[order[q]];
       if (epoch_of(r) < oldest_kept) { ++st.stats.aged; delete r.cov; r.cov = nullptr; continue; }
@@ -322,60 +471,90 @@ inline int build(Store& st, const Config& cfg) {
       auto same_span = [](const Record& a, const Record& b) {
         return !a.track == !b.track && (!a.track || (a.track->start == b.track->start && a.track->stop == b.track->stop));
       };
-      if (!keep.empty() && epoch_of(recs[keep.back()]) == epoch_of(r) && same_span(recs[keep.back()], r)) {
+      if (kept.size() > g0 && epoch_of(recs[kept.back()]) == epoch_of(r) && same_span(recs[kept.back()], r)) {
         ++st.stats.duplicate;
-        delete recs[keep.back()].cov;
-        recs[keep.back()].cov = nullptr;
-        keep.back() = order[q];
+        delete recs[kept.back()].cov;
+        recs[kept.back()].cov = nullptr;
+        kept.back() = order[q];
         continue;
       }
-      keep.push_back(order[q]);
+      kept.push_back(order[q]);
     }
-    if (cfg.max_sets > 0 && keep.size() > cfg.max_sets) {
-      const size_t drop = keep.size() - cfg.max_sets;
-      for (size_t q = 0; q < drop; ++q) { delete recs[keep[q]].cov; recs[keep[q]].cov = nullptr; }
+    if (cfg.max_sets > 0 && kept.size() - g0 > cfg.max_sets) {
+      const size_t drop = kept.size() - g0 - cfg.max_sets;
+      for (size_t q = 0; q < drop; ++q) { delete recs[kept[g0 + q]].cov; recs[kept[g0 + q]].cov = nullptr; }
       st.stats.capped += static_cast<double>(drop);
-      keep.erase(keep.begin(), keep.begin() + static_cast<std::ptrdiff_t>(drop));
+      for (size_t q = drop; g0 + q < kept.size(); ++q) kept[g0 + q - drop] = kept[g0 + q];
+      for (size_t q = 0; q < drop; ++q) kept.pop_back();
     }
-    if (!keep.empty()) {
-      Series s;
-      s.norad = head.norad;
-      s.object_id = head.object_id;
-      s.originator = head.originator;
-      s.theory = head.row.theory;
-      s.met = head.met;
-      s.name = recs[keep.back()].name;
-      s.first = static_cast<uint32_t>(st.entries.size());
-      s.count = static_cast<uint32_t>(keep.size());
-      for (uint32_t q : keep) {
-        Entry en;
-        en.row = recs[q].row;
-        en.epoch = epoch_of(recs[q]);
-        en.cov = recs[q].cov;
-        if (recs[q].track) {
-          carried::keep(*recs[q].track);  // a kept record's bytes, copied once (the call's are freed after it)
-          en.track = recs[q].track;
-          s.carried = true;
-        }
-        en.handover = recs[q].handover;
-        en.forces = recs[q].forces;
-        en.atmosphere = intern(st, recs[q]);
-        if (en.atmosphere != nullptr && !en.atmosphere->days.empty()) {
-          en.first_day = en.atmosphere->days.front().mjd + 1;
-          en.last_day = en.atmosphere->days.back().mjd;
-        }
-        if (en.row.theory == kTheorySgp4Xp) {
-          ocm::Bind bind(en.forces, en.atmosphere);  // the set's own selection decides whether AP's switches exist
-          if (ap_selected()) en.branch = row_branch(en.row);
-        }
-        recs[q].cov = nullptr;
-        st.entries.push_back(en);
-      }
-      st.series.push_back(std::move(s));
-    }
+    if (kept.size() > g0) starts.push_back(static_cast<uint32_t>(g0));
     k = e;
   }
+  starts.push_back(static_cast<uint32_t>(kept.size()));
+  // Now what is kept is known: the entries and the series are allocated at exactly that size, so a capped or theory-filtered load holds nothing for
+  // the records it dropped and the store's byte count is its capacity.
+  Array<uint8_t> live;  // which of the load's atmospheres a kept set reads, marked as the entries are installed
+  bool room = st.entries.reserve(kept.size()) && st.series.reserve(starts.size() - 1) && live.reserve(st.atmospheres.size());
+  for (size_t k = 0; room && k < st.atmospheres.size(); ++k) live.push_back(0);
+  if (!room) {
+    for (Record& r : recs) delete r.cov;
+    return mem::refuse_if_out_of_memory(), 3;
+  }
+  for (size_t g = 0; g + 1 < starts.size(); ++g) {
+    const size_t first = starts[g], last = starts[g + 1];
+    const Record& head = recs[kept[first]];  // the identity fields are those of the series' key, equal in every record of it
+    Series s;
+    s.norad = head.norad;
+    s.object_id = head.object_id;
+    s.originator = head.originator;
+    s.theory = head.row.theory;
+    s.met = head.met;
+    s.name = recs[kept[last - 1]].name;
+    s.first = static_cast<uint32_t>(st.entries.size());
+    s.count = static_cast<uint32_t>(last - first);
+    if (s.count > 1) {
+      s.slots.second = mem::counted(new (std::nothrow) Slot{});
+      if (s.slots.second == nullptr) {
+        for (Record& r : recs) delete r.cov;
+        return mem::refuse_if_out_of_memory(), 3;
+      }
+    }
+    for (size_t j = first; j < last; ++j) {
+      const uint32_t q = kept[j];
+      Entry en;
+      en.row = recs[q].row;
+      en.epoch = epoch_of(recs[q]);
+      en.cov = recs[q].cov;
+      if (recs[q].track) {
+        carried::keep(*recs[q].track);  // a kept record's bytes, copied once (the call's are freed after it)
+        en.track = recs[q].track;
+        s.carried = true;
+      }
+      en.handover = recs[q].handover;
+      en.forces = recs[q].forces;
+      en.atmosphere = recs[q].atmosphere;
+      if (en.atmosphere) live[recs[q].atmosphere_index] = 1;
+      if (en.row.theory == kTheorySgp4Xp) {
+        ocm::Bind bind(en.forces, en.atmosphere);  // the set's own selection decides whether AP's switches exist
+        if (ap_selected()) {
+          const xpt::Branch b = row_branch(en.row);
+          en.branch = static_cast<uint8_t>(b.resonance) | (static_cast<uint64_t>(b.long_period) << 8) |
+                      (static_cast<uint64_t>(b.wide_tess) << 16) | (static_cast<uint64_t>(b.wide_e) << 24) |
+                      (static_cast<uint64_t>(b.series_e) << 32);
+        }
+      }
+      recs[q].cov = nullptr;
+      st.entries.push_back(en);
+    }
+    st.series.push_back(std::move(s));
+  }
+  // Only atmospheres referenced by retained sets belong to the snapshot: the install loop marked them, and one stable pass drops the rest.
+  size_t used = 0;
+  for (size_t k = 0; k < st.atmospheres.size(); ++k)
+    if (live[k]) { if (used != k) st.atmospheres[used] = std::move(st.atmospheres[k]); ++used; }
+  while (st.atmospheres.size() > used) st.atmospheres.pop_back();
   st.stats.kept = static_cast<double>(st.entries.size());
+  unwind.installed = true;
   return 0;
 }
 
@@ -429,13 +608,13 @@ inline Slot& slot_of(Store& st, Series& s, uint32_t k, bool with_cov) {
   for (Slot& q : s.slots)
     if (q.index == static_cast<int32_t>(k)) {
       if (with_cov && q.cp == nullptr && st.entries[s.first + k].cov != nullptr && q.error == 0) {
-        q.cp = new cov::Propagator();
-        if (cov::prepare(*st.entries[s.first + k].cov, *q.cp) != 0) { delete q.cp; q.cp = nullptr; }
+        q.cp = sdnap::mem::counted(new (std::nothrow) cov::Propagator());  // none (counted): the state without covariance
+        if (q.cp != nullptr && cov::prepare(*st.entries[s.first + k].cov, *q.cp, nullptr, q.xp) != 0) { delete q.cp; q.cp = nullptr; }
       }
       return q;
     }
   Slot& q = s.slots[s.next];
-  s.next ^= 1u;
+  s.next = s.slots.second ? s.next ^ 1u : 0u;
   release(q);
   const Entry& en = st.entries[s.first + k];
   const Elements e = elements_of(en.row);
@@ -467,8 +646,9 @@ inline Slot& slot_of(Store& st, Series& s, uint32_t k, bool with_cov) {
     }
   }
   if (with_cov && q.error == kPropOk && en.cov != nullptr) {
-    q.cp = new cov::Propagator();
-    if (cov::prepare(*en.cov, *q.cp) != 0) { delete q.cp; q.cp = nullptr; }
+    // the bank's set 0 borrows the slot's own term tables (stack #599): the slot's set outlives it (release)
+    q.cp = sdnap::mem::counted(new (std::nothrow) cov::Propagator());  // none (counted): the state without covariance
+    if (q.cp != nullptr && cov::prepare(*en.cov, *q.cp, nullptr, q.xp) != 0) { delete q.cp; q.cp = nullptr; }
   }
   return q;
 }
@@ -745,14 +925,23 @@ inline bool any_labeled(const Store& st, const Series& s) {
 }
 
 inline uint64_t bytes_of(const Store& st) {
-  uint64_t b = st.entries.size() * sizeof(Entry) + st.series.size() * sizeof(Series);
-  for (const Entry& e : st.entries) b += (e.cov != nullptr ? sizeof(cov::Set) : 0) + (e.track ? e.track->bytes() : 0);
+  // the arrays at their capacity: what the store holds, not what it uses
+  uint64_t b = st.entries.capacity() * sizeof(Entry) + st.series.capacity() * sizeof(Series) + st.atmospheres.capacity() * sizeof(std::unique_ptr<atm::Atmosphere>);
+  for (const Entry& e : st.entries) b += (e.cov != nullptr ? sizeof(cov::Set) + e.cov->C.size() * sizeof(double) : 0) + (e.track ? e.track->bytes() : 0);
   // the interned rows and nodes, one copy each
   for (const auto& a : st.atmospheres) b += sizeof(atm::Atmosphere) + a->days.size() * sizeof(atm::SpwDay) + a->dca_ms.size() * (sizeof(int64_t) + 2 * sizeof(double));
   for (const Series& s : st.series) {
-    b += s.object_id.capacity() + s.originator.capacity() + s.name.capacity();
-    // a set: its XpSat, the term tables it owns and its caches from the pool (xp_bytes)
-    for (const Slot& q : s.slots) b += (q.xp ? xpt::xp_bytes(*q.xp) : 0) + (q.sat ? sizeof(Sat) : 0) + (q.nodes ? 32u * kCheckpointNodes : 0) + (q.cp ? sizeof(cov::Propagator) : 0);
+    // Short strings live inside Series; count only separately allocated character storage.
+    auto string_bytes = [](const std::string& text) -> size_t {
+      const uintptr_t p = reinterpret_cast<uintptr_t>(text.data()), base = reinterpret_cast<uintptr_t>(&text);
+      return p >= base && p < base + sizeof(text) ? 0 : text.capacity();
+    };
+    b += string_bytes(s.object_id) + string_bytes(s.originator) + string_bytes(s.name);
+    if (s.slots.second) b += sizeof(Slot);
+    // a set: its XpSat, the term tables it owns and its caches from the pool (xp_bytes); its covariance's propagator with its
+    // copy of the epoch covariance, the bank's bodies and what they own (cov::bytes_of, stack #599: through 0.6.52 the
+    // propagator alone)
+    for (const Slot& q : s.slots) b += (q.xp ? xpt::xp_bytes(*q.xp) : 0) + (q.sat ? sizeof(Sat) : 0) + (q.nodes ? 32u * kCheckpointNodes : 0) + (q.cp ? cov::bytes_of(*q.cp) : 0);
   }
   return b;
 }
@@ -1087,7 +1276,7 @@ inline void write_series(Store& st, double jd_whole, double jd_frac, uint32_t fi
 /// A series containing a wide set stays serial for its entire flight: output-time node changes acquire grids too.
 inline bool wide_series(const Store& st, const Series& s) {
   for (uint32_t k = 0; k < s.count; ++k)
-    if (st.entries[s.first + k].branch.wide_tess) return true;
+    if (((st.entries[s.first + k].branch >> 16) & 0xffu) != 0) return true;  // the packed branch's wide_tess byte (load)
   return false;
 }
 

@@ -1,4 +1,6 @@
 #!/usr/bin/env node
+// The stored flight and fitted-record references use the added zonal long-period terms, which move the 48-hour
+// flight by 1.761549 m / 0.996583 mm/s and the fit by 0.567475 m / 0.364730 mm/s; every bound is retained.
 // E2E (tasks modules-sdn-ap-epoch-store-blend-20261025, modules-sdn-ap-ocm-epochs-20261103): the epoch store (SPEC 14)
 // on $OCM streams.
 // The $OCM part (modules-sdn-ap-ocm-epochs-20261103):
@@ -304,7 +306,7 @@ for (const [label, cfg] of [["NEAREST, SMOOTHSTEP", {}], ["NEAREST, HERMITE", { 
   // This build's fit: against the stored record's flight until 0.6.21; from 0.6.22 against this build's propagate_epochs
   // of 0.6.22's own fit (ap-fit-0.6.22.ocm), the bounds kept. AP's own Sun and Moon move the fit: 117.72 mm and 130.37
   // um/s from the 0.6.21 file and, both flown by 0.6.22, 92.33 mm and 101.49 um/s from the stored record's flight.
-  const storedFlight = fs.readFileSync(new URL("fixtures/ap-fit-0.6.42.epochs-0.6.43.oem", import.meta.url));
+  const storedFlight = fs.readFileSync(new URL("fixtures/ap-fit-0.6.42.epochs-0.6.48.oem", import.meta.url));
   const STORE_FLIGHT = { posM: 0.001, velMmS: 0.001, covOfLargest: 1e-4 }, STORE_FIT = { posM: 0.1, velMmS: 0.1 };
   // 0.6.25 (the slow set, SPEC 16.18) moves the fit, which now carries the slow tesseral terms at 550 km: 17.7 m and
   // 19.4 mm/s from 0.6.22's fit (both flown by 0.6.25), FIT_RMS 40.049 against 41.126 m. Against the fixture's own
@@ -340,12 +342,12 @@ for (const [label, cfg] of [["NEAREST, SMOOTHSTEP", {}], ["NEAREST, HERMITE", { 
   // mm and 347.12 um/s on the grid from 0.6.42's fit (both flown by 0.6.43), FIT_RMS 37.286 against 37.273 m. So the
   // own fit is 0.6.43's (ap-fit-0.6.43.ocm); the stored record stays 0.6.42's fit.
   const storedRecord = new Uint8Array(fs.readFileSync(new URL("fixtures/ap-fit-0.6.42.ocm", import.meta.url)));
-  const fitRecord = new Uint8Array(fs.readFileSync(new URL("fixtures/ap-fit-0.6.43.ocm", import.meta.url)));
+  const fitRecord = new Uint8Array(fs.readFileSync(new URL("fixtures/ap-fit-0.6.48.ocm", import.meta.url)));
   const fitRecordFlight = await command.invoke({ methodId: "propagate_epochs", inputs: [store({}, { output: GRID_OUTPUT }), one([fitRecord])] });
-  check(fitRecordFlight.statusCode === 0, `propagate_epochs 0.6.43's fit: ${fitRecordFlight.errorCode} ${fitRecordFlight.errorMessage}`);
+  check(fitRecordFlight.statusCode === 0, `propagate_epochs 0.6.48's fit: ${fitRecordFlight.errorCode} ${fitRecordFlight.errorMessage}`);
   for (const [what, record, bound, reference, against] of [
-    ["the stored AP record", storedRecord, STORE_FLIGHT, storedFlight, "0.6.43's of the stored record"],
-    ["this build's fit", ap, STORE_FIT, new Uint8Array(fitRecordFlight.outputs?.[0]?.payload ?? []), "this build's of 0.6.43's fit"]]) {
+    ["the stored AP record", storedRecord, STORE_FLIGHT, storedFlight, "0.6.48's of the stored record"],
+    ["this build's fit", ap, STORE_FIT, new Uint8Array(fitRecordFlight.outputs?.[0]?.payload ?? []), "this build's of 0.6.48's fit"]]) {
     const pe = await command.invoke({ methodId: "propagate_epochs", inputs: [store({}, { output: GRID_OUTPUT }), one([record])] });
     check(pe.statusCode === 0, `propagate_epochs ${what}: ${pe.errorCode} ${pe.errorMessage}`);
     if (pe.statusCode !== 0 || fitRecordFlight.statusCode !== 0) continue;
@@ -404,7 +406,10 @@ for (const [label, cfg] of [["NEAREST, SMOOTHSTEP", {}], ["NEAREST, HERMITE", { 
   check((await loadSets([ap, repackOcm(ap, (t) => { t.METADATA.NORAD_CAT_ID = 91999; t.PERTURBATIONS.SPACE_WEATHER[0].AP_AVG += 1; })])).statusCode === 0, "load two sets, two row series");
   const copy = stats()[7] - single - (shared - single) / 99;  // one more row series beyond one more set
   console.log(`store bytes: 100 sets sharing one row series ${shared}, with 100 row series ${separate}; one series' rows ${copy} B; 99 extra copies ${separate - shared} B`);
-  check(copy > 32 * 56 && separate - shared === 99 * copy, `interning: ${separate - shared} B for 99 more row series against ${copy} B a copy`);
+  // the pool of distinct series doubles when full, from 16 pointers of 4 bytes (SPEC 14.1): 100 series hold the capacity of 128, one holds 16
+  const poolCapacity = (n) => { let c = 16; while (c < n) c *= 2; return c; };
+  const pool = (poolCapacity(100) - poolCapacity(1)) * 4;
+  check(copy > 32 * 56 && separate - shared === 99 * copy + pool, `interning: ${separate - shared} B for 99 more row series against ${copy} B a copy`);
 }
 
 // --- real history: seven days of the catalog (local, licensed; numbers only)

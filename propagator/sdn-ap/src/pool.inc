@@ -206,20 +206,29 @@ inline void run_chunks() {
   }
 }
 
-/// A thread's once-per-thread caches, made before it computes any row of a batch: the tesseral cache with its storage,
-/// its blk_c storage and grouping scratch, the half-day cache, the covariance's step cache, the Sun and Moon node store, the drift and GCRF node slots. Made lazily
-/// they were made in the batch (stack #487); every one is a pointer test once made.
-inline void warm_thread() {
-  (void)xpt::tess::sp_terms_scratch();
-  (void)xpt::tess::sp_thread_cache();
-  (void)xpt::tess::sp_blk_c_storage();
-  (void)xpt::tess::sp_build_scratch();
-  (void)xpt::tess::half_day_eval_cache();
-  (void)xpt::cov_grid_cache();
-  xpt::ap_bodies_store_make();
-  (void)frames::drift_node_cache();
-  frames::gcrf_node_cache_make();
-  (void)atm::msis_flags();  // the one guarded static a lane first touches: made before any batch, so no thread waits on it in one
+/// A thread's once-per-thread caches: the tesseral cache with its storage, its blk_c storage, grouping scratch and term
+/// scratch, the half-day cache, the covariance's step cache, the Sun and Moon node store, the drift and GCRF node slots.
+/// Made before the thread computes any row of a batch (made lazily they were made in the batch, stack #487), and before
+/// its first state or set initialization (pool::thread_ready, stack #600: made lazily, one was first asked for part way
+/// through a flight, a day after the set's first state, and the module aborted when the memory was full by then). False
+/// when one cannot be had (the failure counted; those made are kept, and the next call makes the rest); once all are made,
+/// one flag test. With them, the guarded statics a lane first touches (NRLMSISE-00's flag table): made before any batch,
+/// so no thread, the calling thread least of all, waits in a static's guard inside one.
+inline bool warm_thread() {
+  if (g_warm) return true;
+  (void)atm::msis_flags();
+  g_warm = warm_thread_xp() && xpt::tess::sp_thread_cache_make() && xpt::tess::sp_blk_c_make() && xpt::tess::sp_build_scratch_make() &&
+           xpt::tess::sp_terms_scratch_make() && xpt::tess::half_day_eval_cache_make() && xpt::ap_bodies_store_make() &&
+           frames::drift_node_cache_make() && frames::gcrf_node_cache_make();
+  return g_warm;
+}
+/// What every set of the SGP4XP family reads, AP's terms or not: the covariance's step cache (rates). An SGP4XP set without
+/// AP's terms reads no other of the nine, so a thread flying only such sets makes this one alone, where 0.6.52 made it: in
+/// the set's first rates.
+inline bool warm_thread_xp() {
+  if (g_warm_xp) return true;
+  g_warm_xp = xpt::cov_grid_cache_make();
+  return g_warm_xp;
 }
 
 inline void* thread_main(void*) {
@@ -228,7 +237,7 @@ inline void* thread_main(void*) {
   g_beat_slot = __atomic_add_fetch(&g_beat_slots, 1, __ATOMIC_SEQ_CST);  // 1 to kMaxThreads (start makes at most that many)
   // start publishes the memory's size before it creates this thread: the caches are made in pages this view covers
   await_view(load(&j.pages));
-  warm_thread();
+  (void)warm_thread();  // one that cannot be had is asked for again at the thread's first state (thread_ready)
   // the one growth a worker makes: published for the calling thread, which goes on once its own view covers it
   __atomic_store_n(&j.pages, view_pages(), __ATOMIC_SEQ_CST);
   __atomic_add_fetch(&j.warmed, 1, __ATOMIC_SEQ_CST);
@@ -288,7 +297,7 @@ inline int32_t run(uint32_t count, size_t reserve) {
   __atomic_store_n(&j.next, 0, __ATOMIC_SEQ_CST);
   uint32_t pages = 0;
   if (threaded) {
-    warm_thread();  // the calling thread computes chunks too: its caches are made before the batch, as the workers' are
+    (void)warm_thread();  // the calling thread computes chunks too: its caches are made before the batch, as the workers' are
     if (reserve > 0) {
       g_reserve_block = sdnap::mem::malloc(reserve);
       std::free(g_reserve_block);
