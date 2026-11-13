@@ -248,7 +248,7 @@ inline int decode_record(const uint8_t* p, uint32_t n, Record& r) {
 /// model.
 inline const atm::Atmosphere* intern(Store& st, Record& r) {
   if (r.forces.weather_source != pcfWeatherSource_RECORDS) return nullptr;
-  const int model = r.forces.msis ? atm::kNrlmsise00 : atm::kJacchia70;
+  const auto model = r.forces.msis ? atm::kNrlmsise00 : atm::kJacchia70;
   auto same_rows = [](const atm::SpwDay& x, const atm::SpwDay& y) {
     return x.mjd == y.mjd && x.f107_obs == y.f107_obs && x.f107_center81 == y.f107_center81 && x.ap_avg == y.ap_avg && x.data_type == y.data_type &&
            std::strcmp(x.date, y.date) == 0;
@@ -433,6 +433,14 @@ inline int build(Store& st, const Config& cfg) {
     }
     k = e;
   }
+  // Only atmospheres referenced by retained sets belong to the snapshot.
+  size_t used = 0;
+  for (size_t k = 0; k < st.atmospheres.size(); ++k) {
+    bool live = false;
+    for (const Entry& en : st.entries) if (en.atmosphere == st.atmospheres[k].get()) { live = true; break; }
+    if (live) { if (used != k) st.atmospheres[used] = std::move(st.atmospheres[k]); ++used; }
+  }
+  while (st.atmospheres.size() > used) st.atmospheres.pop_back();
   st.stats.kept = static_cast<double>(st.entries.size());
   return 0;
 }
