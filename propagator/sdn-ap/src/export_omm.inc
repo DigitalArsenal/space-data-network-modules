@@ -71,6 +71,7 @@ static int export_omm_call(void) {
     if (!sgp4) {
       cov::Set cs;
       const int cr = cov::read(o, row, cs);
+      if (cr < 0 && mem::refuse_if_out_of_memory()) return 3;  // a matrix that could not be allocated is out-of-memory, not malformed
       if (cr < 0) return ocm::refuse(cr == -2 ? "cov-parameter-kind-unspecified" : cr == -3 ? "cov-propagation-invariant" : "invalid-covariance",
                                      "The set's COVARIANCE_DATA, COV_PARAMETER_KINDS or COV_PROPAGATION are malformed.");
       if (cr == 1) {

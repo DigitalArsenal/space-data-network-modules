@@ -111,6 +111,7 @@ static int propagate_call(void) {
             return ocm::refuse(name, why_text);
           }
           xpt::xp_release(*xs);
+          if (cr < 0 && mem::refuse_if_out_of_memory()) return 3;  // a matrix that could not be allocated is out-of-memory, not malformed
           return ocm::refuse(cr == -2 ? "cov-parameter-kind-unspecified" : cr == -3 ? "cov-propagation-invariant" : "invalid-covariance",
                              cr < 0 ? "The set's COVARIANCE_DATA, COV_PARAMETER_KINDS or COV_PROPAGATION are malformed."
                                     : "The set's covariance does not map onto its parameters (the theory refuses a moved set or the epoch columns are singular).");

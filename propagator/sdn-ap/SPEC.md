@@ -141,7 +141,12 @@ integrator used, and the elements of later times do not follow from integrating 
 
 The module's own malloc, calloc, realloc and aligned_alloc calls, and its two nothrow news (the theories' tables and
 grids, the set caches, the fit's arrays, the stores), go through one accounting (`sdnap::mem`), which counts the
-allocations that fail and the largest request.
+allocations that fail and the largest request. The epoch store's allocations are among them: the blocks of 1,024
+decoded records a load fills (one allocated when the one before it is full, so a load's memory follows the records
+decoded, never the frame count the payload claims), the arrays of kept sets, entries and series (sized from the kept
+count), the weather pool (which at least doubles when full), each set's covariance matrix, and the second slot of a
+series of more than one set. A covariance matrix that cannot be allocated refuses `out-of-memory`, not
+`invalid-covariance`.
 
 **A method during which one of them failed refuses with errorCode `out-of-memory` and emits nothing.** That holds for
 `propagate`, `propagate_epochs`, `load_epochs`, `fit`, `maneuver`, `ingest_omm` and `export_omm`, whatever the method
@@ -2801,8 +2806,12 @@ one (NORAD_CAT_ID, OBJECT_ID, theory, ORIGINATOR). Kept, per series and by epoch
 the newest epoch of the load, the clock being the data's (no wall clock: the store is a function of its input); at
 most MAX_SETS_PER_OBJECT (0: no cap), the newest; THEORIES (empty: both). Two records of one series at one epoch:
 the later in the snapshot replaces the earlier. Sets not centered on the Earth are counted and
-not stored. A record's theory record (SGP4 Sat or SGP4XP integrator) is made when first needed, two per
-series held at a time.
+not stored. A record's theory record (SGP4 Sat or SGP4XP integrator) is made when first needed. A series
+of one set holds one slot, and a series of more than one holds two (the second is allocated with the series, counted,
+and a load that cannot allocate it is refused `out-of-memory`); of those, the two sets last used hold a theory record
+at a time. Two series that carry equal weather share one copy of it: equal means every row, node and node value the
+same in every bit, so which of two series is kept never depends on their order. A load that fails, for want of memory
+or any refusal, leaves no snapshot: the store is empty and its arrays are freed.
 
 **14.2 Selection.** With E_0 < ... < E_{n-1} a series' epochs and t the request time: NEAREST takes the set whose
 epoch is nearest t (switch between E_i and E_{i+1} at tau_i = (E_i + E_{i+1}) / 2); LATEST_BEFORE the latest set at or
@@ -2851,8 +2860,8 @@ Each additional MiB of initial memory costs 1,048,576 bytes per instance; at 100
 that is 10.48576 bytes per object. The SDK harness reserves that initial region before the
 module's allocations, so reducing 64 MiB to 2 MiB saves 62 MiB in these catalog loads.
 WebAssembly memory retains its high-water size after payload and temporary storage are freed.
-The load holds one decoded weather series at a time, interns equal rows and nodes, and reserves
-its record and store arrays from the input frame count. The host's staged payload remains part
+The load holds one decoded weather series at a time, interns equal rows and nodes, holds its decoded records in
+blocks that grow with the records actually decoded, and sizes its entry and series arrays from the count it keeps. The host's staged payload remains part
 of the load's high-water: repeated weather on the wire still occupies bytes for every record.
 
 

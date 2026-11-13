@@ -139,7 +139,7 @@ struct Entry {
   double handover = HUGE_VAL;  ///< a hand-over set: the time it serves from, minutes from J2000 (SPEC 18.7); else HUGE_VAL
 };
 
-/// An initialized record of one set (the lazy cache: two per series).
+/// An initialized record of one set (the lazy cache: one slot for a series of one set, two for a series of more).
 struct Slot {
   int32_t index = -1;         ///< the series' set index held, -1 none
   xpt::XpSat* xp = nullptr;
@@ -270,6 +270,7 @@ struct Record {
   Forces forces{};
   ocm::Weather weather;
   const atm::Atmosphere* atmosphere = nullptr;
+  size_t atmosphere_index = 0;  ///< its place in Store::atmospheres (read only when atmosphere is not nullptr)
   std::shared_ptr<carried::Track> track;  ///< reading the call's bytes until the record is kept (carried::keep)
   double handover = HUGE_VAL;
 };
@@ -300,6 +301,7 @@ inline int decode_record(const uint8_t* p, uint32_t n, Record& r) {
     cov::Set c;
     const int cr = cov::read(s.record, r.row, c);
     // SPEC 12.4: an AP record whose floor is at its writer's theory state is stored without its covariance (cr -4)
+    if (cr < 0 && cr != -4 && mem::refuse_if_out_of_memory()) return -1;  // a matrix that could not be allocated is out-of-memory, not malformed
     if (cr < 0 && cr != -4)
       return ocm::refuse(cr == -2 ? "cov-parameter-kind-unspecified" : cr == -3 ? "cov-propagation-invariant" : "invalid-covariance",
                          "A set's COVARIANCE_DATA, COV_PARAMETER_KINDS or COV_PROPAGATION are malformed."), -1;
@@ -316,18 +318,23 @@ inline int decode_record(const uint8_t* p, uint32_t n, Record& r) {
 
 /// The store's one copy of a record's atmosphere (its rows and nodes, by content), or nullptr on the theory's own flux
 /// model.
+///
+/// Two atmospheres are one when every row, node and node value is bit-for-bit the same (memcmp on the doubles that may be -0.0 or NaN: a value that
+/// compares equal to another but differs in bits is a different series), so the copy that is kept never depends on which of them came first.
 inline const atm::Atmosphere* intern(Store& st, Record& r) {
   if (r.forces.weather_source != pcfWeatherSource_RECORDS) return nullptr;
   const auto model = r.forces.msis ? atm::kNrlmsise00 : atm::kJacchia70;
   auto same_rows = [](const atm::SpwDay& x, const atm::SpwDay& y) {
-    return x.mjd == y.mjd && x.f107_obs == y.f107_obs && x.f107_center81 == y.f107_center81 && x.ap_avg == y.ap_avg && x.data_type == y.data_type &&
+    return x.mjd == y.mjd && x.f107_obs == y.f107_obs && x.f107_center81 == y.f107_center81 && std::memcmp(&x.ap_avg, &y.ap_avg, sizeof(double)) == 0 && x.data_type == y.data_type &&
            std::strcmp(x.date, y.date) == 0;
   };
-  for (const auto& held : st.atmospheres) {
-    if (held->model != model || held->days.size() != r.weather.rows.size() || held->dca_ms != r.weather.node_ms || held->dca_s != r.weather.node_s) continue;
+  for (size_t h = 0; h < st.atmospheres.size(); ++h) {
+    const auto& held = st.atmospheres[h];
+    if (held->model != model || held->days.size() != r.weather.rows.size() || held->dca_ms != r.weather.node_ms || held->dca_s.size() != r.weather.node_s.size() ||
+        (!held->dca_s.empty() && std::memcmp(held->dca_s.data(), r.weather.node_s.data(), held->dca_s.size() * sizeof(double)) != 0)) continue;
     bool same = true;
     for (size_t k = 0; same && k < r.weather.rows.size(); ++k) same = same_rows(held->days[k], r.weather.rows[k]);
-    if (same) return held.get();
+    if (same) { r.atmosphere_index = h; return held.get(); }
   }
   std::unique_ptr<atm::Atmosphere> a(mem::counted(new (std::nothrow) atm::Atmosphere{}));
   if (!a) return nullptr;
@@ -337,7 +344,8 @@ inline const atm::Atmosphere* intern(Store& st, Record& r) {
   a->dca_ms = std::move(r.weather.node_ms);
   a->dca_s = std::move(r.weather.node_s);
   for (int64_t ms : a->dca_ms) a->dca_d50.push_back(static_cast<double>(ms) / 86400000.0 + 7306.0);
-  if (!st.atmospheres.reserve(st.atmospheres.size() + 1)) return nullptr;
+  if (!st.atmospheres.grow_one()) return nullptr;  // doubles: n distinct series make O(log n) allocations
+  r.atmosphere_index = st.atmospheres.size();
   st.atmospheres.push_back(std::move(a));
   return st.atmospheres.back().get();
 }
@@ -413,6 +421,8 @@ inline int build(Store& st, const Config& cfg) {
     return mem::refuse_if_out_of_memory(), 3;
   }
   for (uint32_t k = 0; k < recs.size(); ++k) order.push_back(k);
+  // The comparison is a strict weak order because no key is NaN: an epoch comes from omm::epoch, which parses digits only (finite), and a span's
+  // start is refused when NaN or not increasing (carried.inc, the track's start and stop check), so every `<` and `!=` below is on finite numbers.
   auto epoch_of = [&](const Record& r) { return minutes_of(r.row.epoch_jd_whole, r.row.epoch_jd_frac); };
   if (!order.empty()) std::sort(order.begin(), order.end(), [&](uint32_t a, uint32_t b) {
     const Record &x = recs[a], &y = recs[b];
@@ -475,7 +485,10 @@ inline int build(Store& st, const Config& cfg) {
   starts.push_back(static_cast<uint32_t>(kept.size()));
   // Now what is kept is known: the entries and the series are allocated at exactly that size, so a capped or theory-filtered load holds nothing for
   // the records it dropped and the store's byte count is its capacity.
-  if (!st.entries.reserve(kept.size()) || !st.series.reserve(starts.size() - 1)) {
+  Array<uint8_t> live;  // which of the load's atmospheres a kept set reads, marked as the entries are installed
+  bool room = st.entries.reserve(kept.size()) && st.series.reserve(starts.size() - 1) && live.reserve(st.atmospheres.size());
+  for (size_t k = 0; room && k < st.atmospheres.size(); ++k) live.push_back(0);
+  if (!room) {
     for (Record& r : recs) delete r.cov;
     return mem::refuse_if_out_of_memory(), 3;
   }
@@ -512,6 +525,7 @@ inline int build(Store& st, const Config& cfg) {
       en.handover = recs[q].handover;
       en.forces = recs[q].forces;
       en.atmosphere = recs[q].atmosphere;
+      if (en.atmosphere) live[recs[q].atmosphere_index] = 1;
       if (en.row.theory == kTheorySgp4Xp) {
         ocm::Bind bind(en.forces, en.atmosphere);  // the set's own selection decides whether AP's switches exist
         if (ap_selected()) {
@@ -526,13 +540,10 @@ inline int build(Store& st, const Config& cfg) {
     }
     st.series.push_back(std::move(s));
   }
-  // Only atmospheres referenced by retained sets belong to the snapshot.
+  // Only atmospheres referenced by retained sets belong to the snapshot: the install loop marked them, and one stable pass drops the rest.
   size_t used = 0;
-  for (size_t k = 0; k < st.atmospheres.size(); ++k) {
-    bool live = false;
-    for (const Entry& en : st.entries) if (en.atmosphere == st.atmospheres[k].get()) { live = true; break; }
-    if (live) { if (used != k) st.atmospheres[used] = std::move(st.atmospheres[k]); ++used; }
-  }
+  for (size_t k = 0; k < st.atmospheres.size(); ++k)
+    if (live[k]) { if (used != k) st.atmospheres[used] = std::move(st.atmospheres[k]); ++used; }
   while (st.atmospheres.size() > used) st.atmospheres.pop_back();
   st.stats.kept = static_cast<double>(st.entries.size());
   unwind.installed = true;
