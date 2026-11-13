@@ -2833,20 +2833,44 @@ or any refusal, leaves no snapshot: the store is empty and its arrays are freed.
   same-epoch duplicates in whichever parts they fall (the later in input order replaces), the interned weather, the covariances.
   Nothing is decided before the close: the aging and the cap need the newest epoch of the whole load, and series-forces-differ
   compares every record of a series.
-- **Refusals.** A part refused for any reason drops the load: the store is empty and the load closed (a later part or close is
-  refused `load-not-open`). The reported failure is the first one met in input order: within a part as `load_epochs` reports it
+- **Status.** A non-zero status of any of the three methods means the load is closed and the store is empty, without exception:
+  - an open always drops the load in progress and empties the store, whether or not its configuration is accepted (a refused open
+    leaves no load open and no store);
+  - a part refused for any reason (a type, a frame, a record, `out-of-memory`) drops the load and empties the store;
+  - a close always ends the load, accepted or refused (series-forces-differ, `out-of-memory`, `missing-ocm` for a close with no
+    part), and a refused close leaves the store empty.
+
+  Except for the call with nothing to act on: a part or a close with no load open is refused `load-not-open` and changes nothing
+  (a loaded store stays). `load_epochs` abandons a load in progress, accepted or refused; with no load open, a `load_epochs`
+  refused before it begins (a wrong frame type, a bad $PCF) leaves the store as it was, as it always did, where a refused open
+  empties it (the open's contract is the empty store).
+- **The first failure.** The reported failure is the first one met in input order: within a part as `load_epochs` reports it
   (every frame's type is checked before any record is decoded, so within one part a wrong type is reported before an earlier
-  record's decode refusal), across parts the earlier part's. series-forces-differ and the refusals of the install come at the
-  close. An allocation that fails anywhere (SPEC 1.6) refuses by name `out-of-memory`, with the store empty and the load closed.
-- **State of the store.** From the open to the close the store is empty: the open empties it, a part adds nothing to it, and a
-  state asked of it is refused as for any series it does not hold (the `sdnap_epochs_*` exports answer -1, no such series). A
-  part or a close with no load open is refused `load-not-open` and changes nothing (a loaded store stays). An open while a load
-  is open drops that load and starts over; `load_epochs` while one is open does the same. A close with no part is refused
-  `missing-ocm`, as is a part with no 'ocm' frame.
-- **Memory.** Nothing of a part's bytes is kept after the call, so a host may stage every part in one buffer. What is held
-  between parts is the decoded records (their identity, elements, forces and covariance, with the weather interned once and the
-  forecast of a record that carries one copied out of the part's bytes) and the counts; the sort and the install happen at the
-  close, as in `load_epochs`, so the decoded records of every part are held until then.
+  record's decode refusal), across parts the earlier part's. So for a list with a record that cannot be decoded in an earlier part
+  and a frame of a wrong type in a later one, `load_epochs` on the whole list reports the wrong type and the parts report the
+  record; this is the one case in which the failure first reported differs from `load_epochs`'s. series-forces-differ and the
+  refusals of the install come at the close. An allocation that fails anywhere (SPEC 1.6), including the copy of a forecast and
+  the arrays of a track, refuses by name `out-of-memory`.
+- **State of the store.** From the open to the close the store is empty and no state is served: the open empties it and a part
+  adds nothing to it. The `sdnap_epochs_*` exports answer as for a store that holds nothing, and not uniformly: `sdnap_epochs_count`
+  0; `sdnap_epochs_stats` zero counts and, in the eighth statistic, the bytes the open load holds (below); `sdnap_epochs_series`,
+  `_select` and `_set_at` -1 (no such series); `sdnap_epochs_at` and `_source_at` -1 for any request of one series or more and 0 for
+  a request of none; `sdnap_drag_orbit_check` -4 (ORBPRO_PROP_BAD_INPUT). A host reads no state between the open and the close.
+- **One load at a time.** There is one load per instance, with no handle: a part or a close acts on the load open, whoever opened it,
+  and an open from any caller drops the load in progress. A host serializes one load per instance. The install at the close writes the
+  resident store in place, with no guard against a reader on another thread, as `load_epochs` never had: a host does not read the
+  store while a close is in progress. No pool or batch entry of the module reads this store.
+- **Memory.** Nothing of a part's bytes is kept after the call: a host stages every part in one buffer, allocated once and reused
+  (the module reads a part's frames in place and has copied what it keeps before the call returns). What is held between parts is the
+  decoded records (identity, elements, forces and covariance, the weather interned once, and, for a record that carries a forecast,
+  the whole record's bytes copied out of the part's, as one counted allocation) and the arrays that index them. They are counted in
+  the eighth statistic of `sdnap_epochs_stats` (the bytes held), so a host sees what a load in progress holds. The sort and the
+  install happen at the close, as in `load_epochs`, so the decoded records of every part are held until then, and at the close the
+  decoded records and the installed store are resident together: that is the high-water. At 100,000 AP records with a covariance, in
+  parts of 1,000, the instance (including that high-water, since WebAssembly memory keeps its high-water size) is 150,470,656 bytes
+  (143.5 MiB), of which the installed store counts 112,404,152 bytes (107.2 MiB). A record that carries a forecast holds the whole
+  record: 3,000 such records of 13,576 bytes each, in parts of 100, hold 15,368 bytes each while the load is open and 15,349 bytes each
+  in the store, and the instance is 16,930 bytes an object (30,059 in one call, which holds the payload besides).
 
 **14.2 Selection.** With E_0 < ... < E_{n-1} a series' epochs and t the request time: NEAREST takes the set whose
 epoch is nearest t (switch between E_i and E_{i+1} at tau_i = (E_i + E_{i+1}) / 2); LATEST_BEFORE the latest set at or

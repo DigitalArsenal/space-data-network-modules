@@ -195,7 +195,7 @@
     {
       "methodId": "load_epochs_open",
       "displayName": "Open a load of the epoch store in parts",
-      "description": "Starts a load that takes its snapshot in parts (SPEC 14.1): empties the resident epoch store and reads the optional $PCF EPOCH_STORE table once (the same table, defaults and refusals as load_epochs). A load already open is dropped: this starts over. Then load_epochs_part any number of times, then load_epochs_close; the store built is the one load_epochs builds from all the frames in one call. Refused by name: configuration-refused, invalid-configuration, out-of-memory (an allocation failed, SPEC 1.6).",
+      "description": "Starts a load that takes its snapshot in parts (SPEC 14.1.1): always drops the load in progress and empties the resident epoch store, then reads the optional $PCF EPOCH_STORE table once (the same table, defaults and refusals as load_epochs). A refused open leaves no load open and no store: a non-zero status of this method, load_epochs_part or load_epochs_close means the load is closed and the store is empty (except a part or a close with no load open, which changes nothing). Then load_epochs_part any number of times, then load_epochs_close; the store built is the one load_epochs builds from all the frames in one call. One load per instance, with no handle. Refused by name: configuration-refused, invalid-configuration, out-of-memory (an allocation failed, SPEC 1.6).",
       "inputPorts": [
         {
           "portId": "configuration",
@@ -226,7 +226,7 @@
     {
       "methodId": "load_epochs_part",
       "displayName": "Take one part of a load of the epoch store",
-      "description": "Decodes the 'ocm' frames of one part (size-prefixed $OCM records end to end, or one $OCM record a frame, as load_epochs takes them) into the load open by load_epochs_open, in input order. Nothing of the part's bytes is kept after the call: the host may reuse its staging buffer. The store stays empty until load_epochs_close. A part refused for any reason (the refusals of load_epochs that concern a record, a frame or its type, and out-of-memory) drops the load and leaves the store empty; with no load open it is refused load-not-open and nothing else changes. A part carries at least one 'ocm' frame (missing-ocm).",
+      "description": "Decodes the 'ocm' frames of one part (size-prefixed $OCM records end to end, or one $OCM record a frame, as load_epochs takes them) into the load open by load_epochs_open, in input order. Nothing of the part's bytes is kept after the call: the host stages every part in one buffer, allocated once and reused (a record's forecast is copied out of the part, a counted allocation). The store stays empty and serves no state until load_epochs_close (SPEC 14.1.1 lists what each sdnap_epochs_* export answers meanwhile); what the open load holds is in the byte statistic of sdnap_epochs_stats. A part refused for any reason (the refusals of load_epochs that concern a record, a frame or its type, and out-of-memory) drops the load and leaves the store empty; with no load open it is refused load-not-open and nothing else changes. A part carries at least one 'ocm' frame (missing-ocm). The first failure reported is the first in input order (within a part as load_epochs reports it; SPEC 14.1.1 names the one case where it differs).",
       "inputPorts": [
         {
           "portId": "ocm",
@@ -257,7 +257,7 @@
     {
       "methodId": "load_epochs_close",
       "displayName": "Close a load of the epoch store",
-      "description": "Closes the load open by load_epochs_open: the sort into series and epochs, the kept sets, and the install, as load_epochs does after it has decoded its frames (SPEC 14.1). On success the resident epoch store is the snapshot of all the parts; on any refusal (series-forces-differ, out-of-memory) the store is empty and the load is closed. With no load open it is refused load-not-open; with no part taken, missing-ocm.",
+      "description": "Closes the load open by load_epochs_open: the sort into series and epochs, the kept sets, and the install, as load_epochs does after it has decoded its frames (SPEC 14.1, 14.1.1). The decoded records of every part and the installed store are resident together at the close. On success the resident epoch store is the snapshot of all the parts; on any refusal (series-forces-differ, out-of-memory) the store is empty; the load is closed either way. With no load open it is refused load-not-open and nothing changes; with no part taken, missing-ocm (and the load is closed). The install writes the resident store in place: a host reads no state while a close is in progress.",
       "inputPorts": [],
       "outputPorts": [],
       "maxBatch": 65535,
