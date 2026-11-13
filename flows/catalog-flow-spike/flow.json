@@ -1,0 +1,129 @@
+{
+  "programId": "com.digitalarsenal.flows.catalog-flow-spike",
+  "name": "Catalog chain compatibility spike",
+  "version": "0.0.1",
+  "engineLinkage": "bridge",
+  "nodes": [
+    {
+      "nodeId": "ingest",
+      "pluginId": "com.spacedatanetwork.sdn-ap-propagator",
+      "methodId": "ingest_omm",
+      "kind": "transform",
+      "drainPolicy": "single-shot"
+    },
+    {
+      "nodeId": "flight",
+      "pluginId": "com.spacedatanetwork.sdn-ap-propagator",
+      "methodId": "propagate",
+      "kind": "transform",
+      "drainPolicy": "single-shot"
+    },
+    {
+      "nodeId": "fit",
+      "pluginId": "com.spacedatanetwork.sdn-ap-propagator",
+      "methodId": "fit",
+      "kind": "transform",
+      "drainPolicy": "single-shot"
+    },
+    {
+      "nodeId": "egress",
+      "pluginId": "sdn.flow.egress",
+      "methodId": "emit",
+      "kind": "sink",
+      "drainPolicy": "single-shot"
+    }
+  ],
+  "edges": [
+    {
+      "edgeId": "ingest-flight-ocm",
+      "fromNodeId": "ingest",
+      "fromPortId": "ocm",
+      "toNodeId": "flight",
+      "toPortId": "ocm",
+      "backpressurePolicy": "queue",
+      "queueDepth": 1
+    },
+    {
+      "edgeId": "flight-fit-ephemeris",
+      "fromNodeId": "flight",
+      "fromPortId": "ephemeris",
+      "toNodeId": "fit",
+      "toPortId": "ephemeris",
+      "backpressurePolicy": "queue",
+      "queueDepth": 1
+    },
+    {
+      "edgeId": "fit-egress-elements",
+      "fromNodeId": "fit",
+      "fromPortId": "elements",
+      "toNodeId": "egress",
+      "toPortId": "elements",
+      "backpressurePolicy": "queue",
+      "queueDepth": 1
+    },
+    {
+      "edgeId": "fit-egress-residuals",
+      "fromNodeId": "fit",
+      "fromPortId": "residuals",
+      "toNodeId": "egress",
+      "toPortId": "residuals",
+      "backpressurePolicy": "queue",
+      "queueDepth": 1
+    }
+  ],
+  "triggers": [
+    {
+      "triggerId": "set",
+      "kind": "manual",
+      "source": "host"
+    },
+    {
+      "triggerId": "flight_config",
+      "kind": "manual",
+      "source": "host"
+    },
+    {
+      "triggerId": "fit_config",
+      "kind": "manual",
+      "source": "host"
+    },
+    {
+      "triggerId": "weather",
+      "kind": "manual",
+      "source": "host"
+    }
+  ],
+  "triggerBindings": [
+    {
+      "triggerId": "set",
+      "targetNodeId": "ingest",
+      "targetPortId": "omm",
+      "backpressurePolicy": "queue",
+      "queueDepth": 1
+    },
+    {
+      "triggerId": "flight_config",
+      "targetNodeId": "flight",
+      "targetPortId": "configuration",
+      "backpressurePolicy": "queue",
+      "queueDepth": 1
+    },
+    {
+      "triggerId": "fit_config",
+      "targetNodeId": "fit",
+      "targetPortId": "configuration",
+      "backpressurePolicy": "queue",
+      "queueDepth": 1
+    },
+    {
+      "triggerId": "weather",
+      "targetNodeId": "fit",
+      "targetPortId": "space_weather",
+      "backpressurePolicy": "queue",
+      "queueDepth": 1
+    }
+  ],
+  "requiredPlugins": [
+    "com.spacedatanetwork.sdn-ap-propagator"
+  ]
+}
