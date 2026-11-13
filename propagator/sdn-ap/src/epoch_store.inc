@@ -412,6 +412,9 @@ inline int32_t rows_cover(Store& st, const Entry& en, double t) {
   return 0;
 }
 
+/// Test builds install a hook to poison the initializing thread's table storage.
+inline void (*g_init_hook)() = nullptr;
+
 /// The slot holding set `k` of series `s`, initialized on first use (the older of the two slots replaced).
 inline Slot& slot_of(Store& st, Series& s, uint32_t k, bool with_cov) {
   const Entry& bound = st.entries[s.first + k];
@@ -430,6 +433,7 @@ inline Slot& slot_of(Store& st, Series& s, uint32_t k, bool with_cov) {
   q.index = static_cast<int32_t>(k);
   const Entry& en = st.entries[s.first + k];
   const Elements e = elements_of(en.row);
+  if (g_init_hook != nullptr) g_init_hook();
   // SPEC 1.6 (stack #497): a slot whose initialization failed for want of memory is not kept as refused: it answers this
   // call with the failure and is initialized again by the next
   const uint32_t mem_mark = sdnap::mem::g_thread_failures;
@@ -1041,16 +1045,14 @@ int32_t sdnap_epochs_select(uint32_t i, double jd_whole, double jd_frac, double*
   return 0;
 }
 
-/// Series [first, first + count) at one split Julian date (UTC): six planes of `count` doubles (x, y, z, vx, vy, vz),
-/// frame 0 TEME (km, km/s) or 3 Earth-fixed (m, m/s); `status` (optional) one code per series (0 ok); `cov`
-/// (optional) 36 doubles per series, the TEME covariance row-major (NaN for series without one). 0, or -1.
-SDNAP_EXPORT("sdnap_epochs_at")
-int32_t sdnap_epochs_at(double jd_whole, double jd_frac, uint32_t first, uint32_t count, int32_t frame, double* out, int32_t* status, double* cov) {
-  auto& st = sdnap::epochs::resident();
-  if (out == nullptr || first > st.series.size() || count > st.series.size() - first || (frame != 0 && frame != 3)) return -1;
+namespace sdnap {
+namespace epochs {
+/// One series owns both slots throughout selection, initialization, flight and replacement.
+inline void write_series(Store& st, double jd_whole, double jd_frac, uint32_t first, uint32_t count,
+                         int32_t frame, double* out, int32_t* status, double* cov, uint32_t k) {
   const double t = sdnap::epochs::minutes_of(jd_whole, jd_frac);
   const double theta = frame == 3 ? sdnap::gmst(jd_whole, jd_frac) : 0.0;
-  for (uint32_t k = 0; k < count; ++k) {
+
     double r[3], v[3], P[36];
     bool have_p = false;
     const double jd[2] = {jd_whole, jd_frac};
@@ -1064,7 +1066,104 @@ int32_t sdnap_epochs_at(double jd_whole, double jd_frac, uint32_t first, uint32_
     }
     if (cov != nullptr)
       for (int q = 0; q < 36; ++q) cov[36 * k + q] = e == sdnap::kPropOk && have_p ? P[q] : std::numeric_limits<double>::quiet_NaN();
+}
+
+/// A series containing a wide set stays serial for its entire flight: output-time node changes acquire grids too.
+inline bool wide_series(const Store& st, const Series& s) {
+  for (uint32_t k = 0; k < s.count; ++k)
+    if (st.entries[s.first + k].branch.wide_tess) return true;
+  return false;
+}
+
+/// Reserve retained sets, cache-pool room and each thread's largest table build before forbidding growth. The retained
+/// allowance is 64 KiB per selected cold set; larger tables use the same allocation-refusal and serial retry as rows.
+inline size_t series_reserve(Store& st, const pool::Job& j) {
+  size_t cold = 0;
+  int degree = 0;
+  const double t = minutes_of(j.jd_whole, j.jd_frac), jd[2] = {j.jd_whole, j.jd_frac};
+  for (uint32_t i = 0; i < j.count; ++i) {
+    if (j.serial_series[i]) continue;
+    const Series& s = st.series[j.first + i];
+    const auto selected = choose(st, s, t, jd);
+    const int32_t indices[2] = {static_cast<int32_t>(selected.a), selected.b};
+    for (int32_t k : indices) {
+      if (k < 0) continue;
+      const Entry& en = st.entries[s.first + static_cast<uint32_t>(k)];
+      degree = std::max(degree, en.forces.tesseral);
+      bool held = false;
+      for (const Slot& slot : s.slots) if (slot.index == k) held = true;
+      if (!held) ++cold;
+    }
   }
+  // The cache holder/order vectors are allocated before the batch, including the no-reserve diagnostic case.
+  const uint64_t room = xpt::pool_room(2 * j.count);
+  if (pool::g_reserve_off) return 0;
+  degree = std::min(degree, xpt::tess::kFastCap);
+  const int extra = xpt::tess::kShallowMax;
+  const uint64_t table = static_cast<uint64_t>(xpt::tess::sp_comb_bound(degree, false, extra)) * sizeof(xpt::tess::SpCombCoef) +
+      (xpt::keep_sp_raw() ? static_cast<uint64_t>(xpt::tess::sp_bound(degree, false, extra)) * sizeof(xpt::tess::SpCoef) : 0);
+  const uint64_t bytes = cold * (64ull << 10) + std::min<uint64_t>(2ull * j.count * (128u << 10), room + (1u << 20)) +
+      (j.threads + 1) * (table + sizeof(xpt::tess::SpTermsScratch)) + (8u << 20);
+  return static_cast<size_t>(std::min<uint64_t>(bytes, INT32_MAX));
+}
+}  // namespace epochs
+
+namespace pool {
+void run_epoch_row(const Job& j, uint32_t i) {
+  epochs::write_series(*j.epochs, j.jd_whole, j.jd_frac, j.first, j.count, j.frame, j.out, j.status, nullptr, i);
+  if (xpt::g_alloc_refused) {
+    // Even a successful initializer may have crossed a refused allocation in an external routine. No partial set is
+    // retained for the serial retry, including the other slot of a blend.
+    for (epochs::Slot& slot : j.epochs->series[j.first + i].slots) epochs::release(slot);
+  }
+}
+}  // namespace pool
+}  // namespace sdnap
+
+/// Series [first, first + count) at one split Julian date (UTC): six planes of `count` doubles (x, y, z, vx, vy, vz),
+/// frame 0 TEME (km, km/s) or 3 Earth-fixed (m, m/s); `status` (optional) one code per series (0 ok); `cov`
+/// (optional) 36 doubles per series, the TEME covariance row-major (NaN for series without one). 0, or -1.
+SDNAP_EXPORT("sdnap_epochs_at")
+int32_t sdnap_epochs_at(double jd_whole, double jd_frac, uint32_t first, uint32_t count, int32_t frame, double* out, int32_t* status, double* cov) {
+  auto& st = sdnap::epochs::resident();
+  if (out == nullptr || first > st.series.size() || count > st.series.size() - first || (frame != 0 && frame != 3)) return -1;
+  auto& j = sdnap::pool::job();
+  const bool threaded = cov == nullptr && j.threads > 0 && count > sdnap::pool::kEpochChunk && sdnap::pool::load(&j.dead) == 0;
+  if (!threaded) {
+    for (uint32_t k = 0; k < count; ++k)
+      sdnap::epochs::write_series(st, jd_whole, jd_frac, first, count, frame, out, status, cov, k);
+    return 0;
+  }
+  static std::vector<uint8_t> serial;
+  static std::vector<uint32_t> deferred;
+  serial.resize(count);
+  deferred.resize(count);
+  for (uint32_t k = 0; k < count; ++k) {
+    serial[k] = sdnap::epochs::wide_series(st, st.series[first + k]);
+    if (serial[k]) sdnap::epochs::write_series(st, jd_whole, jd_frac, first, count, frame, out, status, nullptr, k);
+  }
+  // Constant tables and ERFA's leap-second globals are initialized before any concurrent set build.
+  (void)sdnap::drag::table();
+  (void)sdnap::xpt::tess::egm_tables();
+  double tt1, tt2;
+  (void)sdnap::frames::utc_to_tt(jd_whole, jd_frac, tt1, tt2);
+  j.kind = sdnap::pool::kJobEpochs;
+  j.epochs = &st;
+  j.serial_series = serial.data();
+  j.jd_whole = jd_whole; j.jd_frac = jd_frac;
+  j.first = first; j.count = count; j.frame = frame;
+  j.out = out; j.status = status; j.deferred = deferred.data();
+  const size_t reserve = sdnap::epochs::series_reserve(st, j);
+  const int32_t rc = sdnap::pool::run(count, reserve);
+  if (rc != 0) {
+    if (status != nullptr) for (uint32_t k = 0; k < count; ++k) status[k] = sdnap::pool::kRowPoolDead;
+    return rc;
+  }
+  const int32_t n = sdnap::pool::load(&j.deferred_n);
+  std::sort(deferred.begin(), deferred.begin() + n);
+  for (int32_t q = 0; q < n; ++q)
+    sdnap::epochs::write_series(st, jd_whole, jd_frac, first, count, frame, out, status, nullptr, deferred[q]);
+  sdnap::xpt::batch_stats().deferred += static_cast<uint64_t>(n);
   return 0;
 }
 

@@ -35,10 +35,12 @@
 // -----------------------------------------------------------------------------
 
 namespace sdnap {
+namespace epochs { struct Store; }
 namespace pool {
 
 constexpr int32_t kMaxThreads = 16;
 constexpr uint32_t kChunk = 512;
+constexpr uint32_t kEpochChunk = 16;
 /// A batch whose pool thread died (it trapped, or stopped answering): the batch's return and every row's status. When
 /// the calling thread, waiting for a batch's last chunks, polls `dead_polls()` times without a row completing on any
 /// thread, a thread is taken for dead; the pool is then not used again (later batches run on the calling thread).
@@ -56,7 +58,7 @@ constexpr uint64_t kDeadYieldsDefault = 1ull << 34;
 /// probe used 4,992 B of it) and its thread-local block, with margin.
 constexpr size_t kThreadRoom = 1u << 20;
 
-enum JobKind : int32_t { kJobNone = 0, kJobJd = 1, kJobMinutes = 2 };
+enum JobKind : int32_t { kJobNone = 0, kJobJd = 1, kJobMinutes = 2, kJobEpochs = 3 };
 
 /// The heartbeat (stack #487): the rows each thread has completed, one counter per thread, each aligned to 64 bytes (slot 0
 /// the calling thread's, 1 to kMaxThreads the pool threads'), so a row's count is a store no other thread makes. The
@@ -92,6 +94,8 @@ struct Job {
   int32_t dead;    ///< a thread was taken for dead: the pool is not used again
   int32_t pages;   ///< the memory's size (pages) as the thread that last grew it saw it: no thread uses less (await_view)
   // arguments
+  epochs::Store* epochs;
+  const uint8_t* serial_series;
   double jd_whole, jd_frac;
   const double* minutes;
   uint32_t first, count, frame;
@@ -148,6 +152,8 @@ inline bool await_view(int32_t pages, uint64_t limit = 0) {
 }
 
 void run_chunk(const Job& j, int32_t chunk);
+void run_epoch_row(const Job& j, uint32_t i);
+inline uint32_t chunk_size(const Job& j) { return j.kind == kJobEpochs ? kEpochChunk : kChunk; }
 /// Test builds only (nullptr in the shipped build): called before each chunk with the chunk and whether a pool thread
 /// (not the calling thread) runs it.
 inline void (*g_chunk_hook)(int32_t chunk, bool pool_thread) = nullptr;
@@ -193,6 +199,7 @@ inline void run_chunks() {
 /// its blk_c storage and grouping scratch, the half-day cache, the covariance's step cache, the Sun and Moon node store, the drift and GCRF node slots. Made lazily
 /// they were made in the batch (stack #487); every one is a pointer test once made.
 inline void warm_thread() {
+  (void)xpt::tess::sp_terms_scratch();
   (void)xpt::tess::sp_thread_cache();
   (void)xpt::tess::sp_blk_c_storage();
   (void)xpt::tess::sp_build_scratch();
@@ -261,7 +268,8 @@ inline int32_t start(int32_t requested) {
 /// growth of the memory refused; the rows a refusal stopped are left in j.deferred for the calling thread.
 inline int32_t run(uint32_t count, size_t reserve) {
   Job& j = job();
-  const int32_t chunks = static_cast<int32_t>((count + kChunk - 1) / kChunk);
+  const uint32_t chunk = chunk_size(j);
+  const int32_t chunks = static_cast<int32_t>((count + chunk - 1) / chunk);
   const bool threaded = j.threads > 0 && chunks > 1 && load(&j.dead) == 0;
   __atomic_store_n(&j.deferred_n, 0, __ATOMIC_SEQ_CST);
   __atomic_store_n(&j.done, 0, __ATOMIC_SEQ_CST);

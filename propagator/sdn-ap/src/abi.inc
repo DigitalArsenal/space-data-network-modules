@@ -93,11 +93,17 @@ inline void run_row(const Job& j, uint32_t i) {
 }
 
 void run_chunk(const Job& j, int32_t chunk) {
-  const uint32_t begin = static_cast<uint32_t>(chunk) * kChunk;
-  const uint32_t end = begin + kChunk < j.count ? begin + kChunk : j.count;
+  const uint32_t size = chunk_size(j);
+  const uint32_t begin = static_cast<uint32_t>(chunk) * size;
+  const uint32_t end = begin + size < j.count ? begin + size : j.count;
   for (uint32_t i = begin; i < end; ++i) {
     xpt::g_alloc_refused = 0;
-    run_row(j, i);
+    if (j.kind == kJobEpochs) {
+      if (j.serial_series[i]) continue;
+      run_epoch_row(j, i);
+    } else {
+      run_row(j, i);
+    }
     if (g_row_hook != nullptr) g_row_hook(i, g_pool_thread);
     pool::beat();  // the heartbeat the waiting calling thread reads (stack #487)
     // a row during which the memory's growth was refused may have been stopped short of a block it needed: the calling
