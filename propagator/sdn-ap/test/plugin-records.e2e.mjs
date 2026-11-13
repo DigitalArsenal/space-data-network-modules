@@ -152,7 +152,7 @@ if (process.env.SDNAP_CONTROL_WASM) {
   cx.plugin_destroy(); cx.sdnap_free(ci); cx.sdnap_free(co); await control.h.destroy?.(); controlCompared = true;
 }
 // A multi-set identity stays one index, supports exact paths, and refuses ambiguous replacement.
-const secondEpoch = repackOcm(ap[0], t => { t.MEAN_ELEMENTS.EPOCH = '2026-10-15T02:00:00.000'; });
+const secondEpoch = repackOcm(ap[0], t => { t.MEAN_ELEMENTS.EPOCH = '2026-10-15T02:00:00.000'; t.TRAJ_FRAME_EPOCH = t.MEAN_ELEMENTS.EPOCH; });
 ok(await call('load_epochs', [input([ap[0], secondEpoch])])); assert.equal(x.plugin_entity_count(), 1);
 refusal(await call('replace_epoch', [input([ap[0]])]), 'replace-multiple-sets');
 assert.equal(x.plugin_propagate_path(0, jd, 0, 1, positions), 1);
