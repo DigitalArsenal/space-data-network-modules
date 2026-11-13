@@ -5579,15 +5579,13 @@ are 4 bytes off the builder's alignment (`ocm::view`, as every SDS input here); 
 scalar, and `ensure` reads the coefficients with `memcpy`. A record's vector of segments costs at most 52 bytes of
 the store a segment (an element of 4 bytes in the record): a hostile record of n bytes asks at most 13 n.
 
-Threads. Today no carried track is shared across threads: the module's pool (`src/pool.inc`, `abi.inc` `batch`) runs
-only the propagator ABI's row store (`plugin_init_omm`'s rows, `row_propagate`), cut into 512-object chunks, one thread
-per row; `propagate`, `propagate_epochs`, `load_epochs`, the `sdnap_epochs_*` exports and `fit` run on the calling
-thread. A track is nonetheless safe for concurrent readers by construction: its storage is sized once when it is read
-and never resized; the coefficients are read in place from the record's bytes, which the store copies once at load
-before any flight; each segment's fields are written once, by the thread that moves its state from unread to busy, and
-published by an atomic store (release) that readers load (acquire), a thread finding it busy reading its own copy; the
-search's hint is per thread. The change that first puts a track on the pool (segment-level serving, #394, or a pooled
-`sdnap_epochs_at`) brings a many-threads byte-identity test with it and does not merge without it. The verifier stays
+Threads. The state-only epoch-store batch assigns each series to one thread, and carried tracks move between threads
+across batches. A track's storage is sized once when it is read and never resized; coefficients are read in place from
+the record's bytes, copied by the store at load before flight. Segment fields are published by a release store after
+one reader moves the state from unread to busy; acquire readers see the completed fields, and a reader finding busy
+uses its own copy. The search hint is per thread. `test/epoch-carried-pool.e2e.mjs` checks 128 carried and theory series
+at four instants inside and outside the carried span, in TEME and Earth-fixed frames, at 0, 1, 4 and 15 threads.
+All state, status and source bytes equal the serial entry and the 0.6.52 artifact. The verifier stays
 lazy with these states, and they did not change W4: on the six orbits' 1-day records and the 8-day record at 500 km
 (paired rounds against the build before them, 100 records, 21 rounds) the load per record moved by -12 to +3 us,
 within the rounds' spread, and the first state took 0.1 to 1.0 us against 0.2 to 4.3 (the coefficients are no longer

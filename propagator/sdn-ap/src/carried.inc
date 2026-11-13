@@ -149,15 +149,9 @@ inline bool epoch_axes(double w, double f, double* q0) { return frame_at(w, f, q
 // $OCM verifier, build.mjs) and read when a state first needs it. A time inside the span is found by interpolation
 // search over the segments' start times; a time the segment found does not cover (to kJoinSeconds) is a gap.
 //
-// Threads (SPEC 18.5). Today no Track is shared across threads: the pool (pool.inc, abi.inc `batch`) runs only the
-// row store of the propagator ABI (plugin_init_omm's rows, `row_propagate`), cut into 512-object chunks, one thread per
-// row; `propagate`, `propagate_epochs`, `load_epochs`, the `sdnap_epochs_*` exports and `fit` run on the calling
-// thread. A Track is nonetheless safe for concurrent readers by construction: its storage is sized once by read() (or
-// by fit's build) and never resized; the coefficients are read in place from the record's bytes (kept once by keep()
-// before any flight); a segment's fields are written once, by the thread that moves its state from kUnread to kBusy,
-// and published by an atomic store (release) that readers load (acquire); a thread that finds a segment kBusy reads it
-// into its own copy; the search hint is per thread. The change that first puts a Track on the pool (segment-level
-// serving, stack #394, or a pooled sdnap_epochs_at) brings the many-threads byte-identity test with it.
+// Threads (SPEC 18.5). The epoch-store pool assigns each series to one thread. Tracks can move between threads across
+// batches; their storage is sized before flight, segment publication is atomic, and search hints are per thread.
+// test/epoch-carried-pool.e2e.mjs compares state, status and source bytes across thread counts and against serial flight.
 
 /// A segment's state: kUnread, kBusy (being read by one thread), kValid, or the refusal (named by refusal_name).
 enum SegmentState : int32_t { kUnread = 0, kBusy = 1, kValid = 2, kNotVerifiable = -1, kBasis = -2, kVelocity = -3, kInvalid = -4, kGap = -5, kFrame = -6 };
