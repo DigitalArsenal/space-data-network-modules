@@ -6312,20 +6312,21 @@ tables `drag::table()` makes, the caches the first `xp_init` on a thread makes, 
   replacement is stored, or before it when the slab is full without them.
 - `sdnap_frames_stats(out)`: 20 doubles: [0] objects, [1] objects this entry can serve, [2] cells held (tombstones
   included), [3] slab bytes, [4] slab bytes used, [5] table bytes, [6] bytes of the block as allocated, [7] refill rows, [8]
-  rows refused for memory, [9] cells stored, [10] windows halved, [11] the bytes asked or needed by the last refused open,
-  [12] rows that could not be stored for want of room, [13] windows AP refused in, stored as tombstones, [14] windows the
-  builder failed at 3 minutes, stored as tombstones, [15] 1 when the store is the one read last, [16] the bytes the cells
+  rows refused for memory, [9] cells and tombstones placed in the slab (each stored row, whatever it holds), [10] windows halved (each halving, counted once), [11] the bytes asked or needed by the last refused open,
+  [12] rows that could not be stored for want of room, [13] rows that ended as a tombstone because AP refused in the window, and rows whose set AP could not make (an object whose set
+  cannot be made counts once), [14] rows that ended as a tombstone because the builder failed at 3 minutes, [15] 1 when the store is the one read last, [16] the bytes the cells
   held take (their own sizes), [17] compactions of the slab, [18] bytes they moved, [19] places visited by refills. The slab
   is compacted only when the free bytes and the bump's remainder together hold the cell: a slab full of live cells is not
   compacted for nothing.
 - `sdnap_frames_close()`.
 
-What a row costs, to turn rows into time: the median milliseconds of one row (160 AP states: 64 sample points and 96 check
-points, from a cold set) by the window's distance from the epoch, 0, 2, 5 and 10 days, 20 seeded sets of each class with
-epochs spread over a day, machine load 16 (`node test/frames-cost.mjs --skip-frame --skip-wide`): 500 km 0.62, 0.80, 1.12,
-1.62; 830 km 0.61, 0.76, 1.01, 1.51; strong drag (perigee 300 km) 0.72, 2.52, 4.99, 8.48; eccentricity 0.015 to 0.045 11.2,
-10.9, 11.7, 11.7; medium 0.20, 0.22, 0.26, 0.36; geosynchronous 0.22, 0.77, 1.30, 2.67. The 95th percentile is 1.2 to 1.8
-times the median in low orbit and 11.3 ms at the largest. The cost grows with the distance because a cold set integrates its
+What a row costs, to turn rows into time: the median milliseconds of one row (162 AP states: 64 sample points, 96 check
+points and the two edges, from a cold set; 834 for a set with the dense check) by the window's distance from the epoch, 0, 2, 5 and 10 days, 20 seeded sets of each class with
+epochs spread over a day, machine load 14 to 16 (`node test/frames-cost.mjs --objects 100000 --rounds 10 --skip-wide`, the rows part; the median of 20 rows a cell of the table, the quarter and three-quarter points in the command's output): 500 km 0.63, 0.82, 1.20,
+1.66; 830 km 0.59, 0.75, 1.03, 1.66; strong drag (perigee 300 km) 1.28, 3.21, 5.63, 9.07; eccentricity 0.015 to 0.045 11.4,
+11.4, 11.6, 11.9 (a quarter of the rows cost under 1.6 ms: the tesseral degree follows the eccentricity); medium 0.20, 0.23,
+0.27, 0.35; geosynchronous 0.22, 0.79, 1.28, 2.64. The 95th percentile is 1.0 to 2.7
+times the median in low orbit and 12.8 ms at the largest. The cost grows with the distance because a cold set integrates its
 nodes from the epoch: a record 10 days old costs 2 to 12 times the first window of its day. The most a row can cost is five
 builds (the window halved four times, each failing at its check) of 160 states each, 800 AP states and one cold set; AP
 refusing in a window ends a build at its first refused state. Two rows of twenty halved in strong drag at 10 days.
@@ -6437,16 +6438,17 @@ What gets worse:
 
 - A frame state differs from AP's by up to the bound above. Two kinds of state exist for an object (AP's, from
   `sdnap_epochs_at`; the cell's, from `sdnap_frames_at`): they differ by up to that bound.
-- A first fill, and a jump of the clock, cost seconds during which objects answer 1 (no cell): 100,000 objects fill in 92 s on
-  one thread (recipe of 19.6, load 16), 128 s for the public catalog's shares (the rows of 19.1). The eccentric sets cost
+- A first fill, and a jump of the clock, cost seconds during which objects answer 1 (no cell): 100,000 objects of the recipe's mix
+  fill in 120 s on one thread when their records are at the epoch (163 s at 2 days, 224 s at 5 days, 323 s at 10 days): the mix of the
+  rows of 19.1, `node test/frames-cost.mjs --objects 100000 --rounds 10 --skip-wide`, load 14 to 16. The eccentric sets cost
   11 to 12 ms a row from eccentricity 0.03 with tesseral degree 31 (1 to 4 ms below it at 800 km): the cost is the set's
   initialization, the same at the epoch and at 2 days, and follows the tesseral degree (0.06 ms at degree 0, 0.43 at 8, 12 at
   31, 21 at 70 at e 0.03; `node test/frames-init.mjs`). On a catalog whose objects between e 0.01 and 0.05 are spread evenly
   (11.8 % of the public catalog's), 5.9 % lie above 0.03 and add about 0.7 ms an object, 70 s to a first fill of 100,000.
 - Objects that the entry does not serve (19.2) are asked of AP's entries, and so are the times a tombstone holds.
 - Memory per served object: 19.6. Refill CPU: a served object needs 1.25 rows an hour (windows of 48 minutes); with the
-  rows of 19.1 and the recipe's mix that is 142, 189 and 226 core seconds an hour for 100,000 objects whose records are 0, 2
-  and 5 days old (4 to 6 % of one core).
+  rows of 19.1 and the recipe's mix that is 150, 204, 280 and 403 core seconds an hour for 100,000 objects whose records are 0, 2, 5 and 10 days old
+  (4 to 11 % of one core; the same command).
 - A wide set flown through `sdnap_epochs_set_at` in the same instance holds about 10 MB (a grid in E, SPEC 16.11) for the
   life of the instance: 20 wide sets grew the instance by 210 MB. The byte bounds of 19.6 hold while wide objects are not
   flown in the instance. A refill row's time is the same before and after (0.84 ms median both). `node test/frames-cost.mjs
@@ -6456,7 +6458,7 @@ What gets worse:
 
 One block, allocated at open, counted, of exactly the budget given: the table (32 bytes a series, padded to 64, 3.2 MB at
 100,000) and the slab. The host's rule for the budget: 850 bytes for each object served, 32 bytes for each series and 1 MiB.
-Measured by `node test/frames-memory.e2e.mjs` (about 7 minutes, 3 GB of the host's memory; it asserts every figure below)
+Measured by `node test/frames-memory.e2e.mjs` (about 7 minutes, 3 GB of the host's memory; it asserts that the slab holds at most 850 bytes for each object served, that no row is refused, that every served object is served, and that the instance total is under 300 MB decimal with and without a pool; the other figures below are printed)
 at 100,000 objects, seeded sets with epochs spread over one window, loaded in parts of 1,000, filled at one instant, then the
 windows turned over (48 minutes in steps of one):
 
@@ -6484,23 +6486,25 @@ decoding of a part), which the memory does not give back to the host. Later allo
 hole in it does not: the 89 MB frame block grows the instance by its full size (open minus load equals the block), and the
 rows' cold sets, the thread's caches and a refill's allocations land in the load's holes and grow it by 0. The instance's
 memory does not shrink: the bound holds while no wide object is flown in the instance (19.5), and a look-ahead of two cells an
-object (19.9) adds 80 to 90 MB (about 330 MB without a pool). A slab that fragments (cells that change size) is compacted when its bump fails: the live cells slide down
+object (19.9) adds 80 to 90 MB (329 MB measured in a browser tab without a pool, 29 MB over the line). A slab that fragments (cells that change size) is compacted when its bump fails: the live cells slide down
 over the free ones and each holder's offset is rewritten (82.7 MB moved for a 100,000-object recipe slab sized 0.4 % above its full fill, six times in 50 minutes of one-minute
 calls: the calls that compacted took 1.66 to 2.12 s, those that did not 1.69 to 2.16 s, for about 2,100 rows each, so a
 compaction's own time is below the spread of a call's); a row is not stored only when the slab is full after that.
 
 ### 19.7 Cost
 
-A frame of 20,000 objects through `sdnap_frames_at` against the same through the module's SGP4 (`sdnap_epochs_at` on SGP4
-records), alternating rounds in one process, process CPU, position and velocity, the recipe's mix (`node test/frames-cost.mjs
---objects 20000 --skip-rows --skip-wide`, load 16): TEME 0.0665 microseconds a state against 0.2542 for
-SGP4, a ratio of 0.263; Earth-fixed 0.0710 against 0.2550, 0.278 (the rotation's sine and cosine are taken once for the call).
-At 100,000 objects (`--objects 100000`, load 25): TEME 0.0670 against 0.2554, 0.262; Earth-fixed 0.0706 against 0.2564,
-0.275. Ratios are what to read.
+A frame of 100,000 objects through `sdnap_frames_at` against the same through the module's SGP4 (`sdnap_epochs_at` on SGP4
+records), position and velocity, the recipe's mix, process CPU, 10 rounds in one process, the four kinds in the order A B C D
+and then D C B A by round (`node test/frames-cost.mjs --objects 100000 --rounds 10 --skip-wide`; load 14.3 at the start, 15.5 at
+the end, 1-minute averages): TEME 0.0666 microseconds a state against 0.2604 for SGP4, a ratio of 0.259 (the middle half of the
+rounds' ratios 0.255 to 0.260, within 2 % of the median); Earth-fixed 0.0699 against 0.2806, 0.249 (0.248 to 0.250; the rotation's
+sine and cosine are taken once for the call). 99,998 of the 100,000 objects were served in the timed frame (the other two hold a
+tombstone). A refill that finds nothing to do, at 100,000 places: 4.84 ms (the same command, `idleRefillMs`). Ratios are what to
+read.
 
 ### 19.8 Tests
 
-`node test/frames.e2e.mjs` (about 70 s): the bound over a day at -1, 0, 2, 5 and 10 days, with counts so that a run that
+`node test/frames.e2e.mjs` (about 13 minutes at load 14 to 16): the bound against AP asked of a fresh instance (every class), over a day at -1, 0, 2, 5 and 10 days, with counts so that a run that
 serves nothing fails; a status the same whatever the order of the windows asked (a refusal before the epoch does not reach
 the times after it); wide sets, series of several sets, stock sets, hand-over records and records with a forecast answer 2 and
 the store's exports (every set) are unchanged by refills; purity from two fill orders, the store's exports unchanged and a
@@ -6509,7 +6513,7 @@ compacted slab sized to the figure of an unconstrained run that never refuses a 
 bits of one at 5,000 and visiting each object once; the position-only mode; a build whose tolerance cannot be held (status
 4); every counted allocation of open and of a refill row failed in turn (the object keeps no cell, the slab is as it was,
 and the same call then answers with the bits of a clean run). `node test/frames-memory.e2e.mjs`: the bytes at 100,000
-objects. `node test/frames-cost.mjs`: 19.1's rows, 19.7's frame ratios and 19.5's residue of wide sets.
+objects. `node test/frames-cost.mjs`: 19.1's rows, 19.7's frame ratios and 19.5's residue of wide sets. `node test/frames-steps.mjs`: 19.5's step tables. `node test/frames-init.mjs`: the cost of a cold set by eccentricity.
 
 ### 19.9 Driving a clock
 
@@ -6527,7 +6531,12 @@ What a host that draws frames from a running clock needs, and what it gets.
   of objects that hold two cells is `ahead` / 48 minutes: 6.3 % at 3 minutes, 10 % at 5 minutes, all of them at 48 minutes. The
   850 bytes an object of 19.6 holds for a look-ahead of a few minutes; a look-ahead of two cells an object doubles the block
   (80 to 90 MB at 100,000 objects). A look-ahead that is short in wall time at speed (3 minutes of clock is 3 s at 60x) leaves
-  the rows no time: the host sizes `ahead` as the rows' time at its speed, and pays for it in the budget.
+  the rows no time: the host sizes `ahead` as the rows' time at its speed, and pays for it in the budget. A browser tab
+  (one thread, 100,000 objects, the budget doubled and a look-ahead of 48 minutes, no command in this repository) measured:
+  at 10x the share of objects without a cell fell to 5 % on average (30 % at the first window turn) and recovered; at 60x it
+  did not keep up (77 % without a cell). With two cells an object, a covariance-bearing 100,000-object catalog under the three
+  host rules of 19.6 made an instance of 329 MB, 29 MB over the 300 MB line: the line holds with a look-ahead of minutes, not
+  of a whole window.
 - **The live clock every frame.** A sweep that is not done goes on from its place when `now` has advanced by at most a minute of
   clock since the last call (measured in clock time: 16 ms of wall time at 60x is under a second). A host whose frames
   advance by more than a minute of clock (above 3,600x at 60 frames a second) starts a sweep at every call and scans the
