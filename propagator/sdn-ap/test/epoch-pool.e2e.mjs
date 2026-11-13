@@ -14,7 +14,8 @@
 // - the reference: each series alone (sdnap_epochs_at, one series a call), on the calling thread;
 // - its digest equals MAIN_DIGEST, the same reference made by sdn-ap 0.6.57 (modules 6a807990), the module this change is
 //   made on: the state, theory and status of every series are 0.6.57's;
-// - the whole store a call on 0, 1, 4 and 15 pool threads; on a test build (same sources, seams below) on 0, 1, 4 and 15
+// - the whole store a call on 0, 1, 4 and 15 pool threads; the store loaded in parts of 768 records (load_epochs_open,
+//   _part, _close) on 0, 4 and 15; on a test build (same sources, seams below) on 0, 1, 4 and 15
 //   with each initializing thread's scratch (the table, terms, shallow, half-day, build and trigonometry scratch) and its
 //   half-day evaluation cache's values poisoned before every set it builds, and on 4 with slices of 100 series (21 batches
 //   a call): each equal to the reference, byte for byte;
@@ -106,9 +107,22 @@ if (process.argv.includes('--case')) {
   const h = await createStandaloneHarness('browser', file, { surface: 'direct', maxThreads: Math.max(1, threads), enableBrowserWasiThreads: threads > 0 });
   const x = h.instance.exports;
   if (threads) assert.equal(x.sdnap_threads(threads), threads);
-  const load = await h.invoke({ methodId: 'load_epochs', inputs: [configuration({ epochStore: { BLEND_WINDOW_SECONDS: 3600 } }),
-    { portId: 'ocm', typeRef: T('OCM'), payload: records() }] });
-  assert.equal(load.statusCode, 0, `${load.errorCode}: ${load.errorMessage}`);
+  const cfg = configuration({ epochStore: { BLEND_WINDOW_SECONDS: 3600 } });
+  if (process.argv.includes('--parts')) {
+    // the same records loaded in parts of 768 (load_epochs_open, load_epochs_part, load_epochs_close)
+    const all = records(), parts = [];
+    for (let o = 0, n = 0, start = 0; o < all.length; ++n) {
+      o += 4 + all.readUInt32LE(o);
+      if ((n + 1) % 768 === 0 || o >= all.length) { parts.push(all.subarray(start, o)); start = o; }
+    }
+    for (const [methodId, inputs] of [['load_epochs_open', [cfg]], ...parts.map((p) => ['load_epochs_part', [{ portId: 'ocm', typeRef: T('OCM'), payload: p }]]), ['load_epochs_close', []]]) {
+      const r = await h.invoke({ methodId, inputs });
+      assert.equal(r.statusCode, 0, `${methodId}: ${r.errorCode}: ${r.errorMessage}`);
+    }
+  } else {
+    const load = await h.invoke({ methodId: 'load_epochs', inputs: [cfg, { portId: 'ocm', typeRef: T('OCM'), payload: records() }] });
+    assert.equal(load.statusCode, 0, `${load.errorCode}: ${load.errorMessage}`);
+  }
   assert.equal(x.sdnap_epochs_count(), count);
   const mode = process.argv.includes('--refuse') ? 2 : 1;
   if (x.sdnap_test_epoch_mode) x.sdnap_test_epoch_mode(mode, Number(arg('--slice', 0)));
@@ -274,6 +288,8 @@ function run(label, file, threads, options = []) {
 const reference = run('single', wasmPath, 0, ['--single']);
 if (count === 2048 && wide === 8) assert.equal(reference.r.digest, MAIN_DIGEST, `the reference against sdn-ap 0.6.57's (${MAIN_DIGEST})`);
 for (const threads of [0, 1, 4, 15]) assert.ok(run(`threads-${threads}`, wasmPath, threads).bytes.equals(reference.bytes), `${threads} pool threads`);
+// the store loaded in parts (SPEC 14.1.1) and flown on the pool
+for (const threads of [0, 4, 15]) assert.ok(run(`parts-${threads}`, wasmPath, threads, ['--parts']).bytes.equals(reference.bytes), `loaded in parts, ${threads} pool threads`);
 const seamed = [];
 for (const threads of [0, 1, 4, 15]) { const c = run(`poison-${threads}`, diagnostic, threads); assert.ok(c.bytes.equals(reference.bytes), `poison, ${threads} pool threads`); seamed.push(c.r); }
 const sliced = run('sliced', diagnostic, 4, ['--slice', '100']);
@@ -322,14 +338,14 @@ for (const r of [...seamed.filter((q) => q.threads > 0), sliced.r, deferred.r]) 
     `${r.label}: NRLMSISE-00 on pool threads ${s.poolMsisLow} of ${s.msisLow} at or under 325 km, ${s.poolMsisHigh} of ${s.msisHigh} over`);
   assert.ok(r.threads < 4 || s.lanes >= 2, `${r.label}: ${s.lanes} pool threads flew rows`);
 }
-for (const r of results.filter((q) => q.label.startsWith('threads-') || q.label.startsWith('poison-')))
+for (const r of results.filter((q) => q.label.startsWith('threads-') || q.label.startsWith('parts-') || q.label.startsWith('poison-')))
   assert.equal(r.good, 3 * count, `${r.label}: ${r.good} of ${3 * count} states answered`);
 // the covariance after the threaded instants: the reference's to the bit, on the calling thread (no batch), answered for
 // every series that carries one
 const covRef = fs.readFileSync(path.join(root, 'single-cov.bin'));
 const carrying = Array.from({ length: count }, (_, k) => k % 2 === 0 && (k < wide || (k % 10 !== 1 && k % 10 !== 2))).filter(Boolean).length;
 assert.equal(reference.r.covAnswered, carrying, `the reference's covariances: ${reference.r.covAnswered} of the ${carrying} series that carry one`);
-for (const r of results.filter((q) => q.label.startsWith('threads-') || q.label.startsWith('poison-') || q.label === 'sliced')) {
+for (const r of results.filter((q) => q.label.startsWith('threads-') || q.label.startsWith('parts-') || q.label.startsWith('poison-') || q.label === 'sliced')) {
   assert.ok(fs.readFileSync(path.join(root, r.label + '-cov.bin')).equals(covRef), `${r.label}: the covariances after the threaded instants`);
   assert.equal(r.covBatches, 0, `${r.label}: a call with a covariance plane ran ${r.covBatches} threaded batches`);
 }
