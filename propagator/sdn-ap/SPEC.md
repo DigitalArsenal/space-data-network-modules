@@ -6690,8 +6690,8 @@ caller's responsibility. The host quiesces its calls before destruction. If a fa
 thread, destruction is a no-op and OMM initialization is refused, preventing a free while that thread holds a reference.
 
 The owning thread can publish two host buffers with atomic generation/timestamp metadata and acknowledgment before
-reuse. That protocol belongs to the host. A separate immutable frame snapshot with a publication gate is an option for
-concurrent reads; it is not implemented by these exports. A previous-time buffer is not relabeled as the requested time.
+reuse. That protocol belongs to the host. These exports require serialized calls on the owning thread and provide no
+concurrent-read publication gate. A previous-time buffer is not relabeled as the requested time.
 
 `test/plugin-records.e2e.mjs` checks mixed synthetic sources, input order, holes, layouts, direct paths, metadata,
 replacement and lifecycle. `SDNAP_CONTROL_WASM` adds byte comparisons with an unchanged artifact. Diagnostic allocator
