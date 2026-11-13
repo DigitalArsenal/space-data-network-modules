@@ -1,5 +1,15 @@
 # Changelog
 
+## 0.6.55 — What a loaded catalog holds
+
+`load_epochs` holds less while it decodes and after it finishes, and every state is as in 0.6.54. The records of a load are held in blocks of 1,024
+allocated as they arrive, so the memory follows the records decoded and not the frame count the payload claims (a payload of a million 12-byte frames
+grew the instance by 544 MB before it was refused; it now grows by the 12 MB payload). The kept sets, entries and series are sized from the kept count.
+A stored covariance is one square matrix at its own size, and a series of one set holds one cache slot. The weather pool doubles when full and live
+atmospheres are marked in one pass; two series are one when every row, node and node value is bit-for-bit equal. A refused load leaves no snapshot.
+A covariance matrix that cannot be allocated is refused `out-of-memory`, not `invalid-covariance`. At 100,000 objects and 2 MiB initial memory the
+instance holds 1,249 bytes per object for SGP4 (1,651 before), 3,466 for AP without covariance (8,547), and 6,466 with covariance (9,837).
+
 ## 0.6.54 — Zonal long-period terms (stack #595)
 
 AP carries the zonal tail's long-period terms with 2 <= |w| <= 6 at epoch eccentricity at or below 0.3.
