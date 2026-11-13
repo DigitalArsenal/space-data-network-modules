@@ -402,6 +402,10 @@ if (!Object.keys(PATCH).length) {
     "static uint32_t g_test_deferred_n = 0, g_test_deferred_at[4096];\n" +
     "void sdnap_test_deferred(uint32_t k) { if (g_test_deferred_n < 4096) g_test_deferred_at[g_test_deferred_n] = k; ++g_test_deferred_n; }\n" +
     'SDNAP_EXPORT("sdnap_test_pool_mode") void sdnap_test_pool_mode(int32_t refuse) { sdnap::pool::g_reserve_off = refuse != 0; }\n' +
+    // the row hook marks the first `n` rows of every slice refused growth, so those series are flown again on the calling thread whichever thread would have been refused
+    "static uint32_t g_test_force_rows = 0;\n" +
+    "static void sdnap_test_force_row(uint32_t row, bool) { if (row < g_test_force_rows) sdnap::xpt::g_alloc_refused = 1; }\n" +
+    'SDNAP_EXPORT("sdnap_test_force_rows") void sdnap_test_force_rows(uint32_t n) { g_test_force_rows = n; sdnap::pool::g_row_hook = n != 0 ? sdnap_test_force_row : nullptr; }\n' +
     'SDNAP_EXPORT("sdnap_test_deferred_count") uint32_t sdnap_test_deferred_count() { return g_test_deferred_n; }\n' +
     'SDNAP_EXPORT("sdnap_test_deferred_series") uint32_t sdnap_test_deferred_series(uint32_t* out) { const uint32_t n = g_test_deferred_n < 4096 ? g_test_deferred_n : 4096; for (uint32_t q = 0; q < n; ++q) out[q] = g_test_deferred_at[q]; return n; }\n' +
     'SDNAP_EXPORT("sdnap_test_drag_pass_misses") double sdnap_test_drag_pass_misses() { return static_cast<double>(__atomic_load_n(&sdnap::xpt::g_drag_pass_window_misses, __ATOMIC_RELAXED)); }\n' +
@@ -433,6 +437,7 @@ if (!Object.keys(PATCH).length) {
     if (r.statusCode !== 0) throw new Error(`pool load_epochs ${r.errorCode}: ${r.errorMessage}`);
     const count = all.length, out = x.sdnap_alloc(48 * count), status = x.sdnap_alloc(4 * count), stats = x.sdnap_alloc(128);
     x.sdnap_test_pool_mode(refuse ? 1 : 0);
+    x.sdnap_test_force_rows(refuse ? sets.length : 0);  // with no reserve the compared sets' rows are among the series flown again, whichever thread is refused growth
     const index = new Map(); { const p = x.sdnap_alloc(24); for (let i = 0; i < count; ++i) { x.sdnap_epochs_series(i, p, 0, 0); index.set(new Float64Array(h.memory.buffer, p, 3)[0], i); } x.sdnap_free(p); }
     let differTotal = 0;
     const asks = async (label, order) => {
@@ -469,7 +474,8 @@ if (!Object.keys(PATCH).length) {
     check(pool[1] > 0 && pool[14] > 0 && pool[15] >= 2, `pool, ${which}: batches ${pool[1]}, rows on pool threads ${pool[14]}, pool threads with rows ${pool[15]} (some, and at least two threads, expected)`);
     if (refuse) {
       check(pool[2] > 0 && pool[3] > 0 && deferred > 0, `pool, no reserve: refusals ${pool[2]}, deferrals ${pool[3]}, series flown again on the calling thread ${deferred} (all above 0 expected)`);
-      // a deferred series is one of the compared sets, and its state is the cold set's (asserted above for every compared set)
+      // a deferred series is one of the compared sets, and its state is the cold set's (asserted above for every compared set); the row hook
+      // marks the compared sets' rows, so this holds on every run and does not depend on which thread is refused growth first
       check(deferredSets.length > 0, "pool, no reserve: none of the thirteen compared sets was among the deferred series");
     } else check(pool[2] === 0 && pool[3] === 0 && deferred === 0, `pool, room reserved: refusals ${pool[2]}, deferrals ${pool[3]}, series flown again ${deferred} (0 expected)`);
     check(misses === 0 && calls > 0, `pool, ${which}: ${misses} calls of drag_pass_rates whose window did not hold the time, of ${calls} calls (0 of some expected)`);
