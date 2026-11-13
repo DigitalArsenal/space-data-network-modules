@@ -1,5 +1,24 @@
 # Changelog
 
+## 0.6.56 — An allocation that fails at the memory limit is refused; a stored set's covariance is built on the record's own set (stacks #600, #599)
+
+At its memory limit the module refuses a state instead of aborting. A thread makes the caches a set's theory reads before
+that set's first state or initialization, through the counted allocator: all nine for AP (1,796,968 bytes), and only the
+645,432-byte step cache for SGP4XP without AP's terms. A thread that cannot make them answers the theory's refusal code,
+and a method answers `out-of-memory`. Through 0.6.55 the module aborted (a wasm `unreachable`) when the 192 KiB coefficient
+block was first needed with the memory full: 547 AP sets at 500 km held to 128 MiB answered 543 and then aborted; they now
+answer 541 in each of two passes, every state the one given with memory to spare. That part changes no state and no
+covariance.
+
+The epoch store (`sdnap_epochs_at`, `propagate_epochs`), `sdnap_covariance_at`, `sdnap_covariance_full_at` and
+`sdnap_test_epoch_floor` build a record's covariance on the record's own set, as `propagate` always did; through 0.6.55
+they built that set again from the parameter vector. At one time to the bit every entry's covariance equals
+`propagate`'s, element for element. On the 942 stored AP records of the synthetic set the store's covariance changes on
+385 records (86 by more than 1e-6 of the matrix's largest element, up to 0.80 of it), and the three exports' covariance on
+381 and their returned state on 378 (up to 0.15 m and 18 µm/s). `propagate`, and every state of the store, the row store
+and `propagate_epochs`, are unchanged. The bank's nominal borrows the stored set's tables: 1,000 copies of a fitted 500 km
+record take 356 KB a set with the covariance (391 KB in 0.6.55), and the store's byte count now includes the bank.
+
 ## 0.6.55 — What a loaded catalog holds
 
 `load_epochs` holds less while it decodes and after it finishes, and every state is as in 0.6.54. The records of a load are held in blocks of 1,024
