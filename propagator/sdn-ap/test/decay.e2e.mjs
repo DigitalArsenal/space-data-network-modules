@@ -38,6 +38,9 @@ import { scratchTemp } from './lib/scratch.mjs';
 
 const BASE = { version: '0.6.48', commit: '3a5fb74c8e12f825160eea58624dbc85a2cbacc5', sha256: 'b2de5af7e03753e57aebf781c49c824552706a16c563ca60b1dbb71d1a2358c6' };  // Fixed AP identity reference
 const MU = 398600.4418, RE = 6378.137, H = 60, BOUND_M = 4.5;
+// the store's blended covariance against SPEC 14.4's mixture of propagate's, of its largest element: rounding (2.1e-16 measured;
+// 0.6.52's store, its nominal built again from the parameter vector, 1.2e-12)
+const MIX_BOUND = 1e-14;
 const epoch = '2026-10-29T00:00:00.000', t0 = Date.parse(epoch + 'Z');
 const iso = (s) => new Date(t0 + s * 1000).toISOString().replace('Z', '');
 const failures = [];
@@ -261,10 +264,40 @@ for (const c of [{ name: 'perigee 500 km, e 0.001, BTERM 0.01', hp: 500, e: 0.00
         const bc = control.statusCode === 0 ? OEM.getRootAsOEM(new fb.ByteBuffer(control.outputs.find((o) => o.portId === 'ephemeris').payload)).unpack().EPHEMERIS_DATA_BLOCK[0] : null;
         check(rm.statusCode === 0 && !/decayed/.test(bm?.COMMENT ?? ''), `an epoch before every crossing, in a window ending between a moved set's crossing and the nominal's: ${rm.statusCode === 0 ? 'answered' : rm.errorCode}`);
         check(bm?.EPHEMERIS_DATA_LINES.length === 1 && bm?.COVARIANCE_MATRIX_LINES.length === 1, 'the epoch before every crossing has its state and covariance');
-        const values = (b) => [...(b?.EPHEMERIS_DATA_LINES ?? []), ...(b?.COVARIANCE_MATRIX_LINES ?? [])].flatMap((l) => Object.values(l).filter((v) => typeof v === 'number'));
-        const actual = values(bm), expected = values(bc);
-        check(control.statusCode === 0 && actual.length >= 27 && actual.every(Number.isFinite) && sameBits(actual, expected), 'the state and covariance before every crossing are 0.6.48\'s bit for bit');
-        console.log(`later-set blend: moved crossing ${own}, nominal ${nominalName}; day 9 state and covariance compared with 0.6.48 at window end ${new Date(endMs).toISOString()}`);
+        // the state is 0.6.48's bit for bit. The covariance is SPEC 14.4's mixture of the two sets' own, each as propagate gives it
+        // at the same instant (from stack #599 a set's bank flies the record's own set, as propagate's does): P = (1 - w) P_a +
+        // w P_b + w (1 - w) d d^T, d = x_b - x_a the two sets' states without covariance, w the store's blend weight
+        // (sdnap_epochs_select), formed here from the module's numbers and held to MIX_BOUND of its largest element (rounding:
+        // the store mixes in TEME and turns the result to GCRF, propagate turns each set's)
+        const values = (lines) => (lines ?? []).flatMap((l) => Object.values(l).filter((v) => typeof v === 'number'));
+        const actual = values(bm?.EPHEMERIS_DATA_LINES), expected = values(bc?.EPHEMERIS_DATA_LINES);
+        check(control.statusCode === 0 && actual.length >= 6 && actual.every(Number.isFinite) && sameBits(actual, expected), 'the state before every crossing is 0.6.48\'s bit for bit');
+        const COV = ['CX_X', 'CY_X', 'CY_Y', 'CZ_X', 'CZ_Y', 'CZ_Z', 'CX_DOT_X', 'CX_DOT_Y', 'CX_DOT_Z', 'CX_DOT_X_DOT', 'CY_DOT_X', 'CY_DOT_Y', 'CY_DOT_Z',
+          'CY_DOT_X_DOT', 'CY_DOT_Y_DOT', 'CZ_DOT_X', 'CZ_DOT_Y', 'CZ_DOT_Z', 'CZ_DOT_X_DOT', 'CZ_DOT_Y_DOT', 'CZ_DOT_Z_DOT'];
+        const ST = ['X', 'Y', 'Z', 'X_DOT', 'Y_DOT', 'Z_DOT'];
+        const one = async (rec) => {
+          const r = await now.invoke({ methodId: 'propagate', inputs: flight([rec], { output: { EPOCHS: [at(9)], FRAME: pcfOutputFrame.GCRF } }) });
+          const b = r.statusCode === 0 ? OEM.getRootAsOEM(new fb.ByteBuffer(r.outputs.find((o) => o.portId === 'ephemeris').payload)).unpack().EPHEMERIS_DATA_BLOCK[0] : null;
+          return { s: b ? ST.map((f) => b.EPHEMERIS_DATA_LINES[0][f]) : null, c: b?.COVARIANCE_MATRIX_LINES?.[0] ? COV.map((f) => b.COVARIANCE_MATRIX_LINES[0][f]) : null };
+        };
+        const bare = (rec) => repackOcm(rec, (o) => { o.COVARIANCE_DATA = []; o.COV_PARAMETER_KINDS = []; o.COV_PARAMETERS = []; o.COV_UNITS = []; o.COV_PROPAGATION = null; });
+        const [pa, pb, xa, xb] = [await one(stable), await one(laterDecay), await one(bare(stable)), await one(bareLater)];
+        // the store's selection at the instant: sets a and b and the weight of b, from the same snapshot and configuration
+        const loaded = await now.invoke({ methodId: 'load_epochs', inputs: flight([stable, laterDecay], { epochStore: { SELECTION: 1, BLEND_SHAPE: 1, BLEND_WINDOW_SECONDS: windowSeconds } }) });
+        const sel = now.instance.exports.sdnap_alloc(24);
+        const day9 = (base0 + 9 * 86400e3) / 86400e3;  // a whole day: the split Julian date of at(9) is exact
+        const selected = loaded.statusCode === 0 && now.instance.exports.sdnap_epochs_select(0, 2440587.5 + day9, 0, sel) === 0
+          ? Array.from(new Float64Array((now.memory ?? now.instance.exports.memory).buffer, sel, 3)) : null;
+        check(!!selected && selected[0] === 0 && selected[1] === 1 && selected[2] > 0 && selected[2] < 1, `the store blends sets 0 and 1 at day 9: ${selected}`);
+        if (selected && pa.c && pb.c && xa.s && xb.s && bm?.COVARIANCE_MATRIX_LINES?.[0]) {
+          const w = selected[2], d = xb.s.map((v, q) => v - xa.s[q]);
+          const lower = []; for (let i = 0; i < 6; i++) for (let j = 0; j <= i; j++) lower.push([i, j]);
+          const mix = lower.map(([i, j], q) => (1 - w) * pa.c[q] + w * pb.c[q] + w * (1 - w) * d[i] * d[j]);
+          const got = COV.map((f) => bm.COVARIANCE_MATRIX_LINES[0][f]);
+          const big = Math.max(...mix.map(Math.abs)), off = Math.max(...got.map((v, q) => Math.abs(v - mix[q]))) / big;
+          check(off <= MIX_BOUND, `the store's blended covariance against SPEC 14.4's mixture of propagate's: ${off.toExponential(2)} of its largest element (bound ${MIX_BOUND})`);
+          console.log(`later-set blend: moved crossing ${own}, nominal ${nominalName}; day 9 state compared with 0.6.48 at window end ${new Date(endMs).toISOString()}; its covariance SPEC 14.4's mixture of propagate's (w ${w.toFixed(4)}) to ${off.toExponential(2)} of its largest element`);
+        } else check(false, 'the parts of the mixture: propagate of both sets, with and without covariance, and the store\'s selection');
       }
     }
     console.log(`the moved record decays at ${cm[1]}; sdnap_covariance_at status ${status}`);
