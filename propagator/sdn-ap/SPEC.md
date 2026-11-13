@@ -1621,24 +1621,63 @@ slow may still be building, flying or replacing its series' slots. So the store 
 `test/epoch-pool-safety.e2e.mjs` holds both rules (256 series, a 1 MiB cache budget, slots replaced in every batch, 4
 and 15 threads) and the dead batch (one pool thread held in its first chunk).
 
-`test/epoch-pool.e2e.mjs` compares 2,048 mixed series (6,144 records, eight wide series, half carrying covariance), at
-one instant and a day later, on 0, 1, 4 and 15 threads, with poisoned table storage and with forced growth refusals.
-Every state and status byte equals the one-series serial entry and the 0.6.52 artifact. The 400-wide-series control
-at 0 and 15 threads also keeps every refusal in the same series.
+Three more rules for the lanes:
+- **No lane waits on a static's first use.** The calling thread and every pool thread make, before any batch, each guarded
+  static a lane can first touch (pool::warm_thread: the thread's caches and NRLMSISE-00's flag table).
+- **The cache pool sorts copies.** A reclaim picks its victims from stamps read once under the pool's lock (an owner
+  moves its stamp under its own cache lock alone, atomically), ordered by stamp and then by address.
+- **The missing weather day is a note, not a result.** `Store::short_day` is written by the thread that flew the state
+  that found no row. `propagate_epochs` reads it on the calling thread right after that state. After a threaded
+  `sdnap_epochs_at` it names some series' missing day; each series' own status is in its status code.
+
+`test/epoch-pool.e2e.mjs` flies 2,048 seeded series (6,144 records) at 6 h, 18 h and 30 h: a blend of sets 0 and 1, then
+of 1 and 2 (slots replaced inside the batch), then set 2 alone. The store holds SGP4, SGP4XP and AP series, AP on
+NRLMSISE-00 at node heights under and over 325 km and on Jacchia 1970, two force sets and two weather tables
+alternating, covariance on half, and eight wide series flown on the calling thread.
+- The reference is each series alone on the calling thread. Its digest is the one sdn-ap 0.6.52 gives.
+- On 0, 1, 4 and 15 threads, with poisoned table storage on each, and in slices of 100 series: every state and status
+  byte equals the reference.
+- With no reserve (every series that needs memory inside a batch is deferred): every status equals the reference. Every
+  state equals the reference, or, for a series deferred at that instant, the serial state with its slots dropped just
+  before its flight. The two differ only for a set whose state depends on what it was flown at before (stack #626).
+- The test build's counters show every path taken.
+
+The 400-wide-series control at 0 and 15 threads also keeps every refusal in the same series.
 
 The pool and the memory (stack #487). A threaded batch grows nothing, and a pool thread uses no page it does not see.
 - Before the batch the calling thread makes its room. The reserve is 128 KiB for each AP row whose set holds no caches,
   at most the pool's free budget plus 1 MiB, plus 8 MiB. The calling thread then publishes the memory's size and sets
   the rule that nothing grows. Only then does it store the batch's chunk total and wake the pool threads.
-- An epoch batch additionally reserves 64 KiB per selected cold XP/AP set (SGP4 reserves its satellite and
-  deep-space checkpoints), the cache pool's available room, and each
-  thread's combined-table bound plus its term storage. The bound uses the largest selected tesseral degree and allows
-  2,048 complementary slow terms; a diagnostic retaining raw terms also reserves their bound. Term storage is made
-  as each thread starts; shallow-term storage is in TLS. A larger retained table can exhaust the allowance: every
-  affected series releases its slots and is retried on the calling thread after the batch, in series order.
+- An epoch call runs in slices of at most 4,096 series, one batch each, and the memory may grow between them, so the
+  high-water is the sets made plus one slice's reserve. A threaded call fits where a serial call fits. A slice's reserve
+  is its own:
+  - 64 KiB per selected cold SGP4XP or AP set (an SGP4 set: its satellite and deep-space checkpoints);
+  - the cache pool's available room, at most 128 KiB per AP set;
+  - each thread's combined-table bound plus its term storage (the largest selected tesseral degree, 2,048
+    complementary slow terms; a diagnostic that keeps raw terms also reserves their bound);
+  - 8 MiB; at most 1 GiB.
+
+  A reserve that cannot be had is not a failure of the call. The slice is halved, and a slice of 32 series or fewer whose
+  reserve still cannot be had runs on the calling thread. Each series depends only on its own inputs and the time, so
+  slicing changes no byte.
+- 64 KiB is a mean, not a bound (a table can reach 416 KB at degree 31 and 694 KB at 70). A lane can reach the following
+  allocations inside a batch. Each is counted and refuses cleanly: the series releases its slots and is deferred.
+  - the slot's set (SGP4XP or AP) or satellite (SGP4), and SGP4's deep-space checkpoints;
+  - AP's per-set tables (resonance Taylor terms, m-daily, combined and raw short-period terms, zonal, half-day, shallow,
+    resonant coefficients) and the thread's table scratch and half-day scratch, grown to the set's bound;
+  - the set's caches from the pool (its record, tesseral copy, node runs). The pool's lists are made room for before the
+    batch and are never grown inside one.
+
+  Never reached inside a batch: the wide grids (a wide series flies on the calling thread), covariance (such calls are
+  serial), the thread's caches and guarded statics (made before the batch), and the call's own flags and deferred list
+  (made through the counted allocator before the first slice; without them the call runs on the calling thread).
 - Inside the batch, sbrk refuses every growth on every thread.
-  - A set refused its caches flies on the thread's caches, with the same states.
-  - A row that a refusal stopped is computed again by the calling thread after the batch, in row order.
+  - A set refused its caches flies on the thread's caches. The states are the same, except for an AP set of the half-day
+    class, which can differ (stack #626: up to 0.18 mm measured).
+  - A row that a refusal stopped is computed again by the calling thread after the batch, in row order. For the epoch
+    store, the series' two slots are released first, keeping the slot to be replaced next, and its sets are built
+    again. The state is the same, except for an AP set of the half-day class that was flown before, which can differ
+    (stack #626; in the test's store, 250 of 6,144 states, up to 0.22 mm).
 - A pool thread runs a chunk only once its own memory.size covers the size published for the batch. Its claim read the
   batch's total, which was stored after that size, so it reads that size.
 - Outside a batch only the calling thread grows the memory, so its view is its own. The one exception is a pool

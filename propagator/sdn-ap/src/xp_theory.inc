@@ -6404,7 +6404,13 @@ struct CachePool {
   const XpSat* last = nullptr;  ///< the set that asked last
   uint64_t sp_holders = 0, reclaimed = 0, refused = 0, sp_refused = 0, sp_made = 0;
   std::vector<XpSat*> holders;
-  std::vector<XpSat*> order;  ///< pool_reclaim_locked's scratch, its capacity kept with the holders' (pool_room)
+  /// pool_reclaim_locked's scratch, its capacity kept with the holders' (pool_room): each candidate with its stamp as read once
+  /// under the pool's lock (an owner moves its stamp under its own cache_lock alone, so the sort compares copies)
+  struct Victim {
+    uint64_t stamp;
+    XpSat* v;
+  };
+  std::vector<Victim> order;
 };
 
 /// Stack #487 (SPEC 9): inside a threaded batch (pool::run, from the workers' wake to the last one done) the module's
@@ -6421,6 +6427,9 @@ inline thread_local int32_t g_alloc_refused = 0;
 struct BatchStats {
   uint64_t batches = 0, refused = 0, deferred = 0, grew = 0, dead = 0, reserve = 0;
   uint64_t views = 0, view_yields_max = 0;
+  /// the epoch store's sliced calls (sdnap_epochs_at): slices halved for want of their reserve, and slices run on the calling
+  /// thread because even the smallest slice's reserve could not be had (read by test builds)
+  uint64_t reserves_halved = 0, slices_serial = 0;
 };
 inline BatchStats& batch_stats() {
   static BatchStats s;
@@ -6489,16 +6498,22 @@ inline bool pool_reclaim_locked(CachePool& p, uint64_t need, const XpSat* keep, 
   if (p.floor >= before) return false;
   // the scratch's room is kept with the holders' (pool_room), so filling it never allocates; inside a threaded batch a
   // candidate beyond its room is left out rather than grow anything (stack #487)
-  std::vector<XpSat*>& order = p.order;
+  std::vector<CachePool::Victim>& order = p.order;
   order.clear();
-  for (XpSat* v : p.holders)
-    if (v->caches->stamp < before && v != keep) {
+  for (XpSat* v : p.holders) {
+    const uint64_t stamp = __atomic_load_n(&v->caches->stamp, __ATOMIC_RELAXED);
+    if (stamp < before && v != keep) {
       if (order.size() == order.capacity() && batch_running()) break;
-      order.push_back(v);
+      order.push_back({stamp, v});
     }
-  std::sort(order.begin(), order.end(), [](const XpSat* x, const XpSat* y) { return x->caches->stamp < y->caches->stamp; });
+  }
+  // a strict weak order on the copies (equal stamps by holder address, so the order is a function of the candidates alone)
+  std::sort(order.begin(), order.end(), [](const CachePool::Victim& x, const CachePool::Victim& y) {
+    return x.stamp != y.stamp ? x.stamp < y.stamp : x.v < y.v;
+  });
   const uint64_t target = p.budget - std::min(p.budget, std::max(need, p.budget / 8));
-  for (XpSat* v : order) {
+  for (const CachePool::Victim& victim : order) {
+    XpSat* const v = victim.v;
     if (p.held + need <= p.budget && p.held <= target) break;
     if (!try_lock(&v->cache_lock)) continue;
     pool_drop_locked(p, *v);
@@ -6507,7 +6522,7 @@ inline bool pool_reclaim_locked(CachePool& p, uint64_t need, const XpSat* keep, 
   }
   // the holders left: their lowest stamp (a holder reclaimed had the lowest; one skipped keeps the bound safe)
   uint64_t left = UINT64_MAX;
-  for (XpSat* v : p.holders) left = std::min(left, v->caches->stamp);
+  for (XpSat* v : p.holders) left = std::min(left, __atomic_load_n(&v->caches->stamp, __ATOMIC_RELAXED));
   p.floor = p.holders.empty() ? __atomic_load_n(&p.clock, __ATOMIC_RELAXED) : std::max(p.floor, left);
   return p.held + need <= p.budget;
 }
@@ -6636,8 +6651,9 @@ struct SetScope {
       return;
     }
     held = &s;
+    // the stamp is read by a reclaim on another lane under the pool's lock alone: atomic (prev is the owner's alone)
     c->prev = c->stamp;
-    c->stamp = __atomic_load_n(&cache_pool().clock, __ATOMIC_RELAXED);
+    __atomic_store_n(&c->stamp, __atomic_load_n(&cache_pool().clock, __ATOMIC_RELAXED), __ATOMIC_RELAXED);
     g_active_bracket_set = &c->ab;
     tess::g_mdaily_set_cache = &c->md;
     tess::g_sp_set_slot = &c->sp;

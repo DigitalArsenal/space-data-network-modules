@@ -1659,6 +1659,20 @@ inline void msis_density_hi_trig2(const ThermoTimeCache& tc, const double c_in[2
 #endif
 }
 
+/// NRLMSISE-00's switches as the module flies it (every term on, switch 0 off; tselec), made once: a guarded static, made
+/// before any threaded batch (pool::warm_thread on every thread), so that no thread, the calling thread least of all, waits
+/// in its guard inside a batch.
+inline const nrlmsise00::nrlmsise_flags& msis_flags() {
+  static const nrlmsise00::nrlmsise_flags kFlags = []() {
+    nrlmsise00::nrlmsise_flags fl{};
+    fl.switches[0] = 0;
+    for (int k = 1; k < 24; ++k) fl.switches[k] = 1;
+    nrlmsise00::tselec(&fl);
+    return fl;
+  }();
+  return kFlags;
+}
+
 inline double msis_density_prepared(const ThermoTimeCache& tc, double lat, double lon, double h, const drag::Flux& f) {
   constexpr double dgtr = 1.74533E-2, hr = 0.2618;
   const double lat_deg = lat * (1.0 / kDeg);
@@ -1672,16 +1686,9 @@ inline double msis_density_prepared(const ThermoTimeCache& tc, double lat, doubl
     fm::sincos(dgtr * lon_deg, slong, clong);
     return msis_density_hi_trig(tc, c, s, slong, clong, stloc, ctloc, h);
   }
-  static const nrlmsise00::nrlmsise_flags kFlags = []() {
-    nrlmsise00::nrlmsise_flags fl{};
-    fl.switches[0] = 0;
-    for (int k = 1; k < 24; ++k) fl.switches[k] = 1;
-    nrlmsise00::tselec(&fl);
-    return fl;
-  }();
   nrlmsise00::nrlmsise_input in{};
   nrlmsise00::nrlmsise_output out{};
-  nrlmsise00::nrlmsise_flags flags = kFlags;
+  nrlmsise00::nrlmsise_flags flags = msis_flags();
   in.doy = tc.doy;
   in.sec = tc.sec;
   in.alt = h;
@@ -1699,13 +1706,6 @@ inline double msis_density_prepared(const ThermoTimeCache& tc, double lat, doubl
 /// NRLMSISE-00 total mass density (kg/m^3) at geodetic latitude and longitude (rad), geodetic height (km) and d50 (UTC),
 /// with drivers f: the day of year and UT seconds of d50, local solar time = UT + longitude / 15.
 inline double msis_density(double d50, double lat, double lon, double h, const drag::Flux& f) {
-  static const nrlmsise00::nrlmsise_flags kFlags = []() {
-    nrlmsise00::nrlmsise_flags fl{};
-    fl.switches[0] = 0;
-    for (int k = 1; k < 24; ++k) fl.switches[k] = 1;
-    nrlmsise00::tselec(&fl);
-    return fl;
-  }();
   // the day of year and UT seconds as prepare_msis_time forms them (its other terms serve msis_density_hi_trig only)
   double D, N;
   drag::day_of_year(d50, D, N);
@@ -1718,7 +1718,7 @@ inline double msis_density(double d50, double lat, double lon, double h, const d
   lst -= 24.0 * std::floor(lst * (1.0 / 24.0));
   nrlmsise00::nrlmsise_input in{};
   nrlmsise00::nrlmsise_output out{};
-  nrlmsise00::nrlmsise_flags flags = kFlags;
+  nrlmsise00::nrlmsise_flags flags = msis_flags();
   in.doy = static_cast<int>(day) + 1;
   in.sec = sec;
   in.alt = h;

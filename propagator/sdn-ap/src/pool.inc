@@ -41,6 +41,14 @@ namespace pool {
 constexpr int32_t kMaxThreads = 16;
 constexpr uint32_t kChunk = 512;
 constexpr uint32_t kEpochChunk = 16;
+/// The series an epoch-store batch holds at most (sdnap_epochs_at runs a larger call in slices of it, one batch each);
+/// test builds set another.
+constexpr uint32_t kEpochSlice = 4096;
+inline uint32_t& epoch_slice_ref() {
+  static uint32_t n = kEpochSlice;
+  return n;
+}
+inline uint32_t epoch_slice() { return epoch_slice_ref() < 2 * kEpochChunk ? 2 * kEpochChunk : epoch_slice_ref(); }
 /// A batch whose pool thread died (it trapped, or stopped answering): the batch's return and every row's status. When
 /// the calling thread, waiting for a batch's last chunks, polls `dead_polls()` times without a row completing on any
 /// thread, a thread is taken for dead; the pool is then not used again (later batches run on the calling thread).
@@ -99,6 +107,9 @@ struct Job {
   double jd_whole, jd_frac;
   const double* minutes;
   uint32_t first, count, frame;
+  /// an epoch-store batch: its rows are the call's series [slice, slice + count) of `stride` (the call's count: the planes'
+  /// length). Read by epoch batches alone; sdnap_epochs_at sets both before each one.
+  uint32_t slice, stride;
   double* out;
   int32_t* status;
   // rows a refused growth stopped, for the calling thread after the batch (room for `count`, made before it)
@@ -208,6 +219,7 @@ inline void warm_thread() {
   xpt::ap_bodies_store_make();
   (void)frames::drift_node_cache();
   frames::gcrf_node_cache_make();
+  (void)atm::msis_flags();  // the one guarded static a lane first touches: made before any batch, so no thread waits on it in one
 }
 
 inline void* thread_main(void*) {

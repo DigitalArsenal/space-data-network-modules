@@ -88,7 +88,10 @@ struct Store {
   std::vector<Series> series;
   Stats stats;
   std::vector<std::unique_ptr<atm::Atmosphere>> atmospheres;  ///< the distinct row series and node vectors of the load
-  int32_t short_day = 0;                                      ///< the day a request found no row for (weather-rows-short)
+  /// the day a request found no row for (weather-rows-short), written by the thread that flew that state. propagate_epochs
+  /// reads it on its own store, on the calling thread, right after the state that wrote it. After a threaded
+  /// sdnap_epochs_at it holds some series' missing day, not a given one (that export answers each series' status alone).
+  int32_t short_day = 0;
   /// A threaded batch over the store ended with the pool dead (pool::kBatchPoolDead): a pool thread only slow, not dead,
   /// may still be building, flying or replacing its series' slots, so nothing reads or frees them again. Every later state
   /// is refused (kRowPoolDead), and load_epochs refuses until no pool thread is active (one that trapped never is).
@@ -1095,9 +1098,9 @@ inline size_t series_reserve(Store& st, const pool::Job& j) {
   size_t ap_sets = 0;
   int degree = 0;
   const double t = minutes_of(j.jd_whole, j.jd_frac), jd[2] = {j.jd_whole, j.jd_frac};
-  for (uint32_t i = 0; i < j.count; ++i) {
-    if (j.serial_series[i]) continue;
-    const Series& s = st.series[j.first + i];
+  for (uint32_t i = 0; i < j.count; ++i) {  // the batch's slice of the call
+    if (j.serial_series[j.slice + i]) continue;
+    const Series& s = st.series[j.first + j.slice + i];
     const auto selected = choose(st, s, t, jd);
     const int32_t indices[2] = {static_cast<int32_t>(selected.a), selected.b};
     for (int32_t k : indices) {
@@ -1122,17 +1125,23 @@ inline size_t series_reserve(Store& st, const pool::Job& j) {
       (xpt::keep_sp_raw() ? static_cast<uint64_t>(xpt::tess::sp_bound(degree, false, extra)) * sizeof(xpt::tess::SpCoef) : 0);
   const uint64_t bytes = retained + (ap_sets ? std::min<uint64_t>(ap_sets * (128ull << 10), room + (1u << 20)) +
       (j.threads + 1) * (table + sizeof(xpt::tess::SpTermsScratch)) : 0) + (8u << 20);
-  return static_cast<size_t>(std::min<uint64_t>(bytes, INT32_MAX));
+  return static_cast<size_t>(std::min<uint64_t>(bytes, 1ull << 30));  // a slice's: far under 2^31 (sbrk's increment)
 }
 }  // namespace epochs
 
 namespace pool {
 void run_epoch_row(const Job& j, uint32_t i) {
-  epochs::write_series(*j.epochs, j.jd_whole, j.jd_frac, j.first, j.count, j.frame, j.out, j.status, nullptr, i);
+  const uint32_t k = j.slice + i;  // the call's series k (the batch is the call's slice)
+  epochs::Series& s = j.epochs->series[j.first + k];
+  const uint32_t next = s.next;
+  epochs::write_series(*j.epochs, j.jd_whole, j.jd_frac, j.first, j.stride, j.frame, j.out, j.status, nullptr, k);
   if (xpt::g_alloc_refused) {
     // Even a successful initializer may have crossed a refused allocation in an external routine. No partial set is
-    // retained for the serial retry, including the other slot of a blend.
-    for (epochs::Slot& slot : j.epochs->series[j.first + i].slots) epochs::release(slot);
+    // retained for the serial retry, including the other slot of a blend; the slot to replace next is the one it was before
+    // the attempt, so the retry fills the slots in the order a serial call does from here (which slot holds a set is a
+    // cache's choice: no state depends on it, SPEC 9)
+    for (epochs::Slot& slot : s.slots) epochs::release(slot);
+    s.next = next;
   }
 }
 }  // namespace pool
@@ -1157,10 +1166,22 @@ int32_t sdnap_epochs_at(double jd_whole, double jd_frac, uint32_t first, uint32_
       sdnap::epochs::write_series(st, jd_whole, jd_frac, first, count, frame, out, status, cov, k);
     return 0;
   }
-  static std::vector<uint8_t> serial;
-  static std::vector<uint32_t> deferred;
-  serial.resize(count);
-  deferred.resize(count);
+  // the call's flags (one byte a series) and one slice's deferred rows, through the counted allocator; none to be had: the
+  // call runs on the calling thread
+  static uint8_t* serial = nullptr;
+  static uint32_t* deferred = nullptr;
+  static uint32_t serial_cap = 0, deferred_cap = 0;
+  const uint32_t slice_max = sdnap::pool::epoch_slice();
+  if (count > serial_cap) {
+    if (uint8_t* s = static_cast<uint8_t*>(sdnap::mem::realloc(serial, count))) { serial = s; serial_cap = count; }
+  }
+  if (slice_max > deferred_cap) {
+    if (uint32_t* d = static_cast<uint32_t*>(sdnap::mem::realloc(deferred, sizeof(uint32_t) * slice_max))) { deferred = d; deferred_cap = slice_max; }
+  }
+  if (count > serial_cap || slice_max > deferred_cap) {
+    for (uint32_t k = 0; k < count; ++k) sdnap::epochs::write_series(st, jd_whole, jd_frac, first, count, frame, out, status, nullptr, k);
+    return 0;
+  }
   for (uint32_t k = 0; k < count; ++k) {
     serial[k] = sdnap::epochs::wide_series(st, st.series[first + k]);
     if (serial[k]) sdnap::epochs::write_series(st, jd_whole, jd_frac, first, count, frame, out, status, nullptr, k);
@@ -1172,23 +1193,56 @@ int32_t sdnap_epochs_at(double jd_whole, double jd_frac, uint32_t first, uint32_
   (void)sdnap::frames::utc_to_tt(jd_whole, jd_frac, tt1, tt2);
   j.kind = sdnap::pool::kJobEpochs;
   j.epochs = &st;
-  j.serial_series = serial.data();
+  j.serial_series = serial;
   j.jd_whole = jd_whole; j.jd_frac = jd_frac;
-  j.first = first; j.count = count; j.frame = frame;
-  j.out = out; j.status = status; j.deferred = deferred.data();
-  const size_t reserve = sdnap::epochs::series_reserve(st, j);
-  const int32_t rc = sdnap::pool::run(count, reserve);
-  if (rc != 0) {
-    // a pool thread taken for dead may be only slow, still in its chunk: the store is refused from now on (Store::pool_dead)
-    st.pool_dead = 1;
-    if (status != nullptr) for (uint32_t k = 0; k < count; ++k) status[k] = sdnap::pool::kRowPoolDead;
-    return rc;
+  j.first = first; j.stride = count; j.frame = frame;
+  j.out = out; j.status = status; j.deferred = deferred;
+  // the call in slices (stack #487's batch, one per slice): at most epoch_slice() series a batch, the memory free to grow
+  // between them, each slice's reserve its own (series_reserve), so the high-water is the sets made plus one slice's reserve.
+  // A slice whose reserve cannot be had is halved; one of two chunks or less whose reserve still cannot be had runs on the
+  // calling thread, as the call does without the pool. Every series is a function of its own inputs and time: the slicing
+  // changes no byte.
+  for (uint32_t a = 0; a < count;) {
+    uint32_t len = std::min(slice_max, count - a);
+    size_t reserve = 0;
+    bool batch = true;
+    for (;;) {
+      j.slice = a;
+      j.count = len;
+      reserve = sdnap::epochs::series_reserve(st, j);
+      if (reserve == 0) break;
+      if (void* p = std::malloc(reserve)) {  // a reserve that cannot be had is not a failure of the call: not counted
+        std::free(p);
+        break;
+      }
+      if (len <= 2 * sdnap::pool::kEpochChunk) {
+        batch = false;
+        break;
+      }
+      len = (len + 1) / 2;
+      __atomic_add_fetch(&sdnap::xpt::batch_stats().reserves_halved, 1, __ATOMIC_RELAXED);
+    }
+    if (!batch) {
+      for (uint32_t k = a; k < a + len; ++k)
+        if (!serial[k]) sdnap::epochs::write_series(st, jd_whole, jd_frac, first, count, frame, out, status, nullptr, k);
+      __atomic_add_fetch(&sdnap::xpt::batch_stats().slices_serial, 1, __ATOMIC_RELAXED);
+      a += len;
+      continue;
+    }
+    const int32_t rc = sdnap::pool::run(len, reserve);
+    if (rc != 0) {
+      // a pool thread taken for dead may be only slow, still in its chunk: the store is refused from now on (Store::pool_dead)
+      st.pool_dead = 1;
+      if (status != nullptr) for (uint32_t k = 0; k < count; ++k) status[k] = sdnap::pool::kRowPoolDead;
+      return rc;
+    }
+    const int32_t n = sdnap::pool::load(&j.deferred_n);
+    std::sort(deferred, deferred + n);
+    for (int32_t q = 0; q < n; ++q)
+      sdnap::epochs::write_series(st, jd_whole, jd_frac, first, count, frame, out, status, nullptr, a + deferred[q]);
+    sdnap::xpt::batch_stats().deferred += static_cast<uint64_t>(n);
+    a += len;
   }
-  const int32_t n = sdnap::pool::load(&j.deferred_n);
-  std::sort(deferred.begin(), deferred.begin() + n);
-  for (int32_t q = 0; q < n; ++q)
-    sdnap::epochs::write_series(st, jd_whole, jd_frac, first, count, frame, out, status, nullptr, deferred[q]);
-  sdnap::xpt::batch_stats().deferred += static_cast<uint64_t>(n);
   return 0;
 }
 
