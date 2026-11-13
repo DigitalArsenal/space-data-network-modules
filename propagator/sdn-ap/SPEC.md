@@ -6090,6 +6090,13 @@ output block); nothing is written to a record, no SDS schema changes, and no cel
   served because the builder fails at 3 minutes, 1 when the store is the one read last, the bytes the cells held take.
 - `sdnap_frames_close()`.
 
+What a row costs, to turn rows into time: the median milliseconds of one row (measured as a cold set's first state and 79 more in one
+window; the module's row flies 160 states, about 0.1 ms more) for the window's distance from the epoch of 0, 2, 5 and 10 days, on a machine under load 28 to 50 (the stored synthetic
+set, one row per record of the class): 500 km 1.7, 1.7, 2.4, 3.0; 830 km 1.1, 1.3, 1.6, 2.5; strong drag (perigee 200 to 300 km)
+2.8, 4.4, 7.5, 11.1; eccentricity 0.01 to 0.05 1.4, 1.5, 2.0, 5.4; medium 0.3, 0.3, 0.4, 0.6; geosynchronous 0.2, 0.7, 1.4,
+2.4. The 95th percentile is 2 to 4 times the median in low orbit and up to 22 ms in strong drag at 10 days (`test/frames-cost.mjs`
+prints a seeded set's rows).
+
 Frames and refills run one after the other on the calling thread: the pool is synchronous (SPEC 9), so the store of cells has
 no lock and no busy flag.
 
