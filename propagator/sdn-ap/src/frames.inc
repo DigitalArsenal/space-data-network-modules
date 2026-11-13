@@ -98,6 +98,19 @@ struct RowOut {
   uint8_t tomb = 0;
 };
 
+constexpr uint32_t kBatchRows = 32;
+struct Candidate {
+  uint32_t index, place;
+  double t;
+  RowOut out;
+};
+struct Batch {
+  Candidate rows[kBatchRows];
+  uint32_t count = 0, end = 0;
+  bool pos_only = false;
+};
+inline Batch* g_batch = nullptr;
+
 inline bool is_tombstone(const uint8_t* c) { return c[16] == 0; }
 inline uint32_t bytes_of_cell(int np, int nv, int hp, int hv) {
   if (np == 0) return kHeaderBytes;  // a tombstone
@@ -425,6 +438,47 @@ inline bool covered(const State& s, const Obj& o, double t) {
   return c != nullptr && covers_cell(c, t);
 }
 
+/// Collects distinct missing objects without changing the sweep, object table, or slab.
+inline void collect(const State& s, const Sweep& sw, double whole, double frac, double ahead,
+                    const uint32_t* priority, uint32_t pc, uint32_t limit, Batch& b) {
+  b.count = 0; b.end = sw.k;
+  b.pos_only = (s.flags & kFlagPositionOnly) != 0;
+  const uint32_t total = pc + s.objects;
+  for (uint32_t k = sw.k; k < total; ++k) {
+    const uint32_t i = k < pc ? priority[k] : k - pc;
+    bool repeated = false;
+    for (uint32_t q = 0; q < b.count; ++q) if (b.rows[q].index == i) repeated = true;
+    if (repeated) break;
+    b.end = k + 1;
+    if (i >= s.objects || s.obj[i].kind != 0) continue;
+    const Obj& o = s.obj[i];
+    const double t0 = minutes_from(o, whole, frac), t = sw.pass == 0 ? t0 : t0 + ahead;
+    const uint8_t* following = cell_at(s, o.nxt);
+    const bool promoted = following != nullptr && covers_cell(following, t0);
+    const uint8_t* current = cell_at(s, promoted ? o.nxt : o.cur);
+    const bool held = (current != nullptr && covers_cell(current, t)) ||
+        (sw.pass != 0 && !promoted && following != nullptr && covers_cell(following, t));
+    if (held) continue;
+    Candidate& row = b.rows[b.count++];
+    row.index = i; row.place = k; row.t = t;
+    if (b.count == limit) break;
+  }
+}
+
+/// Publishes bounded private outputs; placement and logical counters remain on the caller.
+inline int run_batch(Batch& b, double whole, double frac) {
+  (void)drag::table();
+  (void)xpt::tess::egm_tables();
+  double tt1, tt2;
+  (void)utc_to_tt(whole, frac, tt1, tt2);
+  pool::Job& j = pool::job();
+  j.kind = pool::kJobFrames;
+  j.frames = &b;
+  j.count = b.count;
+  j.deferred = nullptr;
+  return pool::run(b.count, 16u << 20);
+}
+
 /// Every held cell that covers neither time of a call goes back to the slab: the room a stalled row needs. Returns the cells freed.
 inline uint32_t reclaim(State& s, double now_whole, double now_frac, double ahead_minutes) {
   uint32_t freed = 0;
@@ -472,6 +526,12 @@ inline bool place(State& s, uint32_t i, int slot, const uint8_t* cell, uint32_t 
 }
 
 }  // namespace frames
+namespace pool {
+void run_frames_row(const Job& j, uint32_t i) {
+  frames::Candidate& row = j.frames->rows[i];
+  frames::build_row(epochs::resident(), row.index, row.t, j.frames->pos_only, row.out);
+}
+}  // namespace pool
 }  // namespace sdnap
 
 /// Opens the frames over the resident store: one table row for each series, and a slab of `budget_bytes` less the table for the cells. The block is one
@@ -606,9 +666,26 @@ int32_t sdnap_frames_refill(double now_whole, double now_frac, double ahead_seco
   uint32_t rows = 0, stored = 0, tombs = 0, unstored = 0, visits = 0;
   int32_t stalled = -1;
   bool stop = false;
+  uint32_t batch_end = sw.k, batch_row = 0;
+  Batch* batch = nullptr;
+  if (sdnap::pool::job().threads > 0 && sdnap::pool::load(&sdnap::pool::job().dead) == 0) {
+    if (g_batch == nullptr) {
+      void* memory = std::malloc(sizeof(Batch));
+      if (memory != nullptr) g_batch = new (memory) Batch;
+    }
+    batch = g_batch;
+  }
   auto holds = [&](uint32_t off, double t) { const uint8_t* c = cell_at(s, off); return c != nullptr && covers_cell(c, t); };
   while (sw.pass < 2 && !stop) {
     while (sw.k < total) {
+      if (batch != nullptr && sw.k >= batch_end && rows < max_rows) {
+        collect(s, sw, now_whole, now_frac, ahead_min, priority, priority_count, std::min(kBatchRows, max_rows - rows), *batch);
+        batch_end = batch->end; batch_row = 0;
+        if (batch->count > 0) {
+          const int rc = run_batch(*batch, now_whole, now_frac);
+          if (rc != 0) return rc;
+        }
+      }
       const uint32_t i = sw.k < priority_count ? priority[sw.k] : sw.k - priority_count;
       Obj& o = s.obj[i < s.objects ? i : 0];
       if (i >= s.objects || o.kind != 0) { ++sw.k; ++visits; continue; }
@@ -626,8 +703,9 @@ int32_t sdnap_frames_refill(double now_whole, double now_frac, double ahead_seco
       const int droppable = ((o.cur != 0 && !holds(o.cur, t0) && !holds(o.cur, ta)) ? 1 : 0) | ((o.nxt != 0 && !holds(o.nxt, t0) && !holds(o.nxt, ta)) ? 2 : 0);
       if (rows >= max_rows) { stop = true; break; }
       ++rows;
-      RowOut out;
-      build_row(sdnap::epochs::resident(), i, t, (s.flags & kFlagPositionOnly) != 0, out);
+      RowOut serial;
+      RowOut& out = batch != nullptr ? batch->rows[batch_row++].out : serial;
+      if (batch == nullptr) build_row(sdnap::epochs::resident(), i, t, (s.flags & kFlagPositionOnly) != 0, out);
       commit_row(s, i, out);
       const int rc = out.result;
       if (rc == 0) { ++unstored; stalled = static_cast<int32_t>(i); stop = true; break; }  // a counted allocation failed: the memory, not this object
@@ -639,6 +717,7 @@ int32_t sdnap_frames_refill(double now_whole, double now_frac, double ahead_seco
       ++sw.k; ++visits;
     }
     if (stop) break;
+    batch_end = 0;
     if (sw.pass == 0 && !sw.rerun && (sw.w0 != now_whole || sw.f0 != now_frac)) {  // the clock advanced while pass 0 ran: once more, a covered object costs a skip
       sw.rerun = true; sw.w0 = now_whole; sw.f0 = now_frac; sw.k = 0;
       continue;

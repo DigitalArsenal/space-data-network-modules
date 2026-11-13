@@ -36,6 +36,7 @@
 
 namespace sdnap {
 namespace epochs { struct Store; }
+namespace frames { struct Batch; }
 namespace pool {
 
 constexpr int32_t kMaxThreads = 16;
@@ -70,7 +71,7 @@ constexpr size_t kThreadStack = 256u << 10;
 /// bytes measured, the tables' and NRLMSISE-00's thread-locals), with margin.
 constexpr size_t kThreadRoom = 1u << 20;
 
-enum JobKind : int32_t { kJobNone = 0, kJobJd = 1, kJobMinutes = 2, kJobEpochs = 3 };
+enum JobKind : int32_t { kJobNone = 0, kJobJd = 1, kJobMinutes = 2, kJobEpochs = 3, kJobFrames = 4 };
 
 /// The heartbeat (stack #487): the rows each thread has completed, one counter per thread, each aligned to 64 bytes (slot 0
 /// the calling thread's, 1 to kMaxThreads the pool threads'), so a row's count is a store no other thread makes. The
@@ -107,6 +108,7 @@ struct Job {
   int32_t pages;   ///< the memory's size (pages) as the thread that last grew it saw it: no thread uses less (await_view)
   // arguments
   epochs::Store* epochs;
+  frames::Batch* frames;
   const uint8_t* serial_series;
   double jd_whole, jd_frac;
   const double* minutes;
@@ -168,7 +170,8 @@ inline bool await_view(int32_t pages, uint64_t limit = 0) {
 
 void run_chunk(const Job& j, int32_t chunk);
 void run_epoch_row(const Job& j, uint32_t i);
-inline uint32_t chunk_size(const Job& j) { return j.kind == kJobEpochs ? kEpochChunk : kChunk; }
+void run_frames_row(const Job& j, uint32_t i);
+inline uint32_t chunk_size(const Job& j) { return j.kind == kJobFrames ? 1 : j.kind == kJobEpochs ? kEpochChunk : kChunk; }
 /// Test builds only (nullptr in the shipped build): called before each chunk with the chunk and whether a pool thread
 /// (not the calling thread) runs it.
 inline void (*g_chunk_hook)(int32_t chunk, bool pool_thread) = nullptr;

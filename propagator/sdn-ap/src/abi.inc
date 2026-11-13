@@ -98,7 +98,9 @@ void run_chunk(const Job& j, int32_t chunk) {
   const uint32_t end = begin + size < j.count ? begin + size : j.count;
   for (uint32_t i = begin; i < end; ++i) {
     xpt::g_alloc_refused = 0;
-    if (j.kind == kJobEpochs) {
+    if (j.kind == kJobFrames) {
+      run_frames_row(j, i);
+    } else if (j.kind == kJobEpochs) {
       if (j.serial_series[j.slice + i]) continue;
       run_epoch_row(j, i);
     } else {
