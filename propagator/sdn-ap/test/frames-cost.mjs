@@ -1,9 +1,11 @@
 #!/usr/bin/env node
 // SPEC 19.7, cost of the frames (a measurement, not an assertion). Process CPU time; the kinds alternate round by round in one process, so read the ratios.
-//  (1) a frame of N objects through sdnap_frames_at against the same through the module's SGP4 (sdnap_epochs_at on SGP4 records), microseconds a state and the ratio;
-//  (2) a refill row of a low set (one cold set, one cell) before and after 20 wide sets were flown through sdnap_epochs_set_at in the same instance, and the
-//      instance's bytes at each step.
-//   node test/frames-cost.mjs [--objects 20000] [--rounds 9]
+//  (1) a frame of N objects through sdnap_frames_at (TEME and Earth-fixed) against the same through the module's SGP4 (sdnap_epochs_at on SGP4 records, TEME and
+//      Earth-fixed), microseconds a state and the ratio;
+//  (2) a refill row (one cold set, one cell) by class and by the window's distance from the epoch (0, 2, 5 and 10 days): median and 95th percentile in milliseconds,
+//      the AP states a row flew, and how many of a class's rows halved;
+//  (3) a refill row of a low set before and after 20 wide sets were flown through sdnap_epochs_set_at in the same instance, and the instance's bytes at each step.
+//   node test/frames-cost.mjs [--objects 20000] [--rounds 9] [--rows 20] [--skip-frame] [--skip-rows] [--skip-wide]
 import os from "node:os";
 import * as flatbuffers from "flatbuffers";
 import { OCM, OCMT } from "spacedatastandards.org/lib/js/OCM/OCM.js";
@@ -19,22 +21,23 @@ import { pcfWeatherSource } from "spacedatastandards.org/lib/js/PCF/pcfWeatherSo
 import { population, openFrames, EPOCH, EPOCH_MS, DAY, revPerDay, STAT } from "./lib/frame-cells.mjs";
 
 const arg = (k, d) => { const i = process.argv.indexOf(k); return i > 0 ? Number(process.argv[i + 1]) : d; };
-const N = arg("--objects", 20000), ROUNDS = arg("--rounds", 9);
+const flag = (k) => process.argv.includes(k);
+const N = arg("--objects", 20000), ROUNDS = arg("--rounds", 9), ROWS = arg("--rows", 20);
 const cpu = () => { const u = process.cpuUsage(); return (u.user + u.system) / 1000; };  // ms
-const med = (a) => [...a].sort((x, y) => x - y)[a.length >> 1];
+const quantile = (a, p) => [...a].sort((x, y) => x - y)[Math.min(a.length - 1, Math.floor(p * a.length))];
+const med = (a) => quantile(a, 0.5);
 const share = (n, p) => Math.round((n * p) / 100);
 const out = { loadAvg: os.loadavg(), objects: N };
+const fail = (m) => { throw new Error(m); };
 
 // ---- (1) frame against SGP4
-{
+if (!flag("--skip-frame")) {
   const low = share(N, 85), plan = [["leo500", Math.round(low * 0.3)], ["leo830", Math.round(low * 0.53)], ["drag300", low - Math.round(low * 0.3) - Math.round(low * 0.53)], ["meo", share(N, 5)], ["geo", share(N, 5)], ["ecc", N - low - 2 * share(N, 5)]];
   const f = await openFrames();
   await f.load(population(plan, 20261113, 48));
-  const need = (f.open(1e9), f.stats()[STAT.table]);
-  f.close();
-  assert(f.open(N * 1100 + need + (1 << 20)) === 0);
+  if (f.open(N * 900 + N * 32 + (1 << 20)) !== 0) fail("open");
   const t = EPOCH_MS + 3600e3;
-  let due = f.refill(t, 180, 5000); while (due > 0) due = f.refill(t, 180, 5000);
+  f.fill(t, 180, 5000);
   const x = f.x, pl = x.sdnap_alloc(48 * N), st = x.sdnap_alloc(4 * N), [w, fr] = f.jd(t);
   // SGP4 records of the module (MEAN_ELEMENT_THEORY SGP4), the same count
   const g = await openFrames();
@@ -53,16 +56,46 @@ const out = { loadAvg: os.loadavg(), objects: N };
   gx.sdnap_epochs_at(gw, gf, 0, N, 0, gpl, gst, 0);
   const kinds = {
     sgp4: () => { for (let j = 1; j <= 5; j++) gx.sdnap_epochs_at(gw, gf + (j * 60) / 86400, 0, N, 0, gpl, gst, 0); return 5 * N; },
+    sgp4Ecef: () => { for (let j = 1; j <= 5; j++) gx.sdnap_epochs_at(gw, gf + (j * 60) / 86400, 0, N, 3, gpl, gst, 0); return 5 * N; },
     frames: () => { for (let j = 1; j <= 5; j++) x.sdnap_frames_at(w, fr + (j * 1) / 86400, 0, N, 0, pl, st); return 5 * N; },
+    framesEcef: () => { for (let j = 1; j <= 5; j++) x.sdnap_frames_at(w, fr + (j * 1) / 86400, 0, N, 3, pl, st); return 5 * N; },
   };
-  const res = { sgp4: [], frames: [] };
-  for (let r = 0; r < ROUNDS; r++) for (const k of r % 2 ? ["frames", "sgp4"] : ["sgp4", "frames"]) { const c0 = cpu(); const n = kinds[k](); res[k].push(((cpu() - c0) * 1000) / n); }
-  out.frame = { sgp4UsPerState: +med(res.sgp4).toFixed(4), framesUsPerState: +med(res.frames).toFixed(4), ratioToSgp4: +med(res.frames.map((v, r) => v / res.sgp4[r])).toFixed(3) };
+  const names = Object.keys(kinds), res = Object.fromEntries(names.map((k) => [k, []]));
+  for (let r = 0; r < ROUNDS; r++) for (let j = 0; j < names.length; j++) { const k = names[(j + r) % names.length]; const c0 = cpu(); const n = kinds[k](); res[k].push(((cpu() - c0) * 1000) / n); }
+  const ratio = (a, b) => +med(res[a].map((v, r) => v / res[b][r])).toFixed(3);
+  out.frame = { usPerState: Object.fromEntries(names.map((k) => [k, +med(res[k]).toFixed(4)])), teme: { ratioToSgp4: ratio("frames", "sgp4") }, earthFixed: { ratioToSgp4: ratio("framesEcef", "sgp4Ecef") } };
 }
 
-// ---- (2) the residue of wide sets in one instance
-{
-  const M = Math.min(N, 40);
+// ---- (2) a refill row by class and distance
+if (!flag("--skip-rows")) {
+  const classes = ["leo500", "leo830", "drag300", "ecc", "meo", "geo"];
+  out.rows = {};
+  for (const kind of classes) {
+    const pop = population([[kind, ROWS]], 41, 1440);
+    const f = await openFrames();
+    await f.load(pop);
+    for (const d of [0, 2, 5, 10]) {
+      f.close();
+      if (f.open(4e6) !== 0) fail("open");
+      const ms = [], states = [];
+      let halved = 0;
+      for (let i = 0; i < pop.length; i++) {
+        const s0 = f.stats();
+        const c0 = cpu();
+        f.refill(EPOCH_MS + pop[i].epochOffsetMs + d * DAY + 600e3, 0, 1, [i]);
+        ms.push(cpu() - c0);
+        const s1 = f.stats();
+        halved += s1[STAT.split] > s0[STAT.split] ? 1 : 0;
+        states.push(160 * (1 + (s1[STAT.split] - s0[STAT.split])));
+      }
+      out.rows[`${kind}@${d}d`] = { medianMs: +med(ms).toFixed(3), p95Ms: +quantile(ms, 0.95).toFixed(3), rowsThatHalved: halved, apStatesWorstRow: Math.max(...states) };
+    }
+  }
+}
+
+// ---- (3) the residue of wide sets in one instance
+if (!flag("--skip-wide")) {
+  const M = 40;
   const pop = population([["leo500", M / 2], ["leo830", M / 2], ["wide", 20]], 20261113, 48);
   const f = await openFrames();
   await f.load(pop);
@@ -83,4 +116,3 @@ const out = { loadAvg: os.loadavg(), objects: N };
   out.wide = { rowMedianMsBefore: +before.toFixed(3), rowMedianMsAfter: +after.toFixed(3), instanceBytes: { start: b0, afterRows: b1, afterWideFlown: b2, afterRowsAgain: b3 }, storeBytesAfterWide: storeBytes };
 }
 console.log(JSON.stringify(out, null, 1));
-function assert(c) { if (!c) throw new Error("assertion"); }

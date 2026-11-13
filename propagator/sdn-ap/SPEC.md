@@ -6055,50 +6055,77 @@ pass W4 (18.5, #394).
 ## 19. Frames: Chebyshev cells of AP's own states (a separate product, outside the SGP4-XP specification)
 
 A frame is the state of every object of the store at one instant, served from short Chebyshev polynomials of AP's own states
-instead of from AP's flight (`src/frames.inc`). The module holds, for each AP set it serves, one cell: six polynomials (x, y,
-z, vx, vy, vz, TEME, km and km/s) over one window of a grid anchored at the set's epoch. A cell is built from AP's own states
-of a cold set of the stored record, flown forward from its epoch, and checked against AP at points that are not the points
-it was built from. A frame reads cells and never flies AP. The entries are exports, not methods (no configuration port, no
+instead of from AP's flight (`src/frames.inc`). For each AP set it serves the module holds at most two cells, the one that
+holds the clock (current) and the one that holds the clock a few minutes later (following): six polynomials (x, y, z, vx,
+vy, vz, TEME, km and km/s; three with the position-only flag) over one window of a grid anchored at the set's epoch. A cell is
+built from AP's own states of a cold set of the stored record, flown from its epoch toward the window, and checked against
+AP at points that are not the points it was built from. A frame reads cells and never flies AP. A time that no held cell
+holds answers "no cell": the host asks for it with a refill. The entries are exports, not methods (no configuration port, no
 output block); nothing is written to a record, no SDS schema changes, and no cell is read by `sdnap_epochs_at`,
 `sdnap_epochs_set_at` or `propagate_epochs`, whose bits are the same with a frame open (`test/frames.e2e.mjs`).
+
+The build to run before the tests: `SDM_MODULE_UNSIGNED_BUILD=1 node build.mjs` in `propagator/sdn-ap`, and `SDNAP_WASM=<that
+module.wasm>` for the commands below.
+
+The threading contract: one host thread calls the frames entries, one after the other, and never while a batch of the pool
+(`sdnap_epochs_at` over many series, `sdnap_propagate_soa`) runs. The module keeps no lock and no busy flag, and nothing
+detects a call made from two threads at once or during a batch; the state of the cells, the cell under construction and the
+count of failed allocations a row reads are the instance's, not a thread's.
 
 ### 19.1 Entries
 
 - `sdnap_frames_open(budget_bytes, flags)`: reads the resident store (the sets `load_epochs` or the load in parts installed)
-  and allocates one block through the counted allocator (SPEC 1.6): a table of 40 bytes a series, then the slab of cells.
-  `flags` 1: no velocity polynomial (19.3). Returns 0, or -1 (bad argument), -2 (an allocation failed:
-  `sdnap_frames_stats`[11] holds the bytes asked), -3 (the budget cannot hold the table and 256 bytes for each object the entry
-  serves: [11] holds the bytes needed). An open replaces any earlier one.
+  and allocates one block of exactly `budget_bytes` through the counted allocator (SPEC 1.6): a table of 32 bytes a series
+  (padded to 64 bytes), then the slab of cells, the first 64 bytes of it reserved. `flags` 1: position only (19.3). Returns 0,
+  or -1 (bad argument), -2 (an allocation failed: `sdnap_frames_stats`[11] holds the bytes asked), -3 (the budget cannot
+  hold the table and one cell of the largest size, 3,136 bytes: [11] holds the bytes needed). The block is allocated before
+  an earlier open is given back: a refused open leaves the earlier frames, cells included, standing, and an open that
+  succeeds holds both blocks for the moment it takes (close first to avoid it). What a served object needs is not known at
+  open: the host sizes the budget by the rule of 19.6, and a slab too small shows as rows that could not be stored.
 - `sdnap_frames_at(jd_whole, jd_frac, first, count, frame, out, status)`: objects `[first, first + count)` at one split
-  Julian date (UTC), in the layout of `sdnap_epochs_at`: six planes of `count` doubles, frame 0 TEME (km, km/s) or 3
-  Earth-fixed (m, m/s), one status each: 0 served; 1 no cell holds this time (the host calls refill); 2 never served by
-  this entry (19.2); 3 not served from this time because AP itself refuses the object (decay, weather rows short); 4 not
-  served from this time because no window of 3 minutes holds the tolerance (19.3). The planes of an object not served are
-  NaN. A pure read: it evaluates polynomials, allocates nothing, never flies AP and never falls back silently. Returns 0,
-  -1 (bad argument), -4 (a load replaced the store since open: every status is 1 and a refill reads the store again) or
-  -5 (not open).
-- `sdnap_frames_refill(now_whole, now_frac, ahead_seconds, max_rows, priority, priority_count)`: builds the cell that `now`
-  needs for each object that has none (the objects of `priority`, in that order, then the others in index order), then the
-  cell that `now + ahead_seconds` needs, and returns after `max_rows` rows. A row is one cold set and one cell. The module
-  imports no clock (SPEC 9): the host counts its time in rows. Returns the objects still due (a missing cell for either time),
-  or -5 (not open), -6 (the store holds more series than open's table: open again). A refill after a load first reads the
-  store again and drops every cell. A cell that covers `now + ahead` becomes the object's current cell when the clock reaches
-  it; a held cell that covers neither time is returned to the slab before its replacement is built.
-- `sdnap_frames_stats(out)`: 17 doubles: objects, objects this entry can serve, cells held, slab bytes, slab bytes used, table
-  bytes, bytes held in all, refill rows, rows refused for memory, cells stored, windows halved, the bytes asked or needed by
-  the last refused open, rows refused for want of room in the slab, objects not served because AP refuses them, objects not
-  served because the builder fails at 3 minutes, 1 when the store is the one read last, the bytes the cells held take.
+  Julian date (UTC), in the layout of `sdnap_epochs_at`: six planes of `count` doubles (three: x, y, z, when open was given
+  the position-only flag; no velocity is written then), frame 0 TEME (km, km/s) or 3 Earth-fixed (m, m/s), one status each:
+  0 served; 1 no cell holds this time (a window not attempted: the host calls refill); 2 never served by this entry (19.2);
+  3 AP refuses the object in the window that holds this time (decay, weather rows short) or cannot make the set; 4 no window
+  of 3 minutes holds the tolerance there (19.3). The planes of an object not served are NaN. A pure read: it evaluates
+  polynomials, allocates nothing, never flies AP and never falls back silently. On 3 and 4 the host asks AP's own entry for
+  that object and time (on 3 it refuses there too, on 4 it answers). Returns 0, -1 (bad argument), -4 (a load replaced the
+  store since open: every status is 1 and a refill reads the store again) or -5 (not open).
+- `sdnap_frames_refill(now_whole, now_frac, ahead_seconds, max_rows, priority, priority_count, result)`: builds the cell
+  that `now` needs for each object that has none (the objects of `priority`, in that order, then the others in index
+  order), then the cell that `now + ahead_seconds` needs (`ahead` is clamped to 48 minutes, the base window), and stops
+  after `max_rows` rows. `priority` holds 0-based series indices of the store, not catalog numbers; an index past the last
+  series is skipped. A row is one cold set and one cell, or one tombstone (19.3); the module imports no clock (SPEC 9), the
+  host turns rows into time with the table below. A call resumes the sweep the one before left when `now`, `ahead` and the
+  store are the same (the host gives the same `priority`), and starts a sweep when they are not, so that a full fill sliced
+  at any `max_rows` visits each object once for each of the two times, and a call costs the objects it visits, not all of
+  them. A row that cannot be stored (a counted allocation failed, or the slab is full after a compaction) ends the call, and
+  the following call retries it. `result`, 6 int32: [0] places of the sequence not yet visited for `now`, [1] for `now + ahead`,
+  [2] cells stored, [3] tombstones stored, [4] rows that could not be stored, [5] places visited. The host's loop: call
+  while [0] or [1] is above 0 (something is due), and stop when a call stores no cell and no tombstone (`[2] + [3] == 0` with
+  `[4] > 0`: the slab or the memory cannot take more; stats[12] counts them). Returns 0, or -1 (bad argument: a non-finite
+  time, a negative `ahead`), -5 (not open), -6 (the store holds more series than open's table: open again). A refill after a
+  load first reads the store again, drops every cell and starts a sweep; it does not check the slab against the new store
+  (a load that makes more objects serveable shows as rows that could not be stored). A cell that holds `now + ahead`
+  becomes the current cell when the clock reaches it; the cells that hold neither time go back to the slab, after the
+  replacement is stored, or before it when the slab is full without them.
+- `sdnap_frames_stats(out)`: 20 doubles: [0] objects, [1] objects this entry can serve, [2] cells held (tombstones
+  included), [3] slab bytes, [4] slab bytes used, [5] table bytes, [6] bytes of the block as allocated, [7] refill rows, [8]
+  rows refused for memory, [9] cells stored, [10] windows halved, [11] the bytes asked or needed by the last refused open,
+  [12] rows that could not be stored for want of room, [13] windows AP refused in, stored as tombstones, [14] windows the
+  builder failed at 3 minutes, stored as tombstones, [15] 1 when the store is the one read last, [16] the bytes the cells
+  held take (their own sizes), [17] compactions of the slab, [18] bytes they moved, [19] places visited by refills.
 - `sdnap_frames_close()`.
 
-What a row costs, to turn rows into time: the median milliseconds of one row (measured as a cold set's first state and 79 more in one
-window; the module's row flies 160 states, about 0.1 ms more) for the window's distance from the epoch of 0, 2, 5 and 10 days, on a machine under load 28 to 50 (the stored synthetic
-set, one row per record of the class): 500 km 1.7, 1.7, 2.4, 3.0; 830 km 1.1, 1.3, 1.6, 2.5; strong drag (perigee 200 to 300 km)
-2.8, 4.4, 7.5, 11.1; eccentricity 0.01 to 0.05 1.4, 1.5, 2.0, 5.4; medium 0.3, 0.3, 0.4, 0.6; geosynchronous 0.2, 0.7, 1.4,
-2.4. The 95th percentile is 2 to 4 times the median in low orbit and up to 22 ms in strong drag at 10 days (`test/frames-cost.mjs`
-prints a seeded set's rows).
-
-Frames and refills run one after the other on the calling thread: the pool is synchronous (SPEC 9), so the store of cells has
-no lock and no busy flag.
+What a row costs, to turn rows into time: the median milliseconds of one row (160 AP states: 64 sample points and 96 check
+points, from a cold set) by the window's distance from the epoch, 0, 2, 5 and 10 days, 20 seeded sets of each class with
+epochs spread over a day, machine load 16 (`node test/frames-cost.mjs --skip-frame --skip-wide`): 500 km 0.62, 0.80, 1.12,
+1.62; 830 km 0.61, 0.76, 1.01, 1.51; strong drag (perigee 300 km) 0.72, 2.52, 4.99, 8.48; eccentricity 0.015 to 0.045 11.2,
+10.9, 11.7, 11.7; medium 0.20, 0.22, 0.26, 0.36; geosynchronous 0.22, 0.77, 1.30, 2.67. The 95th percentile is 1.2 to 1.8
+times the median in low orbit and 11.3 ms at the largest. The cost grows with the distance because a cold set integrates its
+nodes from the epoch: a record 10 days old costs 2 to 12 times the first window of its day. The most a row can cost is five
+builds (the window halved four times, each failing at its check) of 160 states each, 800 AP states and one cold set; AP
+refusing in a window ends a build at its first refused state. Two rows of twenty halved in strong drag at 10 days.
 
 ### 19.2 What is served
 
@@ -6107,7 +6134,8 @@ and without a hand-over, with gravity terms in its forces and not on the wide br
 grid in E: eccentricity above 0.05 in resonance class 0, above 0.3 in the others; SPEC 16). Every other object answers
 status 2, and the host asks AP's own entries for it: SGP4 and stock SGP4XP sets, series of several sets, sets with a forecast
 or a hand-over, wide sets. Of the stored synthetic set of the fits (spread over the whole orbit regime on purpose) the entry
-serves 47 %: 445 of 942 records, 497 are wide. Of a public catalog of 2026-11-12 (32,916 objects with a current set) 92.1 % are
+serves 47 %: 445 of 942 records, 497 are wide. Of a public catalog of 2026-11-12 (32,916 objects with a current set; counted from that catalog, no command of this repository
+reads it) 92.1 % are
 at eccentricity 0.05 or under: 80.3 % under 0.01, 11.8 % from 0.01 to 0.05, 2.6 % from 0.05 to 0.25, 5.3 % at or above 0.25;
 by orbit 45.6 % near-circular with perigee under 600 km, 39.6 % at 600 to 2,000 km, 1.6 % medium, 5.3 % geosynchronous and
 above, 7.9 % eccentric.
@@ -6120,83 +6148,120 @@ demand to 24, 12, 6 and 3 minutes. A row builds the cell of the window that hold
 the stored record under its own forces, never kept and never in the pool of caches (its caches are the thread's), released
 inside the row. For a window:
 
-1. AP's position and velocity at 64 Chebyshev points of the window, ascending in time, from the one cold set.
+1. AP's position and velocity at 64 Chebyshev points of the window from the one cold set: ascending in time for a window
+   after the epoch, descending for a window before it (the windows never straddle the epoch: the grid is anchored on it), so
+   the set is flown from the epoch toward the window. A time before the epoch is served like a time after it.
 2. The discrete cosine transform of the six series; the shortest truncation (position: one count for the three axes;
    velocity: one count) whose dropped tail, summed in magnitude, is under 0.6 of the tolerance (3 mm, 3e-5 m/s).
 3. The cell: a head in doubles and a tail in float32, the tail starting where the sum of the remaining coefficients'
    magnitudes times 6e-8 stays under 3e-5 m in position (3e-7 m/s in velocity); the builder sums the tail's rounding and keeps
    a group in doubles if that sum is not under the limit.
 4. The check of the stored cell, tail included, against AP at 96 points of the window that are not the 64: the cell passes
-   when every point is within 5 mm and 5e-5 m/s. A window that fails is halved, and the half that holds the time is built the
-   same way. A window of 3 minutes that fails marks the object not served from the window's start (status 4); AP refusing a
-   state at any point (the set decayed, the weather rows short) marks it from the window's start (status 3). The two are
-   counted apart. Only a load that replaces the record clears either.
+   when every point is within 5 mm and 5e-5 m/s. A window that fails the check, or in which AP refuses a state at any point
+   (the set decayed, the weather rows short), is halved, and the half that holds the time is built the same way, down to 3
+   minutes. A window of 3 minutes that still fails is stored as a tombstone: a header-only cell for exactly that window
+   with its reason, status 3 (AP refuses in it) or 4 (the tolerance is not held in it). A time in a tombstone answers its
+   status; a time elsewhere is unaffected, before the epoch or after, and a refill does not rebuild a window that holds a
+   tombstone. A set that cannot be made at all (its initialization refuses) answers status 3 at every time. The two kinds of
+   tombstone are counted apart (stats[13], [14]).
 
-A cell is 24 bytes of header (mid and half-span in minutes, the counts) and 8 bytes a coefficient in the head, 4 in the tail,
-held in classes of 64 bytes. With flags 1 only position is built and checked, and the velocity planes are the derivative of
-the position polynomial (the check does not cover them): AP's velocity is not the derivative of its position, they differ
-by 4.6e-2 m/s rms at 500 km, so the option is for displays that need positions.
+A status is a function of the record and the time once the window that holds the time has been attempted; a window not
+attempted answers 1. The cell, or the tombstone, that a window holds does not depend on which windows were attempted before.
+
+A cell is 24 bytes of header (mid and half-span in minutes, the counts, the holder) and 8 bytes a coefficient in the head, 4
+in the tail, held in classes of 64 bytes; a tombstone is the header alone. With the position-only flag only position is
+built, checked and written: three planes and no velocity, because AP's velocity is not the derivative of its position (they
+differ by 4.6e-2 m/s rms at 500 km in the module's own measure) and no derivative is offered as a velocity. A host that needs
+velocity opens without the flag. The positions are the same bits with and without it.
 
 ### 19.4 A state depends on the set and the time alone
 
 The grid is a function of the record's epoch and the split decisions are a function of AP's states, so two instances with
-different refill histories (priority order, cadence, a jump of the clock) return the same bits for an object and a time
-(`test/frames.e2e.mjs`, compared with `Object.is`). Each row builds from a cold set flown forward from the epoch, so a cell
-is the forward-only answer.
+different refill histories (priority order, cadence, a jump of the clock, the times before the epoch asked first or last)
+return the same bits and the same status for an object and a time (`test/frames.e2e.mjs`, compared with `Object.is`). Each
+row builds from a cold set flown from the epoch toward the window. The statement is about the cells: AP's own states in this
+release depend on the history of the asks made of the store's sets (an ask at an earlier time after later ones moves the
+states of some medium-orbit sets, with no frames open: a control in the test's history); the frames' own rows are cold sets
+and do not take part in it, and a refill changes no bit of `sdnap_epochs_at`, `sdnap_epochs_set_at` or `propagate_epochs`
+(the test asks the store before the first refill and after the last, in the same order, in a threaded instance too).
 
 ### 19.5 The bound, and what gets worse
 
-Against AP's own state the cell holds 5 mm and 5e-5 m/s at the 96 checked points of its window by construction; the tests'
-bound is 1 cm and 1e-4 m/s at every second. Measured over the stored synthetic set's 445 served records (a day of windows at 0
-and at 5 days from the epoch, a scan against AP every second, 76 million points; 96 check points): worst position error
-0.96 cm in strong drag, 0.84 cm at 500 km, 0.82 cm at eccentricity 0.01 to 0.05, 0.3 to 0.5 cm in the other classes, 99.9th
-percentile 3.2 to 5.6 mm, worst velocity 3.0e-5 m/s, no point over 1 cm. Windows of 48 minutes hold 99.4 % of the time at
-500 km, 87 % in strong drag, 99 % at eccentricity 0.01 to 0.05 and all of it in the other classes. The seeded population of the test: 2.6 million served points, worst
-7.6 mm and 2.9e-5 m/s. What gets worse, in the figures of 19.6 and 19.7:
+The builder checks every window at 96 points against 5 mm and 5e-5 m/s; between the check points the error is not bounded by
+construction. The bound the tests assert is 1 cm and 1e-4 m/s at every second of a day, on the tests' populations: it is a
+tested bound, not a proved one. Measured by `node test/frames.e2e.mjs` (25 seeded objects, inclinations 0.3 to 140 degrees,
+eccentricity to 0.05, epochs spread over a day, every second at 0 and 5 days from the epoch, every 17 s at -1, 2 and 10 days;
+3.9 million served points at 0 and 5 days): worst position 4.1 mm and velocity 3.0e-5 m/s outside strong drag; strong drag
+(perigees of 250 and 300 km) 10.5 mm, which exceeds 1 cm by 5 %: AP's own output steps by up to 10 mm there, the polynomial
+follows the steps to within half of them and the build tolerance adds to that, so the test's bound for strong drag is 1.5 cm;
+a set in the last hours before decay 24.5 mm (the test's bound there is 5 cm, no promise is made). Over the stored synthetic
+set's 445 served records (the same builder in a JavaScript prototype; a day of windows at 0 and at 5 days, every second, 76
+million points): worst 0.96 cm in strong drag, 0.84 cm at 500 km, 0.82 cm at eccentricity 0.01 to 0.05, 0.3 to 0.5 cm in
+the others; 99.9th percentile 3.2 to 5.6 mm; none over 1 cm (a reader with the stored set repeats it with the prototype that
+reads its rows; the repository holds no command for it). Windows of 48 minutes hold 99.4 % of the time at 500 km, 87 % in
+strong drag, 99 % at eccentricity 0.01 to 0.05 and all of it in the other classes.
+What gets worse:
 
-- A frame state differs from AP's by up to that bound, and AP's own 3e-5 m of white noise is not in it. Two kinds of state
-  exist for an object (AP's, from `sdnap_epochs_at`; the cell's, from `sdnap_frames_at`): they differ by up to the bound.
-- A first fill, and a jump of the clock, cost seconds during which objects answer 1 (no cell): a row costs 0.8 to 1.7 ms
-  of one core at the epoch's distance of 0 to 2 days, 2.5 to 3 ms at 10 days, and 4 to 11 ms in strong drag (0 to 10 days);
-  100,000 objects fill in 104 s on one thread of a loaded machine (the recipe of 19.6), 149 s for the public catalog's shares.
-- Objects that the entry does not serve (19.2) are asked of AP's entries.
-- Memory per served object: 19.6. Refill CPU per object-hour of orbit: one row an hour of 48 minutes, 1.1 ms at 500 km and
-  830 km, so 100,000 objects use 106 core seconds an hour (3 % of one core).
+- A frame state differs from AP's by up to the bound above, and AP's own 3e-5 m of white noise is not in it. Two kinds of
+  state exist for an object (AP's, from `sdnap_epochs_at`; the cell's, from `sdnap_frames_at`): they differ by up to that bound.
+- A first fill, and a jump of the clock, cost seconds during which objects answer 1 (no cell): 100,000 objects fill in 92 s on
+  one thread (recipe of 19.6, load 16), 128 s for the public catalog's shares (the rows of 19.1; the eccentric 5 % of the recipe
+  cost 11 ms each).
+- Objects that the entry does not serve (19.2) are asked of AP's entries, and so are the times a tombstone holds.
+- Memory per served object: 19.6. Refill CPU: a served object needs 1.25 rows an hour (windows of 48 minutes); with the
+  rows of 19.1 and the recipe's mix that is 142, 189 and 226 core seconds an hour for 100,000 objects whose records are 0, 2
+  and 5 days old (4 to 6 % of one core).
 - A wide set flown through `sdnap_epochs_set_at` in the same instance holds about 10 MB (a grid in E, SPEC 16.11) for the
   life of the instance: 20 wide sets grew the instance by 210 MB. The byte bounds of 19.6 hold while wide objects are not
-  flown in the instance. A refill row's time is the same before and after (0.844 and 0.857 ms median).
+  flown in the instance. A refill row's time is the same before and after (0.84 ms median both). `node test/frames-cost.mjs
+  --skip-frame --skip-rows`.
 
 ### 19.6 Memory
 
-One block, allocated at open, counted: the table (40 bytes a series, 4.0 MB at 100,000) and the slab. At 100,000 objects, the
-load probe's recipe (85 % low near-circular, 5 % medium, 5 % geosynchronous, 5 % eccentric below 0.05; seeded sets with
-epochs spread over one window, `test/frames-memory.e2e.mjs`): 106,337 cells at a full fill (6.3 % more than objects: the
-cells of the following window, built 3 minutes ahead), 82.8 MB of slab used (778 bytes a cell); 84.1 MB after the windows have
-turned over (841 bytes an object served; the cells' own sizes are 79.9 MB, the classes of 64 bytes and the cells on the free
-lists take the other 5.0 %). The
-public catalog's shares (92.1 % served, the rest wide): 97,910 cells, 75.5 MB at a full fill, 76.2 MB after the turn (828
-bytes an object served). A host gives 850 bytes for each object served plus the table. With the stored 180,486,144 bytes of
-a 100,000-object load with covariance (parts of 1,000), the thread stacks and the per-thread caches, the instance holds about
-271 MB (recipe) and 263 MB (public shares) in all, under 300 MB decimal: 180.5 MB fixed, 4.0 MB table, 84.1 or 76.2 MB
-cells, 2.7 MB for a row's transient set and the thread's caches. The instance's memory does not shrink: the bound holds while no
-wide object is flown in the instance (19.5).
+One block, allocated at open, counted, of exactly the budget given: the table (32 bytes a series, padded to 64, 3.2 MB at
+100,000) and the slab. The host's rule for the budget: 850 bytes for each object served, 32 bytes for each series and 1 MiB.
+Measured by `node test/frames-memory.e2e.mjs` (about 7 minutes, 3 GB of the host's memory; it asserts every figure below)
+at 100,000 objects, seeded sets with epochs spread over one window, loaded in parts of 1,000, filled at one instant, then the
+windows turned over (48 minutes in steps of one):
+
+| catalog | served | cells at a full fill | slab used, full fill | slab used, after the turn | bytes an object served | cells' own bytes | classes of 64 bytes and free cells |
+| --- | ---: | ---: | ---: | ---: | ---: | ---: | ---: |
+| the load probe's recipe (85 % low near-circular, 5 % medium, 5 % geosynchronous, 5 % eccentric below 0.05) | 100,000 | 106,337 | 82.8 MB | 84.1 MB | 841 | 79.9 MB | 5.0 % |
+| the public catalog's shares (92.1 % served, the rest wide) | 92,100 | 97,910 | 75.5 MB | 76.2 MB | 828 | 72.8 MB | 4.5 % |
+
+The cells at a full fill exceed the objects by 6.3 % on the recipe: the cells of the following window, built 3 minutes ahead,
+the epochs being spread. A catalog whose epochs are not spread holds two cells for every object during those 3 minutes.
+With the stored 180,486,144 bytes of a 100,000-object load with covariance (counted by the load probe of
+`test/load-memory.e2e.mjs` at that size) the instance holds 269.7 MB (recipe: 180.5 + 89.2 block + 0 growth) and 263.0 MB
+(public shares), under 300 MB decimal. What the instance holds besides the block: the first row on a thread makes that
+thread's caches (SPEC 9: 1.8 MB, once, kept); a fill grew the instance by no more than 4 MiB in the test, 0 at 100,000
+(the load's freed memory is reused). The instance's memory does not shrink: the bound holds while no wide object is flown in
+the instance (19.5). A slab that fragments (cells that change size) is compacted when its bump fails: the live cells slide down
+over the free ones and each holder's offset is rewritten (82.7 MB moved for a 100,000-object recipe slab sized 0.4 % above its full fill, six times in 50 minutes of one-minute
+calls: the calls that compacted took 1.66 to 2.12 s, those that did not 1.69 to 2.16 s, for about 2,100 rows each, so a
+compaction's own time is below the spread of a call's); a row is not stored only when the slab is full after that.
 
 ### 19.7 Cost
 
 A frame of 20,000 objects through `sdnap_frames_at` against the same through the module's SGP4 (`sdnap_epochs_at` on SGP4
-records), alternating rounds in one process, process CPU, position and velocity, the recipe's mix and degrees: 0.0677
-microseconds a state against 0.2573, a ratio of 0.263 (`test/frames-cost.mjs`, under load 32; ratios are what to read).
-Evaluation alone in C compiled like the module, 100,000 objects each with its own cell: 0.30 of SGP4 with position and velocity
-in the float32-tail form, 0.18 with position only.
+records), alternating rounds in one process, process CPU, position and velocity, the recipe's mix (`node test/frames-cost.mjs
+--objects 20000 --skip-rows --skip-wide`, load 16, timing token held): TEME 0.0665 microseconds a state against 0.2542 for
+SGP4, a ratio of 0.263; Earth-fixed 0.0710 against 0.2550, 0.278 (the rotation's sine and cosine are taken once for the call).
+At 100,000 objects (`--objects 100000`, load 25): TEME 0.0670 against 0.2554, 0.262; Earth-fixed 0.0706 against 0.2564,
+0.275. Ratios are what to read.
 
 ### 19.8 Tests
 
-`test/frames.e2e.mjs`: the bound at every second of a day at 0 and 5 days; the same bits from two fill orders; the epoch
-store's exports unchanged by refills; every status; the position-only option; the Earth-fixed frame; a load drops the cells;
-the budget refused by name with the bytes needed; a full slab counted; the builder's own status through a build whose tolerance
-cannot be held; every counted allocation of open and of a refill row failed in turn (the object keeps no cell, and the same
-call then answers with the bits of a clean run). `test/frames-memory.e2e.mjs`: the bytes at 100,000 objects for the two
-catalogs. `test/frames-cost.mjs`: the cost of a frame against SGP4 and the residue of wide sets.
+`node test/frames.e2e.mjs` (about 70 s): the bound over a day at -1, 0, 2, 5 and 10 days, with counts so that a run that
+serves nothing fails; a status the same whatever the order of the windows asked (a refusal before the epoch does not reach
+the times after it); wide sets, series of several sets, stock sets, hand-over records and records with a forecast answer 2 and
+the store's exports (every set) are unchanged by refills; purity from two fill orders, the store's exports unchanged and a
+threaded instance; every status; the budget refused by name and a refused open leaving the earlier frames standing; a
+compacted slab sized to the figure of an unconstrained run that never refuses a row; a refill sliced at 8 rows storing the
+bits of one at 5,000 and visiting each object once; the position-only mode; a build whose tolerance cannot be held (status
+4); every counted allocation of open and of a refill row failed in turn (the object keeps no cell, the slab is as it was,
+and the same call then answers with the bits of a clean run). `node test/frames-memory.e2e.mjs`: the bytes at 100,000
+objects. `node test/frames-cost.mjs`: 19.1's rows, 19.7's frame ratios and 19.5's residue of wide sets.
 
 ## References
 

@@ -1,19 +1,22 @@
 #!/usr/bin/env node
 // SPEC 19.6: the bytes of the frames at 100,000 objects. Two catalogs: the load probe's recipe (85 % low near-circular, 5 % medium, 5 % geosynchronous,
-// 5 % eccentric) and the public catalog's shares (92.1 % of its objects at eccentricity 0.05 or under; the rest are wide and not served). The epochs are spread
-// over one window, so each object's grid is anchored at its own epoch. Each catalog is loaded in parts of 1,000, the frames opened over a budget, every object
-// filled at one instant, then the clock moved to 170 s before the next window of the objects whose window ends first.
-// Asserted: the frames' own bytes are the budget given (one block); the slab used after a full fill is at most the figure SPEC 19.6 states; no row is refused
-// for room; the instance's memory grows by no more than the block plus 4 MiB; the objects the entry does not serve answer "not served by this entry".
-//   FRAMES_OBJECTS=100000 node test/frames-memory.e2e.mjs   (the default; a smaller count scales the figures)
+// 5 % eccentric below 0.05) and the public catalog's shares (92.1 % of its objects served, the rest wide). Seeded sets with epochs spread over one window, so each
+// object's grid is anchored at its own epoch. Each catalog is loaded in parts of 1,000, the frames opened with the budget SPEC 19.6 states as a rule (850 bytes for
+// each object served, 32 bytes for each series, 1 MiB), every object filled at one instant, then the windows turned over (48 minutes in steps of one).
+// Asserted: the open grows the instance by the block and no more than 4 MiB; a full fill grows it by no more than 4 MiB (a thread's caches, made once);
+// every object the entry serves is served; no row is refused for room through the turn of the windows; the slab used stays under the stated figure; on the
+// recipe the instance, with the stored load of 100,000 sets with covariance (180,486,144 bytes), is under 300 MB decimal; the objects not served answer 2.
+// A run with another count is PARTIAL: it prints PARTIAL and exits 2, unless FRAMES_PARTIAL=1 (exit 0, still printing PARTIAL).
+//   node test/frames-memory.e2e.mjs   (about 7 minutes, 3 GB of the host's memory)
 import assert from "node:assert/strict";
 import { T } from "./lib/ocm.mjs";
 import { population, ocmOfObject, openFrames, EPOCH_MS, STAT, STATUS } from "./lib/frame-cells.mjs";
 
-const N = Number(process.env.FRAMES_OBJECTS ?? 100000);
+const FULL = 100000;
+const N = Number(process.env.FRAMES_OBJECTS ?? FULL);
 const PART = 1000, MIB = 1048576;
-// SPEC 19.6: bytes of slab used by one served object after a full fill, per catalog (the cell holding the instant), and the budget a host gives per object
-const FIGURE = { recipe: Number(process.env.FIGURE_RECIPE ?? 850), public: Number(process.env.FIGURE_PUBLIC ?? 850) };
+const PER_SERVED = 850, PER_SERIES = 32;       // SPEC 19.6: the host's rule for the budget
+const STORED_LOAD_BYTES = 180486144;           // the stored 100,000-set load with covariance: counted by test/load-memory.e2e.mjs's probe at 100,000 sets
 const share = (n, p) => Math.round((n * p) / 100);
 const plans = {
   recipe: (n) => { const low = share(n, 85), a = share(low, 30), b = share(low, 53); return [["leo500", a], ["leo830", b], ["drag300", low - a - b], ["meo", share(n, 5)], ["geo", share(n, 5)], ["ecc", n - low - 2 * share(n, 5)]]; },
@@ -23,7 +26,6 @@ const out = {};
 for (const [name, plan] of Object.entries(plans)) {
   const pop = population(plan(N), 20261113, 48);
   const f = await openFrames({ initialMemoryBytes: 2 * MIB });
-  // the load, in parts of 1,000
   const x = f.x;
   let r = await f.h.invoke({ methodId: "load_epochs_open", inputs: [] });
   assert.equal(r.statusCode, 0, r.errorMessage);
@@ -38,38 +40,47 @@ for (const [name, plan] of Object.entries(plans)) {
   f.adopt(pop.length);
   const afterLoad = f.mem().byteLength;
   const served = pop.filter((o) => o.serves).length;
-  const budget = Math.ceil(FIGURE[name] * served * 1.0) + pop.length * 48 + MIB;
+  const budget = Math.ceil(PER_SERVED * served + PER_SERIES * pop.length + MIB);
   assert.equal(f.open(budget), 0);
   const afterOpen = f.mem().byteLength;
   const st0 = f.stats();
-  assert.equal(st0[STAT.held], budget - (budget - st0[STAT.table] - st0[STAT.slab]), "the table and the slab are the block");
+  assert.equal(st0[STAT.block], budget, "the block as allocated is the budget");
   assert.equal(st0[STAT.eligible], served);
+  assert.ok(afterOpen - afterLoad <= budget + 4 * MIB, `open grew the instance by ${afterOpen - afterLoad} B for a block of ${budget} B`);
   const t = EPOCH_MS + 3600e3;
   const t0 = performance.now();
-  let due = f.refill(t, 180, 2000);
-  while (due > 0) { const left = f.refill(t, 180, 2000); assert.ok(left < due, "every call builds rows"); due = left; }
+  const fill = f.fill(t, 180, 2000);
+  assert.equal(fill.due, 0, "the fill completes");
   const fillS = (performance.now() - t0) / 1000;
   const afterFill = f.mem().byteLength;
   const st = f.stats();
   assert.equal(st[STAT.full], 0, "no row refused for room");
   assert.equal(st[STAT.rowsOom], 0);
-  assert.equal(st[STAT.cells] >= served - st[STAT.apRefused] - st[STAT.builderFailed], true);
-  const perObject = (st[STAT.used] - 64) / Math.max(1, st[STAT.cells]);
+  assert.ok(afterFill - afterOpen <= 4 * MIB, `a full fill grew the instance by ${afterFill - afterOpen} B (a thread's caches and a cold set)`);
   const q = f.at(t);
-  for (let i = 0; i < pop.length; i++) if (!pop[i].serves) assert.equal(q.status[i], STATUS.notServedHere);
-  out[name] = { objects: pop.length, served, budget, afterLoad, afterOpen, afterFill, slabUsed: st[STAT.used], cells: st[STAT.cells], bytesPerCell: +perObject.toFixed(1), table: st[STAT.table], fillSeconds: +fillS.toFixed(1), apRefused: st[STAT.apRefused], builderFailed: st[STAT.builderFailed] };
+  let nServed = 0;
+  for (let i = 0; i < pop.length; i++) {
+    if (pop[i].serves) { assert.equal(q.status[i], STATUS.served, `object ${i} (${pop[i].kind}) is served`); nServed++; }
+    else assert.equal(q.status[i], STATUS.notServedHere);
+  }
+  assert.equal(nServed, served);
+  out[name] = { objects: pop.length, served, budget, afterLoad, afterOpen, afterFill, slabUsed: st[STAT.used], cells: st[STAT.cells], bytesPerCell: +((st[STAT.used] - 64) / st[STAT.cells]).toFixed(1), table: st[STAT.table], fillSeconds: +fillS.toFixed(1), tombstones: st[STAT.apTombstones] + st[STAT.builderTombstones] };
   console.log(name, JSON.stringify(out[name]));
-  assert.ok(afterFill - afterOpen <= 4 * MIB, `a refill row's cold set and the thread caches grew the instance by ${afterFill - afterOpen} B`);
-  assert.ok(st[STAT.used] <= FIGURE[name] * served + MIB, `slab used ${st[STAT.used]} B over the stated ${FIGURE[name]} B an object`);
-  // the clock moves on: the cells of the objects whose window ends within 3 minutes are replaced; the slab holds them beside the cells they replace
-  let worstUsed = st[STAT.used];
-  for (let m = 1; m <= 48; m++) { f.refill(t + m * 60000, 180, 1 << 30); worstUsed = Math.max(worstUsed, f.stats()[STAT.used]); }
+  // the windows turn over
+  for (let m = 1; m <= 48; m++) f.refill(t + m * 60000, 180, 1 << 30);
   const sf = f.stats();
   assert.equal(sf[STAT.full], 0, "no row refused for room while the windows turn over");
-  assert.ok(sf[STAT.used] <= FIGURE[name] * served + MIB, `slab used ${sf[STAT.used]} B after the windows turned over: over the stated ${FIGURE[name]} B an object served`);
-  out[name].afterTurn = { slabUsed: sf[STAT.used], bytesPerServed: +(sf[STAT.used] / served).toFixed(1), cells: sf[STAT.cells], cellBytes: sf[STAT.cellBytes], slackShare: +((sf[STAT.used] - 64 - sf[STAT.cellBytes]) / sf[STAT.used]).toFixed(4) };  // the slab's classes of 64 B and the cells on the free lists
-  console.log(`${name}: slab used after a full turn of the windows ${sf[STAT.used]} B (${(sf[STAT.used] / served).toFixed(1)} B an object served), cells ${sf[STAT.cells]}, their own bytes ${sf[STAT.cellBytes]}`);
+  assert.ok(sf[STAT.used] <= PER_SERVED * served, `slab used ${sf[STAT.used]} B after the windows turned over: over the stated ${PER_SERVED} B an object served`);
+  out[name].afterTurn = { slabUsed: sf[STAT.used], bytesPerServed: +(sf[STAT.used] / served).toFixed(1), cells: sf[STAT.cells], cellBytes: sf[STAT.cellBytes], slackShare: +((sf[STAT.used] - 64 - sf[STAT.cellBytes]) / sf[STAT.used]).toFixed(4), compactions: sf[STAT.compactions], moved: sf[STAT.moved] };
+  const total = STORED_LOAD_BYTES + budget + (afterFill - afterOpen);
+  out[name].totalWithStoredLoad = total;
+  console.log(`${name}: slab used after a full turn of the windows ${sf[STAT.used]} B (${(sf[STAT.used] / served).toFixed(1)} B an object served), cells ${sf[STAT.cells]}, their own bytes ${sf[STAT.cellBytes]}; with the stored load ${(total / 1e6).toFixed(1)} MB`);
+  if (name === "recipe" && N === FULL) assert.ok(total < 300e6, `the recipe's instance ${total} B is not under 300 MB decimal`);
   f.close();
 }
 console.log(JSON.stringify(out));
+if (N !== FULL) {
+  console.log(`FRAMES-MEMORY PARTIAL (${N} objects, not ${FULL}): the 100,000-object figures are not verified`);
+  process.exit(process.env.FRAMES_PARTIAL === "1" ? 0 : 2);
+}
 console.log("FRAMES-MEMORY PASS");

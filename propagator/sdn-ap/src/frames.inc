@@ -1,9 +1,10 @@
 // -----------------------------------------------------------------------------
-// Frames (SPEC 19): short Chebyshev segments of AP's own states, served by entries of their own.
-// A segment ("cell") holds six polynomials (position, velocity) over one window of a grid anchored at its record's epoch. The
-// store of cells is a slab allocated at sdnap_frames_open through the counted allocator; nothing is allocated afterwards
-// except what one refill row needs for its cold set, released inside the row. Nothing here is written to a record, and no
-// export of the epoch store reads a cell.
+// Frames (SPEC 19): short Chebyshev cells of AP's own states, served by entries of their own.
+// A cell holds six polynomials (position, velocity; position alone with the position-only flag) over one window of a grid anchored at its
+// record's epoch. A window that cannot be served is stored as a tombstone: a header-only cell with the reason. The store of cells is a slab
+// allocated at sdnap_frames_open through the counted allocator; a refill row allocates only its cold set, released inside the row (the first
+// row on a thread also makes that thread's caches, kept: SPEC 9). Nothing here is written to a record, and no export of the epoch store
+// reads a cell. One host thread: frames and refills are called one after the other, never during a batch of the pool.
 // -----------------------------------------------------------------------------
 
 namespace sdnap {
@@ -19,34 +20,41 @@ constexpr double kTailShare = 0.6;           ///< a truncation's dropped tail is
 constexpr double kFloatRel = 6.0e-8;         ///< the relative rounding of a float32 coefficient (2^-24 is 5.96e-8)
 constexpr double kTailLimPos = 3.0e-8;       ///< km: the float32 tail's rounding bound in position (3e-5 m)
 constexpr double kTailLimVel = 3.0e-10;      ///< km/s: the same in velocity (3e-7 m/s)
-constexpr uint32_t kHeaderBytes = 24;
+constexpr double kMaxAheadSeconds = kBaseMinutes * 60.0;  ///< refill clamps `ahead` to one base window
+constexpr uint32_t kHeaderBytes = 24;        ///< mid, half-span (doubles, minutes); np, nv, hp, hv (bytes); holder (u32: series << 1 | slot)
 constexpr uint32_t kClassBytes = 64;         ///< cells are cut in classes of this many bytes
 constexpr uint32_t kClasses = 65;            ///< class c holds c * kClassBytes bytes, c in [1, 64]
-constexpr uint32_t kMinCellBytes = 256;      ///< what open assumes at least one cell of a served object takes
-constexpr uint32_t kFlagPositionOnly = 1;    ///< open: no velocity polynomial; the velocity planes are the position polynomial's derivative
+constexpr uint32_t kMaxCellBytes = kHeaderBytes + 2 * 24 * kNodes;  ///< a cell with every coefficient in doubles
+constexpr uint32_t kFlagPositionOnly = 1;    ///< open: no velocity at all; frames_at writes three planes
+constexpr uint8_t kFreeMark = 0xFF;          ///< byte 16 of a cell on a free list (byte 17: its class)
 
 /// Statuses a frame states (one per object).
 constexpr int32_t kServed = 0;
-constexpr int32_t kNoSegment = 1;       ///< no cell for this time: the host calls refill
+constexpr int32_t kNoSegment = 1;       ///< no cell holds this time (a window not attempted): the host calls refill
 constexpr int32_t kNotServedHere = 2;   ///< this entry never serves the object (wide, several sets, a forecast, not AP, a hand-over set)
-constexpr int32_t kApRefuses = 3;       ///< not served from this time: AP itself refuses the object (decay, rows short)
-constexpr int32_t kBuilderFails = 4;    ///< not served from this time: no window of 3 minutes holds the tolerance
+constexpr int32_t kApRefuses = 3;       ///< AP itself refuses the object in the window holding this time (decay, weather rows short) or at all (the set cannot be made)
+constexpr int32_t kBuilderFails = 4;    ///< no window of 3 minutes holds the tolerance here
 
 /// Return codes of the entries.
 constexpr int32_t kBadArgument = -1;
 constexpr int32_t kOutOfMemory = -2;    ///< a counted allocation failed (stats[11]: the bytes asked)
-constexpr int32_t kBudgetTooSmall = -3; ///< the budget cannot hold the table and a minimum cell for each served object (stats[11]: the bytes needed)
-constexpr int32_t kStoreChanged = -4;   ///< a load replaced the store since open: every status is kNoSegment until refill; refill re-reads the store
+constexpr int32_t kBudgetTooSmall = -3; ///< the budget cannot hold the table and one largest cell (stats[11]: the bytes needed)
+constexpr int32_t kStoreChanged = -4;   ///< a load replaced the store since open: every status is kNoSegment, and a refill reads the store again
 constexpr int32_t kNotOpen = -5;
 constexpr int32_t kReopen = -6;         ///< the store holds more series than open's table: open again
 
 struct Obj {
   double ew = 0, ef = 0;       ///< the record's epoch, split Julian date
-  double fail_from = HUGE_VAL; ///< minutes from the epoch from which the object is not served (fail_kind)
-  uint32_t cur = 0, nxt = 0;   ///< slab offsets of the current and the next cell (0: none)
-  uint8_t kind = 0;            ///< 0 served by this entry, kNotServedHere otherwise
-  uint8_t fail_kind = 0;
-  uint8_t pad[6] = {};
+  uint32_t cur = 0, nxt = 0;   ///< slab offsets of the current and the following cell (0: none)
+  uint8_t kind = 0;            ///< 0 served by this entry; kNotServedHere; kApRefuses: the set cannot be made
+  uint8_t pad[7] = {};
+};
+
+struct Sweep {
+  bool valid = false;
+  double w = 0, f = 0, ahead = 0;
+  int pass = 0;                ///< 0: the cells `now` needs, 1: the cells `now + ahead` needs, 2: done
+  uint32_t k = 0;              ///< the place in the sequence that follows the last one visited (the priority list, then the objects in index order)
 };
 
 struct State {
@@ -58,11 +66,12 @@ struct State {
   uint8_t* block = nullptr;       ///< table, then slab
   Obj* obj = nullptr;
   uint8_t* slab = nullptr;
-  size_t table_bytes = 0, slab_bytes = 0, used = 0;
+  size_t block_bytes = 0, table_bytes = 0, slab_bytes = 0, used = 0;
   uint32_t free_head[kClasses] = {};
-  double st[16] = {};             ///< the statistics of sdnap_frames_stats that are counters
   double needed = 0;
+  Sweep sweep;
   uint64_t rows = 0, rows_oom = 0, stored = 0, split = 0, full = 0, live = 0, live_bytes = 0;
+  uint64_t tomb_ap = 0, tomb_builder = 0, compactions = 0, moved = 0, visits = 0;
 };
 
 inline State& state() {
@@ -72,10 +81,13 @@ inline State& state() {
 
 alignas(8) inline uint8_t g_cell[4096];  ///< the cell under construction
 
+inline bool is_tombstone(const uint8_t* c) { return c[16] == 0; }
 inline uint32_t bytes_of_cell(int np, int nv, int hp, int hv) {
+  if (np == 0) return kHeaderBytes;  // a tombstone
   auto grp = [](int n, int h) { return static_cast<uint32_t>(24 * h + 12 * (n - h) + 7) & ~7u; };
   return kHeaderBytes + grp(np, hp) + grp(nv, hv);
 }
+inline uint32_t cell_bytes(const uint8_t* c) { return bytes_of_cell(c[16], c[17], c[18], c[19]); }
 inline double cell_mid(const uint8_t* c) { double d; std::memcpy(&d, c, 8); return d; }
 inline double cell_half(const uint8_t* c) { double d; std::memcpy(&d, c + 8, 8); return d; }
 
@@ -98,40 +110,16 @@ inline void clen3(const double* head, const float* tail, int h, int n, double u,
   else { o[0] = static_cast<double>(tail[0]) + u * a0 - p0; o[1] = static_cast<double>(tail[1]) + u * a1 - p1; o[2] = static_cast<double>(tail[2]) + u * a2 - p2; }
 }
 
-/// The groups of a cell: position at the header's end, velocity after it (8-byte aligned).
-struct Groups {
-  const double* ph; const float* pt; const double* vh; const float* vt;
-  int np, nv, hp, hv;
-};
-inline Groups groups_of(const uint8_t* c) {
-  Groups g{};
-  g.np = c[16]; g.nv = c[17]; g.hp = c[18]; g.hv = c[19];
-  g.ph = reinterpret_cast<const double*>(c + kHeaderBytes);
-  g.pt = reinterpret_cast<const float*>(c + kHeaderBytes + 24 * g.hp);
-  const uint32_t pos = (24u * g.hp + 12u * (g.np - g.hp) + 7u) & ~7u;
-  g.vh = reinterpret_cast<const double*>(c + kHeaderBytes + pos);
-  g.vt = reinterpret_cast<const float*>(c + kHeaderBytes + pos + 24 * g.hv);
-  return g;
-}
-
-/// The cell's state at t (minutes from the record's epoch): km and km/s. A cell without a velocity polynomial gives the position polynomial's derivative.
+/// The cell's state at t (minutes from the record's epoch): km and, when the cell has a velocity polynomial, km/s (v is untouched otherwise).
 inline void eval_cell(const uint8_t* c, double t, double r[3], double v[3]) {
-  const double half = cell_half(c), u = (t - cell_mid(c)) / half;
-  const Groups g = groups_of(c);
-  clen3(g.ph, g.pt, g.hp, g.np, u, r);
-  if (g.nv > 0) { clen3(g.vh, g.vt, g.hv, g.nv, u, v); return; }
-  // the derivative of the position series: d_{k-1} = d_{k+1} + 2 k c_k (k = n-1 .. 1), p' = d_0 / 2 + sum_{j >= 1} d_j T_j
-  double c3[kNodes][3], d[kNodes + 2][3];
-  for (int k = 0; k < g.np; ++k)
-    for (int a = 0; a < 3; ++a) c3[k][a] = k < g.hp ? g.ph[k * 3 + a] : static_cast<double>(g.pt[(k - g.hp) * 3 + a]);
-  for (int k = 0; k < g.np + 2; ++k) d[k][0] = d[k][1] = d[k][2] = 0.0;
-  for (int k = g.np - 1; k >= 1; --k)
-    for (int a = 0; a < 3; ++a) d[k - 1][a] = d[k + 1][a] + 2.0 * k * c3[k][a];
-  for (int a = 0; a < 3; ++a) {
-    double T0 = 1.0, T1 = u, s = 0.5 * d[0][a];
-    if (g.np > 2) s += d[1][a] * T1;
-    for (int j = 2; j < g.np - 1; ++j) { const double T2 = 2.0 * u * T1 - T0; s += d[j][a] * T2; T0 = T1; T1 = T2; }
-    v[a] = s / half / 60.0;
+  const double u = (t - cell_mid(c)) / cell_half(c);
+  const int np = c[16], nv = c[17], hp = c[18], hv = c[19];
+  const double* ph = reinterpret_cast<const double*>(c + kHeaderBytes);
+  const float* pt = reinterpret_cast<const float*>(c + kHeaderBytes + 24 * hp);
+  clen3(ph, pt, hp, np, u, r);
+  if (nv > 0) {
+    const uint32_t pos = (24u * hp + 12u * (np - hp) + 7u) & ~7u;
+    clen3(reinterpret_cast<const double*>(c + kHeaderBytes + pos), reinterpret_cast<const float*>(c + kHeaderBytes + pos + 24 * hv), hv, nv, u, v);
   }
 }
 
@@ -155,11 +143,35 @@ inline uint32_t slab_alloc(State& s, uint32_t bytes) {
 }
 inline void slab_free(State& s, uint32_t off) {
   if (off == 0) return;
-  const uint32_t bytes = bytes_of_cell(s.slab[off + 16], s.slab[off + 17], s.slab[off + 18], s.slab[off + 19]), c = class_of(bytes);
+  const uint32_t bytes = cell_bytes(s.slab + off), c = class_of(bytes);
   std::memcpy(s.slab + off, &s.free_head[c], 4);
+  s.slab[off + 16] = kFreeMark;
+  s.slab[off + 17] = static_cast<uint8_t>(c);
   s.free_head[c] = off;
   --s.live;
   s.live_bytes -= bytes;
+}
+/// The live cells slid down over the free ones, in slab order, each holder's offset rewritten: only a slab full after this is full.
+inline void compact(State& s) {
+  size_t src = kClassBytes, dst = kClassBytes;
+  while (src < s.used) {
+    uint8_t* c = s.slab + src;
+    if (c[16] == kFreeMark) { src += static_cast<size_t>(c[17]) * kClassBytes; continue; }
+    const size_t size = static_cast<size_t>(class_of(cell_bytes(c))) * kClassBytes;
+    if (dst != src) {
+      std::memmove(s.slab + dst, c, size);
+      uint32_t owner;
+      std::memcpy(&owner, s.slab + dst + 20, 4);
+      Obj& o = s.obj[owner >> 1];
+      ((owner & 1u) ? o.nxt : o.cur) = static_cast<uint32_t>(dst);
+      s.moved += size;
+    }
+    dst += size;
+    src += size;
+  }
+  for (uint32_t c = 0; c < kClasses; ++c) s.free_head[c] = 0;
+  s.used = dst;
+  ++s.compactions;
 }
 
 inline void release_state(State& s) {
@@ -167,7 +179,8 @@ inline void release_state(State& s) {
   s = State{};
 }
 
-/// Eligibility: an AP set alone in its series, flying its theory (no forecast, no hand-over), not wide.
+/// Eligibility: an AP set alone in its series (one set), without a carried forecast (SPEC 18) and without a hand-over, with gravity terms in its forces,
+/// not on the wide branch.
 inline bool eligible_entry(const epochs::Series& se, const epochs::Entry& en) {
   if (se.count != 1 || en.track || en.handover != HUGE_VAL || en.row.theory != kTheorySgp4Xp) return false;
   if (!(en.forces.tesseral > 0 || en.forces.zonal > 0)) return false;
@@ -193,6 +206,7 @@ inline void fill_table(State& s) {
   s.used = kClassBytes;
   s.live = 0;
   s.live_bytes = 0;
+  s.sweep = Sweep{};
 }
 
 inline double minutes_from(const Obj& o, double whole, double frac) { return ((whole - o.ew) + (frac - o.ef)) * kMinutesPerDay; }
@@ -203,18 +217,21 @@ struct Built {
   int np, nv;
 };
 
-/// 0: stored in g_cell (size in bytes); 1: AP refuses; 2: the tolerance is not held.
+/// 0: stored in g_cell (size in `bytes`); 1: AP refuses somewhere in the window; 2: the tolerance is not held.
+/// Samples and checks are taken ascending in time for a window after the epoch and descending for a window before it: the set is flown from the epoch toward the window.
 inline int build_window(xpt::XpSat& xp, epochs::Store& st, const epochs::Entry& en, double a, double b, bool pos_only, uint32_t& bytes) {
   const double mid = 0.5 * (a + b), half = 0.5 * (b - a);
-  // the rows of the record's weather must hold every day the window flies through
+  const bool down = b <= 0.0;
+  // the rows of the record's weather must hold every day between the epoch and the window's far end
   if (epochs::rows_cover(st, en, en.epoch + std::fmin(a, 0.0)) != 0 || epochs::rows_cover(st, en, en.epoch + std::fmax(b, 0.0)) != 0) return 1;
   double u[kNodes], f[6][kNodes];
   for (int j = 0; j < kNodes; ++j) {
-    // ascending in time: node index kNodes-1-j has the j-th smallest u
-    u[j] = std::cos(kPi * (static_cast<double>(kNodes - 1 - j) + 0.5) / kNodes);
+    // node j (ascending in u) is Chebyshev point kNodes-1-j; a window before the epoch takes them descending
+    const int jj = down ? kNodes - 1 - j : j;
+    u[jj] = std::cos(kPi * (static_cast<double>(kNodes - 1 - jj) + 0.5) / kNodes);
     double r[3], v[3];
-    if (xpt::xp_propagate(xp, mid + half * u[j], r, v) != kPropOk) return 1;
-    for (int c = 0; c < 3; ++c) { f[c][j] = r[c]; f[3 + c][j] = v[c]; }
+    if (xpt::xp_propagate(xp, mid + half * u[jj], r, v) != kPropOk) return 1;
+    for (int c = 0; c < 3; ++c) { f[c][jj] = r[c]; f[3 + c][jj] = v[c]; }
   }
   Built bt;
   const int groups = pos_only ? 3 : 6;
@@ -274,8 +291,9 @@ inline int build_window(xpt::XpSat& xp, epochs::Store& st, const epochs::Entry& 
       for (int k = 0; k < bt.nv; ++k) for (int a2 = 0; a2 < 3; ++a2) { if (k < hv) vh[k * 3 + a2] = bt.coef[3 + a2][k]; else vt[(k - hv) * 3 + a2] = static_cast<float>(bt.coef[3 + a2][k]); }
     }
   }
-  // the check: the stored cell against AP at points that are not the sample points
-  for (int j = 0; j < kChecks; ++j) {
+  // the check: the stored cell against AP at points that are not the sample points, in the direction of the flight
+  for (int q = 0; q < kChecks; ++q) {
+    const int j = down ? kChecks - 1 - q : q;
     const double uj = -0.98 + 1.96 * (static_cast<double>(j) + 0.31) / kChecks, t = mid + half * uj;
     double r[3], v[3], rc[3], vc[3];
     if (xpt::xp_propagate(xp, t, r, v) != kPropOk) return 1;
@@ -288,9 +306,11 @@ inline int build_window(xpt::XpSat& xp, epochs::Store& st, const epochs::Entry& 
   return 0;
 }
 
-/// One refill row: the cell of the dyadic window holding t (minutes from the epoch) of object i, built from a cold set of its record and released.
-/// Returns 1 stored (cell offset in `off`), 0 nothing changed (out of memory, or no room: counted), 2 the object is marked not served from the window's start.
-inline int row(State& s, uint32_t i, double t, uint32_t& off) {
+/// One refill row: the leaf cell of the dyadic window holding t (minutes from the epoch, before or after it) of object i, from a cold set of its record,
+/// released inside the row. A window AP refuses in, or that holds no tolerance, is halved down to 3 minutes; a window of 3 minutes that still fails
+/// is a tombstone (its reason in byte 17: kApRefuses or kBuilderFails). The cell, or the tombstone, is left in g_cell with its size in `bytes`.
+/// Returns 1 a cell, 2 a tombstone, 0 nothing (a counted allocation failed: rows_oom), 3 the set cannot be made (the object is marked kApRefuses).
+inline int row(State& s, uint32_t i, double t, uint32_t& bytes) {
   epochs::Store& st = epochs::resident();
   const epochs::Series& se = st.series[i];
   const epochs::Entry& en = st.entries[se.first];
@@ -311,24 +331,24 @@ inline int row(State& s, uint32_t i, double t, uint32_t& off) {
     return rc;
   };
   if (mem::failures() != mark) { ++s.rows_oom; return done(0); }
-  if (err != kPropOk) { o.fail_from = -HUGE_VAL; o.fail_kind = static_cast<uint8_t>(kApRefuses); return done(2); }
+  if (err != kPropOk) { o.kind = static_cast<uint8_t>(kApRefuses); ++s.tomb_ap; return done(3); }
   const bool pos_only = (s.flags & kFlagPositionOnly) != 0;
   double len = kBaseMinutes;
   for (int level = 0;; ++level, len *= 0.5) {
     const double a = std::floor(t / len) * len, b = a + len;
-    uint32_t bytes = 0;
     const int rc = build_window(*xp, st, en, a, b, pos_only, bytes);
     if (mem::failures() != mark) { ++s.rows_oom; return done(0); }
-    if (rc == 0) {
-      const uint32_t at = slab_alloc(s, bytes);
-      if (at == 0) { ++s.full; return done(0); }
-      std::memcpy(s.slab + at, g_cell, bytes);
-      ++s.live; ++s.stored; s.live_bytes += bytes;
-      off = at;
-      return done(1);
+    if (rc == 0) return done(1);
+    if (len <= kMinWindowMinutes * 1.0001) {
+      const double mid = 0.5 * (a + b), half = 0.5 * (b - a);
+      std::memset(g_cell, 0, kHeaderBytes);
+      std::memcpy(g_cell, &mid, 8);
+      std::memcpy(g_cell + 8, &half, 8);
+      g_cell[17] = static_cast<uint8_t>(rc == 1 ? kApRefuses : kBuilderFails);
+      bytes = kHeaderBytes;
+      (rc == 1 ? s.tomb_ap : s.tomb_builder) += 1;
+      return done(2);
     }
-    if (rc == 1) { o.fail_from = std::fmin(o.fail_from, a); o.fail_kind = static_cast<uint8_t>(kApRefuses); return done(2); }
-    if (len <= kMinWindowMinutes * 1.0001) { o.fail_from = std::fmin(o.fail_from, a); o.fail_kind = static_cast<uint8_t>(kBuilderFails); return done(2); }
     ++s.split;
   }
 }
@@ -340,32 +360,61 @@ inline bool covered(const State& s, const Obj& o, double t) {
   return c != nullptr && covers_cell(c, t);
 }
 
+/// Stores g_cell (`bytes`) as object i's slot `slot` (0 current, 1 following). `droppable`: the held cells (bit 0 current, bit 1 following) that cover
+/// neither time of the call; they go back to the slab after the new cell is stored, or earlier when the slab is full without them. The slab is compacted when
+/// its bump fails. 0: no room (counted: stats[12]); the held cells are untouched unless they were droppable and the room was needed.
+inline bool place(State& s, uint32_t i, int slot, uint32_t bytes, int droppable) {
+  uint32_t at = slab_alloc(s, bytes);
+  if (at == 0) { compact(s); at = slab_alloc(s, bytes); }
+  if (at == 0 && droppable != 0) {
+    Obj& o = s.obj[i];
+    if (droppable & 1) { slab_free(s, o.cur); o.cur = 0; }
+    if (droppable & 2) { slab_free(s, o.nxt); o.nxt = 0; }
+    droppable = 0;
+    compact(s);
+    at = slab_alloc(s, bytes);
+  }
+  if (at == 0) { ++s.full; return false; }
+  std::memcpy(s.slab + at, g_cell, bytes);
+  const uint32_t owner = (i << 1) | static_cast<uint32_t>(slot);
+  std::memcpy(s.slab + at + 20, &owner, 4);
+  ++s.live; ++s.stored;
+  s.live_bytes += bytes;
+  Obj& o = s.obj[i];
+  if (droppable & 1) { slab_free(s, o.cur); o.cur = 0; }
+  if (droppable & 2) { slab_free(s, o.nxt); o.nxt = 0; }
+  if (slot == 0) o.cur = at; else o.nxt = at;
+  return true;
+}
+
 }  // namespace frames
 }  // namespace sdnap
 
-/// Opens the frames over the resident store: one table entry for each series, and a slab of `budget_bytes` less the table for
-/// the cells. 0, or a refusal code (kOutOfMemory, kBudgetTooSmall: sdnap_frames_stats[11] holds the bytes asked or needed).
+/// Opens the frames over the resident store: one table row for each series, and a slab of `budget_bytes` less the table for the cells. The block is one
+/// counted allocation made before an earlier open is given back: an open refused leaves the earlier frames standing. 0, or a refusal code (kBadArgument,
+/// kOutOfMemory, kBudgetTooSmall: sdnap_frames_stats[11] holds the bytes asked or needed).
 SDNAP_EXPORT("sdnap_frames_open")
 int32_t sdnap_frames_open(double budget_bytes, uint32_t flags) {
   using namespace sdnap::frames;
   State& s = state();
-  release_state(s);
   const sdnap::epochs::Store& st = sdnap::epochs::resident();
   if (!(budget_bytes >= 0.0) || budget_bytes > 4.0e9 || (flags & ~kFlagPositionOnly) != 0) return kBadArgument;
   const uint32_t n = static_cast<uint32_t>(st.series.size());
-  uint32_t eligible = 0;
-  for (uint32_t i = 0; i < n; ++i) if (eligible_entry(st.series[i], st.entries[st.series[i].first])) ++eligible;
-  const double table = static_cast<double>(n) * sizeof(Obj);
-  const double need = table + kClassBytes + static_cast<double>(eligible) * kMinCellBytes;
-  if (budget_bytes < need) { state().needed = need; return kBudgetTooSmall; }
+  const size_t table = (static_cast<size_t>(n) * sizeof(Obj) + 63u) & ~static_cast<size_t>(63u);
+  const double need = static_cast<double>(table) + kClassBytes + static_cast<double>(class_of(kMaxCellBytes)) * kClassBytes;
+  if (budget_bytes < need) { s.needed = need; return kBudgetTooSmall; }
   const size_t total = static_cast<size_t>(budget_bytes);
-  uint8_t* block = static_cast<uint8_t*>(sdnap::mem::calloc(1, total > 0 ? total : 1));
-  if (block == nullptr) { state().needed = budget_bytes; return kOutOfMemory; }
+  uint8_t* block = static_cast<uint8_t*>(sdnap::mem::calloc(1, total));
+  if (block == nullptr) { s.needed = budget_bytes; return kOutOfMemory; }
+  const double needed = s.needed;
+  release_state(s);
+  s.needed = needed;
   s.block = block;
   s.obj = reinterpret_cast<Obj*>(block);
-  s.table_bytes = static_cast<size_t>(table);
-  s.slab = block + ((s.table_bytes + 63u) & ~static_cast<size_t>(63u));
-  s.slab_bytes = total - static_cast<size_t>(s.slab - block);
+  s.block_bytes = total;
+  s.table_bytes = static_cast<size_t>(n) * sizeof(Obj);
+  s.slab = block + table;
+  s.slab_bytes = total - table;
   s.cap_objects = n;
   s.flags = flags;
   s.open = true;
@@ -382,9 +431,10 @@ void sdnap_frames_close(void) {
   s.needed = needed;
 }
 
-/// The frame of objects [first, first + count) at one split Julian date: six planes of `count` doubles (x, y, z, vx, vy, vz), frame 0 TEME (km, km/s) or 3
-/// Earth-fixed (m, m/s); one status each in `status` (0 served, 1 no segment, 2 not served by this entry, 3 AP refuses from this time, 4 the builder fails
-/// from this time); the planes of an object not served are NaN. A pure read: it evaluates polynomials and never flies AP. 0, or a negative code.
+/// The frame of objects [first, first + count) at one split Julian date: planes of `count` doubles (x, y, z, then vx, vy, vz unless the frames were opened with
+/// the position-only flag: three planes, no velocity), frame 0 TEME (km, km/s) or 3 Earth-fixed (m, m/s); one status each in `status` (0 served, 1 no cell for
+/// this time, 2 never served by this entry, 3 AP refuses here, 4 the builder fails here); the planes of an object not served are NaN. A pure read: it evaluates
+/// polynomials and never flies AP. 0, or a negative code (-4: a load replaced the store, every status is 1).
 SDNAP_EXPORT("sdnap_frames_at")
 int32_t sdnap_frames_at(double jd_whole, double jd_frac, uint32_t first, uint32_t count, int32_t frame, double* out, int32_t* status) {
   using namespace sdnap::frames;
@@ -393,107 +443,129 @@ int32_t sdnap_frames_at(double jd_whole, double jd_frac, uint32_t first, uint32_
   if (!s.open) return kNotOpen;
   if (out == nullptr || status == nullptr || (frame != 0 && frame != 3) || first > s.objects || count > s.objects - first) return kBadArgument;
   const bool stale = sdnap::epochs::resident().generation != s.generation;
-  const double theta = frame == 3 ? sdnap::gmst(jd_whole, jd_frac) : 0.0;
+  const bool pos_only = (s.flags & kFlagPositionOnly) != 0;
+  const int planes = pos_only ? 3 : 6;
+  // the rotation's sine and cosine once for the call; the products are teme_to_ecef_m's, so the bits are the same
+  double rc = 1.0, rs = 0.0;
+  if (frame == 3) { const double theta = sdnap::gmst(jd_whole, jd_frac); rc = std::cos(theta); rs = std::sin(theta); }
   for (uint32_t k = 0; k < count; ++k) {
     const Obj& o = s.obj[first + k];
     int32_t code = kNoSegment;
     double r[3] = {nan, nan, nan}, v[3] = {nan, nan, nan};
     if (!stale) {
-      if (o.kind != 0) code = kNotServedHere;
+      if (o.kind != 0) code = o.kind;
       else {
         const double t = minutes_from(o, jd_whole, jd_frac);
-        if (t >= o.fail_from) code = o.fail_kind;
-        else {
-          const uint8_t* c = cell_at(s, o.cur);
-          if (c == nullptr || !covers_cell(c, t)) c = cell_at(s, o.nxt);
-          if (c != nullptr && covers_cell(c, t)) { eval_cell(c, t, r, v); code = kServed; }
+        const uint8_t* c = cell_at(s, o.cur);
+        if (c == nullptr || !covers_cell(c, t)) c = cell_at(s, o.nxt);
+        if (c != nullptr && covers_cell(c, t)) {
+          if (is_tombstone(c)) code = c[17];
+          else { eval_cell(c, t, r, v); code = kServed; }
         }
       }
     }
     status[k] = code;
-    if (code == kServed && frame == 3) { double ro[3], vo[3]; sdnap::teme_to_ecef_m(theta, r, v, ro, vo); for (int q = 0; q < 3; ++q) { r[q] = ro[q]; v[q] = vo[q]; } }
-    for (int c = 0; c < 3; ++c) { out[c * count + k] = r[c]; out[(3 + c) * count + k] = v[c]; }
+    if (code == kServed && frame == 3) {
+      const double x = (rc * r[0] + rs * r[1]) * 1000.0, y = (-rs * r[0] + rc * r[1]) * 1000.0, z = r[2] * 1000.0;
+      r[0] = x; r[1] = y; r[2] = z;
+      if (!pos_only) {
+        const double vx = (rc * v[0] + rs * v[1]) * 1000.0, vy = (-rs * v[0] + rc * v[1]) * 1000.0;
+        v[0] = vx + sdnap::kEarthRotationRate * y; v[1] = vy - sdnap::kEarthRotationRate * x; v[2] = v[2] * 1000.0;
+      }
+    }
+    for (int c = 0; c < 3; ++c) { out[c * count + k] = r[c]; if (!pos_only) out[(3 + c) * count + k] = v[c]; }
   }
+  (void)planes;
   return stale ? kStoreChanged : 0;
 }
 
-/// Builds the cells the time `now` needs (objects with no cell for it, `priority` first in its order, then the rest in index order), then the cells that
-/// `now + ahead_seconds` needs, and returns after `max_rows` rows (one row: one cold set, one cell; the module reads no clock, the host counts its time).
-/// Returns the objects still due (a cell missing for either time), or a negative code.
+/// Builds the cells the time `now` needs (objects with none for it, `priority` first, in its order, then the others in index order), then the cells that
+/// `now + ahead_seconds` needs (`ahead` clamped to 48 minutes), at most `max_rows` rows (one row: one cold set, one cell or tombstone; the module imports no
+/// clock). A call resumes the sweep the last call left when `now`, `ahead` and the store are the same (give the same priority list), so a full fill in
+/// slices of any size visits each object once; a call with another `now` starts a sweep. A row that cannot be stored (the slab is full after a compaction, or a
+/// counted allocation failed) ends the call. `result`, 6 int32: [0] places of the sequence left to visit for `now`, [1] for `now + ahead`, [2] cells
+/// stored, [3] tombstones stored, [4] rows that could not be stored, [5] objects visited. Returns 0, or -1 (bad argument), -5 (not open), -6 (open again).
 SDNAP_EXPORT("sdnap_frames_refill")
-int32_t sdnap_frames_refill(double now_whole, double now_frac, double ahead_seconds, uint32_t max_rows, const uint32_t* priority, uint32_t priority_count) {
+int32_t sdnap_frames_refill(double now_whole, double now_frac, double ahead_seconds, uint32_t max_rows, const uint32_t* priority, uint32_t priority_count, int32_t* result) {
   using namespace sdnap::frames;
   State& s = state();
   if (!s.open) return kNotOpen;
-  if (!(ahead_seconds >= 0.0) || (priority == nullptr && priority_count != 0)) return kBadArgument;
+  if (!std::isfinite(now_whole) || !std::isfinite(now_frac) || !std::isfinite(ahead_seconds) || ahead_seconds < 0.0 || result == nullptr ||
+      (priority == nullptr && priority_count != 0))
+    return kBadArgument;
   const sdnap::epochs::Store& st = sdnap::epochs::resident();
   if (st.generation != s.generation) {  // a load replaced the store: every cell is dropped, the table read again
     if (st.series.size() > s.cap_objects) return kReopen;
     fill_table(s);
   }
-  uint32_t rows = 0;
-  auto order = [&](uint32_t k) { return k < priority_count ? priority[k] : k - priority_count; };
+  const double ahead = std::fmin(ahead_seconds, kMaxAheadSeconds);
+  Sweep& sw = s.sweep;
+  if (!sw.valid || sw.w != now_whole || sw.f != now_frac || sw.ahead != ahead) { sw = Sweep{}; sw.valid = true; sw.w = now_whole; sw.f = now_frac; sw.ahead = ahead; }
   const uint32_t total = priority_count + s.objects;
-  for (int pass = 0; pass < 2; ++pass) {
-    for (uint32_t k = 0; k < total && rows < max_rows; ++k) {
-      const uint32_t i = order(k);
-      if (i >= s.objects) continue;
-      Obj& o = s.obj[i];
-      if (o.kind != 0) continue;
-      const double t0 = minutes_from(o, now_whole, now_frac), t = pass == 0 ? t0 : t0 + ahead_seconds / 60.0;
-      if (t >= o.fail_from) continue;
-      if (pass == 0) {
-        if (const uint8_t* n = cell_at(s, o.nxt); n != nullptr && covers_cell(n, t)) {  // the next cell is the current one now
+  uint32_t rows = 0, stored = 0, tombs = 0, unstored = 0, visits = 0;
+  bool stop = false;
+  while (sw.pass < 2 && !stop) {
+    while (sw.k < total) {
+      const uint32_t i = sw.k < priority_count ? priority[sw.k] : sw.k - priority_count;
+      Obj& o = s.obj[i < s.objects ? i : 0];
+      if (i >= s.objects || o.kind != 0) { ++sw.k; ++visits; continue; }
+      const double t0 = minutes_from(o, now_whole, now_frac), t = sw.pass == 0 ? t0 : t0 + ahead / 60.0;
+      int slot = 0, droppable = 3;
+      if (sw.pass == 0) {
+        if (const uint8_t* n = cell_at(s, o.nxt); n != nullptr && covers_cell(n, t)) {  // the following cell is the current one now
           slab_free(s, o.cur);
           o.cur = o.nxt; o.nxt = 0;
+          if (o.cur != 0) { const uint32_t ow = (i << 1); std::memcpy(s.slab + o.cur + 20, &ow, 4); }
+          ++sw.k; ++visits;
           continue;
         }
         const uint8_t* c = cell_at(s, o.cur);
-        if (c != nullptr && covers_cell(c, t)) continue;
-        uint32_t off = 0;
-        ++rows;
-        // neither held cell covers now: both go back to the slab first, so the new cell can take the room of one of them
-        slab_free(s, o.cur); slab_free(s, o.nxt); o.cur = o.nxt = 0;
-        if (row(s, i, t, off) == 1) o.cur = off;
+        if (c != nullptr && covers_cell(c, t)) { ++sw.k; ++visits; continue; }
       } else {
-        if (covered(s, o, t)) continue;
-        uint32_t off = 0;
-        ++rows;
-        slab_free(s, o.nxt); o.nxt = 0;  // a next cell that does not cover the ahead time is replaced
-        if (row(s, i, t, off) == 1) o.nxt = off;
+        if (covered(s, o, t)) { ++sw.k; ++visits; continue; }
+        slot = 1;
+        droppable = 2;  // the current cell may cover now: only the following one is replaced
       }
+      if (rows >= max_rows) { stop = true; break; }
+      ++rows;
+      uint32_t bytes = 0;
+      const int rc = row(s, i, t, bytes);
+      if (rc == 0) { ++unstored; stop = true; break; }
+      if (rc == 3) { ++sw.k; ++visits; continue; }
+      if (!place(s, i, slot, bytes, droppable)) { ++unstored; stop = true; break; }
+      if (rc == 1) ++stored; else ++tombs;
+      ++sw.k; ++visits;
     }
+    if (stop) break;
+    ++sw.pass;
+    sw.k = 0;
   }
-  // the objects still due
-  int32_t due = 0;
-  for (uint32_t i = 0; i < s.objects; ++i) {
-    const Obj& o = s.obj[i];
-    if (o.kind != 0) continue;
-    const double t0 = minutes_from(o, now_whole, now_frac);
-    if ((t0 < o.fail_from && !covered(s, o, t0)) || (t0 + ahead_seconds / 60.0 < o.fail_from && !covered(s, o, t0 + ahead_seconds / 60.0))) ++due;
-  }
-  return due;
+  s.visits += visits;
+  result[0] = sw.pass == 0 ? static_cast<int32_t>(total - sw.k) : 0;
+  result[1] = sw.pass == 0 ? static_cast<int32_t>(total) : sw.pass == 1 ? static_cast<int32_t>(total - sw.k) : 0;
+  result[2] = static_cast<int32_t>(stored);
+  result[3] = static_cast<int32_t>(tombs);
+  result[4] = static_cast<int32_t>(unstored);
+  result[5] = static_cast<int32_t>(visits);
+  return 0;
 }
 
-/// Seventeen doubles: [0] objects, [1] objects this entry can serve, [2] cells held, [3] slab bytes, [4] slab bytes used, [5] table bytes, [6] bytes held in all
-/// (the one block), [7] refill rows, [8] rows refused for memory, [9] cells stored, [10] windows halved, [11] bytes asked or needed by the last refused
-/// open, [12] rows refused for want of room in the slab, [13] objects not served because AP refuses them, [14] objects not served because the builder
-/// fails at 3 minutes, [15] 1 when the store is the one read at open or the last refill, [16] the bytes the cells held take (their own sizes, before the
-/// slab's classes of 64 bytes).
+/// Twenty doubles: [0] objects, [1] objects this entry can serve, [2] cells held (tombstones included), [3] slab bytes, [4] slab bytes used, [5] table bytes,
+/// [6] bytes of the block as allocated, [7] refill rows, [8] rows refused for memory, [9] cells stored, [10] windows halved, [11] bytes asked or needed by
+/// the last refused open, [12] rows that could not be stored for want of room, [13] windows AP refused in, stored as tombstones (an object whose set cannot be
+/// made counts once), [14] windows the builder failed at 3 minutes, stored as tombstones, [15] 1 when the store is the one read last, [16] the bytes the cells
+/// held take (their own sizes, before the slab's classes of 64 bytes), [17] compactions of the slab, [18] bytes they moved, [19] objects visited by refills.
 SDNAP_EXPORT("sdnap_frames_stats")
 int32_t sdnap_frames_stats(double* out) {
   using namespace sdnap::frames;
   State& s = state();
   if (out == nullptr) return kBadArgument;
-  double ap = 0, bf = 0;
-  for (uint32_t i = 0; s.open && i < s.objects; ++i) {
-    if (s.obj[i].kind != 0 || s.obj[i].fail_from == HUGE_VAL) continue;
-    (s.obj[i].fail_kind == kApRefuses ? ap : bf) += 1;
-  }
-  const double v[17] = {static_cast<double>(s.objects), static_cast<double>(s.eligible), static_cast<double>(s.live), static_cast<double>(s.slab_bytes),
-                        static_cast<double>(s.used), static_cast<double>(s.table_bytes), s.open ? static_cast<double>(s.table_bytes + s.slab_bytes) : 0.0,
+  const double v[20] = {static_cast<double>(s.objects), static_cast<double>(s.eligible), static_cast<double>(s.live), static_cast<double>(s.slab_bytes),
+                        static_cast<double>(s.used), static_cast<double>(s.table_bytes), static_cast<double>(s.block_bytes),
                         static_cast<double>(s.rows), static_cast<double>(s.rows_oom), static_cast<double>(s.stored), static_cast<double>(s.split), s.needed,
-                        static_cast<double>(s.full), ap, bf, sdnap::epochs::resident().generation == s.generation ? 1.0 : 0.0, static_cast<double>(s.live_bytes)};
-  for (int k = 0; k < 17; ++k) out[k] = v[k];
+                        static_cast<double>(s.full), static_cast<double>(s.tomb_ap), static_cast<double>(s.tomb_builder),
+                        sdnap::epochs::resident().generation == s.generation ? 1.0 : 0.0, static_cast<double>(s.live_bytes),
+                        static_cast<double>(s.compactions), static_cast<double>(s.moved), static_cast<double>(s.visits)};
+  for (int k = 0; k < 20; ++k) out[k] = v[k];
   return 0;
 }
