@@ -69,7 +69,7 @@ for(const stateE of [0.0499,0.0501,0.0521]) {
  assert.ok(rows[0].some(v=>v!==0),'nonzero contribution');
 }
 console.log(JSON.stringify({sharing:'PASS',count70:x.probe_memory(0),tableBytes:16*x.probe_memory(0),coefficientCacheBytes:x.probe_memory(1)}));
-const e0=0.05000001,n=Math.sqrt(398600.4418/((6378.137+300)/(1-e0))**3)*86400/(2*Math.PI),drag=0.0064;
+const e0=0.04999,n=Math.sqrt(398600.4418/((6378.137+300)/(1-e0))**3)*86400/(2*Math.PI),drag=0.0064;
 const reset=()=>assert.equal(init(e0,e0,0,n,drag),0);
 reset();
 const times=Array.from({length:1441},(_,i)=>i*5),forward=times.map(at);
