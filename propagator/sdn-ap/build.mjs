@@ -366,7 +366,8 @@ if (!compilation.report?.ok) {
 // Inspect the artifact just compiled, including builds redirected through SDNAP_DIST_DIR.
 if (process.env.SDNAP_DIAGNOSTIC_BUILD !== "1") {
   const module = await WebAssembly.compile(await fs.readFile(outputPath));
-  const diagnostic = WebAssembly.Module.exports(module).filter(({ name }) => /^(?:test_|sdnap_test_)/.test(name));
+  const readOnlyProbes = new Set(["sdnap_test_two_body_state", "sdnap_test_epoch_floor"]);
+  const diagnostic = WebAssembly.Module.exports(module).filter(({ name }) => /^(?:test_|sdnap_test_)/.test(name) && !readOnlyProbes.has(name));
   if (diagnostic.length) throw new Error(`release contains diagnostic exports: ${diagnostic.map(x => x.name).join(", ")}`);
 }
 await fs.copyFile(path.join(packageRoot, "plugin-manifest.json"), path.join(distRoot, "plugin-manifest.json"));

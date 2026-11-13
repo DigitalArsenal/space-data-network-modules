@@ -6578,7 +6578,8 @@ Release source contains null hook globals (`g_attempt_hook`, `g_chunk_hook`, `g_
 null checks, plus the false reserve switch. No release export sets them. Diagnostic source copies inject the setters
 and forced failures; `test/lib/ap-diagnostic.mjs` sets `SDNAP_DIAGNOSTIC_BUILD=1` for those builds. Without that flag,
 `build.mjs` checks the exports of the newly compiled artifact alongside artifact validation and rejects `test_*` and
-`sdnap_test_*` names, including the frames configuration, hold, cell, initialization, and warm-up probes.
+`sdnap_test_*` names, including the frames configuration, hold, cell, initialization, and warm-up probes. The existing
+read-only covariance probes `sdnap_test_two_body_state` and `sdnap_test_epoch_floor` are explicitly allowed; neither sets hooks.
 
 A pool failure returns -20 and commits none of the pending batch. Earlier batches of the same call remain committed.
 The descriptor, bounded outputs, resident records, and cell slab remain alive because a delayed claim can complete after

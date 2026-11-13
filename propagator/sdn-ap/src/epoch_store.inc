@@ -1058,6 +1058,7 @@ extern "C" int load_epochs(void) {
 static int load_epochs_call(void) {
   using namespace sdnap;
   plugin_reset_output_state();
+  if (const int rc = refuse_while_pool_dead(epochs::resident())) return rc;
   // a load in progress is abandoned by any load_epochs, accepted or refused (the store is empty while one is open); a store with no load open is left
   // as it was by a load_epochs refused before it begins, as it always was
   epochs::resident_build().drop();
@@ -1112,6 +1113,7 @@ extern "C" int load_epochs_part(void) {
 static int load_epochs_part_call(void) {
   using namespace sdnap;
   plugin_reset_output_state();
+  if (const int rc = refuse_while_pool_dead(epochs::resident())) return rc;
   epochs::Build& b = epochs::resident_build();
   if (!b.open) { plugin_set_error("load-not-open", "No load is open: call load_epochs_open first."); return 3; }
   uint32_t frames = 0;
@@ -1131,6 +1133,7 @@ extern "C" int load_epochs_close(void) {
 static int load_epochs_close_call(void) {
   using namespace sdnap;
   plugin_reset_output_state();
+  if (const int rc = refuse_while_pool_dead(epochs::resident())) return rc;
   epochs::Store& st = epochs::resident();
   epochs::Build& b = epochs::resident_build();
   if (!b.open) { plugin_set_error("load-not-open", "No load is open: call load_epochs_open first."); return 3; }
