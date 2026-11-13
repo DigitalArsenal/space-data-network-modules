@@ -1613,7 +1613,8 @@ The pool and the memory (stack #487). A threaded batch grows nothing, and a pool
 - Before the batch the calling thread makes its room. The reserve is 128 KiB for each AP row whose set holds no caches,
   at most the pool's free budget plus 1 MiB, plus 8 MiB. The calling thread then publishes the memory's size and sets
   the rule that nothing grows. Only then does it store the batch's chunk total and wake the pool threads.
-- An epoch batch additionally reserves 64 KiB per selected cold set, the cache pool's available room, and each
+- An epoch batch additionally reserves 64 KiB per selected cold XP/AP set (SGP4 reserves its satellite and
+  deep-space checkpoints), the cache pool's available room, and each
   thread's combined-table bound plus its term storage. The bound uses the largest selected tesseral degree and allows
   2,048 complementary slow terms; a diagnostic retaining raw terms also reserves their bound. Term storage is made
   as each thread starts; shallow-term storage is in TLS. A larger retained table can exhaust the allowance: every

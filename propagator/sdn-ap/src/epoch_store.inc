@@ -1076,9 +1076,10 @@ inline bool wide_series(const Store& st, const Series& s) {
 }
 
 /// Reserve retained sets, cache-pool room and each thread's largest table build before forbidding growth. The retained
-/// allowance is 64 KiB per selected cold set; larger tables use the same allocation-refusal and serial retry as rows.
+/// allowance is 64 KiB per selected cold XP/AP set; SGP4 reserves its satellite and deep-space checkpoints; larger tables use the same allocation-refusal and serial retry as rows.
 inline size_t series_reserve(Store& st, const pool::Job& j) {
-  size_t cold = 0;
+  uint64_t retained = 0;
+  size_t ap_sets = 0;
   int degree = 0;
   const double t = minutes_of(j.jd_whole, j.jd_frac), jd[2] = {j.jd_whole, j.jd_frac};
   for (uint32_t i = 0; i < j.count; ++i) {
@@ -1089,21 +1090,25 @@ inline size_t series_reserve(Store& st, const pool::Job& j) {
     for (int32_t k : indices) {
       if (k < 0) continue;
       const Entry& en = st.entries[s.first + static_cast<uint32_t>(k)];
-      degree = std::max(degree, en.forces.tesseral);
+      const bool ap = en.row.theory == kTheorySgp4Xp && (en.forces.tesseral > 0 || en.forces.zonal > 0);
+      if (ap) { ++ap_sets; degree = std::max(degree, en.forces.tesseral); }
       bool held = false;
       for (const Slot& slot : s.slots) if (slot.index == k) held = true;
-      if (!held) ++cold;
+      if (!held) {
+        if (en.row.theory == kTheorySgp4Xp) retained += 64u << 10;
+        else retained += sizeof(Sat) + (en.row.mean_motion_rev_day <= 6.4 ? sizeof(double) * 4u * kCheckpointNodes : 0u);
+      }
     }
   }
   // The cache holder/order vectors are allocated before the batch, including the no-reserve diagnostic case.
-  const uint64_t room = xpt::pool_room(2 * j.count);
+  const uint64_t room = ap_sets ? xpt::pool_room(ap_sets) : 0;
   if (pool::g_reserve_off) return 0;
   degree = std::min(degree, xpt::tess::kFastCap);
   const int extra = xpt::tess::kShallowMax;
   const uint64_t table = static_cast<uint64_t>(xpt::tess::sp_comb_bound(degree, false, extra)) * sizeof(xpt::tess::SpCombCoef) +
       (xpt::keep_sp_raw() ? static_cast<uint64_t>(xpt::tess::sp_bound(degree, false, extra)) * sizeof(xpt::tess::SpCoef) : 0);
-  const uint64_t bytes = cold * (64ull << 10) + std::min<uint64_t>(2ull * j.count * (128u << 10), room + (1u << 20)) +
-      (j.threads + 1) * (table + sizeof(xpt::tess::SpTermsScratch)) + (8u << 20);
+  const uint64_t bytes = retained + (ap_sets ? std::min<uint64_t>(ap_sets * (128ull << 10), room + (1u << 20)) +
+      (j.threads + 1) * (table + sizeof(xpt::tess::SpTermsScratch)) : 0) + (8u << 20);
   return static_cast<size_t>(std::min<uint64_t>(bytes, INT32_MAX));
 }
 }  // namespace epochs
