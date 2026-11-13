@@ -1,24 +1,19 @@
 #!/usr/bin/env node
-// E2E (the module in a browser, on shared memory with a warm pool of Workers): the module's own wasm, hosted by the SDK's browser host in a
-// Worker of a real browser page, answers what the same calls answer in Node, byte for byte, at 0, 4 and 8 pool threads.
-// - the page: served from 127.0.0.1 with Cross-Origin-Opener-Policy same-origin and Cross-Origin-Embedder-Policy require-corp; the Worker is
-//   cross-origin isolated and its memory is a SharedArrayBuffer; sdnap_threads(N) returns N, and the host's spawn count and its distinct
-//   operating-system threads are N;
-// - 20,000 seeded SGP4 element rows through sdnap_propagate_soa (the pool's entry) at three instants: one SHA-256 of every output double and
-//   status, equal at 0, 4 and 8 threads and equal to the Node run's; every status 0; threaded batches ran with no refused growth, no deferred
-//   row, no dead pool and no batch after which the calling thread saw a larger memory; where the build counts them, rows completed on pool threads;
-// - 2,000 seeded AP records with a covariance (the stored record test/fixtures/ap-fit-0.6.42.ocm at other angles), loaded in parts of 1,000 through
-//   one staging buffer: sdnap_epochs_at over all of them at five instants and once with the covariance planes: the same digests, every status 0;
-//   when the build hands that call to the pool (its statistics count the batches), the same bounds as above and the module's memory growing during
-//   the batches (the first pass makes every set: about a hundred growths);
-// - the frame path (SPEC 19), when the build has its exports: open by the host's rule, a complete fill (8 rows a call in the browser, 500 in
-//   Node), three instants in TEME and in the Earth-fixed frame: planes and statuses equal, bit for bit; every object served. A build without
-//   its exports says so and nothing is asserted about it.
-// The browser: the Playwright chromium headless shell found by the SDK's own resolver, with a temporary profile; never an installed browser
-// application. SDNAP_BROWSER=firefox or webkit runs the page in the Firefox or WebKit build of the same Playwright cache instead. The module
-// under test is the one SDNAP_WASM names (the committed dist by default). Absent browser or bundler: the test prints "SKIP browser-pool: ..." and
-// exits 0, and fails instead when SDNAP_REQUIRE_BROWSER=1.
-// SDNAP_CHROMIUM_NO_SANDBOX=1 explicitly disables Chromium sandboxing for restricted Linux containers; default is sandboxed.
+// Browser/Node parity on the same module.wasm: every output and status bit agrees at 0, 4 and 8 pool threads.
+// Independent AP value correctness belongs to the numerical tests; host equality alone is not a numerical oracle.
+// The page and hosting thread are cross-origin isolated, with shared memory and the requested pool size.
+// Cases: 20,000 seeded SGP4 rows at three instants; 2,000 seeded AP records at five instants plus covariance;
+// optional frames at three instants in TEME and Earth-fixed coordinates, with different fill slices on each host.
+// State and covariance planes are finite and non-zero. Loaded series and tesseral cache counters establish AP use.
+// Where exported, pool counters prove rows completed on more than one pool thread; batch safety counters stay zero.
+// Frame fills are complete before reads, served counts match, and every object is served with status zero.
+// A build without frame exports reports no frame coverage; SDNAP_REQUIRE_FRAMES=1 makes that absence fail.
+// The browser is a headless Playwright cache build with a fresh profile and its own process group.
+// SDNAP_BROWSER=chromium (default), firefox or webkit selects the cache build; no installed application is launched.
+// SDNAP_WASM selects the module (committed dist by default). Missing browser or esbuild prints SKIP and exits 0;
+// SDNAP_REQUIRE_BROWSER=1 requires the browser for a release check. Other resolver/import failures fail the test.
+// SDNAP_CHROMIUM_NO_SANDBOX=1 disables Chromium sandboxing for restricted Linux containers; default is sandboxed.
+// Cases have five-minute limits outside the hosting threads; the whole run has a fifteen-minute limit.
 //   node test/browser-pool.e2e.mjs
 import assert from "node:assert/strict";
 import fs from "node:fs";
