@@ -4161,14 +4161,86 @@ inline void half_day_six(const HalfDayCoef* table, int count, double e0, double 
   six[5] += -(2.0 / (n * a)) * sA + (eta * e / (na2 * (1.0 + eta))) * sE + (tanhalf / (na2 * eta)) * sI;
 }
 
+/// SPEC 16.3: below kWideE the tail's rates also carry the long-period terms 2 <= |w| <= kTailW (w = l - 2p,
+/// q = -w; even w on even l, odd w on odd l), in the rates' cached path. G of each is written e^|w| (a + b e^2), its value and
+/// slope exact at the center of the epoch eccentricity cell, so it stays smooth through e = 0 (G is O(e^|w|) there; a line in e is not).
+constexpr int kTailW = 6;
+constexpr double kTailCell = 0.002;
+inline void zonal_G(int l, int k, double e, double& G, double& dG);
+
+/// The coefficients of e^k (a + b e^2), matching the closed form and its slope at er >= 0.01.
+inline void tail_w_coefficients(int l, int k, double er, float& a, float& b) {
+  if (l - 1 < k) { a = b = 0.0f; return; }
+  double G, dG;
+  zonal_G(l, k, er, G, dG);
+  const double r = er * dG / G - k, erk = std::pow(er, k);
+  a = static_cast<float>(G * (2.0 - r) / (2.0 * erk));
+  b = static_cast<float>(G * r / (2.0 * erk * er * er));
+}
+
+/// A function of the state alone, independent of the epoch and the table's owner.
+inline double tail_w_anchor(double e) {
+  const double at = e > 0.01 ? e : 0.01;
+  return kTailCell * (std::floor(at / kTailCell) + 0.5);
+}
+/// Closed-form coefficients depend on the cell, degree and harmonic, not on semimajor axis or inclination.
+/// Keep them across rate-cache rebuilds caused by a changing semimajor axis.
+struct TailWCoefficients {
+  double anchor = -1.0;
+  int degree = 5;
+  float a[71][kTailW + 1]{}, b[71][kTailW + 1]{};
+};
+inline const TailWCoefficients& tail_w_moved(int degree, double anchor) {
+  static thread_local TailWCoefficients c;
+  if (c.anchor != anchor) { c.anchor = anchor; c.degree = 5; }
+  for (int l = c.degree + 1; l <= degree; ++l)
+    for (int k = (l & 1) ? 3 : 2; k <= kTailW; k += 2)
+      tail_w_coefficients(l, k, anchor, c.a[l][k], c.b[l][k]);
+  if (degree > c.degree) c.degree = degree;
+  return c;
+}
+inline int tail_w_pairs(int l) {
+  int c = 0;
+  for (int k = (l & 1) ? 3 : 2; k <= kTailW && k <= l; k += 2) ++c;
+  return c;
+}
+struct TailWF {
+  double f[kTailW + 1][2][72];   ///< [|w|][w < 0 ? 0 : 1][l]: F_l0p at the epoch inclination
+  double df[kTailW + 1][2][72];  ///< dF/di
+};
+inline void tail_w_F(int degree, double i0, double h, TailWF& t) {
+  double fp[72], fm[72];
+  for (int k = 2; k <= kTailW; ++k)
+    for (int s = 0; s < 2; ++s) {
+      normalized_Fk3(0, s == 0 ? -k : k, degree, i0, h, t.f[k][s], fp, fm);
+      for (int l = 0; l <= degree; ++l) t.df[k][s][l] = (fp[l] - fm[l]) * (0.5 / h);
+    }
+}
+/// Degree l's entries for |w| = k0, k0 + 2, .. (w = -k, then +k): F, dF/di, a, b.
+inline void tail_w_entries(int l, int k0, double e0, const TailWF& t, float* F, int& idx) {
+  const double er = tail_w_anchor(e0);
+  for (int k = k0; k <= kTailW && k <= l; k += 2) {
+    float a, b;
+    tail_w_coefficients(l, k, er, a, b);
+    for (int s = 0; s < 2; ++s) {
+      float* u = F + 4 * idx++;
+      u[0] = static_cast<float>(t.f[k][s][l]);
+      u[1] = static_cast<float>(t.df[k][s][l]);
+      u[2] = a;
+      u[3] = b;
+    }
+  }
+}
+
 /// The zonal tail, J_l for 6 <= l <= the degree (SPEC 2 carries J2-J5), first order in the
 /// rates: the secular terms of even l (p = l/2, q = 0) and the long-period terms of odd l (w = l - 2p = +-1,
-/// q = -w: psi = w omega, O(e) in G and O(1) in the eccentricity vector); `wide` (epoch e above kWideE, SPEC 16.11):
+/// q = -w: psi = w omega, O(e) in G and O(1) in the eccentricity vector), plus 2 <= |w| <= kTailW;
+/// `wide` (epoch e above kWideE, SPEC 16.11):
 /// every long-period term, w = l - 2p for p = 0..l, G = O(e^|w|). Per term at the epoch (float): Fbar, dFbar/di,
-/// G = g0 + g1 e; G is taken at the current e.
+/// G = g0 + g1 e, except the low table's |w| >= 2 entries, which hold a, b for e^|w| (a + b e^2).
 inline int zonal_count(int degree, bool wide) {
   int c = 0;
-  for (int l = 6; l <= degree; ++l) c += wide ? l + 1 : (l & 1) ? 2 : 1;
+  for (int l = 6; l <= degree; ++l) c += wide ? l + 1 : ((l & 1) ? 2 : 1) + 2 * tail_w_pairs(l);
   return c;
 }
 
@@ -4190,6 +4262,27 @@ inline void node_G(int l, int p, int q, double e, double& G, double& dG) {
   }
   G /= N;
   dG /= N;
+}
+
+/// X_0^{-(l+1),k}: average in true anomaly of (1 + e cos f)^(l-1) cos(k f), divided by
+/// (1 - e^2)^(l-1/2). The finite binomial sum and its analytic derivative have positive terms.
+/// k > l - 1 vanishes identically, including l = k = 6. No cancellation-prone quadrature is used.
+inline void zonal_G(int l, int k, double e, double& G, double& dG) {
+  G = dG = 0.0;
+  if (k > l - 1) return;
+  double choose = 1.0;
+  for (int j = 1; j <= k; ++j) choose *= static_cast<double>(l - j) / j;
+  double term = choose * std::pow(0.5 * e, k), sum = term;
+  double slope = e > 0.0 ? k * term / e : (k == 1 ? 0.5 * (l - 1) : 0.0);
+  for (int d = 0; 2 * d + k + 2 <= l - 1; ++d) {
+    const int m = 2 * d + k;
+    term *= (l - 1.0 - m) * (l - 2.0 - m) * (0.25 * e * e) / ((d + 1.0) * (d + k + 1.0));
+    sum += term;
+    if (e > 0.0) slope += (m + 2) * term / e;
+  }
+  const double eta2 = 1.0 - e * e, factor = std::pow(eta2, -(l - 0.5));
+  G = factor * sum;
+  dG = factor * (slope + (2 * l - 1) * e * sum / eta2);
 }
 
 /// The wide zonal table's shared samples retain separate sin/cos calls and
@@ -4312,6 +4405,8 @@ inline void zonal_visit_terms(int degree, bool wide, double i0, double e0, float
         df_pos1[l] = (fp_pos1[l] - fm_pos1[l]) * inv_2h;
       }
     }
+    static thread_local TailWF tw;
+    tail_w_F(degree, i0, h, tw);
     for (int l = 6; l <= degree; ++l) {
       if ((l & 1) == 0) {
         const double c2 = 0.25 * l * (l + 1);
@@ -4323,6 +4418,7 @@ inline void zonal_visit_terms(int degree, bool wide, double i0, double e0, float
         t[1] = static_cast<float>(df_even[l]);
         t[2] = static_cast<float>(G - dG * e0);
         t[3] = static_cast<float>(dG);
+        tail_w_entries(l, 2, e0, tw, F, idx);
       } else {
         double g0, g1;
         if (e0 < 0.01) {
@@ -4344,6 +4440,7 @@ inline void zonal_visit_terms(int degree, bool wide, double i0, double e0, float
         tp[1] = static_cast<float>(df_pos1[l]);
         tp[2] = static_cast<float>(g0);
         tp[3] = static_cast<float>(g1);
+        tail_w_entries(l, 3, e0, tw, F, idx);
       }
     }
     return;
@@ -4374,9 +4471,10 @@ struct ZonalEvalCache {
   bool eq_cut = false;
   float f0 = 0.0f, f1 = 0.0f, f2 = 0.0f, f3 = 0.0f, flast = 0.0f;
   double a_ref = -1.0;
+  double e_anchor = -1.0;
   bool keys_valid = false;
   int64_t ka = 0;  ///< the bits of the a baked at (a_ref)
-  double c[11][3]{};
+  double c[11 + 6 * (kTailW - 1)][3]{};
 };
 inline thread_local ZonalEvalCache g_zonal_eval_cache{};
 inline ZonalEvalCache& zonal_eval_cache() { return g_zonal_eval_cache; }
@@ -4384,7 +4482,8 @@ inline ZonalEvalCache& zonal_eval_cache() { return g_zonal_eval_cache; }
 /// The zonal tail's contribution to the six rates (n-dot, e-dot, i-dot, e varpi-dot, sin i Omega-dot,
 /// lambda-dot - n), at the current mean elements.
 inline void zonal_six(const float* F, int degree, bool wide, const Kepler& kp, double n, double eta, double si, double ci,
-                      double* six, const double* sw_in = nullptr, const double* cw_in = nullptr, uint64_t table_id = 0) {
+                      double* six, const double* sw_in = nullptr, const double* cw_in = nullptr, uint64_t table_id = 0,
+                      double e_r = 0.01) {
   const double a = kp.a, e = kp.e < 1e-12 ? 1e-12 : kp.e;
   const double sin_i = std::fabs(si) < 1e-12 ? (si < 0.0 ? -1e-12 : 1e-12) : si;
   double sw, cw;
@@ -4404,15 +4503,17 @@ inline void zonal_six(const float* F, int degree, bool wide, const Kepler& kp, d
   if (!wide) {
     ZonalEvalCache& zc = zonal_eval_cache();
     const int last_i = 4 * zonal_count(degree, false) - 1;
-    const float flast = last_i >= 0 ? F[last_i] : 0.0f;
+    const float flast = last_i >= 0 ? F[last_i - 3] : 0.0f;
     // baked at the state's own a (only the mean-element rates read it, a few times a node step): a function of the
     // state alone
     const double a_c = a;
+    const double e_anchor = tail_w_anchor(e);
+    const bool reanchor = e_anchor != e_r;
     int64_t ka;
     std::memcpy(&ka, &a, sizeof ka);
     if (table_id == 0 || zc.table_id != table_id || zc.F != F || zc.degree != degree || zc.eq_cut != eq_cut ||
         zc.f0 != F[0] || zc.f1 != F[1] || zc.f2 != F[2] || zc.f3 != F[3] || zc.flast != flast ||
-        !zc.keys_valid || ka != zc.ka) {
+        !zc.keys_valid || ka != zc.ka || zc.e_anchor != e_anchor) {
       zc.table_id = table_id;
       zc.F = F;
       zc.degree = degree;
@@ -4423,6 +4524,7 @@ inline void zonal_six(const float* F, int degree, bool wide, const Kepler& kp, d
       zc.f3 = F[3];
       zc.flast = flast;
       zc.a_ref = a_c;
+      zc.e_anchor = e_anchor;
       zc.ka = ka;
       zc.keys_valid = true;
       std::memset(zc.c, 0, sizeof(zc.c));
@@ -4430,6 +4532,30 @@ inline void zonal_six(const float* F, int degree, bool wide, const Kepler& kp, d
         zc.c[idx][0] += val;
         zc.c[idx][1] += p * val;
         zc.c[idx][2] += 0.5 * p * (p - 1) * val;
+      };
+      // Degree l's w = -k, +k entries at g; odd l weighs w = -k by -1 (sin w omega).
+      // Outside the table's cell only G changes; the inclination factors stay shared.
+      const TailWCoefficients* moved_coeff = reanchor ? &tail_w_moved(degree, e_anchor) : nullptr;
+      auto add_k = [&](const float* g, double Ce, double Ce_a, int l, int k) {
+        float moved[8];
+        if (reanchor) {
+          std::memcpy(moved, g, sizeof moved);
+          moved[2] = moved_coeff->a[l][k]; moved[3] = moved_coeff->b[l][k];
+          moved[6] = moved[2]; moved[7] = moved[3];
+          g = moved;
+        }
+        const double sg = (l & 1) ? -1.0 : 1.0;
+        const double pa = sg * g[0] * g[2] + static_cast<double>(g[4]) * g[6];
+        const double pb = sg * g[0] * g[3] + static_cast<double>(g[4]) * g[7];
+        const double ra = sg * g[1] * g[2] + static_cast<double>(g[5]) * g[6];
+        const double rb = sg * g[1] * g[3] + static_cast<double>(g[5]) * g[7];
+        const int b = 11 + 6 * (k - 2);
+        add_p(b, Ce * pa, l + 1);
+        add_p(b + 1, Ce * pb, l + 1);
+        add_p(b + 2, Ce * ra, l + 1);
+        add_p(b + 3, Ce * rb, l + 1);
+        add_p(b + 4, Ce_a * pa, l + 2);
+        add_p(b + 5, Ce_a * pb, l + 2);
       };
       const double iab = 1.0 / a_c, ia2b = iab * iab;
       const float* f = F;
@@ -4445,10 +4571,11 @@ inline void zonal_six(const float* F, int degree, bool wide, const Kepler& kp, d
         const double Ce_a = -(l + 1) * Ce * iab;
         add_p(3, Ce_a * f0 * f2, l + 2);
         add_p(4, Ce_a * f0 * f3, l + 2);
+        for (int k = 2; k <= kTailW; k += 2) add_k(f + 4 + 8 * (k / 2 - 1), Ce, Ce_a, l, k);
 
         const double Co = Ar * iab * kEgmC[l + 1][0];
-        const float* fn = f + 4;
-        const float* fp = f + 8;
+        const float* fn = f + 28;
+        const float* fp = f + 32;
         const double fg0 = static_cast<double>(fp[0]) * fp[2] - static_cast<double>(fn[0]) * fn[2];
         const double fg1 = static_cast<double>(fp[0]) * fp[3] - static_cast<double>(fn[0]) * fn[3];
         const double ig0 = static_cast<double>(fp[1]) * fp[2] - static_cast<double>(fn[1]) * fn[2];
@@ -4460,7 +4587,8 @@ inline void zonal_six(const float* F, int degree, bool wide, const Kepler& kp, d
         const double Co_a = -(l + 2) * Co * iab;
         add_p(9, Co_a * fg0, l + 3);
         add_p(10, Co_a * fg1, l + 3);
-        f += 12;
+        for (int k = 3; k <= kTailW; k += 2) add_k(f + 36 + 8 * ((k - 3) / 2), Co, Co_a, l + 1, k);
+        f += 52;
         Ar *= ia2b;
       }
       if (l <= degree && Ar >= a_cut) {
@@ -4472,6 +4600,7 @@ inline void zonal_six(const float* F, int degree, bool wide, const Kepler& kp, d
         const double Ce_a = -(l + 1) * Ce * iab;
         add_p(3, Ce_a * f0 * f2, l + 2);
         add_p(4, Ce_a * f0 * f3, l + 2);
+        for (int k = 2; k <= kTailW; k += 2) add_k(f + 4 + 8 * (k / 2 - 1), Ce, Ce_a, l, k);
       }
     }
     const double da = zc.a_ref * ia - 1.0;
@@ -4484,6 +4613,36 @@ inline void zonal_six(const float* F, int degree, bool wide, const Kepler& kp, d
     sE = ev(0) + odd_E * sw;
     sI = (ev(1) + e * ev(2)) + odd_I * sw;
     sA = (ev(3) + e * ev(4)) + odd_A_ia * sw;
+    {  // The terms 2 <= |w| <= kTailW (cos and sin of k omega).
+      double ck[kTailW + 1], sk[kTailW + 1];
+      ck[0] = 1.0;
+      sk[0] = 0.0;
+      for (int k = 1; k <= kTailW; ++k) {
+        ck[k] = ck[k - 1] * cw - sk[k - 1] * sw;
+        sk[k] = sk[k - 1] * cw + ck[k - 1] * sw;
+      }
+      const double e2 = e * e;
+      double ekm1 = e;
+      for (int k = 2; k <= kTailW; ++k) {
+        const int b = 11 + 6 * (k - 2);
+        const double ek = ekm1 * e;
+        const double Pa = ev(b), Pb = ev(b + 1);
+        const double Gp = (Pa + Pb * e2) * ek, dGp = (k * Pa + (k + 2) * Pb * e2) * ekm1;
+        const double Gi = (ev(b + 2) + ev(b + 3) * e2) * ek, Ga = (ev(b + 4) + ev(b + 5) * e2) * ek;
+        if (k & 1) {
+          sW += k * Gp * ck[k];
+          sE += dGp * sk[k];
+          sI += Gi * sk[k];
+          sA += Ga * sk[k];
+        } else {
+          sW += -k * Gp * sk[k];
+          sE += dGp * ck[k];
+          sI += Gi * ck[k];
+          sA += Ga * ck[k];
+        }
+        ekm1 = ek;
+      }
+    }
   } else {
     double ck[72], sk[72];  // cos and sin of k omega, `wide`
     ck[0] = 1.0;
