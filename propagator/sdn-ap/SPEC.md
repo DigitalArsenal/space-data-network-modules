@@ -2915,11 +2915,14 @@ allocation failed answers `out-of-memory` with the store empty (through 0.6.56 t
   the whole record's bytes copied out of the part's, as one counted allocation) and the arrays that index them. They are counted in
   the eighth statistic of `sdnap_epochs_stats` (the bytes held), so a host sees what a load in progress holds. The sort and the
   install happen at the close, as in `load_epochs`, so the decoded records of every part are held until then, and at the close the
-  decoded records and the installed store are resident together: that is the high-water. At 100,000 AP records with a covariance, in
-  parts of 1,000, the instance (including that high-water, since WebAssembly memory keeps its high-water size) is 150,470,656 bytes
-  (143.5 MiB), of which the installed store counts 112,404,152 bytes (107.2 MiB). A record that carries a forecast holds the whole
-  record: 3,000 such records of 13,576 bytes each, in parts of 100, hold 15,368 bytes each while the load is open and 15,349 bytes each
-  in the store, and the instance is 16,930 bytes an object (30,059 in one call, which holds the payload besides).
+  decoded records and the installed store are resident together: that is the high-water. Measured on sdn-ap 0.6.57 (32-bit WebAssembly
+  with threads, 2 MiB initial memory, the host's staging buffer reused), 100,000 AP records, each the stored fitted 500 km record at
+  the angles of a seeded mix (85 % low near-circular, 5 % medium orbit, 5 % geosynchronous, 5 % eccentric): in parts of 1,000 the
+  instance (including that high-water, since WebAssembly memory keeps its high-water size) is 150,470,656 bytes (143.5 MiB), of which
+  the installed store counts 112,404,152 bytes (107.2 MiB); in one call it is 6,465.8 bytes an object (616.6 MiB), the payload
+  included. A record that carries a forecast holds the whole record: 3,000 such records of 13,576 bytes each, in parts of 100, hold
+  15,360 bytes each while the load is open and 15,349 bytes each in the store, and the instance is 16,908 bytes an object (30,015 in
+  one call, which holds the payload besides).
 
 **14.2 Selection.** With E_0 < ... < E_{n-1} a series' epochs and t the request time: NEAREST takes the set whose
 epoch is nearest t (switch between E_i and E_{i+1} at tau_i = (E_i + E_{i+1}) / 2); LATEST_BEFORE the latest set at or

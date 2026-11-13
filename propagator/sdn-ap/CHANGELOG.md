@@ -1,5 +1,18 @@
 # Changelog
 
+## 0.6.57 — A catalog loaded in parts: load_epochs_open, load_epochs_part, load_epochs_close
+
+A host that cannot stage a whole catalog in the module's memory loads it in parts. `load_epochs_open` starts a load (the $PCF EPOCH_STORE read once, the store
+emptied, a load already open dropped), `load_epochs_part` decodes one part's 'ocm' frames (any number of times; nothing of a part's bytes is kept, so a host reuses
+one staging buffer), and `load_epochs_close` does the sort and the install. The store built from any partition of a list of frames is the store `load_epochs`
+builds from the whole list, set for set and in order, and every state and covariance is as in 0.6.56 to the bit. `load_epochs` is the three in sequence on one
+payload, with its meaning unchanged. A non-zero status of any of the three closes the load and empties the store, except `load-not-open` (a part or a close with no
+load open), which changes nothing. While a load is open the store is empty and serves no state; the eighth statistic of `sdnap_epochs_stats` counts what the open load
+holds. A record's forecast, copied out of a part's bytes, and its arrays of segments are counted allocations refused `out-of-memory`.
+A load that builds while a counted allocation failed now answers `out-of-memory` with the store empty (through 0.6.56 the built store stayed in place). The failure-injection
+seam of the tests fails every counted site again (it had stopped matching in 0.6.56). At 100,000 AP records with covariance, at 2 MiB initial memory, the instance
+holds 1,504.7 bytes per object (143.5 MiB) when loaded in parts of 1,000 and 6,465.8 (616.6 MiB) in one call.
+
 ## 0.6.56 — An allocation that fails at the memory limit is refused; a stored set's covariance is built on the record's own set (stacks #600, #599)
 
 At its memory limit the module refuses a state instead of aborting. A thread makes the caches a set's theory reads before
