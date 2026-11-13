@@ -2866,16 +2866,29 @@ d = x_b - x_a (the smoothstep weight for both shapes): the covariance of the two
 - its term tables are borrowed from the store's set, one copy each (the store's set outlives the bank).
 
 `propagate` takes the record's own set as set 0 the same way. Through 0.6.52 the store built set 0 again from the
-parameter vector (12.1's p, then back to elements). That was a second copy of every table, and set 0's elements could differ
-from the record's in their last bits. The moved sets then matched set 0 exactly in all six elements, so the differences
-took other paths (12.3's flags for a moved set that shares the nominal's terms).
+parameter vector (12.1's p, then back to elements):
+- that was a second copy of every table;
+- set 0's elements could differ from the record's in their last bits;
+- the moved sets then matched set 0 exactly in all six elements, so their differences took other paths (12.3's flags for a
+  moved set that shares the nominal's terms);
+- above e 0.048, set 0 held schedule-node grids of its own (16.11).
 
-On the 60 stored AP records of the synthetic set that carry a covariance, flown 120 hours at 30 minutes:
-- **Against `propagate`'s covariance of the same record:** the store's differed by up to 7.9e-4 of the matrix's largest
-  element (a 300 km circular record at day 5). Now it differs by at most 3.7e-7, the difference both builds show on the
-  records this leaves alone.
+The measurement: the 942 stored AP records of the synthetic set. 938 of them give a covariance at some instant. Each was
+loaded alone and flown at its epoch and every 30 minutes for 120 hours, TEME, and compared with `propagate`'s covariance of
+the same record (test/store-covariance.e2e.mjs keeps four of them):
+- **Where both hold the same time,** the 81 instants every 90 minutes (the epochs are at midnight), every element is
+  equal to the bit on every record: 75,978 instants. Through 0.6.52, 48,138 of them were.
+- **At the other instants the two times differ in their last bits.** The caller's split Julian date, here made from
+  milliseconds, is off by up to 0.16 µs; `propagate` reads its ISO text. The covariance then differs by up to 1.4e-3 of
+  the matrix's largest element, on a 5,000 km perigee record at e 0.7. 161 records differ by more than 1e-6. Through
+  0.6.52 the difference reached 1.46 times that element, on a 5,000 km perigee record at e 0.9, and 215 records differed
+  by more than 1e-6.
 - **The borrowing alone changes nothing.** Against set 0 built from the record's elements with tables of its own, every
   state and every covariance element is equal to the bit.
+- **Against 0.6.52**, flown in stores of 40 records, the states are equal. The covariance changes on 385 of the 942
+  records: on 86 by more than 1e-6 of the matrix's largest element, by up to 0.80 of it (a position variance at hour 103.5).
+- **At the family grids' limit,** in stores that reach the 256 family grids (16.11) with the covariance asked, 0.6.52
+  refused (code 1) states this build answers: set 0 now shares the slot's schedule-node grids.
 
 The moved sets still own the tables they cannot borrow from set 0: one whose inclination moved (chi, psi) owns its m-daily
 family, output and zonal tables. `_stats`' bytes count the bank, its bodies and every table and grid its sets own.

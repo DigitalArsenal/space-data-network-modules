@@ -585,7 +585,9 @@ all), measured at a 1-minute load of 10 to 14 on the 28-core build machine.
 A stored set asked for its covariance also holds its bank (SPEC 14.4): 1,000 copies of a fitted 500 km record (tesseral 31,
 zonal 70), each flown a day at 300 s, take 331 KB a set with the covariance against 118 KB for states alone, and the
 store's count reads 328 KB. The bank's set 0 borrows the stored set's tables; through 0.6.52 it held its own, 361 KB a set,
-and the count read 118 KB.
+and the count read 118 KB. Its nominal is the record's own set, so the store's covariance is `propagate`'s: equal to the
+bit where both hold the same time (`test/store-covariance.e2e.mjs`). Through 0.6.52 the nominal was rebuilt from the
+parameter vector, and the store's covariance could differ from `propagate`'s by more than the matrix's largest element.
 
 Above e 0.048 with tesseral terms, each set holds a grid of its tesseral families of about 4.9 MB (with 0.6.14's slopes),
 and a node grid while it is flown: 10 MB a set flown when every set has its own elements (4.8 MB when 100 sets share one

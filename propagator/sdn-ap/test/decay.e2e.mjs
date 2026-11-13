@@ -262,10 +262,13 @@ for (const c of [{ name: 'perigee 500 km, e 0.001, BTERM 0.01', hp: 500, e: 0.00
         const bc = control.statusCode === 0 ? OEM.getRootAsOEM(new fb.ByteBuffer(control.outputs.find((o) => o.portId === 'ephemeris').payload)).unpack().EPHEMERIS_DATA_BLOCK[0] : null;
         check(rm.statusCode === 0 && !/decayed/.test(bm?.COMMENT ?? ''), `an epoch before every crossing, in a window ending between a moved set's crossing and the nominal's: ${rm.statusCode === 0 ? 'answered' : rm.errorCode}`);
         check(bm?.EPHEMERIS_DATA_LINES.length === 1 && bm?.COVARIANCE_MATRIX_LINES.length === 1, 'the epoch before every crossing has its state and covariance');
-        const values = (b) => [...(b?.EPHEMERIS_DATA_LINES ?? []), ...(b?.COVARIANCE_MATRIX_LINES ?? [])].flatMap((l) => Object.values(l).filter((v) => typeof v === 'number'));
-        const actual = values(bm), expected = values(bc);
-        check(control.statusCode === 0 && actual.length >= 27 && actual.every(Number.isFinite) && sameBits(actual, expected), 'the state and covariance before every crossing are 0.6.48\'s bit for bit');
-        console.log(`later-set blend: moved crossing ${own}, nominal ${nominalName}; day 9 state and covariance compared with 0.6.48 at window end ${new Date(endMs).toISOString()}`);
+        // the state is 0.6.48's bit for bit; the covariance is not: from stack #599 each set's bank flies the record's own set as its
+        // nominal (SPEC 14.4), so the store's covariance is propagate's (test/store-covariance.e2e.mjs) and no longer 0.6.48's
+        const values = (lines) => (lines ?? []).flatMap((l) => Object.values(l).filter((v) => typeof v === 'number'));
+        const actual = values(bm?.EPHEMERIS_DATA_LINES), expected = values(bc?.EPHEMERIS_DATA_LINES), cov = values(bm?.COVARIANCE_MATRIX_LINES);
+        check(control.statusCode === 0 && actual.length >= 6 && actual.every(Number.isFinite) && sameBits(actual, expected), 'the state before every crossing is 0.6.48\'s bit for bit');
+        check(cov.length === 21 && cov.every(Number.isFinite), `the covariance before every crossing: ${cov.length} finite elements of 21`);
+        console.log(`later-set blend: moved crossing ${own}, nominal ${nominalName}; day 9 state compared with 0.6.48 at window end ${new Date(endMs).toISOString()}, its covariance present`);
       }
     }
     console.log(`the moved record decays at ${cm[1]}; sdnap_covariance_at status ${status}`);
