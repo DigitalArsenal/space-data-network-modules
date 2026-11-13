@@ -6248,13 +6248,15 @@ output block); nothing is written to a record, no SDS schema changes, and no cel
 The build to run before the tests: `SDM_MODULE_UNSIGNED_BUILD=1 node build.mjs` in `propagator/sdn-ap`, and `SDNAP_WASM=<that
 module.wasm>` for the commands below.
 
-The threading contract: one host thread calls the frames entries, one after the other, and never while a batch of the pool
-(`sdnap_epochs_at` over many series, `sdnap_propagate_soa`) runs. The module keeps no lock and no busy flag, and nothing
-detects a call made from two threads at once or during a batch. What a pool job for rows must change: the state of the
-cells (the table, the slab with its free lists and its compaction, the sweep, the counters), the cell under construction
-(`g_cell`), the count of failed allocations that a row reads (`mem::failures`, the instance's and not a thread's), the lazy
-tables `drag::table()` makes, the caches the first `xp_init` on a thread makes, the forces a row binds (`ocm::Bind`), and
-`Store::short_day`, which `rows_cover` writes. `sdnap_frames_at` reads the cells alone and writes nothing.
+The threading contract: one host thread calls the instance sequentially. No frame read, load, open, close, statistics call,
+or other batch overlaps a refill. `sdnap_threads(n)` starts pool threads; the caller also computes rows. Refill batches hold
+at most 32 distinct objects, one row per claim. Each row owns its output bytes and allocation-failure mark. The caller owns
+the object table, slab, sweep, placement, compaction, and logical counters. Shared constant tables are initialized before
+publication; force bindings and caches are thread-local. The shared relaxed atomic stores are `Store::short_day`,
+`Atmosphere::one_a_day`, and `Atmosphere::before_rows`. Concurrent builders store the same atmosphere values:
+before-rows only becomes true, and one-a-day is derived from the immutable weather rows. The short-day field records
+a missing day as an atomic diagnostic; frames builders do not consume it, so its last writer cannot change a cell or result.
+`sdnap_frames_at` remains a pure read. Scheduling, failure recovery, and the host contract are detailed in 19.10.
 
 ### 19.1 Entries
 
@@ -6267,6 +6269,7 @@ tables `drag::table()` makes, the caches the first `xp_init` on a thread makes, 
   raises the instance's high water by up to one block (the memory is reused by later allocations and not returned to the
   host): the 300 MB figure of 19.6 assumes a first open, or a close before the open. What a served object needs is not known at
   open: the host sizes the budget by the rule of 19.6, and a slab too small shows as rows that could not be stored.
+  A dead pool, a poisoned resident store, or a quarantined frames instance returns -20 (19.10).
 - `sdnap_frames_at(jd_whole, jd_frac, first, count, frame, out, status)`: objects `[first, first + count)` at one split
   Julian date (UTC), in the layout of `sdnap_epochs_at`: six planes of `count` doubles (three: x, y, z, when open was given
   the position-only flag; no velocity is written then), frame 0 TEME (km, km/s) or 3 Earth-fixed (m, m/s), one status each:
@@ -6302,7 +6305,7 @@ tables `drag::table()` makes, the caches the first `xp_init` on a thread makes, 
   [2] + [3] equal to 0) (the slab or the memory cannot take more; stats[12] counts them). A host judges that a frame is full by
   the statuses of `sdnap_frames_at` (19.9), not by [0] and [1]. Returns 0, or -1 (bad argument: a non-finite time, a negative
   `ahead`, `max_rows` under 1, more priority entries than series), -5 (not open), -6 (the store holds more series than
-  open's table: open again). `ahead` is for the shortest window the host expects (3 minutes, `ahead` of 180 seconds): a longer
+  open's table: open again), or -20 (dead pool or quarantined instance, 19.10). `ahead` is for the shortest window the host expects (3 minutes, `ahead` of 180 seconds): a longer
   one builds a cell for a window that is not the one following the current cell, which is not used when the clock reaches the
   current cell's end and is built again. Frames serve one clock and its look-ahead to an instance: two clocks more than a
   window apart rebuild the cells at every alternation. A refill after a
@@ -6318,7 +6321,7 @@ tables `drag::table()` makes, the caches the first `xp_init` on a thread makes, 
   held take (their own sizes), [17] compactions of the slab, [18] bytes they moved, [19] places visited by refills. The slab
   is compacted only when the free bytes and the bump's remainder together hold the cell: a slab full of live cells is not
   compacted for nothing.
-- `sdnap_frames_close()`.
+- `sdnap_frames_close()`: a quarantined instance retains its committed cells and pending buffers; close has no effect there.
 
 What a row costs, to turn rows into time: the median milliseconds of one row (162 AP states: 64 sample points, 96 check
 points and the two edges, from a cold set; 834 for a set with the dense check) by the window's distance from the epoch, 0, 2, 5 and 10 days, 20 seeded sets of each class with
@@ -6456,9 +6459,12 @@ What gets worse:
 
 ### 19.6 Memory
 
+The instance totals in this subsection combine the stored-load baseline and serial-refill growth measured separately.
+Complete one-instance pooled-refill measurements and their limits are in 19.10.
+
 One block, allocated at open, counted, of exactly the budget given: the table (32 bytes a series, padded to 64, 3.2 MB at
 100,000) and the slab. The host's rule for the budget: 850 bytes for each object served, 32 bytes for each series and 1 MiB.
-Measured by `node test/frames-memory.e2e.mjs` (about 7 minutes, 3 GB of the host's memory; it asserts that the slab holds at most 850 bytes for each object served, that no row is refused, that every served object is served, and that the instance total is under 300 MB decimal with and without a pool; the other figures below are printed)
+The historical serial-refill measurement by `node test/frames-memory.e2e.mjs` asserts slab use of at most 850 bytes per served object, no refused rows, complete coverage, and an instance total under 300 MB decimal for its short look-ahead. Its pool threads do not build cells. The pooled-refill totals and covariance configurations are in 19.10. The historical figures below were measured
 at 100,000 objects, seeded sets with epochs spread over one window, loaded in parts of 1,000, filled at one instant, then the
 windows turned over (48 minutes in steps of one):
 
@@ -6478,7 +6484,7 @@ heap grows beside the initial pages it does not use); (2) load in parts of at mo
 test/frames-memory.e2e.mjs` prints it: 15 threads, 37.7 MB). With the rules and this block: the recipe's instance holds 269.7
 MB with 15 pool threads (180.5 + 89.2 block, 0 growth) and 232.0 MB without a pool; the public shares 263.0 and 225.3 MB; a
 browser tab following the rules measured 239.7 MB without a pool for 100,000 AP records with covariance, and 272.8 MB at
-open with 15 threads. The test asserts both totals under 300 MB decimal. The host's own output planes of a frame (5.2 MB at
+open with 15 threads. These are historical serial-refill totals, not bounds for pooled builders or two cells per object. The host's own output planes of a frame (5.2 MB at
 100,000 objects) are inside the instance and counted. What the instance holds besides the block: the first row on a thread
 makes that thread's caches (SPEC 9: 1.8 MB, once, kept); a fill grew the instance by no more than 4 MiB in the test, 0 at
 100,000. After a load the instance holds 33 to 38 MB more than the store's own count: the load's high-water (staging and the
@@ -6544,6 +6550,148 @@ What a host that draws frames from a running clock needs, and what it gets.
 - **Is it filled?** The counters [0] and [1] of the result count the places a sweep has left; they read 0 between sweeps while
   the clock has moved on and the next window's cells are not yet built. A host judges whether the frame is full by the
   statuses `sdnap_frames_at` returns (the objects that answer 1), and uses the counters for the loop of 19.1 only.
+
+### 19.10 Pooled refill
+
+Concurrent cold rows add allocation pressure and scheduling overhead. A synchronous call blocks its caller; a 32-row
+batch bounds storage, not duration. Speculative rows after a genuine allocation failure are discarded. A dead pool
+quarantines the frames instance and retains its pending buffers. Two cells per object require a larger slab; covariance
+and a deep look-ahead compete for the same instance memory budget.
+
+Collection reads the sweep without changing it and stops at a repeated object, a pass boundary, or the smaller of 32 candidate rows and the rows the call still allows.
+After completion, the caller replays visits, promotions, logical counters, reclaim, and placement in serial order.
+Duplicate priorities retain their serial meaning. A growth-refused row is retried with growth permitted at its own commit
+position. A counted allocation failure without a growth refusal stops the logical prefix; no later speculative result is
+committed. A slab stall retains the existing skip-and-continue behavior. Per-call result arrays remain seven int32 values;
+statistics remain twenty doubles. Pool statistics count physical attempts and can differ with scheduling.
+The instance-wide allocation diagnostics `mem::g_failures` and `mem::g_largest_failed` also count physical attempts.
+A refused pooled allocation increases them even when its caller retry succeeds; they can differ by thread count.
+They are not frames results or logical counters. Successful retries do not restore them, avoiding synchronization
+and rollback of concurrent attempts.
+
+Staging is 136,224 bytes, independent of catalog size and `max_rows`, including one retry output. Before publication the
+caller warms shared initialization and checks a reserve based on concurrent builders and the largest tesseral degree in
+the batch. At degree 31 and five active builders the reserve is 11,220,888 bytes. It is free heap room, not a held allocation
+added to the cell slab. Reserve failure halves the candidate count; a single row runs serially. No memory growth occurs
+inside a pooled batch. Thread-local allocation failures and growth refusals are tracked separately.
+
+Release source contains null hook globals (`g_attempt_hook`, `g_chunk_hook`, `g_row_hook`, `g_init_hook`) and their
+null checks, plus the false reserve switch. No release export sets them. Diagnostic source copies inject the setters
+and forced failures; `test/lib/ap-diagnostic.mjs` sets `SDNAP_DIAGNOSTIC_BUILD=1` for those builds. Without that flag,
+`build.mjs` checks the exports of the newly compiled artifact alongside artifact validation and rejects `test_*` and
+`sdnap_test_*` names, including the frames configuration, hold, cell, initialization, and warm-up probes. The existing
+read-only covariance probes `sdnap_test_two_body_state` and `sdnap_test_epoch_floor` are explicitly allowed; neither sets hooks.
+
+A pool failure returns -20 and commits none of the pending batch. Earlier batches of the same call remain committed.
+The descriptor, bounded outputs, resident records, and cell slab remain alive because a delayed claim can complete after
+the failure return. Later open/refill calls return -20, close has no effect, store replacement and descriptor reuse are
+refused, and pure reads of committed frames remain valid. The host terminates the instance's own browser threads and
+discards the instance. Quarantine has no serial fallback, including after a delayed claim finishes.
+The -20 return takes precedence over not-open (-5). On entry refusal, refill writes six zero result fields and
+stalled = -1 when the result pointer is nonnull. A failure during refill returns the committed prefix's result fields.
+Propagation batches and epoch batches fill every supplied row status with the pool-dead status (9); state output
+planes are unspecified on failure and must not be read. A frames identity mismatch increments the internal
+`g_identity_failures` diagnostic and quarantines the instance before that row is counted or placed.
+
+The host uses one dedicated browser execution thread for the instance and never calls `sdnap_frames_at` during refill.
+The display draws a previously copied or transferred frame and receives another between refill calls. Interactive calls
+use `max_rows <= 32`, with the host adjusting the limit from measured p50, p95, and maximum call durations. Expensive rows,
+skip scans, reclaim, and compaction have no hard time bound. JavaScript copies and a replacement instance count separately
+toward total browser memory.
+
+The 300,000,000-byte line applies to the measured configuration, not every thread count and cache history. A host that
+wants the deep look-ahead chooses between the line and the covariance in the same instance. `test/frames-pool-memory.mjs`
+measures each configuration in one 100,000-object instance: 2 MiB initial memory, load parts of at most 1,000 records,
+staging freed before frame planes, full fill, and two 48-minute window turns. Covariance-bearing records carry the synthetic
+fixture's eight-dimensional covariance with compatible parameter declarations and noise. Totals include the module,
+records, slab, table, frame planes, pool threads, staging, and allocator high water; no separate baseline is added.
+
+The recipe has 100,000 eligible objects. Every figure is bytes:
+
+| Pool threads | One cell, covariance | Two cells, covariance | Two-cell excess above 300,000,000 | Two cells, no covariance |
+| ---: | ---: | ---: | ---: | ---: |
+| 0 | 243,662,848 | 328,663,040 | 28,663,040 | 234,225,664 |
+| 4 | 265,093,120 | 350,093,312 | 50,093,312 | 243,793,920 |
+| 15 | 303,300,608 | 388,300,800 | 88,300,800 | 287,703,040 |
+
+The fifteen-thread recipe also exceeds the line with one cell and covariance, by 3,300,608 bytes. Four threads satisfy the
+line with one covariance-bearing cell or two cells without covariance. These cases have zero logical allocation failures,
+zero slab failures, and zero memory growth inside batches.
+
+The synthetic public-share mix in `test/lib/frame-catalog.mjs` has 92,100 eligible objects and 7,900 unsupported objects; cell counts below are per eligible
+object, with all 100,000 records and frame outputs included in each instance total:
+
+| Pool threads | One cell, covariance | Two cells, covariance | Two-cell excess above 300,000,000 | Two cells, no covariance |
+| ---: | ---: | ---: | ---: | ---: |
+| 4 | 258,408,448 | 336,658,432 | 36,658,432 | 230,359,040 |
+| 15 | 296,550,400 | 374,865,920 | 74,865,920 | 274,268,160 |
+
+A separate cache stress case
+loads 100,000 synthetic recipe records, with the first 32 at tesseral degree 70, eccentricity 0.299, and two revolutions per
+day. Each total below is one instance after the full fill and two window turns, with the three host rules of 19.6:
+
+| Pool threads | Cells per object | Covariance | Instance bytes | Bytes above 300,000,000 |
+| ---: | ---: | :---: | ---: | ---: |
+| 4 | 1 | yes | 266,469,376 | 0 |
+| 15 | 1 | yes | 310,640,640 | 10,640,640 |
+| 4 | 2 | no | 243,793,920 | 0 |
+| 15 | 2 | no | 296,091,648 | 0 |
+
+The first batch reserves 12,613,188 bytes at four threads and 21,907,264 bytes at fifteen. All cases have zero logical
+allocation failures, zero slab failures, and zero memory growth inside batches. The fifteen-thread covariance case exceeds
+the line even with one cell per object. These stress records exercise large caches; the table is not a universal upper
+bound for every accepted record or allocation history.
+
+`test/frames-pool.e2e.mjs` compares canonical cell bytes, frame bits, logical counters, and results at 0, 4, and 15 pool
+threads, including two slicings, duplicate priorities, tight slabs, position-only cells, refused growth, counted allocation
+failure, reserve halving, serial fallback, eight counted startup-cache failure sites, and delayed or trapped claims.
+`test/frames-pool-memory.mjs` measures each catalog in one instance. `test/frames-pool-cost.mjs` uses matched A B B A
+segments: eight rounds cover a whole first fill and eight cover a rolling refill, with additional cycles when the
+middle-half ratio range exceeds 5% of the median. Reported whole-catalog execution times sum measured segments and exclude
+the interleaved controls, load, and pool startup.
+
+On 2026-11-13, the complete 100,000-object recipe without covariance was measured on an Apple M3 Ultra with 28 cores,
+256 GiB RAM, macOS arm64, and Node 25.4.0. Four identically loaded instances execute each segment in A B B A order,
+where A is the unchanged serial binary and B is the pooled binary. Eight segment rounds collectively cover a complete
+sweep; they are not eight independent full-catalog sweeps. Initial fill builds 200,000 rows (two cells per object),
+and rolling builds 100,000 rows after a 48-minute advance. Current-frame coverage is asserted halfway through initial
+fill. Both phases compare exact frame bits, logical counters, and row counts against A and assert no in-batch growth.
+
+All four configurations satisfy the middle-half-width limit of 5% of the median round ratio. The eight-thread case
+requires three complete cycles (24 rounds per phase); at 16 rounds its initial-fill width is 5.54%. The other cases
+require one cycle. Times below are medians of measured complete-sweep execution sums. Ratios are medians of paired
+round ratios, a separate statistic that does not equal the quotient of the time medians in general.
+
+| Pool threads | Rounds per phase | Initial serial / pooled seconds | Initial rows/s | Rolling serial / pooled seconds | Rolling rows/s |
+| --- | --- | --- | --- | --- | --- |
+| 0 | 8 | 191.211 / 190.982 | 1,047.2 | 96.886 / 96.768 | 1,033.4 |
+| 4 | 8 | 190.380 / 61.140 | 3,271.2 | 96.453 / 30.739 | 3,253.2 |
+| 8 | 24 | 189.722 / 53.911 | 3,709.8 | 97.086 / 26.191 | 3,818.0 |
+| 15 | 8 | 192.011 / 47.333 | 4,225.4 | 97.667 / 24.005 | 4,165.8 |
+
+| Pool threads | Initial median ratio (middle half) | Rolling median ratio (middle half) |
+| --- | --- | --- |
+| 0 | 1.002 (1.001–1.002) | 1.001 (1.000–1.002) |
+| 4 | 3.115 (3.095–3.130) | 3.138 (3.109–3.149) |
+| 8 | 3.626 (3.555–3.682) | 3.713 (3.637–3.770) |
+| 15 | 4.061 (4.029–4.075) | 4.044 (4.034–4.119) |
+
+Every measured call is capped at 32 rows. Call durations include synchronous pool completion and caller commit. The zero-thread latency row comes from the `FRAMES_THREADS=0` result of `test/frames-pool-cost.mjs` (recorded as `timing-0.json`):
+
+| Pool threads | Initial p50 / p95 / maximum ms | Rolling p50 / p95 / maximum ms |
+| --- | --- | --- |
+| 0 | 30.886 / 46.236 / 80.034 | 31.122 / 47.407 / 80.770 |
+| 4 | 11.538 / 15.576 / 38.633 | 11.491 / 15.637 / 38.308 |
+| 8 | 11.318 / 14.136 / 49.513 | 11.225 / 13.954 / 47.563 |
+| 15 | 10.964 / 12.538 / 38.779 | 10.975 / 12.519 / 51.764 |
+
+Four, eight, and fifteen threads exceed the 2,100-row/s target in both measured phases; zero threads preserve the serial
+baseline. These are host- and catalog-specific measurements, not a latency guarantee. Four threads provide the
+measured 3.1-times improvement with the lower memory requirements above. Covariance is excluded from this timing
+matrix; its complete one-instance memory costs are measured separately above.
+
+The unsigned control binary has SHA-256 `0e1ed45a4a98de7bffbe353125f8fbcc9de8b155286cd60b8dae671ff176beda`;
+the unsigned pooled binary has SHA-256 `4eda56422ca9137240766f684728b96c26c2f8794290d93ba6ea73401ff37a33`.
 
 ## References
 

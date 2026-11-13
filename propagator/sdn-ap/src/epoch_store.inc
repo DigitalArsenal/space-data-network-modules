@@ -1033,6 +1033,8 @@ inline uint64_t bytes_of(const Store& st) {
 /// After a dead batch over the store (Store::pool_dead) the store is emptied or replaced only once no pool thread is active:
 /// one still in its chunk reads and writes it. 0, or the refusal "pool-dead" (load_epochs and load_epochs_open).
 static int refuse_while_pool_dead(sdnap::epochs::Store& st) {
+  if (sdnap::pool::g_frames_quarantined)
+    return sdnap::ocm::refuse("pool-dead", "The frames instance is quarantined after a pool failure. Start a new instance.");
   if (st.pool_dead == 0) return 0;
   if (sdnap::pool::load(&sdnap::pool::job().active) != 0)
     return sdnap::ocm::refuse("pool-dead", "A threaded batch over the epoch store ended with a pool thread taken for dead, and a pool "
@@ -1056,6 +1058,7 @@ extern "C" int load_epochs(void) {
 static int load_epochs_call(void) {
   using namespace sdnap;
   plugin_reset_output_state();
+  if (const int rc = refuse_while_pool_dead(epochs::resident())) return rc;
   // a load in progress is abandoned by any load_epochs, accepted or refused (the store is empty while one is open); a store with no load open is left
   // as it was by a load_epochs refused before it begins, as it always was
   epochs::resident_build().drop();
@@ -1110,6 +1113,7 @@ extern "C" int load_epochs_part(void) {
 static int load_epochs_part_call(void) {
   using namespace sdnap;
   plugin_reset_output_state();
+  if (const int rc = refuse_while_pool_dead(epochs::resident())) return rc;
   epochs::Build& b = epochs::resident_build();
   if (!b.open) { plugin_set_error("load-not-open", "No load is open: call load_epochs_open first."); return 3; }
   uint32_t frames = 0;
@@ -1129,6 +1133,7 @@ extern "C" int load_epochs_close(void) {
 static int load_epochs_close_call(void) {
   using namespace sdnap;
   plugin_reset_output_state();
+  if (const int rc = refuse_while_pool_dead(epochs::resident())) return rc;
   epochs::Store& st = epochs::resident();
   epochs::Build& b = epochs::resident_build();
   if (!b.open) { plugin_set_error("load-not-open", "No load is open: call load_epochs_open first."); return 3; }
@@ -1572,10 +1577,7 @@ int32_t sdnap_epochs_at(double jd_whole, double jd_frac, uint32_t first, uint32_
       if (reserve == 0) break;
       // a reserve that cannot be had is not a failure of the call: not counted. Held through the volatile block, as
       // pool::run holds its own: a malloc freed at once is a pair an optimizing build may remove, and the test then never ran
-      sdnap::pool::g_reserve_block = std::malloc(reserve);
-      const bool had = sdnap::pool::g_reserve_block != nullptr;
-      std::free(sdnap::pool::g_reserve_block);
-      sdnap::pool::g_reserve_block = nullptr;
+      const bool had = sdnap::pool::reserve_room(reserve);
       if (had) break;
       if (len <= 2 * sdnap::pool::kEpochChunk) {
         batch = false;
@@ -1591,7 +1593,7 @@ int32_t sdnap_epochs_at(double jd_whole, double jd_frac, uint32_t first, uint32_
       a += len;
       continue;
     }
-    const int32_t rc = sdnap::pool::run(len, reserve);
+    const int32_t rc = sdnap::pool::run(len, reserve, true);
     if (rc != 0) {
       // a pool thread taken for dead may be only slow, still in its chunk: the store is refused from now on (Store::pool_dead)
       st.pool_dead = 1;

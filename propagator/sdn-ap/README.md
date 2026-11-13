@@ -682,17 +682,30 @@ instance, in every class, strong drag and decay included; a window that cannot m
 entries; a first fill takes about 1.2 ms an object on one thread, 120 s for 100,000 objects at the epoch (SPEC 19.5 has the figure and
 the eccentric sets above e 0.03, which cost 11 ms a row); wide sets (e above 0.05 in the zero-revolution class, above 0.3 in the resonance classes, with tesseral
 terms), series of several sets, sets with a forecast or a hand-over and SGP4 sets are answered by AP's entries (47 % of the
-stored synthetic set is served; 92.1 % of a public catalog's objects have eccentricity at or under 0.05); at 100,000 objects the
-cells take 84 MB and the instance about 270 MB in all, while no wide object is flown in it (a wide set holds about 10 MB); the
+stored synthetic set is served; 92.1 % of a public catalog's objects have eccentricity at or under 0.05); the serial-refill baseline at 100,000 objects has
+84 MB of cells and an instance of 269.7 MB with covariance and 15 idle pool threads, using a three-minute look-ahead and serial refill (SPEC 19.6). Pooled builders and two-cell configurations have the distinct totals in SPEC 19.10. No wide object is flown in these instances (a wide set holds about 10 MB); the
 host runs its own refill loop (SPEC 19.1) and calls the frames from one thread, never during a pool batch.
 
 A frame of every object at one instant from short Chebyshev cells of AP's own states: 0.26 times the cost of SGP4 through
 `sdnap_epochs_at` for position and velocity at 100,000 objects (0.259 in TEME, 0.249 Earth-fixed) (`test/frames-cost.mjs`). `sdnap_frames_open(budget_bytes,
 flags)` reads the loaded store; `sdnap_frames_refill(now, ahead, max_rows, priority, count, result)` builds the cells that `now` and
-`now + ahead` need, one row (one cold set, one cell or tombstone) at a time on the calling thread, and says what is still due;
+`now + ahead` need in batches of at most 32 independent rows on the pool and caller, and says what is still due;
 `sdnap_frames_at` evaluates polynomials only and states one status for each object (served, no cell, not served by this entry,
 AP refuses here, the builder fails here). A cell is checked against AP at 96 points of its window (768 for a set whose output steps: a perigee under a line of 500 km at BTERM 0.01 that rises with BTERM, SPEC 19.5) and at its two ends; the existing exports return the same bits with a frame open.
 Position-only frames write three planes and no velocity.
+
+Pooled refill adds memory pressure and synchronous call latency. At 100,000 synthetic recipe objects, four pool threads
+use 265,093,120 bytes with one cell and covariance, 350,093,312 bytes with two cells and covariance, and 243,793,920 bytes
+with two cells without covariance. Fifteen threads use 303,300,608 bytes even with one cell and covariance. A host that
+wants the deep look-ahead chooses between the line and the covariance in the same instance; SPEC 19.10 states the
+300,000,000-byte line, measured conditions, and cache stress limits. The host serializes calls on a dedicated browser
+execution thread, reads no frame during refill, and uses at most 32 rows per interactive call. A dead pool returns -20,
+preserves committed reads, and quarantines the instance for disposal.
+
+On the measured 100,000-object recipe without covariance, four pool threads build the initial two-cell fill at
+3,271 rows/s and the rolling sweep at 3,253 rows/s, about 3.1 times the unchanged serial control. Calls capped at 32 rows
+have a 95th-percentile duration of about 15.6 ms and a measured maximum of 38.6 ms. SPEC 19.10 gives the host, complete
+0/4/8/15-thread measurements, paired-round variance checks, and the separate memory costs of covariance.
 
 ## SGP4XP status
 

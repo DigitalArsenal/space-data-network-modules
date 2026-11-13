@@ -3,8 +3,9 @@
 // A cell holds six polynomials (position, velocity; position alone with the position-only flag) over one window of a grid anchored at its
 // record's epoch. A window that cannot be served is stored as a tombstone: a header-only cell with the reason. The store of cells is a slab
 // allocated at sdnap_frames_open through the counted allocator; a refill row allocates only its cold set, released inside the row (the first
-// row on a thread also makes that thread's caches, kept: SPEC 9). Nothing here is written to a record, and no export of the epoch store
-// reads a cell; the only write to the store is its short-day scratch field, which every export sets before it reads it (rows_cover).
+// row on a thread also makes that thread's caches, kept: SPEC 9). No export of the epoch store reads a cell.
+// Shared relaxed atomic stores set short_day, atmosphere one_a_day, and atmosphere before_rows;
+// atmosphere writes agree on immutable weather rows; frames results do not read the short-day diagnostic.
 // One host thread: frames and refills are called one after the other, never during a batch of the pool.
 // -----------------------------------------------------------------------------
 
@@ -91,7 +92,29 @@ inline State& state() {
   return s;
 }
 
-alignas(8) inline uint8_t g_cell[4096];  ///< the cell under construction
+struct RowOut {
+  alignas(8) uint8_t cell[4096];
+  uint32_t bytes = 0, splits = 0;
+  int result = 0;
+  uint8_t tomb = 0;
+};
+
+constexpr uint32_t kBatchRows = 32;
+struct Candidate {
+  uint32_t index, place;
+  double t;
+  RowOut out;
+};
+struct Batch {
+  Candidate rows[kBatchRows];
+  RowOut retry;
+  uint32_t count = 0, end = 0;
+  bool pos_only = false, pooled = false;
+};
+inline Batch* g_batch = nullptr;
+inline uint32_t g_identity_failures = 0;
+/// Diagnostic builds: select allocation failures by object and physical attempt.
+inline void (*g_attempt_hook)(uint32_t index, bool pooled) = nullptr;
 
 inline bool is_tombstone(const uint8_t* c) { return c[16] == 0; }
 inline uint32_t bytes_of_cell(int np, int nv, int hp, int hv) {
@@ -245,9 +268,9 @@ inline bool needs_dense_check(const epochs::Entry& en) {
   return a * (1.0 - en.row.eccentricity) - 6378.137 < line;
 }
 
-/// 0: stored in g_cell (size in `bytes`); 1: AP refuses somewhere in the window; 2: the tolerance is not held.
+/// 0: stored in cell (size in `bytes`); 1: AP refuses somewhere in the window; 2: the tolerance is not held.
 /// Samples and checks are taken ascending in time for a window after the epoch and descending for a window before it: the set is flown from the epoch toward the window.
-inline int build_window(xpt::XpSat& xp, epochs::Store& st, const epochs::Entry& en, double a, double b, bool pos_only, uint32_t& bytes) {
+inline int build_window(xpt::XpSat& xp, epochs::Store& st, const epochs::Entry& en, double a, double b, bool pos_only, uint8_t (&cell)[4096], uint32_t& bytes) {
   const double mid = 0.5 * (a + b), half = 0.5 * (b - a);
   // The order of the flight is the one that is right on every build: a window lies on one side of the epoch (the grid is anchored on it), a row's cold set is
   // flown toward the window from the epoch (ascending after it, descending before it), and no row's flight crosses the epoch within one set. A flight that
@@ -314,19 +337,19 @@ inline int build_window(xpt::XpSat& xp, epochs::Store& st, const epochs::Entry& 
   };
   const int hp = head_of(0, bt.np, kTailLimPos), hv = head_of(3, bt.nv, kTailLimVel);
   bytes = bytes_of_cell(bt.np, bt.nv, hp, hv);
-  if (bytes > sizeof g_cell) return 2;
-  std::memset(g_cell, 0, bytes);
-  std::memcpy(g_cell, &mid, 8);
-  std::memcpy(g_cell + 8, &half, 8);
-  g_cell[16] = static_cast<uint8_t>(bt.np); g_cell[17] = static_cast<uint8_t>(bt.nv); g_cell[18] = static_cast<uint8_t>(hp); g_cell[19] = static_cast<uint8_t>(hv);
+  if (bytes > sizeof cell) return 2;
+  std::memset(cell, 0, bytes);
+  std::memcpy(cell, &mid, 8);
+  std::memcpy(cell + 8, &half, 8);
+  cell[16] = static_cast<uint8_t>(bt.np); cell[17] = static_cast<uint8_t>(bt.nv); cell[18] = static_cast<uint8_t>(hp); cell[19] = static_cast<uint8_t>(hv);
   {
-    double* ph = reinterpret_cast<double*>(g_cell + kHeaderBytes);
-    float* pt = reinterpret_cast<float*>(g_cell + kHeaderBytes + 24 * hp);
+    double* ph = reinterpret_cast<double*>(cell + kHeaderBytes);
+    float* pt = reinterpret_cast<float*>(cell + kHeaderBytes + 24 * hp);
     for (int k = 0; k < bt.np; ++k) for (int a2 = 0; a2 < 3; ++a2) { if (k < hp) ph[k * 3 + a2] = bt.coef[a2][k]; else pt[(k - hp) * 3 + a2] = static_cast<float>(bt.coef[a2][k]); }
     if (bt.nv > 0) {
       const uint32_t pos = (24u * hp + 12u * (bt.np - hp) + 7u) & ~7u;
-      double* vh = reinterpret_cast<double*>(g_cell + kHeaderBytes + pos);
-      float* vt = reinterpret_cast<float*>(g_cell + kHeaderBytes + pos + 24 * hv);
+      double* vh = reinterpret_cast<double*>(cell + kHeaderBytes + pos);
+      float* vt = reinterpret_cast<float*>(cell + kHeaderBytes + pos + 24 * hv);
       for (int k = 0; k < bt.nv; ++k) for (int a2 = 0; a2 < 3; ++a2) { if (k < hv) vh[k * 3 + a2] = bt.coef[3 + a2][k]; else vt[(k - hv) * 3 + a2] = static_cast<float>(bt.coef[3 + a2][k]); }
     }
   }
@@ -335,7 +358,7 @@ inline int build_window(xpt::XpSat& xp, epochs::Store& st, const epochs::Entry& 
   // check (needs_dense_check) has 8 times the points of the other, 96. The dense points are a uniform grid offset from the 96-point grid, not a superset of it.
   auto check_values = [&](double t, const double r[3], const double v[3]) -> int {
     double rc[3], vc[3];
-    eval_cell(g_cell, t, rc, vc);
+    eval_cell(cell, t, rc, vc);
     const double dx = rc[0] - r[0], dy = rc[1] - r[1], dz = rc[2] - r[2], wx = vc[0] - v[0], wy = vc[1] - v[1], wz = vc[2] - v[2];
     if (!(std::fabs(dx) <= kTolPos && std::fabs(dy) <= kTolPos && std::fabs(dz) <= kTolPos && std::sqrt(dx * dx + dy * dy + dz * dz) <= kLimit3D)) return 2;
     if (!(std::fabs(wx) <= kTolVel && std::fabs(wy) <= kTolVel && std::fabs(wz) <= kTolVel && std::sqrt(wx * wx + wy * wy + wz * wz) <= kLimitVel3D)) return 2;
@@ -354,7 +377,7 @@ inline int build_window(xpt::XpSat& xp, epochs::Store& st, const epochs::Entry& 
     if (rc != 0) return rc;
   }
   if (pos_only) {  // the velocity group was built and checked; the cell keeps positions alone
-    g_cell[17] = 0; g_cell[19] = 0;
+    cell[17] = 0; cell[19] = 0;
     bytes = bytes_of_cell(bt.np, 0, hp, 0);
   }
   return 0;
@@ -362,15 +385,15 @@ inline int build_window(xpt::XpSat& xp, epochs::Store& st, const epochs::Entry& 
 
 /// One refill row: the leaf cell of the dyadic window holding t (minutes from the epoch, before or after it) of object i, from a cold set of its record,
 /// released inside the row. A window AP refuses in, or that holds no tolerance, is halved down to 3 minutes; a window of 3 minutes that still fails
-/// is a tombstone (its reason in byte 17: kApRefuses or kBuilderFails). The cell, or the tombstone, is left in g_cell with its size in `bytes`.
-/// Returns 1 a cell, 2 a tombstone, 0 nothing (a counted allocation failed: rows_oom), 3 the set cannot be made (the object is marked kApRefuses).
-inline int row(State& s, uint32_t i, double t, uint32_t& bytes) {
-  epochs::Store& st = epochs::resident();
+/// is a tombstone (its reason in byte 17: kApRefuses or kBuilderFails). All cell bytes and logical counter deltas belong to out.
+/// Result: 1 a cell, 2 a tombstone, 0 a counted allocation failed, 3 the set cannot be made.
+inline void build_row(epochs::Store& st, uint32_t i, double t, bool pos_only, RowOut& out) {
+  out.bytes = 0; out.splits = 0; out.result = 0; out.tomb = 0;
+  xpt::g_alloc_refused = 0;
   const epochs::Series& se = st.series[i];
   const epochs::Entry& en = st.entries[se.first];
-  Obj& o = s.obj[i];
-  const uint32_t mark = mem::failures();
-  ++s.rows;
+  const uint32_t mark = mem::thread_failures();
+  if (g_attempt_hook != nullptr) g_attempt_hook(i, xpt::batch_running());
   xpt::XpSat* xp = nullptr;
   int32_t err = kPropOk;
   {
@@ -382,29 +405,39 @@ inline int row(State& s, uint32_t i, double t, uint32_t& bytes) {
   }
   auto done = [&](int rc) {
     if (xp != nullptr) { xpt::xp_release(*xp); std::free(xp); }
-    return rc;
+    if (xpt::g_alloc_refused) {
+      out.bytes = 0; out.splits = 0; out.tomb = 0; out.result = 4;
+    } else out.result = rc;
   };
-  if (mem::failures() != mark) { ++s.rows_oom; return done(0); }
-  if (err != kPropOk) { o.kind = static_cast<uint8_t>(kApRefuses); ++s.tomb_ap; return done(3); }
-  const bool pos_only = (s.flags & kFlagPositionOnly) != 0;
+  if (mem::thread_failures() != mark) return done(0);
+  if (err != kPropOk) { out.tomb = kApRefuses; return done(3); }
   double len = kBaseMinutes;
   for (int level = 0;; ++level, len *= 0.5) {
     const double a = std::floor(t / len) * len, b = a + len;
-    const int rc = build_window(*xp, st, en, a, b, pos_only, bytes);
-    if (mem::failures() != mark) { ++s.rows_oom; return done(0); }
+    const int rc = build_window(*xp, st, en, a, b, pos_only, out.cell, out.bytes);
+    if (mem::thread_failures() != mark) return done(0);
     if (rc == 0) return done(1);
     if (len <= kMinWindowMinutes * 1.0001) {
       const double mid = 0.5 * (a + b), half = 0.5 * (b - a);
-      std::memset(g_cell, 0, kHeaderBytes);
-      std::memcpy(g_cell, &mid, 8);
-      std::memcpy(g_cell + 8, &half, 8);
-      g_cell[17] = static_cast<uint8_t>(rc == 1 ? kApRefuses : kBuilderFails);
-      bytes = kHeaderBytes;
-      (rc == 1 ? s.tomb_ap : s.tomb_builder) += 1;
+      std::memset(out.cell, 0, kHeaderBytes);
+      std::memcpy(out.cell, &mid, 8);
+      std::memcpy(out.cell + 8, &half, 8);
+      out.tomb = out.cell[17] = static_cast<uint8_t>(rc == 1 ? kApRefuses : kBuilderFails);
+      out.bytes = kHeaderBytes;
       return done(2);
     }
-    ++s.split;
+    ++out.splits;
   }
+}
+
+/// Applies one logical row's result on the caller, in sweep order.
+inline void commit_row(State& s, uint32_t i, const RowOut& out) {
+  ++s.rows;
+  s.split += out.splits;
+  if (out.result == 0) ++s.rows_oom;
+  if (out.result == 3) s.obj[i].kind = kApRefuses;
+  if (out.tomb == kApRefuses) ++s.tomb_ap;
+  if (out.tomb == kBuilderFails) ++s.tomb_builder;
 }
 
 inline bool covered(const State& s, const Obj& o, double t) {
@@ -412,6 +445,73 @@ inline bool covered(const State& s, const Obj& o, double t) {
   if (c != nullptr && covers_cell(c, t)) return true;
   c = cell_at(s, o.nxt);
   return c != nullptr && covers_cell(c, t);
+}
+
+/// Collects distinct missing objects without changing the sweep, object table, or slab.
+inline void collect(const State& s, const Sweep& sw, double whole, double frac, double ahead,
+                    const uint32_t* priority, uint32_t pc, uint32_t limit, Batch& b) {
+  b.count = 0; b.end = sw.k; b.pooled = false;
+  b.pos_only = (s.flags & kFlagPositionOnly) != 0;
+  const uint32_t total = pc + s.objects;
+  for (uint32_t k = sw.k; k < total; ++k) {
+    const uint32_t i = k < pc ? priority[k] : k - pc;
+    bool repeated = false;
+    for (uint32_t q = 0; q < b.count; ++q) if (b.rows[q].index == i) repeated = true;
+    if (repeated) break;
+    b.end = k + 1;
+    if (i >= s.objects || s.obj[i].kind != 0) continue;
+    const Obj& o = s.obj[i];
+    const double t0 = minutes_from(o, whole, frac), t = sw.pass == 0 ? t0 : t0 + ahead;
+    const uint8_t* following = cell_at(s, o.nxt);
+    const bool promoted = following != nullptr && covers_cell(following, t0);
+    const uint8_t* current = cell_at(s, promoted ? o.nxt : o.cur);
+    const bool held = (current != nullptr && covers_cell(current, t)) ||
+        (sw.pass != 0 && !promoted && following != nullptr && covers_cell(following, t));
+    if (held) continue;
+    Candidate& row = b.rows[b.count++];
+    row.index = i; row.place = k; row.t = t;
+    if (b.count == limit) break;
+  }
+}
+
+inline size_t batch_reserve(const Batch& b) {
+  if (pool::g_reserve_off) return 0;
+  const auto& st = epochs::resident();
+  int degree = 0;
+  for (uint32_t q = 0; q < b.count; ++q)
+    degree = std::max(degree, st.entries[st.series[b.rows[q].index].first].forces.tesseral);
+  degree = std::min(degree, xpt::tess::kFastCap);
+  const int extra = xpt::tess::kShallowMax;
+  const uint64_t table = static_cast<uint64_t>(xpt::tess::sp_comb_bound(degree, false, extra)) * sizeof(xpt::tess::SpCombCoef) +
+      (xpt::keep_sp_raw() ? static_cast<uint64_t>(xpt::tess::sp_bound(degree, false, extra)) * sizeof(xpt::tess::SpCoef) : 0);
+  const uint32_t builders = std::min(b.count, static_cast<uint32_t>(pool::job().threads + 1));
+  return static_cast<size_t>((8u << 20) + builders * ((64u << 10) + table + sizeof(xpt::tess::SpTermsScratch)));
+}
+
+/// Publishes bounded private outputs; placement and logical counters remain on the caller.
+inline int run_batch(Batch& b, double whole, double frac) {
+  b.pooled = false;
+  if (b.count < 2 || !pool::warm_thread()) {
+    b.count = 1; b.end = b.rows[0].place + 1;
+    return 0;
+  }
+  (void)drag::table();
+  (void)xpt::tess::egm_tables();
+  double tt1, tt2;
+  (void)utc_to_tt(whole, frac, tt1, tt2);
+  size_t reserve;
+  while (!pool::reserve_room(reserve = batch_reserve(b))) {
+    b.count = (b.count + 1) / 2;
+    b.end = b.rows[b.count - 1].place + 1;
+    if (b.count < 2) return 0;
+  }
+  pool::Job& j = pool::job();
+  j.kind = pool::kJobFrames;
+  j.frames = &b;
+  j.count = b.count;
+  j.deferred = nullptr;
+  b.pooled = true;
+  return pool::run(b.count, reserve, true);
 }
 
 /// Every held cell that covers neither time of a call goes back to the slab: the room a stalled row needs. Returns the cells freed.
@@ -430,11 +530,11 @@ inline uint32_t reclaim(State& s, double now_whole, double now_frac, double ahea
   return freed;
 }
 
-/// Stores g_cell (`bytes`) as object i's slot `slot` (0 current, 1 following). `droppable`: the held cells (bit 0 current, bit 1 following) that cover
+/// Stores cell (`bytes`) as object i's slot `slot` (0 current, 1 following). `droppable`: the held cells (bit 0 current, bit 1 following) that cover
 /// neither time of the call; they go back to the slab after the new cell is stored, or earlier when the slab is full without them. A plain allocation is
 /// tried first, a compaction only when it fails and the free bytes and the bump's remainder hold the cell. 0: no room (counted: stats[12]); the held cells are
 /// untouched unless they were droppable and the room was needed.
-inline bool place(State& s, uint32_t i, int slot, uint32_t bytes, int droppable) {
+inline bool place(State& s, uint32_t i, int slot, const uint8_t* cell, uint32_t bytes, int droppable) {
   const size_t need = static_cast<size_t>(class_of(bytes)) * kClassBytes;
   auto recoverable = [&]() { return (s.slab_bytes - s.used) + s.free_bytes >= need; };  // compaction can make room only if the free bytes and the bump's remainder hold the cell
   uint32_t at = slab_alloc(s, bytes);
@@ -448,7 +548,7 @@ inline bool place(State& s, uint32_t i, int slot, uint32_t bytes, int droppable)
     if (at == 0 && recoverable()) { compact(s); at = slab_alloc(s, bytes); }
   }
   if (at == 0) { ++s.full; return false; }
-  std::memcpy(s.slab + at, g_cell, bytes);
+  std::memcpy(s.slab + at, cell, bytes);
   const uint32_t owner = (i << 1) | static_cast<uint32_t>(slot);
   std::memcpy(s.slab + at + 20, &owner, 4);
   ++s.live; ++s.stored;
@@ -461,6 +561,12 @@ inline bool place(State& s, uint32_t i, int slot, uint32_t bytes, int droppable)
 }
 
 }  // namespace frames
+namespace pool {
+void run_frames_row(const Job& j, uint32_t i) {
+  frames::Candidate& row = j.frames->rows[i];
+  frames::build_row(epochs::resident(), row.index, row.t, j.frames->pos_only, row.out);
+}
+}  // namespace pool
 }  // namespace sdnap
 
 /// Opens the frames over the resident store: one table row for each series, and a slab of `budget_bytes` less the table for the cells. The block is one
@@ -471,6 +577,7 @@ int32_t sdnap_frames_open(double budget_bytes, uint32_t flags) {
   using namespace sdnap::frames;
   State& s = state();
   const sdnap::epochs::Store& st = sdnap::epochs::resident();
+  if (sdnap::pool::g_frames_quarantined || st.pool_dead || sdnap::pool::load(&sdnap::pool::job().dead)) return sdnap::pool::kBatchPoolDead;
   if (!(budget_bytes >= 0.0) || budget_bytes > 4.0e9 || (flags & ~kFlagPositionOnly) != 0) return kBadArgument;
   const uint32_t n = static_cast<uint32_t>(st.series.size());
   const size_t table = (static_cast<size_t>(n) * sizeof(Obj) + 63u) & ~static_cast<size_t>(63u);
@@ -498,6 +605,7 @@ int32_t sdnap_frames_open(double budget_bytes, uint32_t flags) {
 SDNAP_EXPORT("sdnap_frames_close")
 void sdnap_frames_close(void) {
   using namespace sdnap::frames;
+  if (sdnap::pool::g_frames_quarantined) return;
   State& s = state();
   const double needed = s.needed;
   release_state(s);
@@ -566,6 +674,13 @@ SDNAP_EXPORT("sdnap_frames_refill")
 int32_t sdnap_frames_refill(double now_whole, double now_frac, double ahead_seconds, uint32_t max_rows, const uint32_t* priority, uint32_t priority_count, int32_t* result) {
   using namespace sdnap::frames;
   State& s = state();
+  if (sdnap::pool::g_frames_quarantined || sdnap::epochs::resident().pool_dead || sdnap::pool::load(&sdnap::pool::job().dead)) {
+    if (result != nullptr) {
+      std::fill(result, result + 6, 0);
+      result[6] = -1;
+    }
+    return sdnap::pool::kBatchPoolDead;
+  }
   if (!s.open) return kNotOpen;
   if (!std::isfinite(now_whole) || !std::isfinite(now_frac) || !std::isfinite(ahead_seconds) || ahead_seconds < 0.0 || result == nullptr || max_rows < 1 ||
       (priority == nullptr && priority_count != 0))
@@ -594,10 +709,34 @@ int32_t sdnap_frames_refill(double now_whole, double now_frac, double ahead_seco
   const double ahead_min = ahead / 60.0;
   uint32_t rows = 0, stored = 0, tombs = 0, unstored = 0, visits = 0;
   int32_t stalled = -1;
+  int32_t failure = 0;
   bool stop = false;
+  uint32_t batch_end = sw.k, batch_row = 0;
+  Batch* batch = nullptr;
+  if (sdnap::pool::job().threads > 0 && sdnap::pool::load(&sdnap::pool::job().dead) == 0) {
+    if (g_batch == nullptr) {
+      void* memory = std::malloc(sizeof(Batch));
+      if (memory != nullptr) g_batch = new (memory) Batch;
+    }
+    batch = g_batch;
+  }
   auto holds = [&](uint32_t off, double t) { const uint8_t* c = cell_at(s, off); return c != nullptr && covers_cell(c, t); };
   while (sw.pass < 2 && !stop) {
     while (sw.k < total) {
+      if (batch != nullptr && sw.k >= batch_end && rows < max_rows) {
+        collect(s, sw, now_whole, now_frac, ahead_min, priority, priority_count, std::min(kBatchRows, max_rows - rows), *batch);
+        batch_row = 0;
+        if (batch->count > 0) {
+          const int rc = run_batch(*batch, now_whole, now_frac);
+          if (rc != 0) {
+            sdnap::pool::g_frames_quarantined = true;
+            sdnap::epochs::resident().pool_dead = 1;
+            failure = rc; stop = true;
+            break;
+          }
+        }
+        batch_end = batch->end;
+      }
       const uint32_t i = sw.k < priority_count ? priority[sw.k] : sw.k - priority_count;
       Obj& o = s.obj[i < s.objects ? i : 0];
       if (i >= s.objects || o.kind != 0) { ++sw.k; ++visits; continue; }
@@ -614,18 +753,35 @@ int32_t sdnap_frames_refill(double now_whole, double now_frac, double ahead_seco
       const int slot = sw.pass == 0 ? 0 : 1;
       const int droppable = ((o.cur != 0 && !holds(o.cur, t0) && !holds(o.cur, ta)) ? 1 : 0) | ((o.nxt != 0 && !holds(o.nxt, t0) && !holds(o.nxt, ta)) ? 2 : 0);
       if (rows >= max_rows) { stop = true; break; }
+      RowOut serial;
+      const bool pooled = batch != nullptr && batch->pooled;
+      if (pooled && (batch_row >= batch->count || batch->rows[batch_row].index != i)) {
+        ++g_identity_failures;
+        sdnap::pool::g_frames_quarantined = true;
+        sdnap::epochs::resident().pool_dead = 1;
+        failure = sdnap::pool::kBatchPoolDead; stop = true;
+        break;
+      }
       ++rows;
-      uint32_t bytes = 0;
-      const int rc = row(s, i, t, bytes);
+      RowOut* built = pooled ? &batch->rows[batch_row++].out : &serial;
+      if (pooled && built->result == 4) {
+        built = &batch->retry;
+        ++sdnap::xpt::batch_stats().deferred;
+        build_row(sdnap::epochs::resident(), i, t, (s.flags & kFlagPositionOnly) != 0, *built);
+      } else if (!pooled) build_row(sdnap::epochs::resident(), i, t, (s.flags & kFlagPositionOnly) != 0, *built);
+      RowOut& out = *built;
+      commit_row(s, i, out);
+      const int rc = out.result;
       if (rc == 0) { ++unstored; stalled = static_cast<int32_t>(i); stop = true; break; }  // a counted allocation failed: the memory, not this object
       if (rc == 3) { ++sw.k; ++visits; continue; }
-      bool put = place(s, i, slot, bytes, droppable);
-      if (!put && reclaim(s, now_whole, now_frac, ahead_min) > 0) put = place(s, i, slot, bytes, droppable);  // one reclaim pass over all objects, one retry
+      bool put = place(s, i, slot, out.cell, out.bytes, droppable);
+      if (!put && reclaim(s, now_whole, now_frac, ahead_min) > 0) put = place(s, i, slot, out.cell, out.bytes, droppable);  // one reclaim pass over all objects, one retry
       if (!put) { ++unstored; stalled = static_cast<int32_t>(i); ++sw.k; ++visits; continue; }  // skipped and reported: the later objects are still visited
       if (rc == 1) ++stored; else ++tombs;
       ++sw.k; ++visits;
     }
     if (stop) break;
+    batch_end = 0;
     if (sw.pass == 0 && !sw.rerun && (sw.w0 != now_whole || sw.f0 != now_frac)) {  // the clock advanced while pass 0 ran: once more, a covered object costs a skip
       sw.rerun = true; sw.w0 = now_whole; sw.f0 = now_frac; sw.k = 0;
       continue;
@@ -641,7 +797,7 @@ int32_t sdnap_frames_refill(double now_whole, double now_frac, double ahead_seco
   result[4] = static_cast<int32_t>(unstored);
   result[5] = static_cast<int32_t>(visits);
   result[6] = stalled;
-  return 0;
+  return failure;
 }
 
 /// Twenty doubles: [0] objects, [1] objects this entry can serve, [2] cells held (tombstones included), [3] slab bytes, [4] slab bytes used, [5] table bytes,

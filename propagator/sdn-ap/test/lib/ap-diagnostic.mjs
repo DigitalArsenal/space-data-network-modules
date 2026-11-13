@@ -21,7 +21,7 @@ export function buildDiagnostic(name,extra,transform=s=>s,others={}){
  for(const [f,t] of Object.entries(others)){const q=path.join(dir,'src',f);const before=fs.readFileSync(q,'utf8'),after=t(before);if(after===before)throw new Error(`buildDiagnostic ${name}: ${f} unchanged`);fs.writeFileSync(q,after);}
  fs.appendFileSync(path.join(dir,'src/sdn_ap_module.cpp'),'\n'+extra+'\n');
  const log=fs.openSync(path.join(root,'build.log'),'w');
- try{execFileSync(process.execPath,['build.mjs'],{cwd:dir,env:{...process.env,SPACE_DATA_NETWORK_MODULES_ROOT:modulesRoot},stdio:['ignore',log,log]});}finally{fs.closeSync(log);}
+ try{execFileSync(process.execPath,['build.mjs'],{cwd:dir,env:{...process.env,SDNAP_DIAGNOSTIC_BUILD:'1',SPACE_DATA_NETWORK_MODULES_ROOT:modulesRoot},stdio:['ignore',log,log]});}finally{fs.closeSync(log);}
  return path.join(dir,'dist/isomorphic/module.wasm');
 }
 

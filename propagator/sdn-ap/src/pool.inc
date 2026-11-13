@@ -36,7 +36,11 @@
 
 namespace sdnap {
 namespace epochs { struct Store; }
+namespace frames { struct Batch; }
 namespace pool {
+
+/// A frames batch without a join guarantee retains its descriptor and buffers for the instance's lifetime.
+inline bool g_frames_quarantined = false;
 
 constexpr int32_t kMaxThreads = 16;
 constexpr uint32_t kChunk = 512;
@@ -70,7 +74,7 @@ constexpr size_t kThreadStack = 256u << 10;
 /// bytes measured, the tables' and NRLMSISE-00's thread-locals), with margin.
 constexpr size_t kThreadRoom = 1u << 20;
 
-enum JobKind : int32_t { kJobNone = 0, kJobJd = 1, kJobMinutes = 2, kJobEpochs = 3 };
+enum JobKind : int32_t { kJobNone = 0, kJobJd = 1, kJobMinutes = 2, kJobEpochs = 3, kJobFrames = 4 };
 
 /// The heartbeat (stack #487): the rows each thread has completed, one counter per thread, each aligned to 64 bytes (slot 0
 /// the calling thread's, 1 to kMaxThreads the pool threads'), so a row's count is a store no other thread makes. The
@@ -107,6 +111,7 @@ struct Job {
   int32_t pages;   ///< the memory's size (pages) as the thread that last grew it saw it: no thread uses less (await_view)
   // arguments
   epochs::Store* epochs;
+  frames::Batch* frames;
   const uint8_t* serial_series;
   double jd_whole, jd_frac;
   const double* minutes;
@@ -168,7 +173,8 @@ inline bool await_view(int32_t pages, uint64_t limit = 0) {
 
 void run_chunk(const Job& j, int32_t chunk);
 void run_epoch_row(const Job& j, uint32_t i);
-inline uint32_t chunk_size(const Job& j) { return j.kind == kJobEpochs ? kEpochChunk : kChunk; }
+void run_frames_row(const Job& j, uint32_t i);
+inline uint32_t chunk_size(const Job& j) { return j.kind == kJobFrames ? 1 : j.kind == kJobEpochs ? kEpochChunk : kChunk; }
 /// Test builds only (nullptr in the shipped build): called before each chunk with the chunk and whether a pool thread
 /// (not the calling thread) runs it.
 inline void (*g_chunk_hook)(int32_t chunk, bool pool_thread) = nullptr;
@@ -181,6 +187,16 @@ inline bool g_reserve_off = false;
 /// The reserve's block, stored before it is freed: a block freed unused is an allocation the compiler removes (seen:
 /// `free(malloc(n))` left the memory as it was).
 inline void* volatile g_reserve_block = nullptr;
+
+/// Checks available room without recording a logical allocation failure.
+inline bool reserve_room(size_t bytes) {
+  if (bytes == 0) return true;
+  g_reserve_block = std::malloc(bytes);
+  const bool had = g_reserve_block != nullptr;
+  std::free(g_reserve_block);
+  g_reserve_block = nullptr;
+  return had;
+}
 
 // A chunk is claimed by compare-and-swap against the job's total, so a
 // thread that wakes late (or reads the counters across a job boundary)
@@ -296,7 +312,8 @@ inline int32_t start(int32_t requested) {
 /// are done: 0, or kBatchPoolDead when the calling thread polled dead_polls() times without a row completing (the
 /// pool is then not used again). A threaded batch is preceded by `reserve` bytes made free on the calling thread and runs with every
 /// growth of the memory refused; the rows a refusal stopped are left in j.deferred for the calling thread.
-inline int32_t run(uint32_t count, size_t reserve) {
+inline int32_t run(uint32_t count, size_t reserve, bool reserved = false) {
+  if (g_frames_quarantined) return kBatchPoolDead;
   Job& j = job();
   const uint32_t chunk = chunk_size(j);
   const int32_t chunks = static_cast<int32_t>((count + chunk - 1) / chunk);
@@ -307,7 +324,7 @@ inline int32_t run(uint32_t count, size_t reserve) {
   uint32_t pages = 0;
   if (threaded) {
     (void)warm_thread();  // the calling thread computes chunks too: its caches are made before the batch, as the workers' are
-    if (reserve > 0) {
+    if (reserve > 0 && !reserved) {
       g_reserve_block = sdnap::mem::malloc(reserve);
       std::free(g_reserve_block);
       g_reserve_block = nullptr;
