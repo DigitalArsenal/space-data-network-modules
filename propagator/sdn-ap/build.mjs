@@ -354,6 +354,7 @@ if (!parts.get("ocm.inc")?.includes(`kModuleVersion = "${manifest.version}"`)) t
 provenance.toolchain = await toolchainVersions();
 const compilation = await compileModuleFromSource({
   manifest,
+  standardsRoot: sdsRoot,
   sourceCode,
   language: "c++",
   outputPath,
