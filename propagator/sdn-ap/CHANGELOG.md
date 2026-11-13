@@ -2,6 +2,9 @@
 
 ## 0.6.59 — An AP set's state is a function of the set and the time
 
+What gets worse: every set holds 16 more bytes, the upper node's time in its drag-pass cache (768 to 784 bytes a set, 1.6 MB at 100,000 objects). The 80 MiB store of 6,000 SGP4XP sets without AP's terms
+(`test/memory-limit.e2e.mjs`, part 4) answers 2,473 sets where 0.6.55 to 0.6.58 answered 2,480; each state it answers is the same bits.
+
 **Fits that fly their set on both sides of its epoch give different records than on 0.6.58**: different fitted elements, so different states from the record. Those are the fits whose
 epoch is not the first state of the fit interval (fit_oem.inc, the epoch placement): an arc under 24 hours on a block that is not eccentric (the epoch is the arc's last state; the arc is
 before it, the held-out and carried states after it), the hand-over fit (OUTPUT.START_TIME without STOP_TIME: the epoch is the arc's last state, the later states held out), and the diagnostic
@@ -21,10 +24,13 @@ a decaying set (perigee 200 km, BTERM 0.01) 714 mm, a transfer orbit 7.5 mm, e 0
 49.7 mm on the pooled path of 0.6.58 (no command of this repository prints the 49.7 mm). The bracket's identity is now the set's context and the smaller of its two nodes' indexes (signed by
 side), and the drag-pass segment is kept under both nodes' times and the perigee time.
 
-What does not move: a state of a set asked only after its epoch is the same bits (`node test/kernel-cost.mjs --diff` on 132 flights, in time order, in reverse and shuffled, and the replay of the 942 stored
-AP records with their covariance, which no command of this repository runs, against 0.6.56's wasm; against 0.6.58's: see the stamp). A state no longer depends on what the set was asked before, on the caches it flew
+What does not move, against 0.6.58's committed wasm (a6095d2c): a state of a set asked only after its epoch, or only before it, is the same bits (`node test/kernel-cost.mjs --diff ... --bound 0,0`, the default
+list and `--tesseral 70 --slow`, 132 flights each, in time order, in reverse and shuffled; and the 942 stored AP records flown only after their epoch and only before it in three orders each, 226,080 states a flight kind
+and order; and the replay of the 942 records through `propagate` with their covariance, 226,736 states and 4,761,456 covariance elements; no command of this repository runs the last two). The flights that differ are the ones asking on both
+sides of their epoch: of the 942 records flown in time order from 2.5 days before the epoch to 5 days after (30 min), 237 differ (148 of 220 medium and other high-perigee records up to 1.0 mm, 55 of 62 geosynchronous-class
+up to 0.43 mm, 34 of 350 of e 0.3 and over up to 20.5 mm; none of the 310 low records, perigee up to 1,400 km, on that schedule). A state no longer depends on what the set was asked before, on the caches it flew
 with, or on the order of the calls (SPEC 9), on any number of threads while one thread flies a given set at a time (a set above e 0.3 stays on the calling thread), except the exception SPEC 9 states (a record that carries a covariance,
-flown through `propagate`). Each flown set holds 16 more bytes: the drag-pass cache grows from 768 to 784 bytes (1.6 MB at 100,000 flown sets).
+flown through `propagate`).
 `test/state-purity.e2e.mjs` is the test; `test/epoch-pool.e2e.mjs` and `test/epoch-carried-pool.e2e.mjs` have the digests of this release.
 
 ## 0.6.58 — The epoch store's first pass on the pool; the memory grown in steps of 4 MiB

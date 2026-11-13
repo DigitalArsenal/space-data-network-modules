@@ -550,3 +550,4 @@ if (partial) {
   process.exit(process.env.STATE_PURITY_PARTIAL === "1" ? 0 : 1);
 }
 console.log(`STATE PURITY: ${tail}`);
+process.exit(0);  // the pool block's threads end with the process

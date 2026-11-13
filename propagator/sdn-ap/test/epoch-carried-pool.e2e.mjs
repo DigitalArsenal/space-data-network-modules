@@ -13,7 +13,7 @@ import {execFileSync} from 'node:child_process';
 import {fileURLToPath} from 'node:url';
 import {createHash} from 'node:crypto';
 import {createStandaloneHarness} from 'space-data-module-sdk/testing/isomorphic';
-import {wasmPath} from './lib/module.mjs';
+import {wasmPath,packageRoot} from './lib/module.mjs';
 import {scratchRoot} from './lib/scratch.mjs';
 import {CLASSES,harness,carriedRecord} from './lib/carried.mjs';
 import {T,repackOcm} from './lib/ocm.mjs';
@@ -25,8 +25,8 @@ const count=128,streamFile=path.join(root,'records.bin');
 // followed the history of those flights, so they differ here; the states of the same records are the same series by series (the serial
 // reference's states equal each record flown alone in a fresh instance)
 const BASE_DIGEST='f88505dc0248e44ec27f8c99847e308b183d2ebb36787e629652e399a3503763';
-// the digest of the fitted records' stream as sdn-ap 0.6.59 makes it (0.6.58's: de1a408d9e096b1f24f683c80ee58cd652fa9979262a176360338084ac5bfcd3)
-const RECORDS_DIGEST='8cc8a7bd8809302444b53f484ef851e7ed2ce0861b00fe4ac049c10869c22cad';
+// the digest of the fitted records' stream as sdn-ap 0.6.59 makes it, PRODUCER's version digits masked
+const RECORDS_DIGEST='511212f3da5314857ea8dd3a98ea8144636e7f405aed5d06e8f646b7d604d88e';
 if(process.argv.includes('--case')){
  const threads=Number(arg('--threads',0)),label=arg('--label','case');
  const h=await createStandaloneHarness('browser',arg('--wasm',wasmPath),{surface:'direct',maxThreads:Math.max(1,threads),enableBrowserWasiThreads:threads>0});
@@ -64,7 +64,12 @@ const reference=run('serial',0);
 if(process.argv.includes('--print-digest')){console.log(reference.r.digest);process.exit(0);}
 // Two digests, so that a change of a fit and a change of a state cannot hide behind each other: the fitted records' bytes (the stream the
 // series are loaded from, made by the module's fit) and the states, statuses and sources the serial reference flies from them.
-assert.equal(createHash('sha256').update(fs.readFileSync(streamFile)).digest('hex'),RECORDS_DIGEST,`the fitted records' bytes against sdn-ap 0.6.59's (${RECORDS_DIGEST})`);
+// The records name this module and its version (PRODUCER): the digest is of the stream with that text's digits set to 0, so that a version
+// stamp does not move it.
+const version=JSON.parse(fs.readFileSync(path.join(packageRoot,'plugin-manifest.json'),'utf8')).version;
+const producer=v=>Buffer.from(`com.spacedatanetwork.sdn-ap-propagator ${v}`);
+const masked=(()=>{const b=Buffer.from(fs.readFileSync(streamFile)),from=producer(version),to=producer(version.replace(/\d/g,'0'));for(let at=b.indexOf(from);at>=0;at=b.indexOf(from,at+1))to.copy(b,at);return b;})();
+assert.equal(createHash('sha256').update(masked).digest('hex'),RECORDS_DIGEST,`the fitted records' bytes (PRODUCER's digits masked) against sdn-ap 0.6.59's (${RECORDS_DIGEST})`);
 assert.equal(reference.r.digest,BASE_DIGEST,`the serial reference's states against sdn-ap 0.6.59's (${BASE_DIGEST})`);
 // each record flown alone in a fresh instance gives the serial reference's bytes: the states in both frames, the statuses and the sources
 {

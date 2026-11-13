@@ -260,7 +260,8 @@ epoch (test/memory-limit.e2e.mjs):
 The same test holds three other entries at their limits, every answer the default maximum's bit for bit:
 - the store's covariance (400 copies of a fitted record, 128 MiB): 69 covariances answered, the rest NaN or refused;
 - a threaded row-store batch (2,000 AP rows, two pool threads, 128 MiB);
-- 6,000 SGP4XP sets without AP's terms at 80 MiB: 2,480 answer, the sets 0.6.55 answers and no other.
+- 6,000 SGP4XP sets without AP's terms at 80 MiB: 2,473 answer (2,480 through 0.6.58, as 0.6.55: each set's drag-pass cache
+  holds the upper node's time since 0.6.59, 16 bytes a set); every one is a set 0.6.55 answers, the same bits.
 
 The pool's list of the sets that hold caches (SPEC 9) grows through the accounting as well. When the list cannot grow, the
 set holds no caches and flies on the thread's.
