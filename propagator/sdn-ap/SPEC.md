@@ -2844,6 +2844,18 @@ bytes), `_series` (identity and epochs), `_select` (the sets and the weight at a
 selection) and `_at` (a batch of series at one time, TEME km, km/s or Earth-fixed m, m/s, with the covariance); and
 `propagate_epochs`, the store of the call's own snapshot on a grid, one $OEM per series (stateless).
 
+**Catalog memory.** A host loading a catalog should start its imported memory at 2 MiB,
+subject to the module's declared minimum, and allow growth for its payload and stored sets.
+The host's initial memory is a page setting, independent of the module and its store budget.
+Each additional MiB of initial memory costs 1,048,576 bytes per instance; at 100,000 objects
+that is 10.48576 bytes per object. The SDK harness reserves that initial region before the
+module's allocations, so reducing 64 MiB to 2 MiB saves 62 MiB in these catalog loads.
+WebAssembly memory retains its high-water size after payload and temporary storage are freed.
+The load holds one decoded weather series at a time, interns equal rows and nodes, and reserves
+its record and store arrays from the input frame count. The host's staged payload remains part
+of the load's high-water: repeated weather on the wire still occupies bytes for every record.
+
+
 ---
 
 ## 15. Selectable drag atmosphere (side B's option, outside the SGP4-XP specification)
