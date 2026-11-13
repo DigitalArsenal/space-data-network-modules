@@ -2,6 +2,8 @@
 // The fit and flight reference is the fixed added-zonal-term artifact at 3a5fb74c: the added terms change the fit
 // from 45 to 30 iterations and move its record by 489.114461 m / 545.131494 mm/s at the five epochs from 6 to 96
 // hours; every bound is retained.
+// The seed argument of perigee is 88 degrees (was 90): the added zonal terms move the earlier seed's fitted
+// AGOM to -3.569763482176455e-5, outside |AGOM| <= 1e-5; the replacement gives -4.199280688515596e-7.
 // E2E (stack #564; SPEC 16.25): a fit whose trial sets meet the decay rule keeps iterating. A set that decays inside the fit's arc is
 // refused (decay.e2e.mjs); the fit's finite-difference columns bump the drag term, and a bumped set may cross the rule inside the arc
 // while the iterate itself does not. Such a column is differenced below the iterate; it is never a reason to end a pass as converged.
@@ -41,7 +43,7 @@ import { configuration } from './lib/pcf.mjs';
 import { spwConstantText } from './lib/spw-constant.mjs';
 requireTruth('ea4576901f9e8dc21af2c24feb7887645706ef934488cb9756a0b5c21ab47934'); // FFM 2.3.0 (modules 48a00fd6)
 const BEFORE = { version: '0.6.48', commit: '3a5fb74c8e12f825160eea58624dbc85a2cbacc5', sha256: 'b2de5af7e03753e57aebf781c49c824552706a16c563ca60b1dbb71d1a2358c6' };
-const CASE = { name: 'perigee 200 km, e 0.01, i 55, B 0.0235', epoch: '2026-10-29T00:00:00.000', hp: 200, e: 0.01, i: 55, raan: 40, argp: 90, ma: 0, truthB: 0.0235 };
+const CASE = { name: 'perigee 200 km, e 0.01, i 55, B 0.0235', epoch: '2026-10-29T00:00:00.000', hp: 200, e: 0.01, i: 55, raan: 40, argp: 88, ma: 0, truthB: 0.0235 };
 const DAY = 864e5, MU = 398600.4418, RE = 6378.137, iso = (ms) => new Date(ms).toISOString().replace('Z', '');
 const kernel = fs.readFileSync(new URL('../../../files/orbit-products/tests/fixtures/de440/de440-2026.bsp', import.meta.url));
 const sha256 = (bytes) => createHash('sha256').update(bytes).digest('hex');
