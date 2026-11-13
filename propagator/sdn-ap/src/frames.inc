@@ -5,7 +5,7 @@
 // allocated at sdnap_frames_open through the counted allocator; a refill row allocates only its cold set, released inside the row (the first
 // row on a thread also makes that thread's caches, kept: SPEC 9). No export of the epoch store reads a cell.
 // Shared relaxed atomic stores set short_day, atmosphere one_a_day, and atmosphere before_rows;
-// concurrent builders store the same value derived from immutable weather rows.
+// atmosphere writes agree on immutable weather rows; frames results do not read the short-day diagnostic.
 // One host thread: frames and refills are called one after the other, never during a batch of the pool.
 // -----------------------------------------------------------------------------
 

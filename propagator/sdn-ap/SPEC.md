@@ -6253,8 +6253,9 @@ or other batch overlaps a refill. `sdnap_threads(n)` starts pool threads; the ca
 at most 32 distinct objects, one row per claim. Each row owns its output bytes and allocation-failure mark. The caller owns
 the object table, slab, sweep, placement, compaction, and logical counters. Shared constant tables are initialized before
 publication; force bindings and caches are thread-local. The shared relaxed atomic stores are `Store::short_day`,
-`Atmosphere::one_a_day`, and `Atmosphere::before_rows`. Every concurrent builder stores the same value: the short-day
-and before-rows marks only become true, and one-a-day is derived from the immutable weather rows.
+`Atmosphere::one_a_day`, and `Atmosphere::before_rows`. Concurrent builders store the same atmosphere values:
+before-rows only becomes true, and one-a-day is derived from the immutable weather rows. The short-day field records
+a missing day as an atomic diagnostic; frames builders do not consume it, so its last writer cannot change a cell or result.
 `sdnap_frames_at` remains a pure read. Scheduling, failure recovery, and the host contract are detailed in 19.10.
 
 ### 19.1 Entries
