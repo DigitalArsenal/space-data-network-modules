@@ -13,7 +13,10 @@ import {createStandaloneHarness} from 'space-data-module-sdk/testing/isomorphic'
 import {OMM} from 'spacedatastandards.org/lib/js/OMM/OMM.js';
 import {T, rowsThrough, repackOcm, ocmOf} from './lib/ocm.mjs';
 import {wasmPath} from './lib/module.mjs';
-import {buildDiagnostic} from './lib/ap-diagnostic.mjs';
+import {buildDiagnostic, failureSeam, failureProbe} from './lib/ap-diagnostic.mjs';
+import {CLASSES, carriedRecord, harness as commandHarness} from './lib/carried.mjs';
+// the counted allocations of one load_epochs of the catalog below and of the two forecast records (measured on this build; an equality, so a site the seam stops failing shows)
+const CATALOG_ALLOCATIONS = 65, FORECAST_ALLOCATIONS = 21;
 const DAY = 86400000;
 const fixture = new Uint8Array(fs.readFileSync(new URL('fixtures/ap-fit-0.6.43.ocm', import.meta.url)));
 const epoch = ocmOf(fixture).MEAN_ELEMENTS.EPOCH;
@@ -26,16 +29,7 @@ const load = (h, records) => h.invoke({methodId: 'load_epochs', inputs: [{portId
 const open = wasm => createStandaloneHarness('browser', wasm, {surface: 'direct', maxThreads: 1, enableBrowserWasiThreads: false, initialMemoryBytes: 2 * 1048576});
 
 // the test-only seam: the Nth counted allocation of a call fails, counted as a failed allocation
-const seam = {
-  'constants.inc': s => s
-    .replace('inline uint32_t g_failures = 0;', 'inline uint32_t g_failures = 0;\ninline uint32_t g_test_fail_at = 0, g_test_count = 0;\ninline bool test_should_fail() { ++g_test_count; return g_test_fail_at != 0 && g_test_count == g_test_fail_at; }')
-    .replace('inline void* malloc(size_t n) {\n  void* p = std::malloc(n);', 'inline void* malloc(size_t n) {\n  if (test_should_fail()) { note_failure(n); return nullptr; }\n  void* p = std::malloc(n);')
-    .replace('inline void* calloc(size_t k, size_t n) {\n  void* p = std::calloc(k, n);', 'inline void* calloc(size_t k, size_t n) {\n  if (test_should_fail()) { note_failure(k * n); return nullptr; }\n  void* p = std::calloc(k, n);')
-    .replace('inline T* counted(T* p) {\n  if (p == nullptr) note_failure(sizeof(T));', 'inline T* counted(T* p) {\n  if (p != nullptr && test_should_fail()) { p->~T(); ::operator delete(p); p = nullptr; }\n  if (p == nullptr) note_failure(sizeof(T));'),
-};
-const probe = `
-SDNAP_EXPORT("sdnap_test_fail_at") void sdnap_test_fail_at(uint32_t n) { sdnap::mem::g_test_fail_at = n; sdnap::mem::g_test_count = 0; }
-SDNAP_EXPORT("sdnap_test_alloc_count") uint32_t sdnap_test_alloc_count(void) { return sdnap::mem::g_test_count; }`;
+const seam = failureSeam, probe = failureProbe;   // test/lib/ap-diagnostic.mjs: every replace must match (the counted() replace stopped matching in 0.6.56 and failed no site)
 const guarded = buildDiagnostic('load-refusal', probe, s => s, seam);
 const unguarded = buildDiagnostic('load-refusal-control', probe, s => s, {...seam, 'epoch_store.inc': s => s
   .replace('~Unwind() { if (!installed) clear(s); }', '~Unwind() {}')
@@ -78,7 +72,7 @@ for (const [name, wasm] of [['guarded', guarded], ['unguarded control', unguarde
   const ok = await load(h, records);
   assert.equal(ok.statusCode, 0, `${name}: ${ok.errorCode}: ${ok.errorMessage}`);
   const total = x.sdnap_test_alloc_count(), kept = stats()[1], series = x.sdnap_epochs_count();
-  assert.ok(total > 20 && kept === 6 + 8 + 9 && series === 6 + 8 + 3, `${name}: ${total} allocations, ${kept} kept, ${series} series`);
+  assert.ok(total === CATALOG_ALLOCATIONS && kept === 6 + 8 + 9 && series === 6 + 8 + 3, `${name}: ${total} allocations (${CATALOG_ALLOCATIONS} expected), ${kept} kept, ${series} series`);
   const bytesFull = stats()[7];
   assert.ok(bytesFull > 0);
   let partial = 0;
@@ -97,6 +91,31 @@ for (const [name, wasm] of [['guarded', guarded], ['unguarded control', unguarde
   console.log(`${name}: ${total} counted allocations failed in turn, ${partial} left a store behind`);
   if (name === 'guarded') assert.equal(partial, 0, failures.join('\n'));
   else assert.ok(partial > 0, 'the control (no clearing on refusal) shows no partial store: the test would not have caught the defect');
+  await h.destroy?.();
+}
+// records that carry a forecast: the one-call install copies each out of the call's bytes (one counted allocation), and frees the series' second slot when
+// that copy fails; no record of the catalog above carries one
+{
+  const command = await commandHarness(wasmPath);
+  const forecast = [];
+  for (const [c, norad] of [[CLASSES[1], 99301], [CLASSES[0], 99302]]) forecast.push((await carriedRecord(command, c, {norad})).ocm);
+  await command.destroy?.();
+  const {h, x, stats} = await counts(guarded);
+  x.sdnap_test_fail_at(0);
+  assert.equal((await load(h, forecast)).statusCode, 0);
+  x.sdnap_test_fail_at(0);
+  assert.equal((await load(h, forecast)).statusCode, 0);
+  const total = x.sdnap_test_alloc_count();
+  assert.equal(stats()[1], 2, 'the forecast records are kept');
+  assert.equal(total, FORECAST_ALLOCATIONS, `the load of the forecast records makes ${total} counted allocations (a count that drops is a site the seam no longer fails)`);
+  for (let n = 1; n <= total; ++n) {
+    x.sdnap_test_fail_at(n);
+    const r = await load(h, forecast);
+    assert.equal(r.errorCode, 'out-of-memory', `forecast records: allocation ${n} of ${total}: ${r.errorCode}`);
+    const s = stats();
+    assert.deepEqual([x.sdnap_epochs_count(), s[1], s[7]], [0, 0, 0], `forecast records: allocation ${n} of ${total}: the store is not empty`);
+  }
+  console.log(`forecast records: ${total} counted allocations failed in turn, each refused out-of-memory with the store empty`);
   await h.destroy?.();
 }
 console.log('LOAD-REFUSAL PASS');

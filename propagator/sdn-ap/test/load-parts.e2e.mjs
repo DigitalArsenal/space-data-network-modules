@@ -1,5 +1,5 @@
 #!/usr/bin/env node
-// A load taken in parts (SPEC 14.1): load_epochs_open, load_epochs_part (any number of times), load_epochs_close.
+// A load taken in parts (SPEC 14.1.1):load_epochs_open, load_epochs_part (any number of times), load_epochs_close.
 //   1. Partition equivalence: for every catalog of load-equivalence (shuffled, capped, theory-filtered, duplicates whichever part they fall in, SGP4, SGP4XP and
 //      AP sets, covariances, forecasts, shared and unused weather) the store built from one part, two, seven uneven parts (some of two frames) and one record
 //      a part equals the store load_epochs builds from the whole list: the counts and bytes, every series, every set's epoch and state, and the selected state
@@ -20,7 +20,7 @@ import {T, seedOcm, rowsThrough, repackOcm, ocmOf} from './lib/ocm.mjs';
 import {configuration, pcfTheory} from './lib/pcf.mjs';
 import {wasmPath} from './lib/module.mjs';
 import {jdOf} from './lib/frames.mjs';
-import {buildDiagnostic} from './lib/ap-diagnostic.mjs';
+import {buildDiagnostic, failureSeam, failureProbe} from './lib/ap-diagnostic.mjs';
 import {CLASSES, carriedRecord, harness as commandHarness} from './lib/carried.mjs';
 const DAY = 86400000, MIB = 1048576;
 const fixture = new Uint8Array(fs.readFileSync(new URL('fixtures/ap-fit-0.6.43.ocm', import.meta.url)));
@@ -158,12 +158,12 @@ await equal('capped at 1 set per object, shuffled', shuffled[0], {MAX_SETS_PER_O
 await equal('SGP4 sets only', catalog, {THEORIES: [pcfTheory.SGP4]});
 await equal('AP sets only, shuffled', shuffled[1], {THEORIES: [pcfTheory.AP]});
 await equal('one-day cache', catalog, {CACHE_DAYS: 1});
+await equal('LATEST_BEFORE, HERMITE, a 7,200 s blend window', shuffled[0], {SELECTION: 1, BLEND_SHAPE: 1, BLEND_WINDOW_SECONDS: 7200});
 await equal('records carrying a forecast', withForecast);
 {
-  // the forecast is read from the part's bytes, which the host reuses: the last of the parts' stores answers from it
+  // one record a part: the forecast of every record is answered by the store (the staging buffer's reuse is section 4b)
   const r = await inParts(fresh, withForecast, Array(withForecast.length).fill(1));
   assert.equal(r.statusCode, 0);
-  const staging = q.x.sdnap_alloc(1 << 20); new Uint8Array(fresh.memory.buffer, staging, 1 << 20).fill(0xA5);   // what a reused staging buffer would overwrite
   assert.match(fingerprint(), /\["source",1\]/, 'no series answers from a carried forecast');
 }
 await equal('records carrying a forecast, shuffled and capped', shuffle(withForecast), {MAX_SETS_PER_OBJECT: 1});
@@ -256,6 +256,12 @@ for (const [name, record] of Object.entries(bad)) {
   assert.equal(q.x.sdnap_epochs_select(0, 2460000.5, 0, out), -1);
   assert.equal(q.x.sdnap_epochs_at(2460000.5, 0, 0, 1, 0, out, 0, 0), -1);
   assert.equal(q.x.sdnap_epochs_set_at(0, 0, 2460000.5, 0, out), -1);
+  // every answer SPEC 14.1.1 lists for an open load: the count 0, the source and the states -1 for a request of one series, 0 for a request of none, the drag check -4
+  assert.equal(q.x.sdnap_epochs_count(), 0);
+  assert.equal(q.x.sdnap_epochs_source_at(2460000.5, 0, 0, 1, out), -1);
+  assert.equal(q.x.sdnap_epochs_source_at(2460000.5, 0, 0, 0, out), 0);
+  assert.equal(q.x.sdnap_epochs_at(2460000.5, 0, 0, 0, 0, out, 0, 0), 0);
+  assert.equal(q.x.sdnap_drag_orbit_check(0, 0, 8, out), -4);
   // a second open starts over: what the first took is dropped
   assert.equal((await opened(fresh)).statusCode, 0);
   assert.equal((await part(fresh, [catalog.slice(10, 20)])).statusCode, 0);
@@ -284,7 +290,7 @@ for (const [name, record] of Object.entries(bad)) {
   const badOpen = await opened(fresh, badConfig);
   assert.equal(badOpen.statusCode, 3, 'an open with a bad configuration was accepted');
   emptyStore('a refused open');
-  refused(await part(fresh, [catalog.slice(3, 6)]), 'load-not-open', 'a part after a refused open: the earlier load is still open');
+  refused(await part(fresh, [catalog.slice(3, 6)]), 'load-not-open', 'a part after a refused open: the earlier load was dropped');
   refused(await close(fresh), 'load-not-open', 'a close after a refused open');
   assert.equal((await whole(fresh, catalog)).statusCode, 0);
   assert.equal((await opened(fresh, badConfig)).statusCode, 3);
@@ -327,21 +333,15 @@ for (const [name, record] of Object.entries(bad)) {
 }
 
 // ---- 4. allocation failure in any call of a load in parts
-const seam = {
-  'constants.inc': s => s
-    .replace('inline uint32_t g_failures = 0;', 'inline uint32_t g_failures = 0;\ninline uint32_t g_test_fail_at = 0, g_test_count = 0;\ninline bool test_should_fail() { ++g_test_count; return g_test_fail_at != 0 && g_test_count == g_test_fail_at; }')
-    .replace('inline void* malloc(size_t n) {\n  void* p = std::malloc(n);', 'inline void* malloc(size_t n) {\n  if (test_should_fail()) { note_failure(n); return nullptr; }\n  void* p = std::malloc(n);')
-    .replace('inline void* calloc(size_t k, size_t n) {\n  void* p = std::calloc(k, n);', 'inline void* calloc(size_t k, size_t n) {\n  if (test_should_fail()) { note_failure(k * n); return nullptr; }\n  void* p = std::calloc(k, n);')
-    .replace('inline T* counted(T* p) {\n  if (p == nullptr) note_failure(sizeof(T));', 'inline T* counted(T* p) {\n  if (p != nullptr && test_should_fail()) { p->~T(); ::operator delete(p); p = nullptr; }\n  if (p == nullptr) note_failure(sizeof(T));'),
-};
-const probe = `
-SDNAP_EXPORT("sdnap_test_fail_at") void sdnap_test_fail_at(uint32_t n) { sdnap::mem::g_test_fail_at = n; sdnap::mem::g_test_count = 0; }
-SDNAP_EXPORT("sdnap_test_alloc_count") uint32_t sdnap_test_alloc_count(void) { return sdnap::mem::g_test_count; }`;
+const seam = failureSeam, probe = failureProbe;   // test/lib/ap-diagnostic.mjs: every replace must match
+// the counted allocations per call (open, three parts, close) of the two scenarios below, measured on this build
+const MIXED_COUNTS = [0, 2, 15, 19, 8], FORECAST_COUNTS = [0, 9, 7, 0, 5];
+const seamedWasm = buildDiagnostic('load-parts-seam', probe, s => s, seam);
 {
-  const seamed = buildDiagnostic('load-parts-seam', probe, s => s, seam);
+  const seamed = seamedWasm;
   const h = await open(seamed), x = h.instance.exports, p = x.sdnap_alloc(64);
   const stats = () => { x.sdnap_epochs_stats(p); return Array.from(new Float64Array(h.memory.buffer, p, 8)); };
-  const inject = async (label, records, sizes) => {
+  const inject = async (label, records, sizes, expected) => {
   // the calls of the load, as thunks: open, three parts, close
   const calls = () => {
     const out = [() => opened(h)];
@@ -364,9 +364,11 @@ SDNAP_EXPORT("sdnap_test_alloc_count") uint32_t sdnap_test_alloc_count(void) { r
   const counts = [];
   const ok = calls();
   for (let c = 0; c < ok.length; ++c) { x.sdnap_test_fail_at(0); assert.equal((await ok[c]()).statusCode, 0); counts.push(x.sdnap_test_alloc_count()); }
-  assert.ok(stats()[1] > 0 && counts[4] > 2, `the load kept ${stats()[1]} sets; allocations per call ${counts}`);
+  assert.ok(stats()[1] > 0, `the load kept ${stats()[1]} sets`);
+  // an equality, the open's count included: a count that drops is a counted site the seam no longer fails (the seam's replaces must all match, and these are measured)
+  assert.deepEqual(counts, expected, `${label}: counted allocations per call (open, parts, close)`);
   let failed = 0;
-  for (let c = 1; c < ok.length; ++c) {   // the open allocates nothing worth failing; the three parts and the close are failed one allocation at a time
+  for (let c = 0; c < ok.length; ++c) {   // the open, the parts and the close, each failed one counted allocation at a time
     for (let n = 1; n <= counts[c]; ++n) {
       const {r} = await run(c, n);
       refused(r, 'out-of-memory', `allocation ${n} of ${counts[c]} of call ${c}`);
@@ -386,10 +388,9 @@ SDNAP_EXPORT("sdnap_test_alloc_count") uint32_t sdnap_test_alloc_count(void) { r
   return failed;
   };
   const mixed = [...catalog.slice(0, 6), ...catalog.slice(14, 24), ...catalog.slice(30, 34), ...catalog.slice(34, 36)];
-  assert.ok(await inject('a mixed catalog', mixed, evenly(mixed.length, 3)) > 20);
+  await inject('a mixed catalog', mixed, evenly(mixed.length, 3), MIXED_COUNTS);
   // records that carry a forecast: the copy of each record out of the part's bytes, and the track's arrays, are counted allocations that refuse by name
-  const forecast = await inject('records carrying a forecast', withForecast, [2, 1, 1]);
-  assert.ok(forecast > 10, `${forecast} allocations of the forecast records`);
+  await inject('records carrying a forecast', withForecast, [1, 1, 2], FORECAST_COUNTS);   // a forecast record in each of the first two parts
   await h.destroy?.();
 }
 
@@ -423,13 +424,21 @@ const staged = async (h, records, sizes) => {
   // the control
   const control = buildDiagnostic('load-parts-control', '', s => s, {'carried.inc': s => s.replace('inline bool keep(Track& t) {\n  if (t.recs == nullptr) return true;', 'inline bool keep(Track& t) {\n  if (true) return true;\n  if (t.recs == nullptr) return true;')});
   const ch = await open(control), cq = probeOf(ch);
-  let broke = false;
+  // the control reads the overwritten region: its load is answered and the states of the forecast records differ from the one-call store's (its fingerprint
+  // differs in a series whose forecast the store answers from), or a segment's refusal names the overwritten bytes; any other outcome is not the defect
+  let reason = null;
   try {
     const cr = await staged(ch, forecastCatalog, evenly(forecastCatalog.length, 5));
-    broke = cr.statusCode !== 0 || fingerprint(cq) !== expect;
-  } catch { broke = true; }
-  assert.ok(broke, 'the control (no forecast copy) equals the one-call store after the staging buffer is overwritten: the test would not catch a missing copy');
-  console.log('staging buffer reused: the store equals the one-call store; the control without the forecast copy does not');
+    if (cr.statusCode !== 0) reason = `refused ${cr.errorCode}`;
+    else {
+      const got = JSON.parse(fingerprint(cq)), want = JSON.parse(expect);
+      const differing = got.map((v, k) => (JSON.stringify(v) !== JSON.stringify(want[k]) ? k : -1)).filter(k => k >= 0);
+      if (differing.length > 0) reason = `${differing.length} entries of the fingerprint differ (first at ${differing[0]})`;
+    }
+  } catch (e) { reason = `the module trapped (${e?.message ?? e})`; }
+  assert.ok(reason !== null, 'the control (no forecast copy) equals the one-call store after the staging buffer is overwritten: the test would not catch a missing copy');
+  assert.match(reason, /^(refused carried-|\d+ entries of the fingerprint differ|the module trapped)/, `the control broke for another reason: ${reason}`);
+  console.log(`staging buffer reused: the store equals the one-call store; the control without the forecast copy does not (${reason})`);
   await ch.destroy?.();
 }
 
@@ -454,27 +463,38 @@ const staged = async (h, records, sizes) => {
 }
 // ---- 6. memory returned after a refusal: repeated refused loads do not keep growing the instance
 {
-  const h = await open(wasmPath), x = h.instance.exports, p = x.sdnap_alloc(64);
+  // What this can see: the instance's memory (memory.buffer.byteLength) does not keep growing over repeated refused loads of records that own something (a covariance
+  // set, two distinct weather series, a forecast copy, a second slot), refused three ways: a record that cannot be decoded, a failed allocation (the test build's
+  // seam, here the fifth counted allocation of a part), and a close that refuses. What it cannot see: the byte statistic, which reads 0 after any drop by
+  // construction; a leak the heap reuses is invisible to it, and only a growth of the memory shows.
+  const h = await open(seamedWasm), x = h.instance.exports, p = x.sdnap_alloc(64);
   const held = () => { x.sdnap_epochs_stats(p); return new Float64Array(h.memory.buffer, p, 8)[7]; };
-  const many = Array.from({length: 1500}, (_, k) => stock(700000 + k, 0, 15 + (k % 97) / 100));
   const garbage = new Uint8Array([1, 2, 3, 4]);
+  const owning = [...good.slice(0, 24), ...withForecast];
   const trial = async () => {
+    x.sdnap_test_fail_at(0);
     assert.equal((await opened(h)).statusCode, 0);
-    assert.equal((await part(h, [many.slice(0, 500)])).statusCode, 0);
-    assert.equal((await part(h, [many.slice(500, 1000)])).statusCode, 0);
-    const r = await part(h, [[garbage]]);   // refused: the load is dropped
-    assert.equal(r.statusCode, 3);
+    assert.equal((await part(h, [owning.slice(0, 12)])).statusCode, 0);
+    assert.equal((await part(h, [owning.slice(12)])).statusCode, 0);
+    // SPEC 14.1.1: a record that carries a forecast holds the whole record (its bytes), and a record its covariance set, while the load is open
+    assert.ok(held() >= withForecast.reduce((s, r) => s + r.length, 0), `an open load holding ${withForecast.length} forecast records reports ${held()} bytes`);
+    refused(await part(h, [[garbage]]), 'invalid-ocm', 'a part that cannot be decoded');   // the load is dropped
     assert.equal(held(), 0, 'a refused load still holds bytes');
-    // the same through a close that refuses (series-forces-differ)
+    assert.equal((await opened(h)).statusCode, 0);
+    assert.equal((await part(h, [owning.slice(0, 12)])).statusCode, 0);
+    x.sdnap_test_fail_at(5);
+    refused(await part(h, [owning.slice(12)]), 'out-of-memory', 'a part whose fifth counted allocation fails');
+    x.sdnap_test_fail_at(0);
+    assert.equal(held(), 0, 'an out-of-memory load still holds bytes');
     const c = await inParts(h, [...good, ap(520010, t => { at(5, t); t.PERTURBATIONS.MAXIMUM_TESSERAL_DEGREE = 20; })], [24, 6, 1]);
-    assert.equal(c.errorCode, 'series-forces-differ');
+    assert.equal(c.errorCode, 'series-forces-differ');   // a close that refuses
     assert.equal(held(), 0, 'a refused close still holds bytes');
   };
   for (let k = 0; k < 3; ++k) await trial();   // warm-up: the high-water of one trial
   const settled = h.memory.buffer.byteLength;
   for (let k = 0; k < 12; ++k) await trial();
   assert.ok(h.memory.buffer.byteLength - settled <= 1048576, `twelve more refused loads grew the instance from ${settled} to ${h.memory.buffer.byteLength}`);
-  console.log(`memory after refusals: the instance stays at ${h.memory.buffer.byteLength} B over 12 repeated refused loads`);
+  console.log(`memory after refusals: the instance stays at ${h.memory.buffer.byteLength} B over 12 repeated refused loads of records that own something`);
   await h.destroy?.();
 }
 console.log(JSON.stringify({compared}));
