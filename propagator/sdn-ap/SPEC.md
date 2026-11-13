@@ -6275,8 +6275,8 @@ tables `drag::table()` makes, the caches the first `xp_init` on a thread makes, 
   made; 4 no window of 3 minutes holds the tolerance there (19.3). The planes of an object not served are NaN. A pure read:
   it evaluates polynomials, allocates nothing, never flies AP and never falls back silently. On 3 and 4 the host asks AP's own
   entry for that object and time: on 3 it may refuse, or answer for the minutes of the window before the refusal; on 4 it
-  answers. Returns 0, -1 (bad argument), -4 (a load replaced the store since open: every status is 1 and a refill reads the
-  store again) or -5 (not open).
+  answers. Returns 0, -1 (bad argument), -4 (the store generation differs: every status is 1) or -5 (not open).
+  Catalog loading releases the frame allocation (section 20); the host opens a fresh budget after loading.
 - `sdnap_frames_refill(now_whole, now_frac, ahead_seconds, max_rows, priority, priority_count, result)`: builds the cell
   that `now` needs for each object that has none (the objects of `priority`, in that order, then the others in index
   order), then the cell that `now + ahead_seconds` needs (`ahead` is clamped to 48 minutes, the base window), and stops
@@ -6597,3 +6597,102 @@ What a host that draws frames from a running clock needs, and what it gets.
 - Seidelmann, P. K., ed. (1992). Explanatory Supplement to the Astronomical Almanac.
 - US Space Force Astrodynamics Standards: release notes 7.7-9.9, JIRA summaries 8.2-9.9, Tle and Sgp4Prop
   interface documents (9.9 package); release notes v9.1.1.0 C Sgp4Prop WebAssembly.
+
+## 20. Record entities through the propagator ABI
+
+**Tradeoffs.** An AP entity without a covering frame cell is hidden: its position and velocity are NaN and its
+VALID flag is clear. Unsupported AP series, including multiple-set and wide-branch series, have no display state through
+these calls. Their direct paths remain available. AP singleton and struct-batch states use the frame approximation of
+section 19, including its existing position and velocity bounds. SGP4 and SGP4XP records use their own exact epoch
+propagation without AP cells or AP caches. Loading a catalog releases the previous frame allocation and all its cells;
+the host opens and refills a new budget. One owning thread serializes load, refill, reads, paths and replacement, so a
+refill can delay a display update. Direct path requests allocate theory caches temporarily and release the path entity's
+caches on completion. These changes add no concurrent-reader guarantee or implicit refill.
+
+**20.1 Source and indices.** An accepted `plugin_init_omm` selects the row source and releases the epoch store, open
+load, plugin index map and frames. Its 88-byte record interpretation, SGP4XP propagation, errors and 64-byte state layout
+are unchanged. A refused initialization preserves an active record source. A successful `load_epochs_open` selects the
+record source, releases rows and exposes zero entities while loading. A failed part or close leaves no records, except
+`load-not-open`, which changes nothing. The single-call `load_epochs` uses the same transitions once its build starts;
+pre-build refusals retain its existing snapshot behavior. An invalid open still clears an existing epoch store.
+
+A record entity is one epoch series, identified by the existing identity tuple in section 14. Multiple retained epochs
+share one entity and the epoch API's selection/blending rules. Plugin indices follow the first accepted input occurrence
+of each surviving series, across arbitrary part boundaries. Duplicate replacement, aging and set caps do not reorder a
+surviving series. Filtered series have no index. Raw `sdnap_epochs_*` and `sdnap_frames_*` indices retain their sorted
+series order. The additional resident map costs four bytes per entity, included in epoch-store byte accounting. Frame
+refill priorities use raw series indices, not plugin indices.
+
+**20.2 State and catalog calls.** All dates below are UTC Julian dates. Output pointers reference caller-owned module
+memory; the caller allocates the complete output size, refreshes its views after memory growth, and frees its buffers.
+
+```c
+int32_t plugin_entity_count(void);
+int32_t plugin_propagate(double jd, uint32_t entity, OrbProStateVector* out);
+int32_t plugin_propagate_batch(double jd, OrbProStateVector* out, uint32_t count);
+int32_t plugin_propagate_all_positions(double jd, double* out, uint32_t max);
+```
+
+A state occupies 64 bytes: epoch at byte 0, position at 8 (three doubles, ECEF meters), velocity at 32 (three doubles,
+ECEF meters/second), frame 3 at byte 56, zero padding at 57–59, and flags at 60 (VALID bit 0). Every processed record slot
+has the requested epoch and frame, including a missing slot. A successful singleton returns 0. Structural errors are -1
+(no initialized entities), -2 (index/count outside the source), -3 (null output), and -4 (nonfinite date). AP missing,
+unsupported or position-only cells return -8 for a full state; AP refusal/builder failure and direct theory failure
+return -6. A failed epoch thread pool also yields -6 without reading its caches.
+
+In record mode, the struct batch returns 0 after filling all requested slots, even when some slots are invalid. Its
+structural errors are negative. In row mode it retains the first propagation error, as the original ABI does. AP struct
+calls require `sdnap_frames_open` flags 0, which stores velocities. No zero velocity is substituted for an absent one.
+
+The catalog call writes `min(entity_count,max)` interleaved x/y/z triples and returns that count, including missing
+entities. Three NaNs occupy each failed entity's slot; output order is never compressed. Empty sources and max 0 return
+0 without writing. Nonempty calls reject a null output with -3 or a nonfinite date with -4. Position-only cells are valid
+for this positions-only call. The row source uses its existing evaluator and also writes NaN for failed positions.
+Neither a singleton, a struct batch, nor a catalog call constructs AP cells or falls back to exact AP automatically.
+
+**20.3 Paths and metadata.**
+
+```c
+int32_t plugin_propagate_path(uint32_t entity, double start_jd,
+                              double step_days, uint32_t count, double* out);
+double get_orbital_period(uint32_t entity); // minutes
+double get_eccentricity(uint32_t entity);
+```
+
+A path samples `start_jd + i*step_days`, writes one ECEF-meter triple per sample and returns count. Zero and negative
+steps are accepted. Count 0 returns 0 without accessing the source or output. Otherwise null output is -3, empty source
+-1, invalid entity -2, nonfinite grid/endpoint or count above INT32_MAX -4, and a failed epoch thread pool -6. Individual
+failed samples are NaN triples. Record paths use the direct epoch evaluator, including selection, blends and carried
+forecast precedence; they do not use frame cells. On return, only that entity's direct slots are released; its frame
+cells remain intact. Row paths use the row evaluator.
+
+Record sampling hints come from the newest retained set: period is 1440 divided by mean motion in revolutions/day,
+eccentricity is the mean-element value. Row hints use the initialized mean motion (recovered mean motion for SGP4) and
+epoch eccentricity. Missing period is 0 and missing eccentricity is NaN. These are sampling hints, not an assertion of
+exact periodicity under perturbations.
+
+**20.4 Replacement and ownership.** Stream method `replace_epoch` accepts exactly one `ocm` record using the same
+binary invoke and size-prefixed framing as `load_epochs`. A closed, nonempty record source is required. The complete
+series identity and theory must already exist, and the target must hold exactly one set. Preparation validates the
+record, retains any carried forecast and interns its atmosphere before committing. The plugin index and raw series
+index are preserved. Commit releases only the target's direct slots, covariance and two frame cells; other entities'
+cells and caches remain usable. The target's frame eligibility and epoch are refreshed, and a refill sweep restarts.
+There is no global-generation invalidation. Replacement does not reapply snapshot aging/capping or change ingestion
+counts. Old weather with no remaining reference is released.
+
+Success is stream status 0. Refusals use status 3 with `records-not-loaded`, `replace-one-record`,
+`replace-identity-missing`, `replace-multiple-sets`, `pool-dead`, an existing record-validation error, or `out-of-memory`.
+Every refusal preserves the old record and cells. There is no append or identity-changing update in this method.
+
+`plugin_destroy` releases both stores, an open load, the map and frames. Caller-owned output allocations remain the
+caller's responsibility. The host quiesces its calls before destruction. If a failed epoch batch still has an active
+thread, destruction is a no-op and OMM initialization is refused, preventing a free while that thread holds a reference.
+
+The owning thread can publish two host buffers with atomic generation/timestamp metadata and acknowledgment before
+reuse. That protocol belongs to the host. A separate immutable frame snapshot with a publication gate is an option for
+concurrent reads; it is not implemented by these exports. A previous-time buffer is not relabeled as the requested time.
+
+`test/plugin-records.e2e.mjs` checks mixed synthetic sources, input order, holes, layouts, direct paths, metadata,
+replacement and lifecycle. `SDNAP_CONTROL_WASM` adds byte comparisons with an unchanged artifact. Diagnostic allocator
+exports enable replacement-refusal and cache-release assertions. The test is an ABI comparison, not an independent
+physics calibration.

@@ -38,11 +38,28 @@ A covariance bank shares the nominal table: legacy |w| <= 1 entries depend on no
 five-day difference for a set 2e-4 away); the added contribution is bit-identical under either owner.
 The output map and the terms above e 0.3 retain their definitions.
 
+## Record catalog display (SPEC 20)
+
+AP objects without a covering frame cell have NaN positions and are hidden; unsupported AP objects remain hidden
+through the display calls. Single states use full-velocity cells and the existing frame approximation. SGP4 and SGP4XP
+records answer directly through their own theories, without AP caches. Catalog reload releases all frame cells, and
+refill on the owning thread can delay display updates. Direct orbit paths remain available and release their entity's
+temporary direct caches on completion.
+
+Load records with `load_epochs_open/part/close`, open full-velocity frames (`sdnap_frames_open` flags 0), and refill in
+bounded slices. `plugin_entity_count` and all plugin state calls use first-input entity order, with one entity per epoch
+series. `plugin_propagate_all_positions(jd,out,max)` returns the number of interleaved ECEF-meter triples, including NaN
+holes. `plugin_propagate_path(index,start,step,count,out)` samples the direct epoch path. Period is in minutes;
+eccentricity is dimensionless. `replace_epoch` updates one existing single-set identity while preserving its index and
+every other entity's cells. All calls have one owning thread; publication of timestamped host buffers is host behavior.
+
 ## Interface
 
 - Propagator ABI: `plugin_init_omm`, `plugin_init`, `plugin_propagate`, `plugin_propagate_batch`,
+  `plugin_propagate_all_positions`, `plugin_propagate_path`, `get_orbital_period`, `get_eccentricity`,
   `plugin_entity_count`, `plugin_destroy`; Earth-fixed meters. `OrbProOMMRecord`s are read as SGP4XP sets
-  (BTERM in `bstar`, AGOM in `mean_motion_ddot`) unless `sdnap_set_omm_theory(0)` selects SGP4.
+  (BTERM in `bstar`, AGOM in `mean_motion_ddot`). Loaded epoch records instead expose entities in first-input order.
+  SPEC 20 states source transitions, layouts, statuses and transactional stream method `replace_epoch`.
 - Batch, structure of arrays: `sdnap_init_elements(rows, count)` (112-byte `ElementRow`s, split Julian epoch, theory per
   row: 0 SGP4, 4 SGP4XP; any other theory is held refused); `sdnap_propagate_soa(jdWhole, jdFrac, first, count, frame,
   out, status)` and `sdnap_propagate_minutes_soa(minutes, first, count, out, status)` write six planes (x, y, z, vx, vy,

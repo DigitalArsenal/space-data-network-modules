@@ -470,12 +470,11 @@ const T_START = Date.now();
   let rebuilt = 0;
   for (let k = 0; k < 4; k++) { rebuilt += h.fill(t + (k % 2 ? 0 : 3 * DAY), 180).stored > 0 ? 1 : 0; }
   assert.ok(rebuilt >= 3, "two clocks a window apart rebuild at every alternation: frames serve one clock and its look-ahead to an instance");
-  // a load replaces the store: every cell is dropped, the table read again
+  // A catalog reload releases the frame allocation; the host opens a fresh budget for the new catalog.
   await f.load(POP);
   q = f.at(t);
-  assert.equal(q.rc, CODE.storeChanged);
-  assert.ok(q.status.every((s) => s === STATUS.noSegment));
-  assert.equal(f.stats()[STAT.current], 0);
+  assert.equal(q.rc, CODE.notOpen);
+  assert.equal(f.open(BUDGET), 0);
   assert.equal(f.fill(t, 180).due, 0);
   assert.equal(f.stats()[STAT.current], 1);
   assert.equal(f.at(t).status[0], STATUS.served);
