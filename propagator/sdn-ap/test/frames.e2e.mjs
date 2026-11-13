@@ -478,8 +478,8 @@ const T_START = Date.now();
   assert.equal(f.fill(t, 180).due, 0);
   assert.equal(f.stats()[STAT.current], 1);
   assert.equal(f.at(t).status[0], STATUS.served);
-  await f.load(population([["leo500", 100]]));  // more series than open's table
-  assert.equal(f.refill(t).rc, CODE.reopen);
+  await f.load(population([["leo500", 100]]));  // A larger catalog also releases the frame allocation.
+  assert.equal(f.refill(t).rc, CODE.notOpen);
   // a slab with room for one largest cell only: rows are refused and counted, each skipped and reported, the later objects still visited; the objects stay "no segment"
   const small = await openFrames();
   await small.load(POP);
