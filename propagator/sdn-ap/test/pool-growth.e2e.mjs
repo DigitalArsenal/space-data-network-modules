@@ -45,7 +45,7 @@ if (process.argv[2] === "--one") {
   const p = x.sdnap_alloc(bytes.length);
   new Uint8Array(mem(), p, bytes.length).set(bytes);
   if (x.sdnap_init_elements(p, ROWS) !== ROWS) throw new Error("the row store refused the rows");
-  const out = x.sdnap_alloc(128), ps = x.sdnap_alloc(96);
+  const out = x.sdnap_alloc(128), ps = x.sdnap_alloc(112);
   x.sdnap_test_growth_stress(ROUNDS, RESERVE, out);
   x.sdnap_pool_stats(ps);
   const v = Array.from(new Float64Array(mem(), out, 12)), s = Array.from(new Float64Array(mem(), ps, 10));

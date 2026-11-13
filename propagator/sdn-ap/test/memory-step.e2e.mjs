@@ -34,7 +34,7 @@ const same = (a, b) => a.length === b.length && a.every((v, q) => Object.is(v, b
 // the step-0 build: the same sources, sbrk growing the memory by the allocator's request alone
 const once = (text, from, to) => { assert.equal(text.split(from).length, 2, `the seam's anchor ${JSON.stringify(from)} is not unique`); return text.replace(from, to); };
 const stepZero = buildDiagnostic("memory-step-0", " ", (s) => s, {
-  "pool.inc": (t) => once(t, `constexpr uintptr_t kSbrkStepPages = ${STEP_PAGES};`, "constexpr uintptr_t kSbrkStepPages = 0;"),
+  "pool.inc": (t) => once(t, `constexpr uint64_t kSbrkStepPages = ${STEP_PAGES};`, "constexpr uint64_t kSbrkStepPages = 0;"),
 });
 
 async function open(file, { max = 0, threads = 0 } = {}) {

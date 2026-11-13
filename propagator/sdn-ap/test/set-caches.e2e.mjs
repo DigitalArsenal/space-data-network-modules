@@ -263,7 +263,7 @@ for (const [name, o] of Object.entries(ORBITS)) {
     const before = m.h.memory.buffer.byteLength;
     check(m.x.sdnap_init_elements(p, n) === n, `${threads} threads: the row store took ${n} rows`);
     const storeMB = (m.h.memory.buffer.byteLength - before) / 1048576;
-    const out = m.x.sdnap_alloc(48 * n), status = m.x.sdnap_alloc(4 * n), ps = m.x.sdnap_alloc(96), all = [], rcs = [];
+    const out = m.x.sdnap_alloc(48 * n), status = m.x.sdnap_alloc(4 * n), ps = m.x.sdnap_alloc(112), all = [], rcs = [];
     for (let k = 0; k < 20; ++k) {
       rcs.push(m.x.sdnap_propagate_soa(2461328.5, 0.5 + 0.25 * k, 0, n, 0, out, status));
       all.push([...new Float64Array(m.h.memory.buffer, out, 6 * n), ...new Int32Array(m.h.memory.buffer, status, n)]);
@@ -327,7 +327,7 @@ for (const [name, o] of Object.entries(ORBITS)) {
     raan: (7.3 * k) % 360, argp: 0, ma: (11.9 * k) % 360, bstar: 1e-4, norad: k + 1, theory: THEORY.SGP4 }));
   const fly = async (setup) => {
     const m = await open(testBuild, 4);
-    const ps = m.x.sdnap_alloc(96);
+    const ps = m.x.sdnap_alloc(112);
     m.x.sdnap_pool_stats(ps);
     const defaults = Array.from(new Float64Array(m.h.memory.buffer, ps, 10));
     setup(m.x);

@@ -110,7 +110,7 @@ if (process.argv.includes('--case')) {
   assert.equal(x.sdnap_epochs_count(), count);
   const mode = process.argv.includes('--refuse') ? 2 : 1;
   if (x.sdnap_test_epoch_mode) x.sdnap_test_epoch_mode(mode, Number(arg('--slice', 0)));
-  const out = x.sdnap_alloc(48 * count), status = x.sdnap_alloc(4 * count), stats = x.sdnap_alloc(96), counts = x.sdnap_alloc(96);
+  const out = x.sdnap_alloc(48 * count), status = x.sdnap_alloc(4 * count), stats = x.sdnap_alloc(112), counts = x.sdnap_alloc(96);
   const all = [], deferredAt = [];
   const drop = process.argv.includes('--drop');
   const taken = x.sdnap_test_deferred_take ? x.sdnap_alloc(4 * 65536) : 0;

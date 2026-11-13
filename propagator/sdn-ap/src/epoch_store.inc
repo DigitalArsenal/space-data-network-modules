@@ -1174,6 +1174,7 @@ SDNAP_EXPORT("sdnap_drag_orbit_check")
 int32_t sdnap_drag_orbit_check(uint32_t index, double minutes, int32_t samples, double* out) {
   auto& st = sdnap::epochs::resident();
   if (index >= st.series.size() || out == nullptr) return ORBPRO_PROP_BAD_INPUT;
+  if (st.pool_dead != 0) return sdnap::pool::kRowPoolDead;  // after a dead batch over the store (Store::pool_dead): no slot is read
   auto& slot = sdnap::epochs::slot_of(st, st.series[index], 0, false);
   if (slot.xp == nullptr || slot.error != 0) return ORBPRO_PROP_UNPHYSICAL;
   sdnap::xpt::XpSat& s = *slot.xp;
@@ -1400,10 +1401,13 @@ int32_t sdnap_epochs_at(double jd_whole, double jd_frac, uint32_t first, uint32_
       j.count = len;
       reserve = sdnap::epochs::series_reserve(st, j);
       if (reserve == 0) break;
-      if (void* p = std::malloc(reserve)) {  // a reserve that cannot be had is not a failure of the call: not counted
-        std::free(p);
-        break;
-      }
+      // a reserve that cannot be had is not a failure of the call: not counted. Held through the volatile block, as
+      // pool::run holds its own: a malloc freed at once is a pair an optimizing build may remove, and the test then never ran
+      sdnap::pool::g_reserve_block = std::malloc(reserve);
+      const bool had = sdnap::pool::g_reserve_block != nullptr;
+      std::free(sdnap::pool::g_reserve_block);
+      sdnap::pool::g_reserve_block = nullptr;
+      if (had) break;
       if (len <= 2 * sdnap::pool::kEpochChunk) {
         batch = false;
         break;
