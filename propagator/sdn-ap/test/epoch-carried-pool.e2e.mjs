@@ -36,7 +36,7 @@ if(process.argv.includes('--case')){
   assert.equal(sources.filter(x=>x===1).length,f<2?count/2:0);
   for(const [p,n] of [[out,48*count],[status,4*count],[source,4*count]])parts.push(Buffer.from(new Uint8Array(h.memory.buffer,p,n)));
  }
- x.sdnap_pool_stats(ps);
+ x.sdnap_pool_stats(ps,2);
  const batches=x.sdnap_pool_stats?new Float64Array(h.memory.buffer,ps,2)[1]:0;
  const bytes=Buffer.concat(parts);fs.writeFileSync(path.join(root,label+'.bin'),bytes);
  console.log(JSON.stringify({label,threads,series:count,states:count*8,batches,digest:createHash('sha256').update(bytes).digest('hex')}));

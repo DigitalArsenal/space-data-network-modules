@@ -5850,8 +5850,8 @@ struct BranchScope {
 /// AP: the per-object tables of what the call selected (tess::active()); nothing without a selection. False out of memory.
 /// The eccentricity switches are s.ctx.branch's (xp_init), never e.eo's own.
 inline bool ap_init(const Elements& e, double n0, int8_t res, XpSat& s) {
-  // this thread's failures: in a threaded batch another lane's refused growth never fails this set (through the merge of
-  // 0.6.53, the instance's count did, and the slot then held a refused set no growth had refused)
+  // this thread's failures: in a threaded batch another thread's refused growth never fails this set (the instance's count
+  // would, and the slot would then hold a refused set no growth had refused)
   const auto mem_mark = mem::thread_failures();
   const tess::Terms& t = s.ctx.selected_terms;
   const Branch& br = s.ctx.branch;
@@ -6456,7 +6456,7 @@ inline bool try_lock(int32_t* word) {
   return __atomic_compare_exchange_n(word, &expected, 1, false, __ATOMIC_ACQUIRE, __ATOMIC_RELAXED);
 }
 
-/// A list in the module's counted memory (SPEC 1.6, stack #600): a growth that cannot be had is counted and fails, never
+/// A list in the module's counted memory (SPEC 1.6): a growth that cannot be had is counted and fails, never
 /// traps (as std::vector's did, a set's first flight adding it to the holders). Doubles from 64. T is trivially copyable.
 template <class T>
 struct CountedList {
@@ -6607,8 +6607,8 @@ inline bool pool_reclaim_locked(CachePool& p, uint64_t need, const XpSat* keep, 
       if (!order.push_back(PoolVictim{stamp, v})) break;
     }
   }
-  // a strict weak order on the copies, by stamp alone, as 0.6.56 sorted the holders: equal stamps (consecutive cached
-  // flights share one) keep the order that sort gives them, so a serial reclaim picks 0.6.56's victims
+  // a strict weak order on the copies, by stamp alone, as sdn-ap 0.6.57 sorted the holders themselves: equal stamps
+  // (consecutive cached flights share one) keep the order that sort gives them, so a serial reclaim picks 0.6.57's victims
   std::sort(order.begin(), order.end(), [](const PoolVictim& x, const PoolVictim& y) { return x.stamp < y.stamp; });
   const uint64_t target = p.budget - std::min(p.budget, std::max(need, p.budget / 8));
   for (const PoolVictim& victim : order) {
@@ -6722,7 +6722,7 @@ inline uint64_t xp_bytes(const XpSat& s) {
 }
 
 /// Frees s's caches (xp_release).
-/// A store's set (pooled) reads its caches under the pool's lock, held or not: a reclaim on another lane of a threaded
+/// A store's set (pooled) reads its caches under the pool's lock, held or not: a reclaim on another thread of a threaded
 /// batch (pool_reclaim_locked) drops a set's caches and then stores the unlock of its cache_lock into it, both inside one
 /// hold of the pool's lock. Read without the lock, a null left by that drop let the caller go on to free the set before the
 /// unlock landed (a write into freed memory). Once this call has held the lock, no reclaim writes into s again: s is no
@@ -6755,7 +6755,7 @@ struct SetScope {
       return;
     }
     held = &s;
-    // the stamp is read by a reclaim on another lane under the pool's lock alone: atomic (prev is the owner's alone)
+    // the stamp is read by a reclaim on another thread under the pool's lock alone: atomic (prev is the owner's alone)
     c->prev = c->stamp;
     __atomic_store_n(&c->stamp, __atomic_load_n(&cache_pool().clock, __ATOMIC_RELAXED), __ATOMIC_RELAXED);
     g_active_bracket_set = &c->ab;

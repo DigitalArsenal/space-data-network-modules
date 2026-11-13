@@ -296,7 +296,8 @@ int32_t sdnap_propagate_minutes_soa(const double* minutes, uint32_t first, uint3
 SDNAP_EXPORT("sdnap_threads")
 int32_t sdnap_threads(int32_t threads) { return sdnap::pool::start(threads); }
 
-/// The pool and the memory, read only (stack #487, SPEC 9 and 1.6), 14 doubles (0.6.56 wrote the first 10):
+/// The pool and the memory, read only (SPEC 9 and 1.6): the first min(count, 16) of 16 doubles, written to `out`, which
+/// has room for `count` (nothing past it is written):
 ///  [0] the threads running;  [1] the threaded batches run;  [2] the growths of the memory refused inside them (every
 ///  thread);  [3] the rows deferred to the calling thread after them;  [4] the batches after which the calling thread saw
 ///  a larger memory (the invariant: 0);  [5] whether the pool was taken for dead (1; its later batches run on the calling
@@ -304,20 +305,31 @@ int32_t sdnap_threads(int32_t threads) { return sdnap::pool::start(threads); }
 ///  (bytes);  [8] the waits for a thread's view of the memory that had to yield;  [9] the most yields one took;
 ///  [10] the memory's growths since the instance started (sbrk's memory.grow calls, each of at least a step but at the
 ///  memory's maximum);  [11] the 64 KiB pages they added;  [12] the epoch store's slices halved for want of their
-///  reserve;  [13] its slices run on the calling thread because even the smallest slice's reserve could not be had.
+///  reserve;  [13] its slices run on the calling thread because even the smallest slice's reserve could not be had;
+///  [14] the batches' rows completed on pool threads since the instance started;  [15] the pool threads that completed
+///  at least one of them.
 SDNAP_EXPORT("sdnap_pool_stats")
-void sdnap_pool_stats(double* out) {
-  if (out == nullptr) return;
+void sdnap_pool_stats(double* out, int32_t count) {
+  if (out == nullptr || count <= 0) return;
   const sdnap::xpt::BatchStats& s = sdnap::xpt::batch_stats();
-  const double v[14] = {static_cast<double>(sdnap::pool::job().threads), static_cast<double>(s.batches), static_cast<double>(s.refused),
+  uint64_t pool_rows = 0;
+  int32_t pool_threads_with_rows = 0;
+  for (int32_t t = 1; t <= sdnap::pool::kMaxThreads; ++t) {
+    const uint64_t rows = __atomic_load_n(&sdnap::pool::g_row_beats[t].rows, __ATOMIC_RELAXED);
+    pool_rows += rows;
+    if (rows != 0) ++pool_threads_with_rows;
+  }
+  const double v[16] = {static_cast<double>(sdnap::pool::job().threads), static_cast<double>(s.batches), static_cast<double>(s.refused),
                         static_cast<double>(s.deferred), static_cast<double>(s.grew), static_cast<double>(s.dead),
                         static_cast<double>(sdnap::pool::dead_polls()), static_cast<double>(s.reserve),
                         static_cast<double>(s.views), static_cast<double>(s.view_yields_max),
                         static_cast<double>(__atomic_load_n(&sdnap::pool::g_memory_growths, __ATOMIC_RELAXED)),
                         static_cast<double>(__atomic_load_n(&sdnap::pool::g_memory_grown_pages, __ATOMIC_RELAXED)),
                         static_cast<double>(__atomic_load_n(&s.reserves_halved, __ATOMIC_RELAXED)),
-                        static_cast<double>(__atomic_load_n(&s.slices_serial, __ATOMIC_RELAXED))};
-  for (int k = 0; k < 14; ++k) out[k] = v[k];
+                        static_cast<double>(__atomic_load_n(&s.slices_serial, __ATOMIC_RELAXED)),
+                        static_cast<double>(pool_rows), static_cast<double>(pool_threads_with_rows)};
+  const int32_t n = count < 16 ? count : 16;
+  for (int32_t k = 0; k < n; ++k) out[k] = v[k];
 }
 
 /// The sets' caches (SPEC 9), read only (the budget is the module's default, 256 MB; xpt::cache_budget_mb sets it in

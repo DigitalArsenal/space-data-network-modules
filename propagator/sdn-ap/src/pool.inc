@@ -216,7 +216,7 @@ inline void run_chunks() {
 /// its first state or set initialization (pool::thread_ready, stack #600: made lazily, one was first asked for part way
 /// through a flight, a day after the set's first state, and the module aborted when the memory was full by then). False
 /// when one cannot be had (the failure counted; those made are kept, and the next call makes the rest); once all are made,
-/// one flag test. With them, the guarded statics a lane first touches (NRLMSISE-00's flag table): made before any batch,
+/// one flag test. With them, the guarded statics a pool thread first touches (NRLMSISE-00's flag table): made before any batch,
 /// so no thread, the calling thread least of all, waits in a static's guard inside one.
 inline bool warm_thread() {
   if (g_warm) return true;
@@ -377,7 +377,8 @@ inline uint64_t g_memory_grown_pages = 0; ///< the pages they added
 }  // namespace pool
 }  // namespace sdnap
 
-/// wasi-libc's sbrk (the allocator's only way to grow the memory): sbrk(0) answers the break, never shrinking, page-sized
+/// wasi-libc's sbrk (the allocator's only way to grow the memory): sbrk(0) answers the break (or -1 when the break is at
+/// 4 GiB, the memory at its maximum: a request of nothing there is refused like any other), never shrinking, page-sized
 /// increments only.
 /// - A request below the end sbrk last produced moves the break.
 /// - One past it grows the memory by at least a step, or, when a step does not fit under the memory's maximum, by exactly
@@ -385,11 +386,11 @@ inline uint64_t g_memory_grown_pages = 0; ///< the pages they added
 /// - Pages found beyond that end were grown by another party (a host, for a buffer of its own): they are never the
 ///   allocator's, and the break moves past them, as the memory's end it answered did before the break was kept here.
 /// - Nothing is served at or past 4 GiB, the end of the address space: such a request is refused, never wrapped.
-/// - While a threaded batch runs no growth of the memory is made (stack #487): one is refused, on every thread, and
+/// - While a threaded batch runs no growth of the memory is made (SPEC 9): one is refused, on every thread, and
 ///   counted, and the refusing thread's row is deferred. The slack below the end is served inside a batch: those pages
 ///   were in the memory when the batch published its size, before any thread claimed a chunk, so every thread's view
-///   covers them (the trap #487 removed came from pages grown after a thread's view was taken; moving the break grows
-///   nothing).
+///   covers them (a pool thread's trap on a bulk fill came from pages grown after its view was taken; moving the break
+///   grows nothing).
 extern "C" void* sbrk(intptr_t increment) {
   using namespace sdnap::pool;
   constexpr uint64_t kPage = 65536, kTop = uint64_t{1} << 32;

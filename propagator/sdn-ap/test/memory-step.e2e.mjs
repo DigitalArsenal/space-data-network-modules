@@ -73,7 +73,7 @@ async function open(file, { max = 0, threads = 0 } = {}) {
   const memory = h.memory ?? x.memory;
   const mem = () => memory.buffer;
   const ps = x.sdnap_alloc(112);
-  const stats = () => { x.sdnap_pool_stats(ps); return Array.from(new Float64Array(mem(), ps, 14)); };
+  const stats = () => { x.sdnap_pool_stats(ps, 14); return Array.from(new Float64Array(mem(), ps, 14)); };
   return { x, memory, mem, stats, load: (payload) => h.invoke({ methodId: "load_epochs", inputs: [{ portId: "ocm", typeRef: T("OCM"), payload }] }) };
 }
 

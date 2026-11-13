@@ -4,18 +4,20 @@
 // The store: 2,048 seeded series, three sets each, 12 hours apart, loaded by one load_epochs (blend window one hour), flown
 // at three instants (6 h, 18 h and 30 h after the first epoch: a blend of sets 0 and 1, then of 1 and 2, then set 2 alone,
 // so slots are replaced inside the batches). The series, by k:
-// - k < 8: AP above e 0.3 (the family-grid branch, flown on the calling thread before each batch);
+// - k < 8: AP at e 0.65, wide sets (the family-grid branch: above e 0.05 in no resonance class, above e 0.3 in one; flown
+//   on the calling thread before each batch);
 // - k mod 10 = 1: SGP4; k mod 10 = 2: SGP4XP without AP's terms; k mod 10 = 3: AP on Jacchia 1970 (no NRLMSISE-00);
 // - the rest AP on NRLMSISE-00, at 290, 310, 500 and 830 km (node heights under and over 325 km: both of its paths);
 // - two force sets alternating (tesseral 31 and zonal 20; tesseral 12 and zonal 6; tesseral 70 every 31st), two weather
 //   tables alternating, a covariance on every even series, the slow set every 19th;
-// so a lane that read another lane's binding, weather or set would change a byte.
+// so a pool thread that read another thread's binding, weather or set would change a byte.
 // Every case writes the six planes and the statuses at the three instants:
 // - the reference: each series alone (sdnap_epochs_at, one series a call), on the calling thread;
 // - its digest equals MAIN_DIGEST, the same reference made by sdn-ap 0.6.57 (modules 6a807990), the module this change is
 //   made on: the state, theory and status of every series are 0.6.57's;
 // - the whole store a call on 0, 1, 4 and 15 pool threads; the store loaded in parts of 768 records (load_epochs_open,
-//   _part, _close) on 0, 4 and 15; on a test build (same sources, seams below) on 0, 1, 4 and 15
+//   _part, _close) on 0, 4 and 15; on 4 and 15, whole or in parts, the pool's statistics (sdnap_pool_stats [14] and
+//   [15]) show rows run on pool threads, by at least two of them; on a test build (same sources, seams below) on 0, 1, 4 and 15
 //   with each initializing thread's scratch (the table, terms, shallow, half-day, build and trigonometry scratch) and its
 //   half-day evaluation cache's values poisoned before every set it builds, and on 4 with slices of 100 series (21 batches
 //   a call): each equal to the reference, byte for byte;
@@ -26,11 +28,12 @@
 //   the case still refuses and defers, asserted): every status the reference's, and every state the reference's, byte for
 //   byte, except that a series deferred at an instant may instead equal, byte for byte, the dropped control there: the
 //   serial state with the series' two slots released just before its flight, which is what a deferral does. This
-//   allowance covers stack #626 alone: an AP set of the half-day class answers differently once it was flown before (one
+//   allowance covers one defect alone: an AP set of the half-day class answers differently once it was flown before (one
 //   cache id for the brackets on both sides of a set's epoch in the tesseral and m-daily bake caches, and the same fault
-//   in the drag-pass cache's key; 250 states up to 0.22 mm here), and the store must hold such states.
+//   in the drag-pass cache's key; the summary line prints how many deferred states took the control and the largest
+//   position difference), and the store must hold such states.
 // The test build counts, per thread, what each case took, asserted: rows, slots replaced and NRLMSISE-00 evaluations on
-// each side of 325 km on the pool's threads (at least a quarter of each), more than one lane at 4 and 15 threads, the wide
+// each side of 325 km on the pool's threads (at least a quarter of each), more than one pool thread at 4 and 15 threads, the wide
 // branch's rows on the calling thread, states of each family (SGP4, SGP4XP, AP), every state answered; the pool's own
 // counts (no growth inside a batch, refusals and deferrals only where the reserve is off).
 //   node test/epoch-pool.e2e.mjs [--count N]
@@ -126,7 +129,7 @@ if (process.argv.includes('--case')) {
   assert.equal(x.sdnap_epochs_count(), count);
   const mode = process.argv.includes('--refuse') ? 2 : 1;
   if (x.sdnap_test_epoch_mode) x.sdnap_test_epoch_mode(mode, Number(arg('--slice', 0)));
-  const out = x.sdnap_alloc(48 * count), status = x.sdnap_alloc(4 * count), stats = x.sdnap_alloc(112), counts = x.sdnap_alloc(8 * 17 * 8);
+  const out = x.sdnap_alloc(48 * count), status = x.sdnap_alloc(4 * count), stats = x.sdnap_alloc(128), counts = x.sdnap_alloc(8 * 17 * 8);
   const all = [], deferredAt = [];
   const drop = process.argv.includes('--drop');
   const taken = x.sdnap_test_deferred_take ? x.sdnap_alloc(4 * 65536) : 0;
@@ -153,14 +156,14 @@ if (process.argv.includes('--case')) {
     if (taken) { const n = x.sdnap_test_deferred_take(taken); deferredAt.push(Array.from(new Uint32Array(h.memory.buffer, taken, n))); }
   }
   if (taken) fs.writeFileSync(path.join(root, label + '-deferred.json'), JSON.stringify(deferredAt));
-  x.sdnap_pool_stats(stats);
-  const pool = Array.from(new Float64Array(h.memory.buffer, stats, 14));
+  x.sdnap_pool_stats(stats, 16);
+  const pool = Array.from(new Float64Array(h.memory.buffer, stats, 16));
   let seams = null;
   if (x.sdnap_test_epoch_counts) {
     x.sdnap_test_epoch_counts(counts);
     const v = Array.from(new Float64Array(h.memory.buffer, counts, 17 * 8));
     const sum = (k, from = 0) => v.reduce((a, c, q) => a + (q % 8 === k && q >= 8 * from ? c : 0), 0);
-    // totals over every thread, the same on the pool's threads alone (not the calling thread), and the lanes with rows
+    // totals over every thread, the same on the pool's threads alone (not the calling thread), and the pool threads with rows
     seams = { rows: sum(0), widePrePass: sum(1), replaced: sum(2), msisLow: sum(3), msisHigh: sum(4), sgp4: sum(5), xp: sum(6), ap: sum(7),
       poolRows: sum(0, 1), poolReplaced: sum(2, 1), poolMsisLow: sum(3, 1), poolMsisHigh: sum(4, 1),
       lanes: Array.from({ length: 16 }, (_, t) => v[8 * (t + 1)]).filter((n) => n > 0).length };
@@ -184,7 +187,7 @@ if (process.argv.includes('--case')) {
     covParts.push(Buffer.from(new Uint8Array(h.memory.buffer, out, 48 * count)), Buffer.from(new Uint8Array(h.memory.buffer, status, 4 * count)),
       Buffer.from(new Uint8Array(h.memory.buffer, cov, 36 * 8 * count)));
   }
-  x.sdnap_pool_stats(stats);
+  x.sdnap_pool_stats(stats, 2);
   const covBatches = new Float64Array(h.memory.buffer, stats, 2)[1] - batchesBefore;
   const covs = new Float64Array(Uint8Array.from(covParts[2]).buffer);
   const covAnswered = Array.from({ length: count }, (_, k) => Number.isFinite(covs[36 * k])).filter(Boolean).length;
@@ -287,24 +290,34 @@ function run(label, file, threads, options = []) {
 }
 const reference = run('single', wasmPath, 0, ['--single']);
 if (count === 2048 && wide === 8) assert.equal(reference.r.digest, MAIN_DIGEST, `the reference against sdn-ap 0.6.57's (${MAIN_DIGEST})`);
-for (const threads of [0, 1, 4, 15]) assert.ok(run(`threads-${threads}`, wasmPath, threads).bytes.equals(reference.bytes), `${threads} pool threads`);
+// the shipped build's own statistics: rows run on pool threads ([14]) by at least two of them at 4 and 15 threads ([15]),
+// none without the pool, so a build that flew every row on the calling thread fails here
+const onPool = (c) => {
+  const { label, threads, pool } = c.r;
+  if (threads === 0) assert.ok(pool[14] === 0 && pool[15] === 0, `${label}: rows on pool threads ${pool[14]} with none running`);
+  else assert.ok(pool[14] > 0 && pool[15] >= Math.min(threads, 2), `${label}: ${pool[14]} rows on ${pool[15]} pool threads`);
+  return c;
+};
+for (const threads of [0, 1, 4, 15]) assert.ok(onPool(run(`threads-${threads}`, wasmPath, threads)).bytes.equals(reference.bytes), `${threads} pool threads`);
 // the store loaded in parts (SPEC 14.1.1) and flown on the pool
-for (const threads of [0, 4, 15]) assert.ok(run(`parts-${threads}`, wasmPath, threads, ['--parts']).bytes.equals(reference.bytes), `loaded in parts, ${threads} pool threads`);
+for (const threads of [0, 4, 15]) assert.ok(onPool(run(`parts-${threads}`, wasmPath, threads, ['--parts'])).bytes.equals(reference.bytes), `loaded in parts, ${threads} pool threads`);
 const seamed = [];
 for (const threads of [0, 1, 4, 15]) { const c = run(`poison-${threads}`, diagnostic, threads); assert.ok(c.bytes.equals(reference.bytes), `poison, ${threads} pool threads`); seamed.push(c.r); }
 const sliced = run('sliced', diagnostic, 4, ['--slice', '100']);
 assert.ok(sliced.bytes.equals(reference.bytes), 'slices of 100 series');
 // A deferred series is computed again from its records: its two slots released, its sets built again. An AP set of the
-// half-day class answers differently, by up to 0.22 mm here, once it was flown before (stack #626: one cache id for the
-// brackets on both sides of its epoch in the tesseral and m-daily bakes and the drag-pass cache's key), so the control for
-// a deferred series is the serial state with its slots dropped just before its flight (the allowance of the header).
+// half-day class answers differently once it was flown before (one cache id for the brackets on both sides of its epoch
+// in the tesseral and m-daily bakes and the drag-pass cache's key), so the control for a deferred series is the serial
+// state with its slots dropped just before its flight (the allowance of the header).
 const dropped = run('dropped', diagnostic, 0, ['--single', '--drop']);
 const deferred = run('deferred', diagnostic, 4, ['--refuse']);
 const deferredAt = JSON.parse(fs.readFileSync(path.join(root, 'deferred-deferred.json'), 'utf8'));
 const per = 52 * count;
 const planes = (b, n, k) => Buffer.concat(Array.from({ length: 6 }, (_, c) => b.subarray(n * per + (c * count + k) * 8, n * per + (c * count + k + 1) * 8)));
 const code = (b, n, k) => b.readInt32LE(n * per + 48 * count + 4 * k);
-let history = 0, deferredStates = 0, tookDropped = 0;
+let history = 0, deferredStates = 0, tookDropped = 0, largestMm = 0;
+// the position difference of a state that took the dropped control from the reference's (TEME km planes), for the summary
+const apart = (a, b) => { const p = new Float64Array(Uint8Array.from(a).buffer), q = new Float64Array(Uint8Array.from(b).buffer); return 1e6 * Math.hypot(p[0] - q[0], p[1] - q[1], p[2] - q[2]); };
 for (let n = 0; n < INSTANTS.length; ++n) {
   const late = new Set(deferredAt[n]);
   deferredStates += late.size;
@@ -317,15 +330,16 @@ for (let n = 0; n < INSTANTS.length; ++n) {
     assert.ok(late.has(k) && got.equals(drop), `no reserve, series ${k} at ${INSTANTS[n]} d: ` +
       (late.has(k) ? 'deferred, but neither the reference nor the dropped control' : 'not deferred, and not the reference'));
     tookDropped += 1;
+    largestMm = Math.max(largestMm, apart(got, ref));
   }
 }
 // the store holds states that a set's history moves (else the rule above tests nothing), and the case deferred series
 assert.ok(history > 0, 'the store holds no state its set\'s history moves');
 assert.ok(deferredStates > 0, 'the no-reserve case deferred no series');
-console.log(JSON.stringify({ historyMoved: history, deferredStates, deferredTookDropped: tookDropped }));
+console.log(JSON.stringify({ historyMoved: history, deferredStates, deferredTookDropped: tookDropped, deferredLargestMm: Number(largestMm.toFixed(3)) }));
 // the coverage: every path taken, on the threaded cases, and taken on the pool's threads (not only the calling thread):
 // at least a quarter of the rows, of the slots replaced and of the NRLMSISE-00 evaluations on each side of 325 km there,
-// on more than one lane at 4 and 15 threads; every state answered
+// on more than one pool thread at 4 and 15 threads; every state answered
 for (const r of [...seamed.filter((q) => q.threads > 0), sliced.r, deferred.r]) {
   const s = r.seams;
   assert.equal(r.good, 3 * count, `${r.label}: ${r.good} of ${3 * count} states answered`);

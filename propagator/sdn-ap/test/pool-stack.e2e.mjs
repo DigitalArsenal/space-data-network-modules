@@ -1,9 +1,9 @@
 #!/usr/bin/env node
-// E2E (SPEC 1.6, SPEC 9): the pool threads' stacks. The epoch store's threaded call builds sets on pool threads: a lane runs
-// slot_of, xp_init, ap_init and every table build (one frame alone, the half-day terms', is 25,936 bytes), the decay
-// probe with drag and NRLMSISE-00, and the flight. A test build of this checkout paints each pool thread's stack with a
-// pattern when the thread starts, and after the call reads how deep each thread wrote (the high-water). The store: every
-// class AP builds, each on several series, so every lane builds every kind:
+// E2E (SPEC 1.6, SPEC 9): the pool threads' stacks. The epoch store's threaded call builds sets on pool threads: a pool
+// thread runs slot_of, xp_init, ap_init and every table build (one frame alone, the half-day terms', is 25,936 bytes), the
+// decay probe with drag and NRLMSISE-00, and the flight. A test build of this checkout paints each pool thread's stack with
+// a pattern when the thread starts, and after the call reads how deep each thread wrote (the high-water). The store: every
+// class AP builds, each on several series, so every pool thread builds every kind:
 // - low orbit at 500 km and at 290 km (NRLMSISE-00 under 325 km), tesseral 31 / zonal 20 and 70 with the slow set;
 // - the half-day class (a 12-hour orbit) and the one-day class (geostationary), at 31 and at 70 with the slow set;
 // - an eccentric orbit under the wide branch's switch (e 0.2), at 31 and 70;
@@ -98,7 +98,7 @@ async function fly(threads) {
   assert.equal(load.statusCode, 0, `load_epochs: ${load.errorCode} ${load.errorMessage}`);
   const out = x.sdnap_alloc(48 * N), status = x.sdnap_alloc(4 * N), ps = x.sdnap_alloc(112), depths = x.sdnap_alloc(16 * 32);
   assert.equal(x.sdnap_epochs_at(W, F, 0, N, 0, out, status, 0), 0, "sdnap_epochs_at");
-  x.sdnap_pool_stats(ps);
+  x.sdnap_pool_stats(ps, 14);
   const pool = Array.from(new Float64Array(h.memory.buffer, ps, 14));
   const n = x.sdnap_test_stack_depths(depths);
   const d = Array.from(new Float64Array(h.memory.buffer, depths, 2 * n));

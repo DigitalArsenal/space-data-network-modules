@@ -153,7 +153,7 @@ holds whole, and its arrays of segments). A covariance matrix that cannot be all
 time, and each growth of the memory costs about 0.3 ms. Grown by exactly what the allocator asks, a serial first pass of
 20,000 AP series spends a third of its time growing it: 774 µs an object, against 501 with the memory grown beforehand.
 So `sbrk` keeps the allocator's break itself, at or below the end of the memory it has grown (`sbrk(0)` answers the
-break):
+break, or -1 when the break is at 4 GiB, the memory at its maximum: a request of nothing there is refused like any other):
 - A request below that end moves the break.
 - One past it grows the memory by at least a step (64 pages, 4 MiB). When a step does not fit under the memory's maximum,
   it grows by exactly what the request lacks, and only then refuses.
@@ -163,10 +163,11 @@ break):
   may be refused although the memory grew (the pages stay as slack).
 - Nothing is served at or past 4 GiB, the end of the address space. Such a request is refused, never wrapped.
 
-So the instance may hold up to one step more than the allocator has asked for, and it refuses only where the request
-itself does not fit. `sdnap_pool_stats` counts the growths and the pages they added. `test/memory-step.e2e.mjs` probes
-the break directly. Against a test build with the step 0 it shows the same bytes and the same sets answered at a
-limit, a host's pages intact, and at most 100 growths where the step-0 build makes thousands.
+So the memory the module grew and has not served is at most one step, plus at most one step given up at each growth by
+another party, and it refuses only where the request itself does not fit. `sdnap_pool_stats` counts the growths and the
+pages they added. `test/memory-step.e2e.mjs` probes the break directly. Against a test build with the step 0 it shows
+the same bytes and the same sets answered at a limit, a host's pages intact, and at most 100 growths where the step-0
+build makes thousands.
 
 **A method during which one of them failed refuses with errorCode `out-of-memory` and emits nothing.** That holds for
 `propagate`, `propagate_epochs`, `load_epochs`, `load_epochs_open`, `load_epochs_part`, `load_epochs_close`, `fit`, `maneuver`, `ingest_omm` and `export_omm`, whatever the method
@@ -179,8 +180,8 @@ The message names how many allocations failed since the method began and the lar
 
 A method's mark counts every thread's failures, because its batch spans the pool. A step that runs on one thread
 compares that thread's own count (`mem::thread_failures`). That covers a set's initialization (AP's tables, the slow
-terms, the odd zonal G1 table) and an epoch-store slot's build. On a pool lane, another lane's refused growth never fails
-it. Compared with the instance's count, it would: a set no growth had refused would be refused, not deferred, and its
+terms, the odd zonal G1 table) and an epoch-store slot's build. On a pool thread, another thread's refused growth never
+fails it. Compared with the instance's count, it would: a set no growth had refused would be refused, not deferred, and its
 slot would keep the refusal (the no-reserve case of `test/epoch-pool.e2e.mjs` shows it).
 
 **AP initialization storage (0.6.53).** Shared sample arrays use counted allocations; each memo is local to one
@@ -202,7 +203,7 @@ and at 70 with the slow set, plus a decaying set and SGP4XP. The deepest is 31,1
 wasi-libc's default 64 KiB). The test holds every thread under half its stack. A thread's thread-local block is 343,956
 bytes. With the stack it fits the 1 MiB room the pool makes free before it creates the thread. A pool thread costs
 192 KiB more of the instance than on wasi-libc's default stack. After starting 15 pool threads, an instance started at
-64 MiB holds 104,857,600 bytes, against 100,139,008 on 0.6.56: 2.9 MB of stacks, the rest the 4 MiB step's rounding.
+64 MiB holds 104,857,600 bytes, against 100,139,008 on 0.6.57: 2.9 MB of stacks, the rest the 4 MiB step's rounding.
 
 Through 0.6.47 such a call answered one of five ways:
 - the theory's refusal of the elements (`element-set-refused`);
@@ -1694,25 +1695,33 @@ grids. Beyond them a state is refused, and which eccentric set is refused depend
 The epoch store's state-only `sdnap_epochs_at` also uses the pool. A chunk holds 16 consecutive series; one thread
 owns both slots of each series through selection, initialization, flight and replacement. A series containing a wide
 set is initialized and flown on the calling thread, in series order, because both initialization and output-time nodes
-acquire the shared 256-slot grids. Calls requesting covariance remain serial. The atmosphere and force bindings and
+acquire the shared 256-slot grids. A wide set is an AP set above e 0.05 in no resonance class (class 0: low orbit, the
+LAGEOS band, below 0.8 rev/day) and above e 0.3 in a resonance class (`tess::wide_set`, SPEC 16.11). So a store of
+low-orbit sets at e 0.1 is built and flown serially, and the pool's speed-up holds for the near-circular sets below
+those switches. Calls requesting covariance remain serial. The atmosphere and force bindings and
 NRLMSISE-00's mutable state belong to each thread. Constant drag, gravity and leap-second tables are initialized before
 the batch. The context identifier, short-period generation tag and grouping identifier are cache keys only.
 
-Two rules keep one lane's work out of another's:
+Two rules keep one pool thread's work out of another's:
 - **A set leaves the cache pool under the pool's lock.** A store's set releasing its caches does so under the pool's lock,
-  whether it still holds them or not. A reclaim on another lane drops a set's caches and stores the unlock of the set's
+  whether it still holds them or not. A reclaim on another thread drops a set's caches and stores the unlock of the set's
   cache lock within one hold of that lock. A release that read the null left by such a drop without the lock could free
   the set before the unlock landed in it.
 - **A slot names its set only once the set is built.** Until then it holds none.
 
 **After a dead batch** (a pool thread taken for dead, the batch's return -20, every status 9), a thread that was only
-slow may still be building, flying or replacing its series' slots. So the store is not read again:
+slow may still be building, flying or replacing its series' slots. So the store's slots are not read again until the
+store is replaced:
 - `sdnap_epochs_at` answers -20 with every status 9, `sdnap_epochs_set_at` and `sdnap_drag_orbit_check` answer 9, and
-  the store's byte count reads NaN;
-- `load_epochs` refuses "pool-dead" while a pool thread is active, and replaces the store once none is. A thread that
-  trapped never stops being active.
+  the store's byte count (`sdnap_epochs_stats`, the eighth value) reads NaN;
+- `load_epochs` and `load_epochs_open` refuse "pool-dead" while a pool thread is active, before they free anything:
+  the store stays as it is, and no load is open (a part or a close answers "load-not-open"). `load_epochs_open`
+  refuses so before it reads its $PCF, so a bad $PCF there also answers "pool-dead"; `load_epochs` reads its inputs
+  first and answers their refusals as before. A thread that trapped never stops being active.
+- Once no pool thread is active, `load_epochs`, or `load_epochs_open` and the parts and the close, replace the store.
+  The pool is not used again: the new store's calls run on the calling thread.
 - The other readers of the store (`sdnap_epochs_count`, `_series`, `_select`, `_source_at`) read only its entries and
-  series, which no lane writes.
+  series, which no pool thread writes: `sdnap_epochs_count` answers the store's count.
 
 **A pool thread that traps while it holds a lock** (the module's locks are spin locks with no owner: the cache pool's,
 a set's cache lock, the family grids', sbrk's break) leaves it held. The calling thread's next call that needs that lock
@@ -1721,15 +1730,18 @@ for dead, discards the instance and starts a new one.
 
 `test/epoch-pool-safety.e2e.mjs` holds both rules (256 series, a 1 MiB cache budget, slots replaced in every batch, 4
 and 15 threads) and the dead batch (one pool thread held in its first chunk, the calling thread going on only once a
-pool thread holds it).
+pool thread holds it): every answer above while the thread is held, then the store loaded again by the three calls and
+by `load_epochs` once it has left, each equal to a fresh instance's states.
 
-Three more rules for the lanes:
-- **No lane waits on a static's first use.** The calling thread and every pool thread make, before any batch, each guarded
-  static a lane can first touch (pool::warm_thread: the thread's caches and NRLMSISE-00's flag table).
+Three more rules for the pool threads:
+- **No pool thread waits on a static's first use.** The calling thread and every pool thread make, before any batch,
+  each guarded static a pool thread can first touch (pool::warm_thread: the thread's caches and NRLMSISE-00's flag
+  table).
 - **The cache pool sorts copies.** A reclaim picks its victims from stamps read once under the pool's lock (an owner
-  moves its stamp under its own cache lock alone, atomically). It orders them by stamp alone, with 0.6.56's comparator
-  over the holders in 0.6.56's order. Equal stamps are common, since consecutive cached flights share one, and a serial
-  reclaim keeps 0.6.56's choice among them: the choice can move a half-day-class state (stack #626).
+  moves its stamp under its own cache lock alone, atomically). It orders them by stamp alone, with the comparator of
+  sdn-ap 0.6.57 (which sorted the holders themselves) over the holders in its order. Equal stamps are common, since
+  consecutive cached flights share one, and a serial reclaim keeps 0.6.57's choice among them: the choice can move a
+  half-day-class state (its bake caches use one id for the brackets on both sides of the set's epoch, below).
 - **The missing weather day is a note, not a result.** `Store::short_day` is written by the thread that flew the state
   that found no row. `propagate_epochs` reads it on the calling thread right after that state. After a threaded
   `sdnap_epochs_at` it names some series' missing day; each series' own status is in its status code.
@@ -1745,10 +1757,12 @@ alternating, covariance on half, and eight wide series flown on the calling thre
 - After the threaded instants, every series' covariance in one call equals the reference's to the bit. A call with a
   covariance plane runs no batch.
 - Counted per thread: at least a quarter of the rows, slot replacements and NRLMSISE-00 evaluations (on each side of
-  325 km) are on pool threads, and more than one lane flies at 4 and 15 threads.
+  325 km) are on pool threads, and more than one pool thread flies at 4 and 15 threads. On the shipped build,
+  `sdnap_pool_stats` shows rows on pool threads and at least two pool threads with rows at 4 and 15 threads, the
+  store loaded whole or in parts.
 - With no reserve (every growth of the memory inside a batch refused; the case still refuses and defers): every status
   equals the reference. Every state equals the reference, or, for a series deferred at that instant, the serial state
-  with its slots dropped just before its flight. That allowance covers stack #626 alone: one cache id for the brackets
+  with its slots dropped just before its flight. That allowance covers one defect alone: one cache id for the brackets
   on both sides of a set's epoch in the tesseral and m-daily bake caches, and the drag-pass cache's key.
 - The test build's counters show every path taken.
 
@@ -1759,8 +1773,10 @@ The pool and the memory (stack #487). A threaded batch grows nothing, and a pool
   at most the pool's free budget plus 1 MiB, plus 8 MiB. The calling thread then publishes the memory's size and sets
   the rule that nothing grows. Only then does it store the batch's chunk total and wake the pool threads.
 - An epoch call runs in slices of at most 4,096 series, one batch each, and the memory may grow between them, so the
-  high-water is the sets made plus one slice's reserve. A threaded call fits where a serial call fits. A slice's reserve
-  is its own:
+  high-water is the sets made plus one slice's reserve. A threaded call holds more memory than a serial one: the
+  slice's reserve, and each pool thread's own caches and scratch. After a first pass of 20,000 AP series the instance
+  held 1,092 to 1,135 MiB on 1 to 15 pool threads, against 972 MiB on the calling thread alone. A slice's reserve is its
+  own:
   - 64 KiB per selected cold SGP4XP or AP set (an SGP4 set: its satellite and deep-space checkpoints);
   - the cache pool's available room, at most 128 KiB per AP set;
   - each thread's combined-table bound plus its term storage (the largest selected tesseral degree, 2,048
@@ -1770,8 +1786,8 @@ The pool and the memory (stack #487). A threaded batch grows nothing, and a pool
   A reserve that cannot be had is not a failure of the call. The slice is halved, and a slice of 32 series or fewer whose
   reserve still cannot be had runs on the calling thread. Each series depends only on its own inputs and the time, so
   slicing changes no byte.
-- 64 KiB is a mean, not a bound (a table can reach 416 KB at degree 31 and 694 KB at 70). A lane can reach the following
-  allocations inside a batch. Each is counted and refuses cleanly: the series releases its slots and is deferred.
+- 64 KiB is a mean, not a bound (a table can reach 416 KB at degree 31 and 694 KB at 70). A pool thread can reach the
+  following allocations inside a batch. Each is counted and refuses cleanly: the series releases its slots and is deferred.
   - the slot's set (SGP4XP or AP) or satellite (SGP4), and SGP4's deep-space checkpoints;
   - AP's per-set tables (resonance Taylor terms, m-daily, combined and raw short-period terms, zonal, half-day, shallow,
     resonant coefficients) and the thread's table scratch and half-day scratch, grown to the set's bound;
@@ -1783,21 +1799,22 @@ The pool and the memory (stack #487). A threaded batch grows nothing, and a pool
   (made through the counted allocator before the first slice; without them the call runs on the calling thread).
 - Inside the batch, sbrk refuses every growth of the memory on every thread. It still serves a request below the
   memory's end, moving the allocator's break (1.6): those pages were in the memory when the batch published its size,
-  before any thread claimed a chunk, so every thread's view covers them. The trap of #487 came from pages grown after a
-  thread's view was taken, and moving the break grows nothing.
+  before any thread claimed a chunk, so every thread's view covers them. The trap (Why, below) came from pages grown
+  after a thread's view was taken, and moving the break grows nothing.
   - A set refused its caches flies on the thread's caches. The states are the same, except for an AP set of the half-day
-    class, which can differ (stack #626: up to 0.18 mm measured).
+    class, which can differ: its bake caches use one id for the brackets on both sides of the set's epoch, so what it
+    answers depends on which caches it flew with before.
   - A row that a refusal stopped is computed again by the calling thread after the batch, in row order. For the epoch
     store, the series' two slots are released first, keeping the slot to be replaced next, and its sets are built
-    again. The state is the same, except for an AP set of the half-day class that was flown before, which can differ
-    (stack #626; in the test's store, 250 of 6,144 states, up to 0.22 mm).
+    again. The state is the same, except for an AP set of the half-day class that was flown before, which can differ for
+    the same cause (`node test/epoch-pool.e2e.mjs` prints how many deferred states differ and the largest difference).
 - A pool thread runs a chunk only once its own memory.size covers the size published for the batch. Its claim read the
   batch's total, which was stored after that size, so it reads that size.
 - Outside a batch only the calling thread grows the memory, so its view is its own. The one exception is a pool
   thread's once-per-thread caches, made as it starts, one thread at a time. That thread publishes its size, and the
   calling thread goes on once its own view covers it.
-- `sdnap_pool_stats(out)` writes 14 doubles (112 bytes). 0.6.56 wrote the first 10, so a host with a smaller buffer is
-  overrun and must give it 112 bytes:
+- `sdnap_pool_stats(out, count)` writes the first min(count, 16) of 16 doubles and nothing past them (a count of 16 is 128
+  bytes):
   - [0] the threads running;
   - [1] the threaded batches run;
   - [2] the growths of the memory refused inside them (every thread);
@@ -1809,7 +1826,9 @@ The pool and the memory (stack #487). A threaded batch grows nothing, and a pool
   - [8] the waits for a thread's view of the memory that had to yield, and [9] the most yields one took;
   - [10] the memory's growths since the instance started (sbrk's, 1.6), and [11] the 64 KiB pages they added;
   - [12] the epoch store's slices halved for want of their reserve, and [13] its slices run on the calling thread
-    because even the smallest slice's reserve could not be had.
+    because even the smallest slice's reserve could not be had;
+  - [14] the batches' rows completed on pool threads since the instance started, and [15] the pool threads that
+    completed at least one.
 
 Why. Measured on Node 25.4.0 (V8 14.1.146.11), through the module SDK's wasi-threads glue:
 - A thread can trap (memory access out of bounds) when it bulk-fills or bulk-copies a block in pages another thread has
@@ -1840,8 +1859,9 @@ Why. Measured on Node 25.4.0 (V8 14.1.146.11), through the module SDK's wasi-thr
 
 The timer.
 - A batch returns -20, with every row's status 9, once the calling thread has polled 2^35 times (2^37 through 0.6.32)
-  while waiting for its last chunks without a row completing on any thread. The pool is then not used again, and
-  later batches run on the calling thread.
+  while waiting for its last chunks without a row completing on any thread. The pool is then not used again. The row
+  store's later batches run on the calling thread. The epoch store the batch ran over is refused (After a dead batch,
+  above) until it is loaded again with no pool thread active; a store loaded then runs on the calling thread.
 - The heartbeat is a row, not a chunk (from 0.6.33; through 0.6.32 a chunk had to complete). Each thread counts the
   rows it completes in a counter of its own (each counter aligned to 64 bytes), and the calling thread reads their sum at
   each poll. In a cold batch of 1,534 rows that each build a node grid (sets above their switch, flown 4 days from their
@@ -3020,16 +3040,23 @@ allocation failed answers `out-of-memory` with the store empty (through 0.6.56 t
   the close: the aging and the cap (they need the newest epoch of the whole load), the same-epoch replacement and series-forces-differ
   (it compares every record of a series). So a record the close later drops is held until the close, a forecast record whole.
 - **Status.** A non-zero status of any of the three methods means the load is closed and the store is empty, except `load-not-open`,
-  which changes nothing (a part or a close with no load open; a loaded store stays):
-  - an open always drops the load in progress and empties the store, whether or not its configuration is accepted (a refused open
+  which changes nothing (a part or a close with no load open; a loaded store stays), and `pool-dead`, which leaves the store in
+  place:
+  - an open drops the load in progress and empties the store, whether or not its configuration is accepted (a refused open
     leaves no load open and no store);
+  - except after a threaded batch over the store taken for dead (SPEC 9), while a pool thread is still active. That thread may
+    still be reading or writing the store, so the open frees nothing and refuses `pool-dead`, before it reads its $PCF (a bad $PCF
+    in that open is reported as `pool-dead`). The store stays as the dead batch left it: `sdnap_epochs_count` answers its count,
+    the eighth statistic of `sdnap_epochs_stats` is NaN, `sdnap_epochs_at` answers -20 with every status 9, and
+    `sdnap_epochs_set_at` and `sdnap_drag_orbit_check` answer 9. No load is open, so a part or a close answers `load-not-open`.
+    Once no pool thread is active, an open empties the store and the three calls load as usual;
   - a part refused for any reason (a type, a frame, a record, `out-of-memory`) drops the load and empties the store;
   - a close always ends the load, accepted or refused (series-forces-differ, `out-of-memory`, `missing-ocm` for a close with no
     part), and a refused close leaves the store empty.
 
   `load_epochs` abandons a load in progress, accepted or refused. With no load open, a `load_epochs` refused before its build begins
-  (a wrong frame type, a bad $PCF) leaves the store as it was, as it always did, where a refused open empties it (the open's contract is
-  the empty store).
+  (a wrong frame type, a bad $PCF, `pool-dead`) leaves the store as it was, as it always did, where a refused open empties it (the
+  open's contract is the empty store; `pool-dead` excepted, above).
 - **The first failure.** The reported failure is the first one met in input order: within a part as `load_epochs` reports it
   (every frame's type is checked before any record is decoded, so within one part a wrong type is reported before an earlier
   record's decode refusal), across parts the earlier part's. Two cases differ from `load_epochs` on the whole list: (1) a record that
@@ -3048,8 +3075,11 @@ allocation failed answers `out-of-memory` with the store empty (through 0.6.56 t
 - **One load at a time.** There is one load per instance, with no handle: a part or a close acts on the load open, whoever opened it,
   and an open from any caller drops the load in progress. A host serializes one load per instance. No export, the statistics
   included, may run on another thread while any of the three methods or `load_epochs` runs: the open frees a loaded store, the
-  install writes the resident store in place with no guard (as `load_epochs` never had), and the statistics walk the open load. No pool
-  or batch entry of the module reads this store.
+  install writes the resident store in place with no guard (as `load_epochs` never had), and the statistics walk the open load. One
+  pool entry reads and writes this store: `sdnap_epochs_at` without a covariance plane runs its series on the pool's threads (SPEC
+  9). It returns only once every chunk is done, so no pool thread touches the store while a load call runs. The exception is a
+  batch taken for dead, whose slow thread may still be in its chunk: `load_epochs` and `load_epochs_open` then refuse `pool-dead`
+  while a pool thread is active, before they free anything.
 - **Memory.** Nothing of a part's bytes is kept after the call: a host stages every part in one buffer, allocated once and reused
   (the module reads a part's frames in place and has copied what it keeps before the call returns). What is held between parts is the
   decoded records (identity, elements, forces and covariance, the weather interned once, and, for a record that carries a forecast,

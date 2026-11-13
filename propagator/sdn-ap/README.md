@@ -47,16 +47,19 @@ The output map and the terms above e 0.3 retain their definitions.
   row: 0 SGP4, 4 SGP4XP; any other theory is held refused); `sdnap_propagate_soa(jdWhole, jdFrac, first, count, frame,
   out, status)` and `sdnap_propagate_minutes_soa(minutes, first, count, out, status)` write six planes (x, y, z, vx, vy,
   vz) of `count` doubles, TEME km and km/s or Earth-fixed m and m/s. `sdnap_threads(n)` starts the pool; results are
-  the same bytes at any thread count. A threaded batch grows no memory (SPEC 9, stack #487). A batch whose pool thread
-  stops returns -20, with every status 9, and later batches run on the calling thread. `sdnap_pool_stats(out)` reads
-  the pool's counts and the memory's growths: 14 doubles, so the buffer is 112 bytes (0.6.56 wrote 10; SPEC 9 gives
-  the layout; the memory grows in steps of at least 4 MiB, SPEC 1.6). Before 0.6.31 a pool thread could trap on a block in pages another thread had just grown, and
-  the calling thread then waited forever. On a loaded machine that happened in AP batches of a test build, never in the
-  shipped build with SGP4XP rows (0 of 40 processes).
+  the same bytes at any thread count. A threaded batch grows no memory (SPEC 9). A batch whose pool thread stops
+  returns -20, with every status 9. The row store's later batches run on the calling thread; the epoch store the batch
+  ran over is refused until it is loaded again with no pool thread active (SPEC 9), and a store loaded then runs on the
+  calling thread. `sdnap_pool_stats(out, count)` writes the first min(count, 16) of the pool's 16 counts (SPEC 9 gives
+  the layout: among them the memory's growths, steps of at least 4 MiB by SPEC 1.6, and the rows run on pool threads).
+  Before 0.6.31 a pool thread could trap on a block in pages another thread had just grown, and the calling thread then
+  waited forever. On a loaded machine that happened in AP batches of a test build, never in the shipped build with
+  SGP4XP rows (0 of 40 processes).
 - The epoch store's state-only `sdnap_epochs_at` initializes and flies series on the pool in chunks of 16. Each series'
-  two slots belong to one thread during the batch. Wide series stay serial in series order, including their flight;
-  requests for covariance stay serial. Initialization storage and cache room are reserved before the batch, and any
-  series stopped by refused growth is retried serially. The thread-count and poisoned-storage test is
+  two slots belong to one thread during the batch. A series holding a wide set (AP above e 0.05 in no resonance class,
+  above e 0.3 in one) stays serial in series order, including its flight; requests for covariance stay serial.
+  Initialization storage and cache room are reserved before the batch, and any series stopped by refused growth is
+  retried serially. The thread-count and poisoned-storage test is
   `test/epoch-pool.e2e.mjs`.
   Browser threads require a dedicated Worker on a cross-origin-isolated page, browser WASI threads enabled in the
   host, and `sdnap_threads(n)` called while idle. A host refusing thread creation leaves computation on the calling

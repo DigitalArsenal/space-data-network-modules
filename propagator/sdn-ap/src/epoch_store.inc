@@ -200,7 +200,8 @@ struct Store {
   int32_t short_day = 0;
   /// A threaded batch over the store ended with the pool dead (pool::kBatchPoolDead): a pool thread only slow, not dead,
   /// may still be building, flying or replacing its series' slots, so nothing reads or frees them again. Every later state
-  /// is refused (kRowPoolDead), and load_epochs refuses until no pool thread is active (one that trapped never is).
+  /// is refused (kRowPoolDead), and load_epochs and load_epochs_open refuse, before they free anything, until no pool
+  /// thread is active (one that trapped never is).
   int32_t pool_dead = 0;
 };
 
@@ -684,7 +685,7 @@ inline Slot& slot_of(Store& st, Series& s, uint32_t k, bool with_cov) {
   const Elements e = elements_of(en.row);
   if (g_init_hook != nullptr) g_init_hook();
   // the slot names set k only once its build is complete (Valid, on every return): until then it holds no set (index -1),
-  // so nothing reads a half-built slot as set k. SPEC 1.6 (stack #497): a slot whose initialization failed for want of
+  // so nothing reads a half-built slot as set k. SPEC 1.6 (the counted memory): a slot whose initialization failed for want of
   // memory is not kept as refused: it answers this call with the failure and is initialized again by the next
   const uint32_t mem_mark = sdnap::mem::g_thread_failures;
   struct Valid {
@@ -1551,8 +1552,9 @@ int32_t sdnap_epochs_at(double jd_whole, double jd_frac, uint32_t first, uint32_
   j.jd_whole = jd_whole; j.jd_frac = jd_frac;
   j.first = first; j.stride = count; j.frame = frame;
   j.out = out; j.status = status; j.deferred = deferred;
-  // the call in slices (stack #487's batch, one per slice): at most epoch_slice() series a batch, the memory free to grow
-  // between them, each slice's reserve its own (series_reserve), so the high-water is the sets made plus one slice's reserve.
+  // the call in slices (one threaded batch a slice, which grows no memory: SPEC 9): at most epoch_slice() series a batch, the
+  // memory free to grow between them, each slice's reserve its own (series_reserve), so the high-water is the sets made plus
+  // one slice's reserve.
   // A slice whose reserve cannot be had is halved; one of two chunks or less whose reserve still cannot be had runs on the
   // calling thread, as the call does without the pool. Every series is a function of its own inputs and time: the slicing
   // changes no byte.
