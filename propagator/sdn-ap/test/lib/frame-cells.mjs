@@ -56,7 +56,7 @@ export const ocmOfObject = (o, ap = true) => seedOcm({ epoch: o.epochOffsetMs ? 
   norad: o.norad, msis: ap, records: ap, tesseral: ap ? 31 : 0, zonal: ap ? 20 : 0, rows: ap ? (o.rowsFrom ? allRows.filter((r) => r.DATE >= o.rowsFrom) : allRows) : [] });
 const prefixed = (u) => { const b = Buffer.alloc(4 + u.length); b.writeUInt32LE(u.length, 0); Buffer.from(u).copy(b, 4); return b; };
 
-/** An instance of the module (wasm: the one under test, or `wasm`) with the frames entries wrapped. `threads`: a pool of that many threads (the pool exists, the frames run on the calling thread). */
+/** An instance of the module with the frames entries wrapped. `threads` starts that many pool threads for refill and theory batches. */
 export async function openFrames({ wasm = wasmPath, initialMemoryBytes, threads = 0 } = {}) {
   const h = await createStandaloneHarness("browser", wasm, { surface: "direct", maxThreads: Math.max(1, threads), enableBrowserWasiThreads: threads > 0, ...(initialMemoryBytes ? { initialMemoryBytes } : {}) });
   const x = h.instance.exports, mem = () => h.memory.buffer;

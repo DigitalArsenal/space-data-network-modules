@@ -6456,6 +6456,9 @@ What gets worse:
 
 ### 19.6 Memory
 
+The instance totals in this subsection combine the stored-load baseline and serial-refill growth measured separately.
+Complete one-instance pooled-refill measurements and their limits are in 19.10.
+
 One block, allocated at open, counted, of exactly the budget given: the table (32 bytes a series, padded to 64, 3.2 MB at
 100,000) and the slab. The host's rule for the budget: 850 bytes for each object served, 32 bytes for each series and 1 MiB.
 Measured by `node test/frames-memory.e2e.mjs` (about 7 minutes, 3 GB of the host's memory; it asserts that the slab holds at most 850 bytes for each object served, that no row is refused, that every served object is served, and that the instance total is under 300 MB decimal with and without a pool; the other figures below are printed)
