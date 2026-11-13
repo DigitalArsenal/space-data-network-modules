@@ -104,3 +104,76 @@ int32_t plugin_propagate_all_positions(double jd, double* out, uint32_t max) {
   }
   return static_cast<int32_t>(n);
 }
+
+/// Direct epoch states on the requested grid; zero and negative steps are accepted.
+SDNAP_EXPORT("plugin_propagate_path")
+int32_t plugin_propagate_path(uint32_t index, double start_jd, double step_days, uint32_t count, double* out) {
+  using namespace sdnap;
+  if (count == 0) return 0;
+  if (out == nullptr) return ORBPRO_PROP_NULL_OUTPUT;
+  const uint32_t n = plugin_records ? plugin_record_count() : store().count;
+  if (n == 0) return ORBPRO_PROP_NOT_INITIALIZED;
+  if (index >= n) return ORBPRO_PROP_BAD_ENTITY_INDEX;
+  if (count > INT32_MAX || !std::isfinite(start_jd) || !std::isfinite(step_days) ||
+      !std::isfinite(start_jd + (count - 1) * step_days)) return ORBPRO_PROP_BAD_INPUT;
+  auto& st = epochs::resident();
+  if (plugin_records && st.pool_dead != 0) return ORBPRO_PROP_UNPHYSICAL;
+  const uint32_t raw = plugin_records ? st.plugin_order[index] : 0;
+  for (uint32_t i = 0; i < count; ++i) {
+    const double jd = start_jd + i * step_days;
+    double whole, frac;
+    split_jd(jd, whole, frac);
+    OrbProStateVector state;
+    plugin_invalid(jd, &state);
+    const int32_t rc = plugin_records ? plugin_direct_state(raw, whole, frac, &state) : write_state(index, whole, frac, &state);
+    for (int a = 0; a < 3; ++a) out[3 * i + a] = rc == 0 ? state.position[a] : __builtin_nan("");
+  }
+  // A focused path releases only its entity's direct caches, leaving all frame cells intact.
+  if (plugin_records) {
+    auto& series = st.series[raw];
+    for (auto& slot : series.slots) epochs::release(slot);
+    series.next = 0;
+  }
+  return static_cast<int32_t>(count);
+}
+
+namespace sdnap {
+inline bool plugin_metadata(uint32_t index, double& period, double& eccentricity) {
+  if (plugin_records) {
+    auto& st = epochs::resident();
+    if (index >= st.plugin_order.size() || st.pool_dead != 0) return false;
+    const auto& s = st.series[st.plugin_order[index]];
+    const auto& row = st.entries[s.first + s.count - 1].row;
+    period = row.mean_motion_rev_day > 0 ? 1440.0 / row.mean_motion_rev_day : 0;
+    eccentricity = row.eccentricity;
+  } else {
+    const auto& st = store();
+    if (index >= st.count) return false;
+    const uint32_t slot = st.slot[index];
+    if (st.kind[index] == 0) {
+      const auto& sat = st.sats[slot];
+      if (sat.init_error != 0) return false;
+      period = sat.xnodp > 0 ? kTwoPi / sat.xnodp : 0;
+      eccentricity = sat.eo;
+    } else {
+      const auto& sat = st.xps[slot];
+      if (sat.init_error != 0) return false;
+      period = sat.ctx.n0 > 0 ? kTwoPi / sat.ctx.n0 : 0;
+      eccentricity = sat.ctx.e0;
+    }
+  }
+  return true;
+}
+}  // namespace sdnap
+SDNAP_EXPORT("get_orbital_period")
+double get_orbital_period(uint32_t index) {
+  double period = 0, eccentricity;
+  sdnap::plugin_metadata(index, period, eccentricity);
+  return period;
+}
+SDNAP_EXPORT("get_eccentricity")
+double get_eccentricity(uint32_t index) {
+  double period, eccentricity = __builtin_nan("");
+  sdnap::plugin_metadata(index, period, eccentricity);
+  return eccentricity;
+}
