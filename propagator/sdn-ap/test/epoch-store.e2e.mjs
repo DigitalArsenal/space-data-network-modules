@@ -404,7 +404,10 @@ for (const [label, cfg] of [["NEAREST, SMOOTHSTEP", {}], ["NEAREST, HERMITE", { 
   check((await loadSets([ap, repackOcm(ap, (t) => { t.METADATA.NORAD_CAT_ID = 91999; t.PERTURBATIONS.SPACE_WEATHER[0].AP_AVG += 1; })])).statusCode === 0, "load two sets, two row series");
   const copy = stats()[7] - single - (shared - single) / 99;  // one more row series beyond one more set
   console.log(`store bytes: 100 sets sharing one row series ${shared}, with 100 row series ${separate}; one series' rows ${copy} B; 99 extra copies ${separate - shared} B`);
-  check(copy > 32 * 56 && separate - shared === 99 * copy, `interning: ${separate - shared} B for 99 more row series against ${copy} B a copy`);
+  // the pool of distinct series doubles when full, from 16 pointers of 4 bytes (SPEC 14.1): 100 series hold the capacity of 128, one holds 16
+  const poolCapacity = (n) => { let c = 16; while (c < n) c *= 2; return c; };
+  const pool = (poolCapacity(100) - poolCapacity(1)) * 4;
+  check(copy > 32 * 56 && separate - shared === 99 * copy + pool, `interning: ${separate - shared} B for 99 more row series against ${copy} B a copy`);
 }
 
 // --- real history: seven days of the catalog (local, licensed; numbers only)
