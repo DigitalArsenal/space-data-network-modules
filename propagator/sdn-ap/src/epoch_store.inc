@@ -195,6 +195,7 @@ struct Store {
   Stats stats;
   Array<std::unique_ptr<atm::Atmosphere>> atmospheres;  ///< the distinct row series and node vectors of the load
   int32_t short_day = 0;                                      ///< the day a request found no row for (weather-rows-short)
+  uint32_t generation = 0;                                    ///< counts the store's replacements (clear, install): the frames (SPEC 19) drop their cells when it changes
 };
 
 /// The covariance bank first: its set 0 borrows the slot's set's term tables (stack #599), so they outlive it.
@@ -217,6 +218,7 @@ inline void clear(Store& st) {
   st.entries.release();
   st.series.release();
   st.stats = Stats{};
+  ++st.generation;
   st.atmospheres.release();
 }
 
@@ -601,6 +603,7 @@ inline int close(Store& st, Build& b) {
   while (st.atmospheres.size() > used) st.atmospheres.pop_back();
   st.stats.kept = static_cast<double>(st.entries.size());
   unwind.installed = true;
+  ++st.generation;
   return 0;
 }
 

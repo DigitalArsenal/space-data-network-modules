@@ -663,6 +663,21 @@ this cache rework does not touch.
 Above e 0.05 with tesseral 31 (perigee 600 km), a low orbit costs 18 to 20 times SGP4-XP, unchanged (stack #339).
 Without the tesseral terms it costs 0.3 to 0.4 times.
 
+## Frames (SPEC 19; `sdnap_frames_*`, `test/frames.e2e.mjs`)
+
+A frame of every object at one instant from short Chebyshev cells of AP's own states: 0.26 times the cost of SGP4 through
+`sdnap_epochs_at` for position and velocity (`test/frames-cost.mjs`). `sdnap_frames_open(budget_bytes, flags)` reads the loaded
+store; `sdnap_frames_refill(now, ahead, max_rows, priority, count)` builds the cells that `now` and `now + ahead` need, one
+row (one cold set, one cell) at a time on the calling thread, and returns the objects still due; `sdnap_frames_at` evaluates
+polynomials only and states one status for each object (served, no cell, not served by this entry, AP refuses, the builder
+fails). A cell is within 5 mm and 5e-5 m/s of AP's state at 96 checked points of its window; the existing exports return the
+same bits with a frame open.
+
+What gets worse: a frame state differs from AP's by up to that bound (AP's 3e-5 m of noise is not in it); a first fill takes
+about 1 ms an object on one thread (104 s for 100,000); wide sets (e above 0.05 with tesseral terms), series of several sets,
+sets with a forecast and SGP4 sets are answered by AP's entries (47 % of the stored synthetic set is served, 92.1 % of a public
+catalog's objects); at 100,000 objects the cells take 84 MB and the instance about 271 MB in all, while no wide object is flown
+in it (a wide set holds about 10 MB).
 
 ## SGP4XP status
 
@@ -763,6 +778,10 @@ built by `test/lib/spw-constant.mjs` (`FFM_SPW_FIXTURE` names another file of su
 - `test/kernel-patterns.mjs`: AP's cost against SGP4's by request pattern: many records stepped together and record by
   record, the first state of a fresh record at 0, 1 and 7 days, ascending, random and alternating-ends order, e 0 to
   0.3 in low orbit, and the public `propagate` in TEME and GCRF with and without a covariance.
+- `test/frames.e2e.mjs`, `test/frames-memory.e2e.mjs`, `test/frames-cost.mjs`: the frames (SPEC 19): the bound at every second of
+  a day at 0 and 5 days, the same bits from two fill orders, the epoch store's exports unchanged, every status, every counted
+  allocation of open and of a refill row failed in turn; the bytes at 100,000 objects for two catalogs (about 6 minutes, 3 GB
+  of the host's memory); the cost of a frame against SGP4 and the residue of wide sets.
 - `test/output-frames.mjs`: the cost of a `propagate` state in TEME, GCRF and EME2000 (grids and explicit EPOCHS, and
   one-state calls), and with `--diff BEFORE.wasm` the GCRF and EME2000 states of two builds compared (TEME bytes must
   not move) and each build against the per-state IAU 2006/2000A chain with GMST82 in exact arithmetic.
