@@ -6581,7 +6581,33 @@ skip scans, reclaim, and compaction have no hard time bound. JavaScript copies a
 toward total browser memory.
 
 The 300,000,000-byte line applies to the measured configuration, not every thread count and cache history. A host that
-wants the deep look-ahead chooses between the line and the covariance in the same instance. A separate cache stress case
+wants the deep look-ahead chooses between the line and the covariance in the same instance. `test/frames-pool-memory.mjs`
+measures each configuration in one 100,000-object instance: 2 MiB initial memory, load parts of at most 1,000 records,
+staging freed before frame planes, full fill, and two 48-minute window turns. Covariance-bearing records carry the synthetic
+fixture's eight-dimensional covariance with compatible parameter declarations and noise. Totals include the module,
+records, slab, table, frame planes, pool threads, staging, and allocator high water; no separate baseline is added.
+
+The recipe has 100,000 eligible objects. Every figure is bytes:
+
+| Pool threads | One cell, covariance | Two cells, covariance | Two-cell excess above 300,000,000 | Two cells, no covariance |
+| ---: | ---: | ---: | ---: | ---: |
+| 0 | 243,662,848 | 328,663,040 | 28,663,040 | 234,225,664 |
+| 4 | 265,093,120 | 350,093,312 | 50,093,312 | 243,793,920 |
+| 15 | 303,300,608 | 388,300,800 | 88,300,800 | 287,703,040 |
+
+The fifteen-thread recipe also exceeds the line with one cell and covariance, by 3,300,608 bytes. Four threads satisfy the
+line with one covariance-bearing cell or two cells without covariance. These cases have zero logical allocation failures,
+zero slab failures, and zero memory growth inside batches.
+
+The synthetic public-share mix has 92,100 eligible objects and 7,900 unsupported objects; cell counts below are per eligible
+object, with all 100,000 records and frame outputs included in each instance total:
+
+| Pool threads | One cell, covariance | Two cells, covariance | Two-cell excess above 300,000,000 | Two cells, no covariance |
+| ---: | ---: | ---: | ---: | ---: |
+| 4 | 258,408,448 | 336,658,432 | 36,658,432 | 230,359,040 |
+| 15 | 296,550,400 | 374,865,920 | 74,865,920 | 274,268,160 |
+
+A separate cache stress case
 loads 100,000 synthetic recipe records, with the first 32 at tesseral degree 70, eccentricity 0.299, and two revolutions per
 day. Each total below is one instance after the full fill and two window turns, with the three host rules of 19.6:
 
