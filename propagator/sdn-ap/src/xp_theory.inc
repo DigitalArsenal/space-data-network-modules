@@ -5850,7 +5850,9 @@ struct BranchScope {
 /// AP: the per-object tables of what the call selected (tess::active()); nothing without a selection. False out of memory.
 /// The eccentricity switches are s.ctx.branch's (xp_init), never e.eo's own.
 inline bool ap_init(const Elements& e, double n0, int8_t res, XpSat& s) {
-  const auto mem_mark = mem::failures();
+  // this thread's failures: in a threaded batch another thread's refused growth never fails this set (the instance's count
+  // would, and the slot would then hold a refused set no growth had refused)
+  const auto mem_mark = mem::thread_failures();
   const tess::Terms& t = s.ctx.selected_terms;
   const Branch& br = s.ctx.branch;
   s.ctx.n0 = n0;
@@ -5902,7 +5904,7 @@ inline bool ap_init(const Elements& e, double n0, int8_t res, XpSat& s) {
           res::HansenSamples(e.eo), res::HansenSamples(e.eo + h), res::HansenSamples(e.eo + 2.0 * h)};
         for (int j = 0; j < ts.count; ++j) g[j] = res::g_taylor(ts.t[j].l, ts.t[j].p, ts.t[j].q, e.eo, samples);
         s.ctx.res_taylor = g;
-        if (mem::failures() != mem_mark) return false;
+        if (mem::thread_failures() != mem_mark) return false;
       }
     }
   }
@@ -6044,7 +6046,7 @@ inline bool ap_init(const Elements& e, double n0, int8_t res, XpSat& s) {
       tess::zonal_visit_terms(zd, wide, e.xincl, e.eo, kept);
       s.ctx.zt = kept;
       s.ctx.zt_er = tess::tail_w_anchor(e.eo);
-      if (mem::failures() != mem_mark) return false;
+      if (mem::thread_failures() != mem_mark) return false;
       s.ctx.zt_degree = zd;
       s.ctx.zt_wide = wide ? 1 : 0;
     }
@@ -6454,20 +6456,21 @@ inline bool try_lock(int32_t* word) {
   return __atomic_compare_exchange_n(word, &expected, 1, false, __ATOMIC_ACQUIRE, __ATOMIC_RELAXED);
 }
 
-/// A list of sets in the module's counted memory (SPEC 1.6, stack #600): a growth that cannot be had is counted and fails,
-/// never traps (as std::vector's did, a set's first flight adding it to the holders). Doubles from 64.
-struct SetList {
-  XpSat** p = nullptr;
+/// A list in the module's counted memory (SPEC 1.6): a growth that cannot be had is counted and fails, never
+/// traps (as std::vector's did, a set's first flight adding it to the holders). Doubles from 64. T is trivially copyable.
+template <class T>
+struct CountedList {
+  T* p = nullptr;
   size_t n = 0, cap = 0;
   bool reserve(size_t want) {
     if (want <= cap) return true;
-    XpSat** q = static_cast<XpSat**>(sdnap::mem::realloc(p, want * sizeof(XpSat*)));
+    T* q = static_cast<T*>(sdnap::mem::realloc(p, want * sizeof(T)));
     if (q == nullptr) return false;
     p = q;
     cap = want;
     return true;
   }
-  bool push_back(XpSat* v) {
+  bool push_back(const T& v) {
     if (n == cap && !reserve(cap < 64 ? 64 : 2 * cap)) return false;
     p[n++] = v;
     return true;
@@ -6477,10 +6480,17 @@ struct SetList {
   bool empty() const { return n == 0; }
   void clear() { n = 0; }
   void pop_back() { --n; }
-  XpSat*& operator[](size_t i) { return p[i]; }
-  XpSat* back() const { return p[n - 1]; }
-  XpSat** begin() const { return p; }
-  XpSat** end() const { return p + n; }
+  T& operator[](size_t i) { return p[i]; }
+  T back() const { return p[n - 1]; }
+  T* begin() const { return p; }
+  T* end() const { return p + n; }
+};
+using SetList = CountedList<XpSat*>;
+/// A reclaim's candidate: a holder with its stamp as read once under the pool's lock (an owner moves its stamp under its
+/// own cache_lock alone, so the reclaim sorts copies, never stamps that can change under the sort).
+struct PoolVictim {
+  uint64_t stamp;
+  XpSat* v;
 };
 
 /// The sets' caches (SPEC 9): every SetCaches and the tesseral caches they hold count against one budget (default
@@ -6499,7 +6509,7 @@ struct CachePool {
   const XpSat* last = nullptr;  ///< the set that asked last
   uint64_t sp_holders = 0, reclaimed = 0, refused = 0, sp_refused = 0, sp_made = 0;
   SetList holders;
-  SetList order;  ///< pool_reclaim_locked's scratch, its capacity kept with the holders' (pool_room)
+  CountedList<PoolVictim> order;  ///< pool_reclaim_locked's scratch, its capacity kept with the holders' (pool_room)
 };
 
 /// Stack #487 (SPEC 9): inside a threaded batch (pool::run, from the workers' wake to the last one done) the module's
@@ -6516,6 +6526,9 @@ inline thread_local int32_t g_alloc_refused = 0;
 struct BatchStats {
   uint64_t batches = 0, refused = 0, deferred = 0, grew = 0, dead = 0, reserve = 0;
   uint64_t views = 0, view_yields_max = 0;
+  /// the epoch store's sliced calls (sdnap_epochs_at): slices halved for want of their reserve, and slices run on the calling
+  /// thread because even the smallest slice's reserve could not be had (read by test builds)
+  uint64_t reserves_halved = 0, slices_serial = 0;
 };
 inline BatchStats& batch_stats() {
   static BatchStats s;
@@ -6585,16 +6598,21 @@ inline bool pool_reclaim_locked(CachePool& p, uint64_t need, const XpSat* keep, 
   // the scratch's room is kept with the holders' (pool_room), so filling it never allocates; inside a threaded batch a
   // candidate beyond its room is left out rather than grow anything (stack #487), and so is one beyond a growth that
   // cannot be had (stack #600)
-  SetList& order = p.order;
+  CountedList<PoolVictim>& order = p.order;
   order.clear();
-  for (XpSat* v : p.holders)
-    if (v->caches->stamp < before && v != keep) {
+  for (XpSat* v : p.holders) {
+    const uint64_t stamp = __atomic_load_n(&v->caches->stamp, __ATOMIC_RELAXED);
+    if (stamp < before && v != keep) {
       if (order.size() == order.capacity() && batch_running()) break;
-      if (!order.push_back(v)) break;
+      if (!order.push_back(PoolVictim{stamp, v})) break;
     }
-  std::sort(order.begin(), order.end(), [](const XpSat* x, const XpSat* y) { return x->caches->stamp < y->caches->stamp; });
+  }
+  // a strict weak order on the copies, by stamp alone, as sdn-ap 0.6.57 sorted the holders themselves: equal stamps
+  // (consecutive cached flights share one) keep the order that sort gives them, so a serial reclaim picks 0.6.57's victims
+  std::sort(order.begin(), order.end(), [](const PoolVictim& x, const PoolVictim& y) { return x.stamp < y.stamp; });
   const uint64_t target = p.budget - std::min(p.budget, std::max(need, p.budget / 8));
-  for (XpSat* v : order) {
+  for (const PoolVictim& victim : order) {
+    XpSat* const v = victim.v;
     if (p.held + need <= p.budget && p.held <= target) break;
     if (!try_lock(&v->cache_lock)) continue;
     pool_drop_locked(p, *v);
@@ -6603,7 +6621,7 @@ inline bool pool_reclaim_locked(CachePool& p, uint64_t need, const XpSat* keep, 
   }
   // the holders left: their lowest stamp (a holder reclaimed had the lowest; one skipped keeps the bound safe)
   uint64_t left = UINT64_MAX;
-  for (XpSat* v : p.holders) left = std::min(left, v->caches->stamp);
+  for (XpSat* v : p.holders) left = std::min(left, __atomic_load_n(&v->caches->stamp, __ATOMIC_RELAXED));
   p.floor = p.holders.empty() ? __atomic_load_n(&p.clock, __ATOMIC_RELAXED) : std::max(p.floor, left);
   return p.held + need <= p.budget;
 }
@@ -6704,11 +6722,16 @@ inline uint64_t xp_bytes(const XpSat& s) {
 }
 
 /// Frees s's caches (xp_release).
+/// A store's set (pooled) reads its caches under the pool's lock, held or not: a reclaim on another thread of a threaded
+/// batch (pool_reclaim_locked) drops a set's caches and then stores the unlock of its cache_lock into it, both inside one
+/// hold of the pool's lock. Read without the lock, a null left by that drop let the caller go on to free the set before the
+/// unlock landed (a write into freed memory). Once this call has held the lock, no reclaim writes into s again: s is no
+/// longer listed, and the caller may free it. A set that is not a store's never holds caches and is never listed.
 inline void pool_release(XpSat& s) {
-  if (s.caches == nullptr) return;
+  if (!s.pooled) return;
   CachePool& p = cache_pool();
   lock(&p.lock);
-  pool_drop_locked(p, s);
+  if (s.caches != nullptr) pool_drop_locked(p, s);
   unlock(&p.lock);
 }
 
@@ -6732,8 +6755,9 @@ struct SetScope {
       return;
     }
     held = &s;
+    // the stamp is read by a reclaim on another thread under the pool's lock alone: atomic (prev is the owner's alone)
     c->prev = c->stamp;
-    c->stamp = __atomic_load_n(&cache_pool().clock, __ATOMIC_RELAXED);
+    __atomic_store_n(&c->stamp, __atomic_load_n(&cache_pool().clock, __ATOMIC_RELAXED), __ATOMIC_RELAXED);
     g_active_bracket_set = &c->ab;
     tess::g_mdaily_set_cache = &c->md;
     tess::g_sp_set_slot = &c->sp;
