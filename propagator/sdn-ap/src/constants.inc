@@ -119,6 +119,9 @@ template <class T> struct InitTable {
   T* end() { return data + count; }
 };
 inline uint32_t failures() { return __atomic_load_n(&g_failures, __ATOMIC_RELAXED); }
+/// The failures counted on the calling thread: what a step that runs on one thread (a set's initialization, a thread's
+/// table) compares, so that another thread's failure, in a threaded batch, never fails it.
+inline uint32_t thread_failures() { return g_thread_failures; }
 /// The failures counted when the calling thread's method began.
 inline thread_local uint32_t g_call_mark = 0;
 // The largest failed request is the instance's, reset by every method: were two methods ever to overlap on one instance, only

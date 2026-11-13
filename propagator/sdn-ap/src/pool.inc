@@ -353,26 +353,61 @@ inline int32_t run(uint32_t count, size_t reserve) {
   return rc;
 }
 
+/// The allocator's break (SPEC 1.6; the init-threads review's item 13). The allocator grows its heap through sbrk in small
+/// steps (a few 64 KiB pages at a time); each memory.grow costs about 0.3 ms in V8, and a serial first pass of 20,000 AP
+/// series lost a third of its time to them (774 against 501 us an object). sbrk therefore keeps the allocator's break
+/// itself, at or below the memory's end, and grows the memory by at least kSbrkStepPages when the break would pass the
+/// end: the instance may hold up to one step more than the allocator has asked for. Test builds set the step to 0 (the
+/// memory grown by the request alone, as through 0.6.56).
+constexpr uintptr_t kSbrkStepPages = 64;  // 4 MiB
+inline uintptr_t g_break = 0;             ///< the allocator's break (0: not yet read; then the memory's end)
+inline int32_t g_break_lock = 0;          ///< the allocator calls sbrk under its own lock; this one keeps the break whole regardless
+inline uint64_t g_memory_growths = 0;     ///< memory.grow calls made (sdnap_pool_stats)
+inline uint64_t g_memory_grown_pages = 0; ///< the pages they added
+
 }  // namespace pool
 }  // namespace sdnap
 
-/// wasi-libc's sbrk (the allocator's only way to grow the memory), with the batch's rule: while a threaded batch runs,
-/// every growth is refused (ENOMEM), on every thread, and counted; the refusing thread's row is deferred (stack #487).
-/// Otherwise it is wasi-libc's: sbrk(0) the memory's end, page-sized growth only, never shrinking.
+/// wasi-libc's sbrk (the allocator's only way to grow the memory): sbrk(0) answers the break, never shrinking, page-sized
+/// increments only. A request below the memory's end moves the break; one past it grows the memory by at least a step, or,
+/// when a step does not fit under the memory's maximum, by exactly what the request lacks before it is refused (ENOMEM).
+/// While a threaded batch runs no growth of the memory is made (stack #487): one is refused, on every thread, and counted,
+/// and the refusing thread's row is deferred. The slack below the memory's end is served inside a batch: those pages were
+/// in the memory when the batch published its size, before any thread claimed a chunk, so every thread's view covers them
+/// (the trap #487 removed came from pages grown after a thread's view was taken; moving the break grows nothing).
 extern "C" void* sbrk(intptr_t increment) {
+  using namespace sdnap::pool;
   constexpr uintptr_t kPage = 65536;
-  if (increment == 0) return reinterpret_cast<void*>(static_cast<uintptr_t>(__builtin_wasm_memory_size(0)) * kPage);
   if (increment < 0 || static_cast<uintptr_t>(increment) % kPage != 0) std::abort();
-  if (sdnap::xpt::batch_running()) {
-    __atomic_add_fetch(&sdnap::xpt::batch_stats().refused, 1, __ATOMIC_SEQ_CST);
-    sdnap::xpt::g_alloc_refused = 1;
+  for (int32_t expected = 0; !__atomic_compare_exchange_n(&g_break_lock, &expected, 1, false, __ATOMIC_ACQUIRE, __ATOMIC_RELAXED); expected = 0) {
+  }
+  void* result = nullptr;
+  const uintptr_t end = static_cast<uintptr_t>(__builtin_wasm_memory_size(0)) * kPage;
+  if (g_break == 0) g_break = end;  // the first call: the allocator's heap ends where the memory does
+  const uintptr_t need = g_break + static_cast<uintptr_t>(increment);
+  if (need > end) {
+    const uintptr_t short_pages = (need - end) / kPage;
+    if (sdnap::xpt::batch_running()) {
+      __atomic_add_fetch(&sdnap::xpt::batch_stats().refused, 1, __ATOMIC_SEQ_CST);
+      sdnap::xpt::g_alloc_refused = 1;
+    } else {
+      uintptr_t pages = short_pages < kSbrkStepPages ? kSbrkStepPages : short_pages;
+      if (__builtin_wasm_memory_grow(0, pages) == SIZE_MAX)
+        pages = pages != short_pages && __builtin_wasm_memory_grow(0, short_pages) != SIZE_MAX ? short_pages : 0;
+      if (pages != 0) {
+        __atomic_add_fetch(&g_memory_growths, 1, __ATOMIC_RELAXED);
+        __atomic_add_fetch(&g_memory_grown_pages, static_cast<uint64_t>(pages), __ATOMIC_RELAXED);
+      }
+      if (pages != 0) result = reinterpret_cast<void*>(g_break);
+    }
+  } else {
+    result = reinterpret_cast<void*>(g_break);
+  }
+  if (result != nullptr) g_break = need;
+  __atomic_store_n(&g_break_lock, 0, __ATOMIC_RELEASE);
+  if (result == nullptr) {
     errno = ENOMEM;
     return reinterpret_cast<void*>(static_cast<intptr_t>(-1));
   }
-  const uintptr_t old = __builtin_wasm_memory_grow(0, static_cast<uintptr_t>(increment) / kPage);
-  if (old == SIZE_MAX) {
-    errno = ENOMEM;
-    return reinterpret_cast<void*>(static_cast<intptr_t>(-1));
-  }
-  return reinterpret_cast<void*>(old * kPage);
+  return result;
 }

@@ -296,21 +296,24 @@ int32_t sdnap_propagate_minutes_soa(const double* minutes, uint32_t first, uint3
 SDNAP_EXPORT("sdnap_threads")
 int32_t sdnap_threads(int32_t threads) { return sdnap::pool::start(threads); }
 
-/// The pool, read only (stack #487, SPEC 9), 10 doubles: the threads running; the threaded batches run; the growths of
-/// the memory refused inside them (every thread); the rows deferred to the calling thread after them; the batches
-/// after which the calling thread saw a larger memory (the invariant: 0); whether the pool was taken for dead (1; its
-/// later batches run on the calling thread); the polls without a completed row a waiting caller allows a batch; the
-/// last batch's reserve (bytes); the waits for a thread's view of the memory that had to yield, and the most yields one
-/// took.
+/// The pool and the memory, read only (stack #487, SPEC 9 and 1.6), 12 doubles: the threads running; the threaded batches
+/// run; the growths of the memory refused inside them (every thread); the rows deferred to the calling thread after them;
+/// the batches after which the calling thread saw a larger memory (the invariant: 0); whether the pool was taken for dead
+/// (1; its later batches run on the calling thread); the polls without a completed row a waiting caller allows a batch;
+/// the last batch's reserve (bytes); the waits for a thread's view of the memory that had to yield, and the most yields
+/// one took; the memory's growths since the instance started (sbrk's memory.grow calls, each of at least a step but at
+/// the memory's maximum) and the 64 KiB pages they added.
 SDNAP_EXPORT("sdnap_pool_stats")
 void sdnap_pool_stats(double* out) {
   if (out == nullptr) return;
   const sdnap::xpt::BatchStats& s = sdnap::xpt::batch_stats();
-  const double v[10] = {static_cast<double>(sdnap::pool::job().threads), static_cast<double>(s.batches), static_cast<double>(s.refused),
+  const double v[12] = {static_cast<double>(sdnap::pool::job().threads), static_cast<double>(s.batches), static_cast<double>(s.refused),
                         static_cast<double>(s.deferred), static_cast<double>(s.grew), static_cast<double>(s.dead),
                         static_cast<double>(sdnap::pool::dead_polls()), static_cast<double>(s.reserve),
-                        static_cast<double>(s.views), static_cast<double>(s.view_yields_max)};
-  for (int k = 0; k < 10; ++k) out[k] = v[k];
+                        static_cast<double>(s.views), static_cast<double>(s.view_yields_max),
+                        static_cast<double>(__atomic_load_n(&sdnap::pool::g_memory_growths, __ATOMIC_RELAXED)),
+                        static_cast<double>(__atomic_load_n(&sdnap::pool::g_memory_grown_pages, __ATOMIC_RELAXED))};
+  for (int k = 0; k < 12; ++k) out[k] = v[k];
 }
 
 /// The sets' caches (SPEC 9), read only (the budget is the module's default, 256 MB; xpt::cache_budget_mb sets it in

@@ -148,6 +148,16 @@ count), the weather pool (which at least doubles when full), each set's covarian
 series of more than one set. A covariance matrix that cannot be allocated refuses `out-of-memory`, not
 `invalid-covariance`.
 
+**The memory grows in steps of at least 4 MiB.** The allocator grows its heap through `sbrk` a few 64 KiB pages at a
+time, and each growth of the memory costs about 0.3 ms. Through 0.6.56 `sbrk` grew the memory by exactly what the
+allocator asked. A serial first pass of 20,000 AP series then spent a third of its time growing it: 774 µs an object,
+against 501 with the memory grown beforehand. `sbrk` now keeps the allocator's break itself, at or below the memory's end
+(`sbrk(0)` answers the break). A request below the end moves the break. One past the end grows the memory by at least a
+step (64 pages, 4 MiB). When a step does not fit under the memory's maximum, it grows by exactly what the request lacks,
+and only then refuses. So the instance may hold up to one step more than the allocator has asked for, and it refuses
+only where the request itself does not fit. `sdnap_pool_stats` counts the growths and the pages they added
+(`test/memory-step.e2e.mjs`: a test build with the step 0 gives the same bytes and answers the same sets at a limit).
+
 **A method during which one of them failed refuses with errorCode `out-of-memory` and emits nothing.** That holds for
 `propagate`, `propagate_epochs`, `load_epochs`, `fit`, `maneuver`, `ingest_omm` and `export_omm`, whatever the method
 would otherwise have answered. That includes the decay answers of SPEC 16.25:
@@ -1689,12 +1699,14 @@ Three more rules for the lanes:
 of 1 and 2 (slots replaced inside the batch), then set 2 alone. The store holds SGP4, SGP4XP and AP series, AP on
 NRLMSISE-00 at node heights under and over 325 km and on Jacchia 1970, two force sets and two weather tables
 alternating, covariance on half, and eight wide series flown on the calling thread.
-- The reference is each series alone on the calling thread. Its digest is the one sdn-ap 0.6.52 gives.
+- The reference is each series alone on the calling thread. Its digest is the one sdn-ap 0.6.56 gives.
 - On 0, 1, 4 and 15 threads, with poisoned table storage on each, and in slices of 100 series: every state and status
   byte equals the reference.
 - With no reserve (every series that needs memory inside a batch is deferred): every status equals the reference. Every
   state equals the reference, or, for a series deferred at that instant, the serial state with its slots dropped just
-  before its flight. The two differ only for a set whose state depends on what it was flown at before (stack #626).
+  before its flight. The two differ only for a set whose state depends on what it was flown at before (stack #626: one
+  cache id for the brackets on both sides of a set's epoch in the tesseral and m-daily bake caches and the drag-pass
+  cache's key). This allowance goes when #626 is fixed; the no-reserve case is then held to the reference like the rest.
 - The test build's counters show every path taken.
 
 The 400-wide-series control at 0 and 15 threads also keeps every refusal in the same series.
@@ -1726,7 +1738,10 @@ The pool and the memory (stack #487). A threaded batch grows nothing, and a pool
   Never reached inside a batch: the wide grids (a wide series flies on the calling thread), covariance (such calls are
   serial), the thread's caches and guarded statics (made before the batch), and the call's own flags and deferred list
   (made through the counted allocator before the first slice; without them the call runs on the calling thread).
-- Inside the batch, sbrk refuses every growth on every thread.
+- Inside the batch, sbrk refuses every growth of the memory on every thread. It still serves a request below the
+  memory's end, moving the allocator's break (1.6): those pages were in the memory when the batch published its size,
+  before any thread claimed a chunk, so every thread's view covers them. The trap of #487 came from pages grown after a
+  thread's view was taken, and moving the break grows nothing.
   - A set refused its caches flies on the thread's caches. The states are the same, except for an AP set of the half-day
     class, which can differ (stack #626: up to 0.18 mm measured).
   - A row that a refusal stopped is computed again by the calling thread after the batch, in row order. For the epoch
@@ -1738,7 +1753,8 @@ The pool and the memory (stack #487). A threaded batch grows nothing, and a pool
 - Outside a batch only the calling thread grows the memory, so its view is its own. The one exception is a pool
   thread's once-per-thread caches, made as it starts, one thread at a time. That thread publishes its size, and the
   calling thread goes on once its own view covers it.
-- sdnap_pool_stats counts the batches, refusals, deferred rows, batches that grew inside (0) and the view waits.
+- sdnap_pool_stats (12 doubles) counts the batches, refusals, deferred rows, batches that grew inside (0) and the view
+  waits, and the memory's growths and the pages they added (1.6).
 
 Why. Measured on Node 25.4.0 (V8 14.1.146.11), through the module SDK's wasi-threads glue:
 - A thread can trap (memory access out of bounds) when it bulk-fills or bulk-copies a block in pages another thread has

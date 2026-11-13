@@ -78,7 +78,8 @@ const testBuild = buildDiagnostic("epoch-pool-safety", SEAMS,
   { "epoch_store.inc": (t) => once(once(once(t, "inline void release(Slot& s) {", "inline uint32_t g_test_replaced = 0;\ninline void release(Slot& s) {"),
       "  std::free(s.xp);\n",
       "  if (s.xp != nullptr && __atomic_load_n(&xpt::g_test_reclaim_target, __ATOMIC_SEQ_CST) == s.xp) __atomic_add_fetch(&xpt::g_test_late, 1u, __ATOMIC_SEQ_CST);\n  std::free(s.xp);\n"),
-    "  s.next ^= 1u;\n  release(q);\n", "  s.next ^= 1u;\n  if (q.index >= 0) __atomic_add_fetch(&g_test_replaced, 1u, __ATOMIC_RELAXED);\n  release(q);\n") });
+    "  s.next = s.slots.second ? s.next ^ 1u : 0u;\n  release(q);\n",
+    "  s.next = s.slots.second ? s.next ^ 1u : 0u;\n  if (q.index >= 0) __atomic_add_fetch(&g_test_replaced, 1u, __ATOMIC_RELAXED);\n  release(q);\n") });
 
 async function open(threads) {
   const h = await createStandaloneHarness("browser", testBuild, { surface: "direct", maxThreads: Math.max(1, threads), enableBrowserWasiThreads: threads > 0 });

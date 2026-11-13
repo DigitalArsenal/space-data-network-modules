@@ -204,7 +204,7 @@ async function soa(threads, bytes = 0) {
   }
   // the pool's statistics (sdnap_pool_stats): the threads running, the threaded batches run, ..., whether the pool was taken
   // for dead: 8 threads run a threaded batch at every one of the 20 instants and stay alive; 1 thread runs none
-  const ps = x.sdnap_alloc(80);
+  const ps = x.sdnap_alloc(96);
   x.sdnap_pool_stats(ps);
   const [poolThreads, batches, , , , dead] = Array.from(new Float64Array(mem(), ps, 10));
   if (threads > 1) assert.ok(poolThreads === threads && batches >= 20 && dead === 0, `${threads} threads: ${poolThreads} running, ${batches} threaded batches, dead ${dead}`);

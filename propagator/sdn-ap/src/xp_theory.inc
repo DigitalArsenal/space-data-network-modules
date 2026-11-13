@@ -5850,7 +5850,9 @@ struct BranchScope {
 /// AP: the per-object tables of what the call selected (tess::active()); nothing without a selection. False out of memory.
 /// The eccentricity switches are s.ctx.branch's (xp_init), never e.eo's own.
 inline bool ap_init(const Elements& e, double n0, int8_t res, XpSat& s) {
-  const auto mem_mark = mem::failures();
+  // this thread's failures: in a threaded batch another lane's refused growth never fails this set (through the merge of
+  // 0.6.53, the instance's count did, and the slot then held a refused set no growth had refused)
+  const auto mem_mark = mem::thread_failures();
   const tess::Terms& t = s.ctx.selected_terms;
   const Branch& br = s.ctx.branch;
   s.ctx.n0 = n0;
@@ -5902,7 +5904,7 @@ inline bool ap_init(const Elements& e, double n0, int8_t res, XpSat& s) {
           res::HansenSamples(e.eo), res::HansenSamples(e.eo + h), res::HansenSamples(e.eo + 2.0 * h)};
         for (int j = 0; j < ts.count; ++j) g[j] = res::g_taylor(ts.t[j].l, ts.t[j].p, ts.t[j].q, e.eo, samples);
         s.ctx.res_taylor = g;
-        if (mem::failures() != mem_mark) return false;
+        if (mem::thread_failures() != mem_mark) return false;
       }
     }
   }
@@ -6044,7 +6046,7 @@ inline bool ap_init(const Elements& e, double n0, int8_t res, XpSat& s) {
       tess::zonal_visit_terms(zd, wide, e.xincl, e.eo, kept);
       s.ctx.zt = kept;
       s.ctx.zt_er = tess::tail_w_anchor(e.eo);
-      if (mem::failures() != mem_mark) return false;
+      if (mem::thread_failures() != mem_mark) return false;
       s.ctx.zt_degree = zd;
       s.ctx.zt_wide = wide ? 1 : 0;
     }
