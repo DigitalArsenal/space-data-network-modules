@@ -388,9 +388,7 @@ struct NormalizedFkSamples {
   }
   Sample* get(int m, int NF, int count, double i0, int lmax) {
     if (degree != -1 && (std::memcmp(&inclination, &i0, sizeof(i0)) != 0 || degree != lmax)) {
-#ifdef SDNAP_TEST_INIT
-      __builtin_trap();
-#endif
+      assert(false && "inclination memo input changed");
       clear();
     }
     inclination = i0; degree = lmax;
