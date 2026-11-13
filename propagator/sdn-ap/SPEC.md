@@ -1740,8 +1740,9 @@ Three more rules for the pool threads:
 - **The cache pool sorts copies.** A reclaim picks its victims from stamps read once under the pool's lock (an owner
   moves its stamp under its own cache lock alone, atomically). It orders them by stamp alone, with the comparator of
   sdn-ap 0.6.57 (which sorted the holders themselves) over the holders in its order. Equal stamps are common, since
-  consecutive cached flights share one, and a serial reclaim keeps 0.6.57's choice among them: the choice can move a
-  half-day-class state (its bake caches use one id for the brackets on both sides of the set's epoch, below).
+  consecutive cached flights share one, and a serial reclaim keeps 0.6.57's choice among them: the choice can move the
+  state of an AP set that was asked on both sides of its epoch (its bake caches use one id for the brackets on both sides
+  of the set's epoch, below).
 - **The missing weather day is a note, not a result.** `Store::short_day` is written by the thread that flew the state
   that found no row. `propagate_epochs` reads it on the calling thread right after that state. After a threaded
   `sdnap_epochs_at` it names some series' missing day; each series' own status is in its status code.
@@ -1763,7 +1764,7 @@ alternating, covariance on half, and eight wide series flown on the calling thre
 - With no reserve (every growth of the memory inside a batch refused; the case still refuses and defers): every status
   equals the reference. Every state equals the reference, or, for a series deferred at that instant, the serial state
   with its slots dropped just before its flight. That allowance covers one defect alone: one cache id for the brackets
-  on both sides of a set's epoch in the tesseral and m-daily bake caches, and the drag-pass cache's key.
+  on both sides of a set's epoch in the tesseral and m-daily bake caches.
 - The test build's counters show every path taken.
 
 The 400-wide-series control at 0 and 15 threads also keeps every refusal in the same series.
@@ -1801,13 +1802,21 @@ The pool and the memory (stack #487). A threaded batch grows nothing, and a pool
   memory's end, moving the allocator's break (1.6): those pages were in the memory when the batch published its size,
   before any thread claimed a chunk, so every thread's view covers them. The trap (Why, below) came from pages grown
   after a thread's view was taken, and moving the break grows nothing.
-  - A set refused its caches flies on the thread's caches. The states are the same, except for an AP set of the half-day
-    class, which can differ: its bake caches use one id for the brackets on both sides of the set's epoch, so what it
-    answers depends on which caches it flew with before.
+  - A set refused its caches flies on the thread's caches. The states are the same, except for an AP set that was asked
+    on both sides of its epoch before, which can differ. The cause: its bake caches use one id for the brackets on both
+    sides of the set's epoch, so what it answers depends on which caches it flew with before (pull request 86 removes
+    it).
   - A row that a refusal stopped is computed again by the calling thread after the batch, in row order. For the epoch
     store, the series' two slots are released first, keeping the slot to be replaced next, and its sets are built
-    again. The state is the same, except for an AP set of the half-day class that was flown before, which can differ for
-    the same cause (`node test/epoch-pool.e2e.mjs` prints how many deferred states differ and the largest difference).
+    again. The state is the same, except for an AP set that was asked on both sides of its epoch before, which can differ
+    for the same cause.
+  - The sizes measured: under a millimeter in every class measured (500 km, 830 km, medium orbit, geosynchronous,
+    eccentric: 0 to 0.13 mm) except strong drag, where one of eight sets with perigee under about 350 km differed by
+    49.7 mm (asked every second for 81,000 s across its epoch, against a fresh instance; one by 0.11 mm, six by
+    nothing). No command of this repository prints the 49.7 mm; `node test/epoch-pool.e2e.mjs` prints how many of its
+    deferred states differ and the largest difference.
+  - Which sets are refused their caches and which series are deferred depend on the threads' timing, so for such a set
+    two runs of the same calls can differ by that much. Serially the answer is the same every run for the same calls.
 - A pool thread runs a chunk only once its own memory.size covers the size published for the batch. Its claim read the
   batch's total, which was stored after that size, so it reads that size.
 - Outside a batch only the calling thread grows the memory, so its view is its own. The one exception is a pool

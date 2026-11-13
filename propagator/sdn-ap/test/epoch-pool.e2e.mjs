@@ -28,10 +28,10 @@
 //   the case still refuses and defers, asserted): every status the reference's, and every state the reference's, byte for
 //   byte, except that a series deferred at an instant may instead equal, byte for byte, the dropped control there: the
 //   serial state with the series' two slots released just before its flight, which is what a deferral does. This
-//   allowance covers one defect alone: an AP set of the half-day class answers differently once it was flown before (one
-//   cache id for the brackets on both sides of a set's epoch in the tesseral and m-daily bake caches, and the same fault
-//   in the drag-pass cache's key; the summary line prints how many deferred states took the control and the largest
-//   position difference), and the store must hold such states.
+//   allowance covers one defect alone: an AP set that was asked on both sides of its epoch before answers differently (one
+//   cache id for the brackets on both sides of a set's epoch in the tesseral and m-daily bake caches; the summary line
+//   prints how many deferred states took the control and the largest position difference), and the store must hold such
+//   states.
 // The test build counts, per thread, what each case took, asserted: rows, slots replaced and NRLMSISE-00 evaluations on
 // each side of 325 km on the pool's threads (at least a quarter of each), more than one pool thread at 4 and 15 threads, the wide
 // branch's rows on the calling thread, states of each family (SGP4, SGP4XP, AP), every state answered; the pool's own
@@ -305,10 +305,10 @@ const seamed = [];
 for (const threads of [0, 1, 4, 15]) { const c = run(`poison-${threads}`, diagnostic, threads); assert.ok(c.bytes.equals(reference.bytes), `poison, ${threads} pool threads`); seamed.push(c.r); }
 const sliced = run('sliced', diagnostic, 4, ['--slice', '100']);
 assert.ok(sliced.bytes.equals(reference.bytes), 'slices of 100 series');
-// A deferred series is computed again from its records: its two slots released, its sets built again. An AP set of the
-// half-day class answers differently once it was flown before (one cache id for the brackets on both sides of its epoch
-// in the tesseral and m-daily bakes and the drag-pass cache's key), so the control for a deferred series is the serial
-// state with its slots dropped just before its flight (the allowance of the header).
+// A deferred series is computed again from its records: its two slots released, its sets built again. An AP set that was
+// asked on both sides of its epoch before answers differently (one cache id for the brackets on both sides of its epoch
+// in the tesseral and m-daily bakes), so the control for a deferred series is the serial state with its slots dropped
+// just before its flight (the allowance of the header).
 const dropped = run('dropped', diagnostic, 0, ['--single', '--drop']);
 const deferred = run('deferred', diagnostic, 4, ['--refuse']);
 const deferredAt = JSON.parse(fs.readFileSync(path.join(root, 'deferred-deferred.json'), 'utf8'));
