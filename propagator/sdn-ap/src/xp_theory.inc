@@ -5954,7 +5954,7 @@ inline bool ap_init(const Elements& e, double n0, int8_t res, XpSat& s) {
       if (kept == nullptr) return false;
       tess::zonal_visit_terms(zd, wide, e.xincl, e.eo, kept);
       s.ctx.zt = kept;
-      s.ctx.zt_er = e.eo > 0.01 ? e.eo : 0.01;
+      s.ctx.zt_er = tess::tail_w_anchor(e.eo);
       s.ctx.zt_degree = zd;
       s.ctx.zt_wide = wide ? 1 : 0;
     }

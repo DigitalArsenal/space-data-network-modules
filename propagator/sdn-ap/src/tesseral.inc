@@ -4018,9 +4018,9 @@ inline void half_day_six(const HalfDayCoef* table, int count, double e0, double 
 
 /// SPEC 16.3: below kWideE the tail's rates also carry the long-period terms 2 <= |w| <= kTailW (w = l - 2p,
 /// q = -w; even w on even l, odd w on odd l), in the rates' cached path. G of each is written e^|w| (a + b e^2), its value and
-/// slope exact at e_r = max(e0, 0.01), so it stays smooth through e = 0 (G is O(e^|w|) there; a line in e is not).
+/// slope exact at the center of the epoch eccentricity cell, so it stays smooth through e = 0 (G is O(e^|w|) there; a line in e is not).
 constexpr int kTailW = 6;
-constexpr double kTailAnchorE = 0.002;
+constexpr double kTailCell = 0.002;
 inline void zonal_G(int l, int k, double e, double& G, double& dG);
 
 /// The coefficients of e^k (a + b e^2), matching the closed form and its slope at er >= 0.01.
@@ -4033,10 +4033,26 @@ inline void tail_w_coefficients(int l, int k, double er, float& a, float& b) {
   b = static_cast<float>(G * r / (2.0 * erk * er * er));
 }
 
-/// A pure function of the set and the state: cache reuse cannot change a flight's order-independent answer.
-inline double tail_w_anchor(double e, double er) {
+/// A function of the state alone, independent of the epoch and the table's owner.
+inline double tail_w_anchor(double e) {
   const double at = e > 0.01 ? e : 0.01;
-  return std::fabs(at - er) > kTailAnchorE ? at : er;
+  return kTailCell * (std::floor(at / kTailCell) + 0.5);
+}
+/// Closed-form coefficients depend on the cell, degree and harmonic, not on semimajor axis or inclination.
+/// Keep them across rate-cache rebuilds caused by a changing semimajor axis.
+struct TailWCoefficients {
+  double anchor = -1.0;
+  int degree = 5;
+  float a[71][kTailW + 1]{}, b[71][kTailW + 1]{};
+};
+inline const TailWCoefficients& tail_w_moved(int degree, double anchor) {
+  static thread_local TailWCoefficients c;
+  if (c.anchor != anchor) { c.anchor = anchor; c.degree = 5; }
+  for (int l = c.degree + 1; l <= degree; ++l)
+    for (int k = (l & 1) ? 3 : 2; k <= kTailW; k += 2)
+      tail_w_coefficients(l, k, anchor, c.a[l][k], c.b[l][k]);
+  if (degree > c.degree) c.degree = degree;
+  return c;
 }
 inline int tail_w_pairs(int l) {
   int c = 0;
@@ -4057,7 +4073,7 @@ inline void tail_w_F(int degree, double i0, double h, TailWF& t) {
 }
 /// Degree l's entries for |w| = k0, k0 + 2, .. (w = -k, then +k): F, dF/di, a, b.
 inline void tail_w_entries(int l, int k0, double e0, const TailWF& t, float* F, int& idx) {
-  const double er = e0 > 0.01 ? e0 : 0.01;
+  const double er = tail_w_anchor(e0);
   for (int k = k0; k <= kTailW && k <= l; k += 2) {
     float a, b;
     tail_w_coefficients(l, k, er, a, b);
@@ -4300,11 +4316,11 @@ inline void zonal_six(const float* F, int degree, bool wide, const Kepler& kp, d
   if (!wide) {
     ZonalEvalCache& zc = zonal_eval_cache();
     const int last_i = 4 * zonal_count(degree, false) - 1;
-    const float flast = last_i >= 0 ? F[last_i] : 0.0f;
+    const float flast = last_i >= 0 ? F[last_i - 3] : 0.0f;
     // baked at the state's own a (only the mean-element rates read it, a few times a node step): a function of the
     // state alone
     const double a_c = a;
-    const double e_anchor = tail_w_anchor(e, e_r);
+    const double e_anchor = tail_w_anchor(e);
     const bool reanchor = e_anchor != e_r;
     int64_t ka;
     std::memcpy(&ka, &a, sizeof ka);
@@ -4331,12 +4347,13 @@ inline void zonal_six(const float* F, int degree, bool wide, const Kepler& kp, d
         zc.c[idx][2] += 0.5 * p * (p - 1) * val;
       };
       // Degree l's w = -k, +k entries at g; odd l weighs w = -k by -1 (sin w omega).
-      // Beyond the eccentricity bound only G is rebuilt; the immutable epoch inclination table is shared unchanged.
+      // Outside the table's cell only G changes; the inclination factors stay shared.
+      const TailWCoefficients* moved_coeff = reanchor ? &tail_w_moved(degree, e_anchor) : nullptr;
       auto add_k = [&](const float* g, double Ce, double Ce_a, int l, int k) {
         float moved[8];
         if (reanchor) {
           std::memcpy(moved, g, sizeof moved);
-          tail_w_coefficients(l, k, e_anchor, moved[2], moved[3]);
+          moved[2] = moved_coeff->a[l][k]; moved[3] = moved_coeff->b[l][k];
           moved[6] = moved[2]; moved[7] = moved[3];
           g = moved;
         }
