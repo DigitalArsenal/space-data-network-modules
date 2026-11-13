@@ -117,8 +117,12 @@ int32_t plugin_propagate_path(uint32_t index, double start_jd, double step_days,
   const uint32_t n = plugin_records ? plugin_record_count() : store().count;
   if (n == 0) return ORBPRO_PROP_NOT_INITIALIZED;
   if (index >= n) return ORBPRO_PROP_BAD_ENTITY_INDEX;
-  if (count > INT32_MAX || !std::isfinite(start_jd) || !std::isfinite(step_days) ||
-      !std::isfinite(start_jd + (count - 1) * step_days)) return ORBPRO_PROP_BAD_INPUT;
+  constexpr uint32_t kMaxPathSamples = 1000000;
+  if (count > kMaxPathSamples || count > UINT32_MAX / (3 * sizeof(double)) ||
+      !std::isfinite(start_jd) || !std::isfinite(step_days)) return ORBPRO_PROP_BAD_INPUT;
+  // Validate the complete grid before writing, including intermediate multiply/add overflow.
+  for (uint32_t i = 0; i < count; ++i)
+    if (!std::isfinite(start_jd + i * step_days)) return ORBPRO_PROP_BAD_INPUT;
   auto& st = epochs::resident();
   if (plugin_records && st.pool_dead != 0) return ORBPRO_PROP_UNPHYSICAL;
   const uint32_t raw = plugin_records ? st.plugin_order[index] : 0;

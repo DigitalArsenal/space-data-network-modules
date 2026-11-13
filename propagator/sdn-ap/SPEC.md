@@ -6660,7 +6660,8 @@ double get_eccentricity(uint32_t entity);
 ```
 
 A path samples `start_jd + i*step_days`, writes one ECEF-meter triple per sample and returns count. Zero and negative
-steps are accepted. Count 0 returns 0 without accessing the source or output. Otherwise null output is -3, empty source
+steps are accepted. The cap is 1,000,000 samples (24,000,000 output bytes); counts that overflow 32-bit output
+arithmetic are refused. Every sample time is checked for finiteness before any output write. Count 0 returns 0 without accessing the source or output. Otherwise null output is -3, empty source
 -1, invalid entity -2, nonfinite grid/endpoint or count above INT32_MAX -4, and a failed epoch thread pool -6. Individual
 failed samples are NaN triples. Record paths use the direct epoch evaluator, including selection, blends and carried
 forecast precedence; they do not use frame cells. On return, only that entity's direct slots are released; its frame
