@@ -1785,6 +1785,20 @@ machine, so a median means little.
   GEO; a seeded record is equal at 500 km and 13 % slower at GEO. The integration of the nominal's nodes carries the node
   re-evaluation.
 
+**The warm record's bakes (stack #441).** AP's compact tesseral cache reads block coefficients from the thread cache
+when both hold the same grouping id. An atomic counter assigns each grouping its id before coefficients are written;
+the compact copy preserves it. Otherwise a base bake rebuilds all block coefficients from the terms, and a resonant
+bake rebuilds only resonant blocks. The allocation and thread preallocation follow the same memory accounting.
+
+AP memoizes a, e, and cos i at the bracket's two nodes, keyed byte for byte on n, af, ag, chi, and psi at both nodes.
+The memo belongs to the set while its cache lock is held, and to the thread otherwise. The propagation entry still
+clears the anchor; epoch calls still clear it without consulting the memo. SGP4XP computes its anchor as before.
+
+Inline tesseral and m-daily checks compare the bracket identity, first time, length, and each bake level's part key
+before calling the synchronization routines. The checks use the same part-key expression as the bakes. The stored
+part counts and keys follow the cache's existing lock ownership. These shortcuts reuse values without changing
+arithmetic in the bakes or the returned states.
+
 How room is shared:
 
 - The pool's clock ticks at every ask for room. A holder's stamp is the clock when it was last flown.
