@@ -49,7 +49,7 @@ SDNAP_EXPORT("test_cell_size") uint32_t test_cell_size(uint32_t p) {
 }
 SDNAP_EXPORT("test_staging_bytes") uint32_t test_staging_bytes() { return sizeof(sdnap::frames::Batch); }
 `;
-const wasm = buildDiagnostic("frames-pool", probe, s => s, {
+const wasm = process.env.FRAMES_POOL_DIAGNOSTIC ?? buildDiagnostic("frames-pool", probe, s => s, {
   "constants.inc": s => once(once(s, "inline uint32_t g_failures = 0;", "inline uint32_t g_failures = 0;\ninline thread_local uint32_t test_failure = 0;"),
     "inline void* calloc(size_t k, size_t n) {\n  void* p = std::calloc(k, n);",
     "inline void* calloc(size_t k, size_t n) {\n  if (test_failure) { note_failure(k * n); return nullptr; }\n  void* p = std::calloc(k, n);"),
@@ -78,7 +78,8 @@ const equal = (a, b, t) => {
   for (const dt of [0, 30000, 2880000]) assert.deepEqual(b.at(t + dt), a.at(t + dt), "frame bits");
 };
 let compared = 0;
-for (const threads of [4, 15]) {
+const deadOnly = process.argv.includes("--dead-only");
+for (const threads of deadOnly ? [] : [4, 15]) {
   const a = await open(0), b = await open(threads);
   for (const flags of [0, 1]) for (const budget of [20000, 2e6]) {
     assert.equal(a.open(budget, flags), 0); assert.equal(b.open(budget, flags), 0);
@@ -95,18 +96,18 @@ for (const threads of [4, 15]) {
   assert.equal(b.poolStats()[4], 0, "no memory growth in a batch");
   await a.h.destroy(); await b.h.destroy();
 }
-console.log(`ordered calls: ${compared}, equal cells, counters, results and frame bits at 0/4/15 threads`);
+if (!deadOnly) console.log(`ordered calls: ${compared}, equal cells, counters, results and frame bits at 0/4/15 threads`);
 
-for (const threads of [0, 4, 15]) {
+for (const threads of deadOnly ? [] : [0, 4, 15]) {
   const a = await open(threads), b = await open(threads), t = EPOCH_MS + DAY;
   a.open(2e6); b.open(2e6);
   assert.equal(a.fill(t, 2880, 8).due, 0); assert.equal(b.fill(t, 2880, 5000).due, 0);
   equal(a, b, t);
   await a.h.destroy(); await b.h.destroy();
 }
-console.log("two slicings: identical cells, states and accumulated counters");
+if (!deadOnly) console.log("two slicings: identical cells, states and accumulated counters");
 
-for (const mode of [1, 2]) {
+for (const mode of deadOnly ? [] : [1, 2]) {
   const a = await open(0), b = await open(4), t = EPOCH_MS + DAY;
   a.open(2e6); b.open(2e6);
   if (mode === 2) a.x.test_config(3, mode, 0, 0);
@@ -118,7 +119,7 @@ for (const mode of [1, 2]) {
   else { assert.equal(b.stats()[STAT.rowsOom], 1); assert.equal(b.stats()[STAT.rows], 4, "speculative suffix uncommitted"); }
   await a.h.destroy(); await b.h.destroy();
 }
-for (const [reserves, staging] of [[2, 0], [99, 0], [0, 1]]) {
+for (const [reserves, staging] of deadOnly ? [] : [[2, 0], [99, 0], [0, 1]]) {
   const a = await open(0), b = await open(4), t = EPOCH_MS + DAY;
   a.open(2e6); b.open(2e6); b.x.test_config(0xffffffff, 0, reserves, staging);
   assert.deepEqual(b.refill(t, 0, 32), a.refill(t, 0, 32)); equal(a, b, t);
@@ -126,7 +127,7 @@ for (const [reserves, staging] of [[2, 0], [99, 0], [0, 1]]) {
   if (staging) assert.equal(b.x.test_batch_rows(), 0, "staging refusal uses serial path");
   await a.h.destroy(); await b.h.destroy();
 }
-console.log("deferred growth refusal, counted OOM, reserve halving and serial fallbacks: pass");
+if (!deadOnly) console.log("deferred growth refusal, counted OOM, reserve halving and serial fallbacks: pass");
 
 for (const mode of [1, 2]) {
   const f = await open(4), t = EPOCH_MS + DAY;
@@ -138,7 +139,7 @@ for (const mode of [1, 2]) {
   assert.deepEqual(f.stats(), old.stats); assert.deepEqual(cells(f), old.cells);
   assert.equal(f.open(2e6), -20); assert.equal(f.refill(t, 2880, 32).rc, -20);
   f.close(); assert.deepEqual(f.at(t), old.frame);
-  assert.equal(f.x.sdnap_propagate_jd_soa(0, 0, 0, 0, 0, 0, 0), -20, "descriptor reuse refused");
+  assert.equal(f.x.sdnap_propagate_soa(0, 0, 0, 0, 0, 0, 0), -20, "descriptor reuse refused");
   const load = await f.h.invoke({ methodId: "load_epochs_open", inputs: [] });
   assert.equal(load.errorCode, "pool-dead");
   if (mode === 1) {
