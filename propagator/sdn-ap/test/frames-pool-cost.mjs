@@ -27,8 +27,8 @@ for (const changed of [false, true, true, false]) {
 }
 const quantile = (a, q) => { const s = [...a].sort((a, b) => a - b); return s[Math.min(s.length - 1, Math.floor(q * s.length))]; };
 const median = a => { const s = [...a].sort((a, b) => a - b), m = s.length >> 1; return s.length % 2 ? s[m] : (s[m - 1] + s[m]) / 2; };
-const hash = f => {
-  const q = f.at(EPOCH_MS + 3600000);
+const hash = (f, t) => {
+  const q = f.at(t);
   return createHash("sha256").update(Buffer.from(q.planes.buffer)).update(Buffer.from(q.status.buffer)).digest("hex");
 };
 const samples = { first: [], rolling: [] }, totals = { first: [], rolling: [] };
@@ -80,7 +80,7 @@ for (let cycle = 0; cycle < 4; ++cycle) {
       assert.equal(models[k].fill(t, 2880, 32).stored, 0);
       assert.equal(models[k].poolStats()[4], 0);
     }
-    const hashes = models.map(hash); assert.ok(hashes.every(h => h === hashes[0]), "control and pooled frame bits");
+    const hashes = models.map(f => hash(f, t)); assert.ok(hashes.every(h => h === hashes[0]), "control and pooled frame bits");
   }
   if (summary("first").usable && summary("rolling").usable) break;
 }
