@@ -1,7 +1,7 @@
 // Test-build instrumentation: compare reused coefficients with a fresh reconstruction, byte for byte.
 export const guardExports = `
 SDNAP_EXPORT("sdnap_test_warm_counts") void sdnap_test_warm_counts(double* out) {
-  for (int i = 0; i < 4; ++i) out[i] = static_cast<double>(__atomic_load_n(&sdnap::xpt::g_test_warm[i], __ATOMIC_RELAXED));
+  for (int i = 0; i < 4; ++i) out[i] = static_cast<double>(__atomic_load_n(&sdnap::xpt::tess::g_test_warm[i], __ATOMIC_RELAXED));
 }
 `;
 export function guardTesseral(source) {
