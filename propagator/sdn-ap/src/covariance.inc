@@ -313,6 +313,21 @@ inline void release(Bank& b) {
   for (bool& f : b.live) f = false;  // a second init on this bank starts from no started slot
 }
 
+/// The elements of a moved set's row `r` that parameter `kind` (kinds_of) does not move, set back to `from`'s bits: af and ag
+/// move the eccentricity, argument of perigee and mean anomaly; chi and psi the inclination, node and argument of perigee;
+/// lambda the mean anomaly; n the mean motion; BTERM, AGOM and the consider parameters no element.
+inline void keep_unmoved(const ElementRow& from, int kind, ElementRow& r) {
+  const bool ecc = kind == 0 || kind == 1, inc = kind == 2 || kind == 3, lam = kind == 4, mot = kind == 5;
+  if (!mot) r.mean_motion_rev_day = from.mean_motion_rev_day;
+  if (!ecc) r.eccentricity = from.eccentricity;
+  if (!inc) {
+    r.inclination_deg = from.inclination_deg;
+    r.raan_deg = from.raan_deg;
+  }
+  if (!ecc && !inc) r.arg_pericenter_deg = from.arg_pericenter_deg;
+  if (!ecc && !lam) r.mean_anomaly_deg = from.mean_anomaly_deg;
+}
+
 /// `nominal`: an AP set of `row`, freshly initialized, that becomes the bank's set 0 (moved in: the caller's is left empty).
 /// `tables` (stack #599): an AP set of `row` that outlives the bank (the epoch store's slot), whose term tables set 0
 /// borrows: set 0 is initialized from the row's own elements, as that set was, inside its TableShareScope, so it is the
@@ -329,9 +344,16 @@ inline bool init(const ElementRow& row, const fit::Options& o, Bank& b, xpt::XpS
   b.sats = static_cast<xpt::XpSat*>(sdnap::mem::calloc(static_cast<size_t>(total), sizeof(xpt::XpSat)));
   if (b.sats == nullptr) return false;
   drag::table();
-  auto start = [&](const double* x, int slot) {
+  // set 0 the record's own set (moved in, or borrowing the store's set's tables): a moved set keeps the record's own bits in
+  // every element its parameter does not move (keep_unmoved), so it matches set 0 wherever the theory compares the two bit for
+  // bit (ap_init's same_inc for the tables it shares; 12.3's flags of a moved set), and a one-sided column differences two
+  // flights that differ in its parameter alone. Through 0.6.52 set 0 and the moved sets both came from the parameter vector.
+  const bool own = (nominal != nullptr && xpt::is_ap_ctx(nominal->ctx)) ||
+                   (tables != nullptr && tables->init_error == 0 && xpt::is_ap_ctx(tables->ctx));
+  auto start = [&](const double* x, int slot, int kind = -1) {
     ElementRow r = row;
     fit::row_of(x, o, r);
+    if (own && kind >= 0) keep_unmoved(row, kind, r);
     const bool ok = xpt::xp_init(elements_of(r), b.sats[slot]) == kPropOk;
     if (slot + 1 > b.count) b.count = slot + 1;
     b.live[slot] = true;
@@ -370,10 +392,10 @@ inline bool init(const ElementRow& row, const fit::Options& o, Bank& b, xpt::XpS
     double xp[fit::kMaxParams], xm[fit::kMaxParams];
     for (int q = 0; q < b.np; ++q) xp[q] = xm[q] = b.x[q];
     xp[j] += b.h[j];
-    if (!start(xp, 1 + 2 * b.slot[j])) return false;
+    if (!start(xp, 1 + 2 * b.slot[j], b.kind[j])) return false;
     if (b.central[j] || !xpt::is_ap_ctx(b.sats[0].ctx)) {
       xm[j] -= b.central[j] ? b.h[j] : 0.0;
-      if (!start(xm, 2 + 2 * b.slot[j])) return false;
+      if (!start(xm, 2 + 2 * b.slot[j], b.kind[j])) return false;
     } else if (2 + 2 * b.slot[j] + 1 > b.count) {
       b.count = 2 + 2 * b.slot[j] + 1;
     }

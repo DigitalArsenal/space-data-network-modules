@@ -198,10 +198,18 @@ inline void run_chunks() {
 /// one flag test.
 inline bool warm_thread() {
   if (g_warm) return true;
-  g_warm = xpt::tess::sp_thread_cache_make() && xpt::tess::sp_blk_c_make() && xpt::tess::sp_build_scratch_make() &&
-           xpt::tess::sp_terms_scratch_make() && xpt::tess::half_day_eval_cache_make() && xpt::cov_grid_cache_make() &&
-           xpt::ap_bodies_store_make() && frames::drift_node_cache_make() && frames::gcrf_node_cache_make();
+  g_warm = warm_thread_xp() && xpt::tess::sp_thread_cache_make() && xpt::tess::sp_blk_c_make() && xpt::tess::sp_build_scratch_make() &&
+           xpt::tess::sp_terms_scratch_make() && xpt::tess::half_day_eval_cache_make() && xpt::ap_bodies_store_make() &&
+           frames::drift_node_cache_make() && frames::gcrf_node_cache_make();
   return g_warm;
+}
+/// What every set of the SGP4XP family reads, AP's terms or not: the covariance's step cache (rates). An SGP4XP set without
+/// AP's terms reads no other of the nine, so a thread flying only such sets makes this one alone, where 0.6.52 made it: in
+/// the set's first rates.
+inline bool warm_thread_xp() {
+  if (g_warm_xp) return true;
+  g_warm_xp = xpt::cov_grid_cache_make();
+  return g_warm_xp;
 }
 
 inline void* thread_main(void*) {

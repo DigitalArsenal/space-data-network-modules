@@ -177,16 +177,23 @@ initializes it again.
 state whose set could not be initialized with the theory's refusal code, as before, and so a state on a thread whose caches
 cannot be made (below). `sdnap_wide_grid_cache` and `sdnap_wide_grid_budget` show the instance's grids and bytes.
 
-**A thread's caches** *[stack #600]*. A thread keeps nine caches for every set it flies, about 1.8 MB, fixed in size:
-- the short-period evaluator's thread cache and its 192 KiB coefficient block;
-- the grouping and term scratch;
-- the half-day cache and the covariance's step cache;
-- the Sun and Moon node store, the drift and GCRF node slots.
+**A thread's caches** *[stack #600]*. A thread keeps nine caches, fixed in size, 1,796,968 B (1.71 MiB) together:
+- the short-period evaluator's thread cache with its storage (614,288 B) and its 196,608 B coefficient block;
+- the grouping and term scratch (22,816 and 84,896 B);
+- the half-day cache (45,024 B) and the covariance's step cache (645,432 B);
+- the Sun and Moon node store (18,432 B), the drift and GCRF node slots (163,840 and 5,632 B).
 
-They are made together, through the accounting, before the thread's first state or set initialization, and before any
-threaded batch. A state or an initialization on a thread where one cannot be had is refused with the theory's refusal code
-(in a method: `out-of-memory`); the set is left as it was, and the next state asks again. Where the node store or the node
-slots cannot be had, a node is computed at each use without them, to the same numbers.
+A set's theory reads some or all of them:
+- an AP set reads all nine;
+- an SGP4XP set without AP's terms reads the step cache alone (its rates).
+
+What a set reads is made, through the accounting, before the thread's first state or initialization of such a set: all
+nine for AP, and before any threaded batch; the step cache alone for an SGP4XP flight, where 0.6.52 made it, in the set's
+first rates. A state or an initialization on a thread where one cannot be had is refused with the theory's refusal code (in
+a method: `out-of-memory`). An epoch-store slot is left as it was, and the next state asks again. A row-store row
+(`sdnap_init_elements`, `ingest_omm`) whose set was refused at its initialization holds that refusal until the store is
+built again. Where the node store or the node slots cannot be had, a node is computed at each use without them, to the
+same numbers.
 
 Through 0.6.52 each was made at its first use. The coefficient block is first used when a set's tesseral cache is baked
 again from its table, a day or so into a flight. When the memory was full by then, the module aborted there (a wasm
@@ -194,7 +201,10 @@ again from its table, a day or so into a flight. When the memory was full by the
 aborted at the second pass's first set (test/memory-limit.e2e.mjs). Now 545 answer in each pass and 2 are refused, and
 every state answered equals the same state at the default maximum, bit for bit. 100,000 sets at the default 2,048 MiB,
 flown twice at one instant: 68,772 answer in each pass, and the rest are refused, where the second pass aborted at its
-9th set.
+9th set. The same test holds three other entries at their limits, every answer the default maximum's bit for bit:
+- the store's covariance (400 copies of a fitted record, 128 MiB): 207 covariances answered, the rest NaN or refused;
+- a threaded row-store batch (2,000 AP rows, two pool threads, 128 MiB);
+- 6,000 SGP4XP sets without AP's terms at 80 MiB: 2,335 answer, every set 0.6.52 answered and no other.
 
 The pool's list of the sets that hold caches (SPEC 9) grows through the accounting as well. When the list cannot grow, the
 set holds no caches and flies on the thread's.
@@ -221,10 +231,14 @@ set holds no caches and flies on the thread's.
   - a carried forecast's segments;
   - every output's FlatBufferBuilder.
 - A record's covariance as a load reads it (`load_epochs`, `new`), and a carried forecast's segment states.
+- The row store's threaded batch's list of deferred rows (`batch`, a `static std::vector` resized to the batch's count
+  before it starts).
 
 **Counted, then trapping when it fails:** a thread's caches on a path that reaches them before any state or set
 initialization on that thread: the diagnostic exports that read a set's mean state (`sdnap_xp_native`, `sdnap_rates_repeat`,
 `sdnap_shadow_margin`, `sdnap_drag_orbit_check`) on a thread that has flown no set.
+
+**Not memory:** `sbrk`'s abort on a negative or non-page increment (a malformed call from the allocator).
 
 **The stack.** No array whose size follows the grid's anomalies or a degree lies on it: the grid builder's anomaly arrays
 (9 x 128 doubles) and the m-daily family's inclination functions are on the heap. The fixed-size arrays indexed by the

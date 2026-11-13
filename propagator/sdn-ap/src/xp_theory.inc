@@ -58,12 +58,16 @@ inline void apply_drift(const double R[3][3], double r[3], double v[3]);
 inline int utc_to_tt(double whole, double frac, double& tt1, double& tt2);
 }  // namespace frames
 namespace pool {
-/// SPEC 1.6 (stack #600): the calling thread's caches (pool.inc), all made: every state and every set's initialization asks
-/// for them first, so none is made part way through a flight. False when one could not be had (the failure counted): the
-/// state or the initialization is refused, and the next asks again.
+/// SPEC 1.6 (stack #600): the calling thread's caches (pool.inc) that a set's theory reads, all made: every state and every
+/// set's initialization asks for them first, so none is made part way through a flight. An AP set reads all nine
+/// (warm_thread); an SGP4XP set without AP's terms the covariance's step cache alone (its rates, warm_thread_xp). False
+/// when one could not be had (the failure counted): the state or the initialization is refused, and the next asks again.
 inline bool warm_thread();
-inline thread_local bool g_warm = false;
-inline bool thread_ready() { return __builtin_expect(g_warm, 1) || warm_thread(); }
+inline bool warm_thread_xp();
+inline thread_local bool g_warm = false, g_warm_xp = false;
+inline bool thread_ready(bool ap) {
+  return ap ? (__builtin_expect(g_warm, 1) || warm_thread()) : (__builtin_expect(g_warm_xp, 1) || warm_thread_xp());
+}
 }  // namespace pool
 namespace xpt {
 
@@ -6142,14 +6146,15 @@ inline int32_t xp_init(const Elements& e, XpSat& s) {
     s.init_error = kPropRefused;
     return kPropRefused;
   }
-  // SPEC 1.6 (stack #600): the thread's caches before the set's first table; a thread that cannot make them refuses the set
-  // (the failure counted: a method refuses as out-of-memory, an epoch-store slot initializes again at its next state)
-  if (!pool::thread_ready()) {
+  const double n0 = e.xno;  // Brouwer (SPEC 1.1)
+  s.ctx.selected_terms = tess::active();
+  // SPEC 1.6 (stack #600): the thread's caches the set's theory reads (AP's terms selected: all nine; otherwise the step
+  // cache), before its first table; a thread that cannot make them refuses the set (the failure counted: a method refuses as
+  // out-of-memory, an epoch-store slot initializes again at its next state)
+  if (!pool::thread_ready(s.ctx.selected_terms.tesseral > 0 || s.ctx.selected_terms.zonal > 0)) {
     s.init_error = kPropRefused;
     return kPropRefused;
   }
-  const double n0 = e.xno;  // Brouwer (SPEC 1.1)
-  s.ctx.selected_terms = tess::active();
   // the branch, once, from the epoch elements (SPEC 6 Bands, 16.7); a covariance's moved set (inside its nominal's
   // CovBankScope) takes its nominal's, so the columns difference one branch's theory (SPEC 12.3); a fit's trial set inside
   // a BranchScope takes the pinned one
@@ -6398,6 +6403,7 @@ inline int census_radiation_row(const RateContext& ctx, int count, double* rows,
 /// `cap` with the slow set (a fit's record), built as a flight builds it (ap_init) and released. -1 for elements it refuses.
 inline int field_census(int cap, double n, double e, double inc, double cut, double* rows, int max_rows) {
   if (!(n > 0.0) || !(e >= 0.0 && e < 1.0) || !(inc >= 0.0 && inc < kPi) || cap < 2 || cap > 70 || !(cut > 0.0)) return -1;
+  if (!pool::thread_ready(true)) return -1;  // SPEC 1.6: AP's tables are built with the thread's caches (stack #600)
   Elements el{};
   el.epoch_jd_whole = 2461000.5;
   el.xno = n;
@@ -6679,7 +6685,9 @@ inline uint64_t xp_bytes(const XpSat& s) {
   // its grid of the tesseral families (SPEC 16.11) and the node grids it holds: each one block, shared among the sets
   // holding it (a grid of one exact key serves them all)
   double grids = 0.0;
-  if (c.wide != nullptr && c.wide_owned && c.wide_anchor == nullptr) grids += tess::wide_grid_share(c.wide);
+  // every holder its share, a copy that reads its anchor's grid as well (it holds a reference): the shares of one grid's
+  // holders sum to the grid once (through 0.6.52 a copy counted none, and the grid's count fell short by the copies' shares)
+  if (c.wide != nullptr && c.wide_owned) grids += tess::wide_grid_share(c.wide);
   for (const tess::WideGrid* g : s.wide_node) grids += tess::wide_grid_share(g);
   b += static_cast<uint64_t>(grids);
   if (s.caches != nullptr) b += s.caches->bytes + sp_cache_bytes(s.caches->sp.cache);
@@ -7375,7 +7383,7 @@ inline int32_t xp_propagate_impl(XpSat& s, double t, double r[3], double v[3], c
   if (s.init_error != 0) return kPropRefused;
   // SPEC 1.6 (stack #600): a thread whose caches cannot be made answers the state with the theory's refusal code, before
   // the set's caches or grids are touched (the failure counted: a method refuses as out-of-memory); the set is unchanged
-  if (!pool::thread_ready()) return kPropRefused;
+  if (!pool::thread_ready(is_ap_ctx(s.ctx))) return kPropRefused;
   SetScope set_scope(s);
   // the bracket this state's tesseral bakes are made on: set by mean_at, the caller's restored on return
   struct AnchorScope {
@@ -7805,7 +7813,7 @@ inline bool xp_propagate_cov_at(XpSat* sats, int np, const int* slot, const bool
     return true;
   }
   // SPEC 1.6 (stack #600): the thread's caches before the bank's first flight, as xp_propagate_impl
-  if (s0.init_error != 0 || !pool::thread_ready()) {
+  if (s0.init_error != 0 || !pool::thread_ready(true)) {
     if (nom_status != nullptr) *nom_status = kPropRefused;
     return false;
   }
