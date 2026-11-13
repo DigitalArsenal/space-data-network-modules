@@ -26,7 +26,8 @@
 //   same bit for bit; and on both, at minute 0, P(0) less the floor at the flown state equals that remainder within
 //   IDENTITY of P(0)'s largest entry.
 // - A set's own flight is as it was: this build's record flown by this build against another build's record of the same
-//   arc flown by that build, sdnap_covariance_at hourly to 48 h, within SELF; from 0.6.45 the other build's record carries
+//   arc flown by that build, propagate hourly to 48 h (TEME), within SELF (through 0.6.54 by sdnap_covariance_at, whose
+//   nominal from stack #599 is the record's own set as propagate's always was); from 0.6.45 the other build's record carries
 //   this build's drag share and s_d (restated: 0.6.45 multiplies a strong-drag record's share, SPEC 12.5, stack #568).
 //   - The cure's property (a pre-cure build's own flight equals the cured build's) is held where this change moves neither
 //     the theory nor the floor: the case at caps 0 (no gravity terms, so no radial term) against BASE. Through 0.6.42 the
@@ -134,6 +135,26 @@ const call = (h, fn, rec, n, extra = null) => {
   return {status, out};
 };
 const covAt = (h, rec) => call(h, 'sdnap_covariance_at', rec, 42 * minutes.length, minutes);
+// the same 42 doubles a time through `propagate` (TEME, the record's epoch plus the minutes): the entry whose covariance
+// construction every build since SELF_BASE shares (from stack #599 sdnap_covariance_at's nominal is the record's own set,
+// as propagate's always was, so its own flight is held this way: SPEC 14.4)
+const COVF = ['CX_X', 'CY_X', 'CY_Y', 'CZ_X', 'CZ_Y', 'CZ_Z', 'CX_DOT_X', 'CX_DOT_Y', 'CX_DOT_Z', 'CX_DOT_X_DOT', 'CY_DOT_X', 'CY_DOT_Y', 'CY_DOT_Z',
+  'CY_DOT_X_DOT', 'CY_DOT_Y_DOT', 'CZ_DOT_X', 'CZ_DOT_Y', 'CZ_DOT_Z', 'CZ_DOT_X_DOT', 'CZ_DOT_Y_DOT', 'CZ_DOT_Z_DOT'];
+const propAt = async (h, rec) => {
+  const e = ocmOf(rec).MEAN_ELEMENTS.EPOCH, e0 = Date.parse(e.endsWith('Z') ? e : `${e}Z`);
+  const r = await h.invoke({methodId: 'propagate', inputs: flight([rec], {output: {EPOCHS: minutes.map((m) => iso(e0 + m * 60000)), FRAME: pcfOutputFrame.TEME}})});
+  if (r.statusCode !== 0) return {status: r.errorCode};
+  const b = statesOf(r);
+  if (b.COVARIANCE_MATRIX_LINES.length !== minutes.length) return {status: 'no covariance lines'};
+  const out = [];
+  b.EPHEMERIS_DATA_LINES.forEach((l, k) => {
+    const c = b.COVARIANCE_MATRIX_LINES[k], m = Array(36).fill(0);
+    let q = 0;
+    for (let i = 0; i < 6; i++) for (let j = 0; j <= i; j++) { m[6 * i + j] = m[6 * j + i] = c[COVF[q++]]; }
+    out.push(l.X, l.Y, l.Z, l.X_DOT, l.Y_DOT, l.Z_DOT, ...m);
+  });
+  return {status: 0, out};
+};
 const parts = (rec) => call(cur, 'sdnap_test_epoch_floor', rec, 150);
 // the covariance's largest difference over a time's largest entry, and the along-track variance's relative difference
 // (the along-track axis from the module's own state: r x v), 1 to 48 h
@@ -215,10 +236,11 @@ for (const c of CASES) {
     u.COV_PROPAGATION.NON_GRAVITATIONAL_SHARE = f.NON_GRAVITATIONAL_SHARE;
     u.COV_PROPAGATION.NOISE_NON_GRAVITATIONAL_RAD_DAY2 = f.NOISE_NON_GRAVITATIONAL_RAD_DAY2;
   });
-  const [ob, os, mc] = [covAt(base, old), covAt(ownH, c.own === 'base' ? old : restated(await fitBy(ownH))), covAt(cur, mine)];
+  const ownRecord = c.own === 'base' ? old : restated(await fitBy(ownH));
+  const [ob, os, mc, mcc] = [covAt(base, old), await propAt(ownH, ownRecord), await propAt(cur, mine), covAt(cur, mine)];
   const self = os.status === 0 && mc.status === 0 ? apart(os.out, mc.out) : null;
   row.self = {against: ownName, ...self};
-  row.selfAgainstBase = ob.status === 0 && mc.status === 0 ? apart(ob.out, mc.out) : null;
+  row.selfAgainstBase = ob.status === 0 && mcc.status === 0 ? apart(ob.out, mcc.out) : null;
   check(self && self.ofLargest <= SELF.ofLargest && self.along <= SELF.along,
     `${c.name}: this build's record on this build against ${ownName}'s on it: ${JSON.stringify(self ?? [os.status, mc.status])} (within ${JSON.stringify(SELF)})`);
   // across a theory change: the rule's release's record on this build against that release's flight of it

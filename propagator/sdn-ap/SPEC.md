@@ -207,16 +207,18 @@ a method: `out-of-memory`). An epoch-store slot is left as it was, and the next 
 built again. Where the node store or the node slots cannot be had, a node is computed at each use without them, to the
 same numbers.
 
-Through 0.6.52 each was made at its first use. The coefficient block is first used when a set's tesseral cache is baked
+Through 0.6.54 each was made at its first use. The coefficient block is first used when a set's tesseral cache is baked
 again from its table, a day or so into a flight. When the memory was full by then, the module aborted there (a wasm
-`unreachable`): 547 AP sets at 500 km in an instance held to 128 MiB, flown a day and then two days after their epoch,
-aborted at the second pass's first set (test/memory-limit.e2e.mjs). Now 545 answer in each pass and 2 are refused, and
-every state answered equals the same state at the default maximum, bit for bit. 100,000 sets at the default 2,048 MiB,
-flown twice at one instant: 68,772 answer in each pass, and the rest are refused, where the second pass aborted at its
-9th set. The same test holds three other entries at their limits, every answer the default maximum's bit for bit:
-- the store's covariance (400 copies of a fitted record, 128 MiB): 207 covariances answered, the rest NaN or refused;
+`unreachable`). Take 547 AP sets at 500 km in an instance held to 128 MiB, flown a day and then two days after their
+epoch (test/memory-limit.e2e.mjs):
+- 0.6.54 answers 541 of them in the first pass, then aborts at the second pass's first set;
+- now 539 answer in each pass and 8 are refused (the coefficient block, made first, takes two sets' room);
+- every state answered equals the same state at the default maximum, bit for bit.
+
+The same test holds three other entries at their limits, every answer the default maximum's bit for bit:
+- the store's covariance (400 copies of a fitted record, 128 MiB): 68 covariances answered, the rest NaN or refused;
 - a threaded row-store batch (2,000 AP rows, two pool threads, 128 MiB);
-- 6,000 SGP4XP sets without AP's terms at 80 MiB: 2,335 answer, every set 0.6.52 answered and no other.
+- 6,000 SGP4XP sets without AP's terms at 80 MiB: 2,329 answer, the sets 0.6.54 answers and no other.
 
 The pool's list of the sets that hold caches (SPEC 9) grows through the accounting as well. When the list cannot grow, the
 set holds no caches and flies on the thread's.
