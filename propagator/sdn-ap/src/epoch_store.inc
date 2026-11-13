@@ -89,8 +89,7 @@ struct Entry {
   cov::Set* cov = nullptr;
   Forces forces{};
   const atm::Atmosphere* atmosphere = nullptr;
-  int32_t first_day = 0, last_day = 0;  ///< RECORDS: the MJDs it flies through (its first row's day + 1, its last row's day)
-  xpt::Branch branch{};                 ///< an AP set's branch (SPEC 14.3, 16.7); every other set the default
+  uint64_t branch = 0;        ///< the five branch identity bytes; the integration step is not part of equality
   std::shared_ptr<const carried::Track> track;  ///< the forecast the record carries (SPEC 18), or none: read as flown
   double handover = HUGE_VAL;  ///< a hand-over set: the time it serves from, minutes from J2000 (SPEC 18.7); else HUGE_VAL
 };
@@ -105,6 +104,26 @@ struct Slot {
   int32_t error = 0;
 };
 
+/// The first cache slot is inline; only a series with multiple sets owns a second.
+struct Slots {
+  Slot first;
+  Slot* second = nullptr;
+  size_t size() const { return second ? 2 : 1; }
+  Slot& operator[](size_t k) { return k == 0 ? first : *second; }
+  const Slot& operator[](size_t k) const { return k == 0 ? first : *second; }
+  template <class S> struct Iterator {
+    S* slots;
+    size_t index;
+    auto& operator*() const { return (*slots)[index]; }
+    Iterator& operator++() { ++index; return *this; }
+    bool operator!=(const Iterator& other) const { return index != other.index; }
+  };
+  Iterator<Slots> begin() { return {this, 0}; }
+  Iterator<Slots> end() { return {this, size()}; }
+  Iterator<const Slots> begin() const { return {this, 0}; }
+  Iterator<const Slots> end() const { return {this, size()}; }
+};
+
 struct Series {
   uint32_t norad = 0;
   std::string object_id, originator, name;
@@ -112,7 +131,7 @@ struct Series {
   int32_t met = 0;            ///< MEAN_ELEMENT_THEORY
   uint32_t first = 0, count = 0;  ///< into Store::entries, by epoch
   bool carried = false;           ///< a set carries a forecast (SPEC 18.3: selection prefers a span holding t)
-  Slot slots[2];
+  Slots slots;
   uint32_t next = 0;              ///< the slot replaced next
 };
 
@@ -139,8 +158,10 @@ inline void release(Slot& s) {
 }
 
 inline void clear(Store& st) {
-  for (Series& s : st.series)
+  for (Series& s : st.series) {
     for (Slot& q : s.slots) release(q);
+    delete s.slots.second;
+  }
   for (Entry& e : st.entries) delete e.cov;
   st.entries.clear();
   st.series.clear();
@@ -408,6 +429,13 @@ inline int build(Store& st, const Config& cfg) {
       s.name = recs[keep.back()].name;
       s.first = static_cast<uint32_t>(st.entries.size());
       s.count = static_cast<uint32_t>(keep.size());
+      if (s.count > 1) {
+        s.slots.second = mem::counted(new (std::nothrow) Slot{});
+        if (s.slots.second == nullptr) {
+          for (Record& r : recs) delete r.cov;
+          return mem::refuse_if_out_of_memory(), 3;
+        }
+      }
       for (uint32_t q : keep) {
         Entry en;
         en.row = recs[q].row;
@@ -421,13 +449,14 @@ inline int build(Store& st, const Config& cfg) {
         en.handover = recs[q].handover;
         en.forces = recs[q].forces;
         en.atmosphere = recs[q].atmosphere;
-        if (en.atmosphere != nullptr && !en.atmosphere->days.empty()) {
-          en.first_day = en.atmosphere->days.front().mjd + 1;
-          en.last_day = en.atmosphere->days.back().mjd;
-        }
         if (en.row.theory == kTheorySgp4Xp) {
           ocm::Bind bind(en.forces, en.atmosphere);  // the set's own selection decides whether AP's switches exist
-          if (ap_selected()) en.branch = row_branch(en.row);
+          if (ap_selected()) {
+            const xpt::Branch b = row_branch(en.row);
+            en.branch = static_cast<uint8_t>(b.resonance) | (static_cast<uint64_t>(b.long_period) << 8) |
+                        (static_cast<uint64_t>(b.wide_tess) << 16) | (static_cast<uint64_t>(b.wide_e) << 24) |
+                        (static_cast<uint64_t>(b.series_e) << 32);
+          }
         }
         recs[q].cov = nullptr;
         st.entries.push_back(en);
@@ -501,7 +530,7 @@ inline Slot& slot_of(Store& st, Series& s, uint32_t k, bool with_cov) {
       return q;
     }
   Slot& q = s.slots[s.next];
-  s.next ^= 1u;
+  s.next = s.slots.second ? s.next ^ 1u : 0u;
   release(q);
   q.index = static_cast<int32_t>(k);
   const Entry& en = st.entries[s.first + k];
@@ -816,7 +845,13 @@ inline uint64_t bytes_of(const Store& st) {
   // the interned rows and nodes, one copy each
   for (const auto& a : st.atmospheres) b += sizeof(atm::Atmosphere) + a->days.size() * sizeof(atm::SpwDay) + a->dca_ms.size() * (sizeof(int64_t) + 2 * sizeof(double));
   for (const Series& s : st.series) {
-    b += s.object_id.capacity() + s.originator.capacity() + s.name.capacity();
+    // Short strings live inside Series; count only separately allocated character storage.
+    auto string_bytes = [](const std::string& text) -> size_t {
+      const uintptr_t p = reinterpret_cast<uintptr_t>(text.data()), base = reinterpret_cast<uintptr_t>(&text);
+      return p >= base && p < base + sizeof(text) ? 0 : text.capacity();
+    };
+    b += string_bytes(s.object_id) + string_bytes(s.originator) + string_bytes(s.name);
+    if (s.slots.second) b += sizeof(Slot);
     // a set: its XpSat, the term tables it owns and its caches from the pool (xp_bytes)
     for (const Slot& q : s.slots) b += (q.xp ? xpt::xp_bytes(*q.xp) : 0) + (q.sat ? sizeof(Sat) : 0) + (q.nodes ? 32u * kCheckpointNodes : 0) + (q.cp ? sizeof(cov::Propagator) + q.cp->s.C.size() * sizeof(double) : 0);
   }
