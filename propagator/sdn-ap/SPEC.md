@@ -6563,6 +6563,10 @@ Duplicate priorities retain their serial meaning. A growth-refused row is retrie
 position. A counted allocation failure without a growth refusal stops the logical prefix; no later speculative result is
 committed. A slab stall retains the existing skip-and-continue behavior. Per-call result arrays remain seven int32 values;
 statistics remain twenty doubles. Pool statistics count physical attempts and can differ with scheduling.
+The instance-wide allocation diagnostics `mem::g_failures` and `mem::g_largest_failed` also count physical attempts.
+A refused pooled allocation increases them even when its caller retry succeeds; they can differ by thread count.
+They are not frames results or logical counters. Successful retries do not restore them, avoiding synchronization
+and rollback of concurrent attempts.
 
 Staging is 136,224 bytes, independent of catalog size and `max_rows`, including one retry output. Before publication the
 caller warms shared initialization and checks a reserve based on concurrent builders and the largest tesseral degree in
