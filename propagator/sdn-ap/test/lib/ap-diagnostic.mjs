@@ -26,3 +26,15 @@ export function buildDiagnostic(name,extra,transform=s=>s,others={}){
  try{execFileSync(process.execPath,['build.mjs'],{cwd:dir,env,stdio:['ignore',log,log]});}finally{fs.closeSync(log);}
  return path.join(dir,'dist/isomorphic/module.wasm');
 }
+
+// The test-only seam of the counted allocator (src/constants.inc): the Nth counted allocation of a call fails, counted as a failed allocation, and the count of
+// a call is exported. Every replace must match: one that matched nothing (the source moved under it) throws, so a seam never silently stops failing a site.
+const replacing=(...pairs)=>s=>{for(const [a,b] of pairs){if(!s.includes(a))throw new Error(`failureSeam: no match for ${JSON.stringify(a.slice(0,70))}`);s=s.replace(a,b);}return s;};
+export const failureSeam={'constants.inc':replacing(
+ ['inline uint32_t g_failures = 0;','inline uint32_t g_failures = 0;\ninline uint32_t g_test_fail_at = 0, g_test_count = 0;\ninline bool test_should_fail() { ++g_test_count; return g_test_fail_at != 0 && g_test_count == g_test_fail_at; }'],
+ ['inline void* malloc(size_t n) {\n  void* p = std::malloc(n);','inline void* malloc(size_t n) {\n  if (test_should_fail()) { note_failure(n); return nullptr; }\n  void* p = std::malloc(n);'],
+ ['inline void* calloc(size_t k, size_t n) {\n  void* p = std::calloc(k, n);','inline void* calloc(size_t k, size_t n) {\n  if (test_should_fail()) { note_failure(k * n); return nullptr; }\n  void* p = std::calloc(k, n);'],
+ ['inline T* counted(T* p, size_t n = sizeof(T)) {\n  if (p == nullptr) note_failure(n);','inline T* counted(T* p, size_t n = sizeof(T)) {\n  if (p != nullptr && test_should_fail()) { if (n == sizeof(T)) { p->~T(); ::operator delete(p); } else ::operator delete[](p); p = nullptr; }\n  if (p == nullptr) note_failure(n);'])};
+export const failureProbe=`
+SDNAP_EXPORT("sdnap_test_fail_at") void sdnap_test_fail_at(uint32_t n) { sdnap::mem::g_test_fail_at = n; sdnap::mem::g_test_count = 0; }
+SDNAP_EXPORT("sdnap_test_alloc_count") uint32_t sdnap_test_alloc_count(void) { return sdnap::mem::g_test_count; }`;

@@ -47,7 +47,7 @@ if (process.argv[2] === "--one") {
   if (x.sdnap_init_elements(p, ROWS) !== ROWS) throw new Error("the row store refused the rows");
   const out = x.sdnap_alloc(128), ps = x.sdnap_alloc(80);
   x.sdnap_test_growth_stress(ROUNDS, RESERVE, out);
-  x.sdnap_pool_stats(ps);
+  x.sdnap_pool_stats(ps, 10);
   const v = Array.from(new Float64Array(mem(), out, 12)), s = Array.from(new Float64Array(mem(), ps, 10));
   console.log(JSON.stringify({ threads: made, rounds: v[0], grew: v[1], poolChunks: v[2], poolBlocks: v[3], callerBlocks: v[4], dead: v[5],
     marked: v[6] < 0 ? null : { pool: v[6], block: v[7], bytes: v[8], pagesSeen: v[9], pagesNow: v[10] }, views: s[8], mostYields: s[9] }));

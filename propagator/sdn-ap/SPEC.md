@@ -1,6 +1,6 @@
 # SGP4-XP: mathematical specification (clean room, side A)
 
-Version 0.6.56 (dist 2131db19).
+Version 0.6.58 (dist 4b7ffed8).
 
 **License note.** The US Space Force Sgp4Prop library is used under the USSF open source agreement
 (`space-data-network-modules/propagator/sgp4-xp/third_party/ussf-sgp4/AGREEMENT.txt`; the 9.9 package carries the
@@ -145,11 +145,32 @@ counts the allocations that fail and the largest request. The epoch store's allo
 decoded records a load fills (one allocated when the one before it is full, so a load's memory follows the records
 decoded, never the frame count the payload claims), the arrays of kept sets, entries and series (sized from the kept
 count), the weather pool (which at least doubles when full), each set's covariance matrix, and the second slot of a
-series of more than one set. A covariance matrix that cannot be allocated refuses `out-of-memory`, not
+series of more than one set, and a carried forecast's track (its copy of the record's bytes, which a record that carries one
+holds whole, and its arrays of segments). A covariance matrix that cannot be allocated refuses `out-of-memory`, not
 `invalid-covariance`.
 
+**The memory grows in steps of at least 4 MiB.** The allocator grows its heap through `sbrk` a few 64 KiB pages at a
+time, and each growth of the memory costs about 0.3 ms. Grown by exactly what the allocator asks, a serial first pass of
+20,000 AP series spends a third of its time growing it: 774 µs an object, against 501 with the memory grown beforehand.
+So `sbrk` keeps the allocator's break itself, at or below the end of the memory it has grown (`sbrk(0)` answers the
+break, or -1 when the break is at 4 GiB, the memory at its maximum: a request of nothing there is refused like any other):
+- A request below that end moves the break.
+- One past it grows the memory by at least a step (64 pages, 4 MiB). When a step does not fit under the memory's maximum,
+  it grows by exactly what the request lacks, and only then refuses.
+- Pages found beyond that end were grown by another party (a host's buffer). They are never served: the break moves past
+  them. The module's own slack below them is given up, at most one step per such growth. When another party grows the
+  memory between sbrk's check and its own growth, the break moves to the start of sbrk's new pages, and that one request
+  may be refused although the memory grew (the pages stay as slack).
+- Nothing is served at or past 4 GiB, the end of the address space. Such a request is refused, never wrapped.
+
+So the memory the module grew and has not served is at most one step, plus at most one step given up at each growth by
+another party, and it refuses only where the request itself does not fit. `sdnap_pool_stats` counts the growths and the
+pages they added. `test/memory-step.e2e.mjs` probes the break directly. Against a test build with the step 0 it shows
+the same bytes and the same sets answered at a limit, a host's pages intact, and at most 100 growths where the step-0
+build makes thousands.
+
 **A method during which one of them failed refuses with errorCode `out-of-memory` and emits nothing.** That holds for
-`propagate`, `propagate_epochs`, `load_epochs`, `fit`, `maneuver`, `ingest_omm` and `export_omm`, whatever the method
+`propagate`, `propagate_epochs`, `load_epochs`, `load_epochs_open`, `load_epochs_part`, `load_epochs_close`, `fit`, `maneuver`, `ingest_omm` and `export_omm`, whatever the method
 would otherwise have answered. That includes the decay answers of SPEC 16.25:
 - `decayed:<time>` and `decayed-in-arc:<time>`;
 - a record whose held-out states past the crossing read DECAYED;
@@ -157,16 +178,32 @@ would otherwise have answered. That includes the decay answers of SPEC 16.25:
 
 The message names how many allocations failed since the method began and the largest.
 
+A method's mark counts every thread's failures, because its batch spans the pool. A step that runs on one thread
+compares that thread's own count (`mem::thread_failures`). That covers a set's initialization (AP's tables, the slow
+terms, the odd zonal G1 table) and an epoch-store slot's build. On a pool thread, another thread's refused growth never
+fails it. Compared with the instance's count, it would: a set no growth had refused would be refused, not deferred, and its
+slot would keep the refusal (the no-reserve case of `test/epoch-pool.e2e.mjs` shows it).
+
 **AP initialization storage (0.6.53).** Shared sample arrays use counted allocations; each memo is local to one
 initialization and retains the scalar evaluator's operation order. An inclination column is keyed by inclination,
 degree, order, and quadrature size; a changed inclination or degree rebuilds its columns. Against 0.6.52, the measured
 allocator peak for one synthetic 15.2 rev/day, e = 0.001, i = 97.4 degree set with tesseral degree 70, zonal degree 20,
 and slow terms is 31,888 versus 1,340,432 bytes after shared caches are warm. Both builds retain 31,888 bytes for that
 set and release them all. In a fresh instance both peak at 1,342,912 bytes because persistent caches dominate.
-The added 71 by 71 field-magnitude table occupies 45,376 bytes per thread. The largest measured initialization
-stack frame is half_day_terms at 25,936 bytes; ap_init uses 3,664 bytes, against the pool thread's 65,536-byte stack.
-These are individual compiler frame sizes, not a bound on accumulated call depth. The invoking thread builds row
-sets and lazy epoch slots; pool threads fly the prepared row sets.
+The added 71 by 71 field-magnitude table occupies 45,376 bytes per thread. The largest initialization stack frame is
+half_day_terms at 25,936 bytes; ap_init uses 3,664 bytes.
+
+**Where sets are built, and the stack they take.** The calling thread builds the row store's sets (`sdnap_init_elements`,
+`ingest_omm`), a fit's trial sets and a covariance's moved sets. Pool threads fly the row store's prepared sets. In the
+epoch store's threaded call they also build the sets of the series they own: slot_of, xp_init, ap_init, every table
+build, the decay probe with drag and NRLMSISE-00, and the flight. A pool thread's stack is 256 KiB
+(`pthread_attr_setstacksize`). `test/pool-stack.e2e.mjs` paints each pool thread's stack and reads how deep it wrote,
+over a store of every class: low orbit at 500 and 290 km, the half-day and one-day classes and e 0.2, each at degree 31
+and at 70 with the slow set, plus a decaying set and SGP4XP. The deepest is 31,192 bytes, a margin of 8.4 (2.1 on
+wasi-libc's default 64 KiB). The test holds every thread under half its stack. A thread's thread-local block is 343,956
+bytes. With the stack it fits the 1 MiB room the pool makes free before it creates the thread. A pool thread costs
+192 KiB more of the instance than on wasi-libc's default stack. After starting 15 pool threads, an instance started at
+64 MiB holds 104,857,600 bytes, against 100,139,008 on 0.6.57: 2.9 MB of stacks, the rest the 4 MiB step's rounding.
 
 Through 0.6.47 such a call answered one of five ways:
 - the theory's refusal of the elements (`element-set-refused`);
@@ -236,8 +273,10 @@ set holds no caches and flies on the thread's.
 - `ingest_omm`, refused `out-of-memory`: by then the old row store is dropped (the new store's build begins by freeing it).
   When the new store's arrays could be had, it is installed; a row whose set failed to initialize for want of memory holds
   the theory's refusal. Its $OCM outputs are discarded with the refusal.
-- `load_epochs`, refused for any reason: the old snapshot is gone (the store's build begins by clearing it). A record's
-  carried forecast is read with operator new (below), so it traps rather than counts. The forecast check that flies a set
+- `load_epochs`, refused once its build has begun (a record, a failed allocation, series-forces-differ): the old snapshot is gone
+  and the store is empty. A `load_epochs` refused before its build begins (a frame of a wrong type, a bad $PCF) leaves the old
+  snapshot as it was. A record's carried forecast is a counted block (its copy, when it is kept) and counted arrays, refused
+  `out-of-memory`. The forecast check that flies a set
   at the carried span's ends (`carried::build`) is reached only by `fit`; there a set that cannot be initialized writes "the
   theory does not reach it", and the fit then answers `out-of-memory`.
 
@@ -245,9 +284,10 @@ set holds no caches and flies on the thread's.
 - std::vector and operator new under -fno-exceptions, including the paths a caller's input sizes:
   - a fit's states;
   - the output times (up to OUTPUT.MAXIMUM_STATES);
-  - the records of a load;
+  - the records of a load: the strings of a record's identity, its weather rows and nodes and its covariance as the decode reads
+    them (a part's or a call's), which are std::string and std::vector, until the record is kept or dropped, and the Track object
+    of a record that carries a forecast (`std::make_shared`: the object and its control block, about 200 bytes);
   - the $OMM sets, the burns, the $SPW rows;
-  - a carried forecast's segments;
   - every output's FlatBufferBuilder.
 - A record's covariance as a load reads it (`load_epochs`, `new`), and a carried forecast's segment states.
 - The row store's threaded batch's list of deferred rows (`batch`, a `static std::vector` resized to the batch's count
@@ -1666,19 +1706,152 @@ The pool's threads change no state. Over 1,000 AP rows of a catalog mix in the r
 against 4). The exception today is stack #424: above e 0.048 with tesseral terms, a process holds at most 256 family
 grids. Beyond them a state is refused, and which eccentric set is refused depends on which thread asked first.
 
+The epoch store's state-only `sdnap_epochs_at` also uses the pool. A chunk holds 16 consecutive series; one thread
+owns both slots of each series through selection, initialization, flight and replacement. A series containing a wide
+set is initialized and flown on the calling thread, in series order, because both initialization and output-time nodes
+acquire the shared 256-slot grids. A wide set is an AP set above e 0.05 in no resonance class (class 0: low orbit, the
+LAGEOS band, below 0.8 rev/day) and above e 0.3 in a resonance class (`tess::wide_set`, SPEC 16.11). So a store of
+low-orbit sets at e 0.1 is built and flown serially, and the pool's speed-up holds for the near-circular sets below
+those switches. Calls requesting covariance remain serial. The atmosphere and force bindings and
+NRLMSISE-00's mutable state belong to each thread. Constant drag, gravity and leap-second tables are initialized before
+the batch. The context identifier, short-period generation tag and grouping identifier are cache keys only.
+
+Two rules keep one pool thread's work out of another's:
+- **A set leaves the cache pool under the pool's lock.** A store's set releasing its caches does so under the pool's lock,
+  whether it still holds them or not. A reclaim on another thread drops a set's caches and stores the unlock of the set's
+  cache lock within one hold of that lock. A release that read the null left by such a drop without the lock could free
+  the set before the unlock landed in it.
+- **A slot names its set only once the set is built.** Until then it holds none.
+
+**After a dead batch** (a pool thread taken for dead, the batch's return -20, every status 9), a thread that was only
+slow may still be building, flying or replacing its series' slots. So the store's slots are not read again until the
+store is replaced:
+- `sdnap_epochs_at` answers -20 with every status 9, `sdnap_epochs_set_at` and `sdnap_drag_orbit_check` answer 9, and
+  the store's byte count (`sdnap_epochs_stats`, the eighth value) reads NaN;
+- `load_epochs` and `load_epochs_open` refuse "pool-dead" while a pool thread is active, before they free anything:
+  the store stays as it is, and no load is open (a part or a close answers "load-not-open"). `load_epochs_open`
+  refuses so before it reads its $PCF, so a bad $PCF there also answers "pool-dead"; `load_epochs` reads its inputs
+  first and answers their refusals as before. A thread that trapped never stops being active.
+- Once no pool thread is active, `load_epochs`, or `load_epochs_open` and the parts and the close, replace the store.
+  The pool is not used again: the new store's calls run on the calling thread.
+- The other readers of the store (`sdnap_epochs_count`, `_series`, `_select`, `_source_at`) read only its entries and
+  series, which no pool thread writes: `sdnap_epochs_count` answers the store's count.
+
+**A pool thread that traps while it holds a lock** (the module's locks are spin locks with no owner: the cache pool's,
+a set's cache lock, the family grids', sbrk's break) leaves it held. The calling thread's next call that needs that lock
+spins without end, which on a browser's main thread is a hang. A host that sees a pool thread trap, or a batch taken
+for dead, discards the instance and starts a new one.
+
+`test/epoch-pool-safety.e2e.mjs` holds both rules (256 series, a 1 MiB cache budget, slots replaced in every batch, 4
+and 15 threads) and the dead batch (one pool thread held in its first chunk, the calling thread going on only once a
+pool thread holds it): every answer above while the thread is held, then the store loaded again by the three calls and
+by `load_epochs` once it has left, each equal to a fresh instance's states.
+
+Three more rules for the pool threads:
+- **No pool thread waits on a static's first use.** The calling thread and every pool thread make, before any batch,
+  each guarded static a pool thread can first touch (pool::warm_thread: the thread's caches and NRLMSISE-00's flag
+  table).
+- **The cache pool sorts copies.** A reclaim picks its victims from stamps read once under the pool's lock (an owner
+  moves its stamp under its own cache lock alone, atomically). It orders them by stamp alone, with the comparator of
+  sdn-ap 0.6.57 (which sorted the holders themselves) over the holders in its order. Equal stamps are common, since
+  consecutive cached flights share one, and a serial reclaim keeps 0.6.57's choice among them: the choice can move the
+  state of an AP set that was asked on both sides of its epoch (its bake caches use one id for the brackets on both sides
+  of the set's epoch, below).
+- **The missing weather day is a note, not a result.** `Store::short_day` is written by the thread that flew the state
+  that found no row. `propagate_epochs` reads it on the calling thread right after that state. After a threaded
+  `sdnap_epochs_at` it names some series' missing day; each series' own status is in its status code.
+
+`test/epoch-pool.e2e.mjs` flies 2,048 seeded series (6,144 records) at 6 h, 18 h and 30 h: a blend of sets 0 and 1, then
+of 1 and 2 (slots replaced inside the batch), then set 2 alone. The store holds SGP4, SGP4XP and AP series, AP on
+NRLMSISE-00 at node heights under and over 325 km and on Jacchia 1970, two force sets and two weather tables
+alternating, covariance on half, and eight wide series flown on the calling thread.
+- The reference is each series alone on the calling thread. Its digest is the one sdn-ap 0.6.57 gives.
+- On 0, 1, 4 and 15 threads, in slices of 100 series, and with each building thread's scratch and its half-day
+  evaluation cache's values poisoned before every set: every state and status byte equals the reference. Every state is
+  answered.
+- After the threaded instants, every series' covariance in one call equals the reference's to the bit. A call with a
+  covariance plane runs no batch.
+- Counted per thread: at least a quarter of the rows, slot replacements and NRLMSISE-00 evaluations (on each side of
+  325 km) are on pool threads, and more than one pool thread flies at 4 and 15 threads. On the shipped build,
+  `sdnap_pool_stats` shows rows on pool threads and at least two pool threads with rows at 4 and 15 threads, the
+  store loaded whole or in parts.
+- With no reserve (every growth of the memory inside a batch refused; the case still refuses and defers): every status
+  equals the reference. Every state equals the reference, or, for a series deferred at that instant, the serial state
+  with its slots dropped just before its flight. That allowance covers one defect alone: one cache id for the brackets
+  on both sides of a set's epoch in the tesseral and m-daily bake caches.
+- The test build's counters show every path taken.
+
+The 400-wide-series control at 0 and 15 threads also keeps every refusal in the same series.
+
 The pool and the memory (stack #487). A threaded batch grows nothing, and a pool thread uses no page it does not see.
 - Before the batch the calling thread makes its room. The reserve is 128 KiB for each AP row whose set holds no caches,
   at most the pool's free budget plus 1 MiB, plus 8 MiB. The calling thread then publishes the memory's size and sets
   the rule that nothing grows. Only then does it store the batch's chunk total and wake the pool threads.
-- Inside the batch, sbrk refuses every growth on every thread.
-  - A set refused its caches flies on the thread's caches, with the same states.
-  - A row that a refusal stopped is computed again by the calling thread after the batch, in row order.
+- An epoch call runs in slices of at most 4,096 series, one batch each, and the memory may grow between them, so the
+  high-water is the sets made plus one slice's reserve. A threaded call holds more memory than a serial one: the
+  slice's reserve, and each pool thread's own caches and scratch. After a first pass of 20,000 AP series the instance
+  held 1,092 to 1,135 MiB on 1 to 15 pool threads, against 972 MiB on the calling thread alone. A slice's reserve is its
+  own:
+  - 64 KiB per selected cold SGP4XP or AP set (an SGP4 set: its satellite and deep-space checkpoints);
+  - the cache pool's available room, at most 128 KiB per AP set;
+  - each thread's combined-table bound plus its term storage (the largest selected tesseral degree, 2,048
+    complementary slow terms; a diagnostic that keeps raw terms also reserves their bound);
+  - 8 MiB; at most 1 GiB.
+
+  A reserve that cannot be had is not a failure of the call. The slice is halved, and a slice of 32 series or fewer whose
+  reserve still cannot be had runs on the calling thread. Each series depends only on its own inputs and the time, so
+  slicing changes no byte.
+- 64 KiB is a mean, not a bound (a table can reach 416 KB at degree 31 and 694 KB at 70). A pool thread can reach the
+  following allocations inside a batch. Each is counted and refuses cleanly: the series releases its slots and is deferred.
+  - the slot's set (SGP4XP or AP) or satellite (SGP4), and SGP4's deep-space checkpoints;
+  - AP's per-set tables (resonance Taylor terms, m-daily, combined and raw short-period terms, zonal, half-day, shallow,
+    resonant coefficients) and the thread's table scratch and half-day scratch, grown to the set's bound;
+  - the set's caches from the pool (its record, tesseral copy, node runs). The pool's lists are made room for before the
+    batch and are never grown inside one.
+
+  Never reached inside a batch: the wide grids (a wide series flies on the calling thread), covariance (such calls are
+  serial), the thread's caches and guarded statics (made before the batch), and the call's own flags and deferred list
+  (made through the counted allocator before the first slice; without them the call runs on the calling thread).
+- Inside the batch, sbrk refuses every growth of the memory on every thread. It still serves a request below the
+  memory's end, moving the allocator's break (1.6): those pages were in the memory when the batch published its size,
+  before any thread claimed a chunk, so every thread's view covers them. The trap (Why, below) came from pages grown
+  after a thread's view was taken, and moving the break grows nothing.
+  - A set refused its caches flies on the thread's caches. The states are the same, except for an AP set that was asked
+    on both sides of its epoch before, which can differ. The cause: its bake caches use one id for the brackets on both
+    sides of the set's epoch, so what it answers depends on which caches it flew with before (pull request 86 removes
+    it).
+  - A row that a refusal stopped is computed again by the calling thread after the batch, in row order. For the epoch
+    store, the series' two slots are released first, keeping the slot to be replaced next, and its sets are built
+    again. The state is the same, except for an AP set that was asked on both sides of its epoch before, which can differ
+    for the same cause.
+  - The sizes measured: under a millimeter in every class measured (500 km, 830 km, medium orbit, geosynchronous,
+    eccentric: 0 to 0.13 mm) except strong drag, where one of eight sets with perigee under about 350 km differed by
+    49.7 mm (asked every second for 81,000 s across its epoch, against a fresh instance; one by 0.11 mm, six by
+    nothing). No command of this repository prints the 49.7 mm; `node test/epoch-pool.e2e.mjs` prints how many of its
+    deferred states differ and the largest difference.
+  - Which sets are refused their caches and which series are deferred depend on the threads' timing, so for such a set
+    two runs of the same calls can differ by that much. Serially the answer is the same every run for the same calls.
 - A pool thread runs a chunk only once its own memory.size covers the size published for the batch. Its claim read the
   batch's total, which was stored after that size, so it reads that size.
 - Outside a batch only the calling thread grows the memory, so its view is its own. The one exception is a pool
   thread's once-per-thread caches, made as it starts, one thread at a time. That thread publishes its size, and the
   calling thread goes on once its own view covers it.
-- sdnap_pool_stats counts the batches, refusals, deferred rows, batches that grew inside (0) and the view waits.
+- `sdnap_pool_stats(out, count)` writes the first min(count, 16) of 16 doubles and nothing past them (a count of 16 is 128
+  bytes):
+  - [0] the threads running;
+  - [1] the threaded batches run;
+  - [2] the growths of the memory refused inside them (every thread);
+  - [3] the rows deferred to the calling thread after them;
+  - [4] the batches after which the calling thread saw a larger memory (the invariant: 0);
+  - [5] whether the pool was taken for dead (1);
+  - [6] the polls without a completed row a waiting caller allows a batch;
+  - [7] the last batch's reserve in bytes;
+  - [8] the waits for a thread's view of the memory that had to yield, and [9] the most yields one took;
+  - [10] the memory's growths since the instance started (sbrk's, 1.6), and [11] the 64 KiB pages they added;
+  - [12] the epoch store's slices halved for want of their reserve, and [13] its slices run on the calling thread
+    because even the smallest slice's reserve could not be had;
+  - [14] the batches' rows completed on pool threads since the instance started, and [15] the pool threads that
+    completed at least one.
 
 Why. Measured on Node 25.4.0 (V8 14.1.146.11), through the module SDK's wasi-threads glue:
 - A thread can trap (memory access out of bounds) when it bulk-fills or bulk-copies a block in pages another thread has
@@ -1709,8 +1882,9 @@ Why. Measured on Node 25.4.0 (V8 14.1.146.11), through the module SDK's wasi-thr
 
 The timer.
 - A batch returns -20, with every row's status 9, once the calling thread has polled 2^35 times (2^37 through 0.6.32)
-  while waiting for its last chunks without a row completing on any thread. The pool is then not used again, and
-  later batches run on the calling thread.
+  while waiting for its last chunks without a row completing on any thread. The pool is then not used again. The row
+  store's later batches run on the calling thread. The epoch store the batch ran over is refused (After a dead batch,
+  above) until it is loaded again with no pool thread active; a store loaded then runs on the calling thread.
 - The heartbeat is a row, not a chunk (from 0.6.33; through 0.6.32 a chunk had to complete). Each thread counts the
   rows it completes in a counter of its own (each counter aligned to 64 bytes), and the calling thread reads their sum at
   each poll. In a cold batch of 1,534 rows that each build a node grid (sets above their switch, flown 4 days from their
@@ -2875,8 +3049,75 @@ not stored. A record's theory record (SGP4 Sat or SGP4XP integrator) is made whe
 of one set holds one slot, and a series of more than one holds two (the second is allocated with the series, counted,
 and a load that cannot allocate it is refused `out-of-memory`); of those, the two sets last used hold a theory record
 at a time. Two series that carry equal weather share one copy of it: equal means every row, node and node value the
-same in every bit, so which of two series is kept never depends on their order. A load that fails, for want of memory
-or any refusal, leaves no snapshot: the store is empty and its arrays are freed.
+same in every bit, so which of two series is kept never depends on their order. A `load_epochs` refused once its build has
+begun (a record, a failed allocation, series-forces-differ) leaves no snapshot: the store is empty and its arrays are freed. One
+refused before its build begins (a frame of a wrong type, a bad $PCF) leaves the store as it was. A load that builds while a counted
+allocation failed answers `out-of-memory` with the store empty (through 0.6.56 the built store stayed in place).
+
+**14.1.1 Load in parts.** A host that cannot stage the whole catalog in the module's memory takes it in parts with three methods:
+`load_epochs_open` (the optional $PCF EPOCH_STORE, read once), `load_epochs_part` (the 'ocm' frames of one part, framed as for
+`load_epochs`; any number of times) and `load_epochs_close`. `load_epochs` is these three in sequence on one payload.
+- **Equality.** The store built from any partition of a list of frames into parts, the parts in order, equals set for set and in
+  order the store `load_epochs` builds from the whole list: the kept sets, each series' order, capped and theory-filtered loads,
+  same-epoch duplicates in whichever parts they fall (the later in input order replaces), the interned weather, the covariances.
+  What is decided at a part: the theory filter and the skip of a set not centered on the Earth (counted, not held). What waits for
+  the close: the aging and the cap (they need the newest epoch of the whole load), the same-epoch replacement and series-forces-differ
+  (it compares every record of a series). So a record the close later drops is held until the close, a forecast record whole.
+- **Status.** A non-zero status of any of the three methods means the load is closed and the store is empty, except `load-not-open`,
+  which changes nothing (a part or a close with no load open; a loaded store stays), and `pool-dead`, which leaves the store in
+  place:
+  - an open drops the load in progress and empties the store, whether or not its configuration is accepted (a refused open
+    leaves no load open and no store);
+  - except after a threaded batch over the store taken for dead (SPEC 9), while a pool thread is still active. That thread may
+    still be reading or writing the store, so the open frees nothing and refuses `pool-dead`, before it reads its $PCF (a bad $PCF
+    in that open is reported as `pool-dead`). The store stays as the dead batch left it: `sdnap_epochs_count` answers its count,
+    the eighth statistic of `sdnap_epochs_stats` is NaN, `sdnap_epochs_at` answers -20 with every status 9, and
+    `sdnap_epochs_set_at` and `sdnap_drag_orbit_check` answer 9. No load is open, so a part or a close answers `load-not-open`.
+    Once no pool thread is active, an open empties the store and the three calls load as usual;
+  - a part refused for any reason (a type, a frame, a record, `out-of-memory`) drops the load and empties the store;
+  - a close always ends the load, accepted or refused (series-forces-differ, `out-of-memory`, `missing-ocm` for a close with no
+    part), and a refused close leaves the store empty.
+
+  `load_epochs` abandons a load in progress, accepted or refused. With no load open, a `load_epochs` refused before its build begins
+  (a wrong frame type, a bad $PCF, `pool-dead`) leaves the store as it was, as it always did, where a refused open empties it (the
+  open's contract is the empty store; `pool-dead` excepted, above).
+- **The first failure.** The reported failure is the first one met in input order: within a part as `load_epochs` reports it
+  (every frame's type is checked before any record is decoded, so within one part a wrong type is reported before an earlier
+  record's decode refusal), across parts the earlier part's. Two cases differ from `load_epochs` on the whole list: (1) a record that
+  cannot be decoded in an earlier part and a frame of a wrong type in a later one (`load_epochs` reports the wrong type, the parts the
+  record); (2) a bad $PCF, which the open reports before any frame's type is seen, where `load_epochs` checks the frames' types first.
+  series-forces-differ and the refusals of the install come at the close. An allocation that fails in a counted site (SPEC 1.6),
+  including the copy of a forecast and the arrays of a track, refuses by name `out-of-memory`; what SPEC 1.6 lists as not counted
+  (the strings and vectors the decode reads a record into) still traps.
+- **A difference from 0.6.56.** A load (`load_epochs` included) that builds while a counted allocation failed now answers `out-of-memory`
+  with the store empty; through 0.6.56 the built store stayed in place.
+- **State of the store.** From the open to the close the store is empty and no state is served: the open empties it and a part
+  adds nothing to it. The `sdnap_epochs_*` exports answer as for a store that holds nothing, and not uniformly: `sdnap_epochs_count`
+  0; `sdnap_epochs_stats` zero counts and, in the eighth statistic, the bytes the open load holds (below); `sdnap_epochs_series`,
+  `_select` and `_set_at` -1 (no such series); `sdnap_epochs_at` and `_source_at` -1 for any request of one series or more and 0 for
+  a request of none; `sdnap_drag_orbit_check` -4 (ORBPRO_PROP_BAD_INPUT). A host reads no state between the open and the close.
+- **One load at a time.** There is one load per instance, with no handle: a part or a close acts on the load open, whoever opened it,
+  and an open from any caller drops the load in progress. A host serializes one load per instance. No export, the statistics
+  included, may run on another thread while any of the three methods or `load_epochs` runs: the open frees a loaded store, the
+  install writes the resident store in place with no guard (as `load_epochs` never had), and the statistics walk the open load. One
+  pool entry reads and writes this store: `sdnap_epochs_at` without a covariance plane runs its series on the pool's threads (SPEC
+  9). It returns only once every chunk is done, so no pool thread touches the store while a load call runs. The exception is a
+  batch taken for dead, whose slow thread may still be in its chunk: `load_epochs` and `load_epochs_open` then refuse `pool-dead`
+  while a pool thread is active, before they free anything.
+- **Memory.** Nothing of a part's bytes is kept after the call: a host stages every part in one buffer, allocated once and reused
+  (the module reads a part's frames in place and has copied what it keeps before the call returns). What is held between parts is the
+  decoded records (identity, elements, forces and covariance, the weather interned once, and, for a record that carries a forecast,
+  the whole record's bytes copied out of the part's, as one counted allocation) and the arrays that index them. They are counted in
+  the eighth statistic of `sdnap_epochs_stats` (the bytes held), so a host sees what a load in progress holds. The sort and the
+  install happen at the close, as in `load_epochs`, so the decoded records of every part are held until then, and at the close the
+  decoded records and the installed store are resident together: that is the high-water. Measured on sdn-ap 0.6.57 (32-bit WebAssembly
+  with threads, 2 MiB initial memory, the host's staging buffer reused), 100,000 AP records, each the stored fitted 500 km record at
+  the angles of a seeded mix (85 % low near-circular, 5 % medium orbit, 5 % geosynchronous, 5 % eccentric): in parts of 1,000 the
+  instance (including that high-water, since WebAssembly memory keeps its high-water size) is 150,470,656 bytes (143.5 MiB), of which
+  the installed store counts 112,404,152 bytes (107.2 MiB); in one call it is 6,465.8 bytes an object (616.6 MiB), the payload
+  included. A record that carries a forecast holds the whole record: 3,000 such records of 13,576 bytes each, in parts of 100, hold
+  15,360 bytes each while the load is open and 15,349 bytes each in the store, and the instance is 16,908 bytes an object (30,015 in
+  one call, which holds the payload besides).
 
 **14.2 Selection.** With E_0 < ... < E_{n-1} a series' epochs and t the request time: NEAREST takes the set whose
 epoch is nearest t (switch between E_i and E_{i+1} at tau_i = (E_i + E_{i+1}) / 2); LATEST_BEFORE the latest set at or
@@ -3018,8 +3259,8 @@ analysis/density-calibration read the rows; for Jacchia 1970 the three are 3.2's
 every switch 1 but the output units (the daily-Ap form), the total mass density with anomalous oxygen, at the node's
 geodetic latitude phi and height h of 3.4 (below 10 km, 10 km, as 3.3), its longitude alpha - theta_g (alpha the
 node's TEME right ascension, theta_g = theta_g0 + omega_E t, 1.2), the UTC day of year and seconds of d50, and the
-local solar time UT + longitude / 15. Above 2500 km, 1e-20 kg/m^3 as 3.3. NRLMSISE-00 holds file-static state:
-it is evaluated on the calling thread only.
+local solar time UT + longitude / 15. Above 2500 km, 1e-20 kg/m^3 as 3.3. The build gives NRLMSISE-00's 29 mutable file-scope declarations thread-local storage. Its pinned source bytes and
+numerical expressions are unchanged; concurrent initializations use independent state.
 
 **15.4 Open DCA.** A $DCL as FFM reads the open-DCA product: Solved, ATMOSPHERE NRLMSIS00E, CORRECTION LogDensityNodes
 with one finite NODE_LOG_DENSITY_SCALE_DIMENSIONLESS per strictly increasing NODE_TIMES_MS (UTC). s(t) is linear
@@ -3113,8 +3354,8 @@ MAXIMUM_TESSERAL_DEGREE is a cap on families, not the degree of a field.
 - **Where a set's table is built** (from 0.6.42). The table is filled in the building thread's scratch at its bound
   (tess::SpTableScratch: 755 KB at d 31 and 3.1 MB at 70, against 160 KB at 12) and kept at its counts (68 bytes a combined
   entry, 20 a raw one). The scratch is the thread's, never shared, grown to the largest bound it has asked for and kept for
-  the thread's life. Sets are built on the calling thread (the row store's sdnap_init_elements, the epoch store, fit's
-  trial sets, the covariance's moved sets); the pool's threads fly sets built before a batch and hold none.
+  the thread's life. The row store's sdnap_init_elements, fit's trial sets and covariance's moved sets build on the calling thread.
+  The epoch store's state-only batch also builds on pool threads, with each series' two slots owned by one thread.
   - A table taken at its bound and cut down after leaves the rest free between the sets' tables, a hole no later bound
     fits. On 1,000 rows of a catalog mix (test/set-caches.e2e.mjs's, 783 in the low table) at 31/20 the row store's build
     took 223.9 MB of memory that way, 167.4 MB of it free inside the heap, against 51.9 MB on 0.6.41.
@@ -3349,7 +3590,7 @@ rates only: section 8's output map has no added zonal-tail term. SGP4XP and SGP4
 `test/zonal-long-period.e2e.mjs`, `test/zonal-long-period-table.e2e.mjs`, `test/zonal-cell.e2e.mjs` and
 `test/zonal-cell-placements.e2e.mjs` cover the model pairs, finite sum, half-cell envelope, switch, crossing,
 query order, sharing and epoch seed placements. Shared per-set tables are immutable; re-anchoring changes
-only the calling thread's caches.
+only the evaluating thread's caches.
 
 **16.4 Frame.** Frame policy is selected once, by `ap_init`, from the record's gravity terms. With d or z above 0,
 every AP set carries its epoch-axis states to TEME of date by M(t) M(t0)^T: from 0.6.34 the long-period regime's class 0
@@ -5786,15 +6027,16 @@ are 4 bytes off the builder's alignment (`ocm::view`, as every SDS input here); 
 scalar, and `ensure` reads the coefficients with `memcpy`. A record's vector of segments costs at most 52 bytes of
 the store a segment (an element of 4 bytes in the record): a hostile record of n bytes asks at most 13 n.
 
-Threads. Today no carried track is shared across threads: the module's pool (`src/pool.inc`, `abi.inc` `batch`) runs
-only the propagator ABI's row store (`plugin_init_omm`'s rows, `row_propagate`), cut into 512-object chunks, one thread
-per row; `propagate`, `propagate_epochs`, `load_epochs`, the `sdnap_epochs_*` exports and `fit` run on the calling
-thread. A track is nonetheless safe for concurrent readers by construction: its storage is sized once when it is read
-and never resized; the coefficients are read in place from the record's bytes, which the store copies once at load
-before any flight; each segment's fields are written once, by the thread that moves its state from unread to busy, and
-published by an atomic store (release) that readers load (acquire), a thread finding it busy reading its own copy; the
-search's hint is per thread. The change that first puts a track on the pool (segment-level serving, #394, or a pooled
-`sdnap_epochs_at`) brings a many-threads byte-identity test with it and does not merge without it. The verifier stays
+Threads. The state-only epoch-store batch (`sdnap_epochs_at` without a covariance plane) assigns each series to one
+thread, and carried tracks move between threads across batches. `propagate`, `propagate_epochs`, `load_epochs`,
+`load_epochs_open`, `load_epochs_part`, `load_epochs_close`, the other `sdnap_epochs_*` exports and `fit` run on the
+calling thread. A track's storage is sized once when it is read and never resized; coefficients are read in place from
+the record's bytes, copied by the store at load before flight. Segment fields are published by a release store after
+one reader moves the state from unread to busy; acquire readers see the completed fields, and a reader finding busy
+uses its own copy. The search hint is per thread. `test/epoch-carried-pool.e2e.mjs` checks 128 distinct carried and
+theory series at four instants inside and outside the carried span, in TEME and Earth-fixed frames, at 0, 1, 4 and 15
+threads, with threaded batches run: all state, status and source bytes equal the serial entry, whose digest is
+0.6.57's. The verifier stays
 lazy with these states, and they did not change W4: on the six orbits' 1-day records and the 8-day record at 500 km
 (paired rounds against the build before them, 100 records, 21 rounds) the load per record moved by -12 to +3 us,
 within the rounds' spread, and the first state took 0.1 to 1.0 us against 0.2 to 4.3 (the coefficients are no longer

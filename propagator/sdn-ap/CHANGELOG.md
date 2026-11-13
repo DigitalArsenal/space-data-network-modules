@@ -1,5 +1,32 @@
 # Changelog
 
+## 0.6.58 — The epoch store's first pass on the pool; the memory grown in steps of 4 MiB
+
+`sdnap_epochs_at` without a covariance plane builds and flies each series' sets on the pool's threads, one thread a series, in chunks of 16 series, and every
+state and status is the calling thread's to the bit, but for the case below. A series holding a wide set (AP above e 0.05 in no resonance class, above e 0.3 in one) and a call with a
+covariance plane stay on the calling thread. A call runs in slices of at most 4,096 series, each reserving its room before its batch; no memory grows inside a
+batch, and a series that needed a growth is computed again on the calling thread. Such a series, or a set refused its caches inside a batch, can answer a
+different state when it is an AP set that was asked on both sides of its epoch before (one cache id for the brackets on both sides of a set's epoch; pull
+request 86 removes it): under a millimeter in every class measured but strong drag, where 49.7 mm was measured on one of eight sets with perigee under about
+350 km. Which series are deferred depends on the threads' timing, so two runs of the same calls can differ by that much (SPEC 9). `sbrk` keeps the allocator's break and grows the memory by at least 4 MiB at a
+time, never serving pages a host grew. A pool thread's stack is 256 KiB, 192 KiB more of the instance a thread. `sdnap_pool_stats(out, count)` takes the number of
+doubles the caller has room for and writes at most 16 (among them the memory's growths, the epoch store's halved and serial slices, and the rows run on pool
+threads). After a batch taken for dead, `load_epochs` and `load_epochs_open` refuse `pool-dead` while a pool thread is active, leaving the store in place, and
+`sdnap_drag_orbit_check` answers 9. 20,000 near-circular AP series take 0.035 of 0.6.57's time on 15 pool threads, and 0.47 of it on the calling thread alone.
+
+## 0.6.57 — A catalog loaded in parts: load_epochs_open, load_epochs_part, load_epochs_close
+
+A host that cannot stage a whole catalog in the module's memory loads it in parts. `load_epochs_open` starts a load (the $PCF EPOCH_STORE read once, the store
+emptied, a load already open dropped), `load_epochs_part` decodes one part's 'ocm' frames (any number of times; nothing of a part's bytes is kept, so a host reuses
+one staging buffer), and `load_epochs_close` does the sort and the install. The store built from any partition of a list of frames is the store `load_epochs`
+builds from the whole list, set for set and in order, and every state and covariance is as in 0.6.56 to the bit. `load_epochs` is the three in sequence on one
+payload, with its meaning unchanged. A non-zero status of any of the three closes the load and empties the store, except `load-not-open` (a part or a close with no
+load open), which changes nothing. While a load is open the store is empty and serves no state; the eighth statistic of `sdnap_epochs_stats` counts what the open load
+holds. A record's forecast, copied out of a part's bytes, and its arrays of segments are counted allocations refused `out-of-memory`.
+A load that builds while a counted allocation failed now answers `out-of-memory` with the store empty (through 0.6.56 the built store stayed in place). The failure-injection
+seam of the tests fails every counted site again (it had stopped matching in 0.6.56). At 100,000 AP records with covariance, at 2 MiB initial memory, the instance
+holds 1,504.7 bytes per object (143.5 MiB) when loaded in parts of 1,000 and 6,465.8 (616.6 MiB) in one call.
+
 ## 0.6.56 — An allocation that fails at the memory limit is refused; a stored set's covariance is built on the record's own set (stacks #600, #599)
 
 At its memory limit the module refuses a state instead of aborting. A thread makes the caches a set's theory reads before

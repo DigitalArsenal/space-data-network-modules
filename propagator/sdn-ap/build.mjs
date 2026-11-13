@@ -157,8 +157,16 @@ async function nrlmsise() {
   const ptmExtern = "extern double ptm[10];";
   const model = text["nrlmsise-00.c"].replace('#include "nrlmsise-00.h"', "").replace(/#include <(math|stdio|stdlib)\.h>/g, "");
   if (!model.includes(mallocCast) || !model.includes(ptmExtern)) throw new Error("nrlmsise-00.c no longer has the malloc call and the ptm declaration this build adapts");
+  // The pinned port's mutable file state belongs to the evaluating thread. Static functions and the constant data
+  // tables retain their storage. Match declarations only; the source hash above pins the declaration census.
+  let tlsCount = 0;
+  const threadedModel = model.replace(/^static (double|int|struct \w+) ([^()\n]*;)/gm, (_, type, declaration) => {
+    ++tlsCount;
+    return `static thread_local ${type} ${declaration}`;
+  });
+  if (tlsCount !== 29) throw new Error(`NRLMSISE-00 mutable declaration census: ${tlsCount}, expected 29`);
   return ["#include <math.h>", "#include <stdio.h>", "#include <stdlib.h>", "namespace nrlmsise00 {", text["nrlmsise-00.h"], text["nrlmsise-00_data.c"],
-    model.replace(mallocCast, "u=(double*)malloc(sizeof(double)*(unsigned int)n);").replace(ptmExtern, "extern double ptm[50];"), "}"].join("\n");
+    threadedModel.replace(mallocCast, "u=(double*)malloc(sizeof(double)*(unsigned int)n);").replace(ptmExtern, "extern double ptm[50];"), "}"].join("\n");
 }
 
 // ERFA (BSD-3-Clause, derived with permission from IAU SOFA; fit's GCRF input frame, IAU 2006/2000A), read from the

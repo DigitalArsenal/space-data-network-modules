@@ -137,7 +137,7 @@ struct Terms {
   bool slow = false;         ///< SPEC 16.18 (the low table): the slow set by size, to the field's degree (stack #477)
 };
 inline Terms& active() {
-  static Terms t;
+  static thread_local Terms t;
   return t;
 }
 constexpr int kMdailyCap = 12, kSpCap = 12, kShallowCap = 31;
@@ -4359,10 +4359,10 @@ struct OddZonalG1 {
 };
 inline thread_local OddZonalG1 g_odd_zonal_g1{};
 [[gnu::noinline]] inline void init_odd_zonal_g1(OddZonalG1& r) {
-  const auto mark = mem::failures();
+  const auto mark = mem::thread_failures();
   res::HansenSamples samples(1e-3);
   for (int l = 7; l <= 70; l += 2) r.g1[l] = samples.get(l, (l - 1) / 2, -1) / 1e-3;
-  r.ready = mem::failures() == mark;
+  r.ready = mem::thread_failures() == mark;
 }
 inline const OddZonalG1& odd_zonal_g1() {
   OddZonalG1& r = g_odd_zonal_g1;
@@ -5210,9 +5210,9 @@ inline int slow_terms_low(int shallow_degree, double n, double e0, double i0, Sh
   const SecularRates sr = secular_rates(n, e0, i0);
   const double a = std::pow(kKe / n, kX2o3), band = kShallowSelect * kShallowBand * n;
   const int qmax = slow_q_max() < 0 ? 0 : slow_q_max() > kSlowQMax ? kSlowQMax : slow_q_max();
-  const auto mem_mark = mem::failures();
+  const auto mem_mark = mem::thread_failures();
   SlowGMemo gmemo;
-  if (mem::failures() != mem_mark) return -1;
+  if (mem::thread_failures() != mem_mark) return -1;
   NormalizedFkSamples inclination;
   double amplitudes[71];
   amplitudes[0] = kMu / a;
@@ -5233,14 +5233,14 @@ inline int slow_terms_low(int shallow_degree, double n, double e0, double i0, Sh
         // the field, not of the method (AP and a numerical propagator at 70 x 70 would both hold a series the real field continues)
         if (l0 >= kSlowDegree - 1) continue;
         normalized_Fk_dF(m, w, L, i0, F, dF, &inclination);
-        if (mem::failures() != mem_mark) return -1;
+        if (mem::thread_failures() != mem_mark) return -1;
         for (int l = l0; l <= L; l += 2) {
           if (j == 1 && q == 0 && l <= shallow_degree) continue;  // the shallow set's own term
           const int pp = (l - w) / 2;
           if (pp < 0 || pp > l) continue;
           double G, dG;
           gmemo.get(l, pp, q, j, e0, G, dG);
-          if (mem::failures() != mem_mark) return -1;
+          if (mem::thread_failures() != mem_mark) return -1;
           // the larger of its size through the mean motion and through the eccentricity vector reaches the cut
           if (slow_size_m(l, m, j, F[l] * G, a, psidot, amplitudes[l]) < kSlowKeepM && slow_size_e_m(l, m, F[l] * dG, a, n, psidot, amplitudes[l]) < kSlowKeepM) continue;
           if (out.count >= kShallowMax) { ++out.over; continue; }  // counted: the diagnostic lists such a term as code 7
