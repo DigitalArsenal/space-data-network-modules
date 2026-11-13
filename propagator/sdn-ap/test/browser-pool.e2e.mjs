@@ -23,6 +23,7 @@ import assert from "node:assert/strict";
 import fs from "node:fs";
 import http from "node:http";
 import os from "node:os";
+import { randomBytes } from "node:crypto";
 import path from "node:path";
 import { spawn } from "node:child_process";
 import { createRequire } from "node:module";
@@ -145,6 +146,7 @@ const pageJs = fs.readFileSync(path.join(here, "lib", "browser-pool", "page.js")
 const pageHtml = fs.readFileSync(path.join(here, "lib", "browser-pool", "page.html"));
 const wasmBytes = fs.readFileSync(wasmPath);
 const headers = { "Cross-Origin-Opener-Policy": "same-origin", "Cross-Origin-Embedder-Policy": "require-corp", "Cross-Origin-Resource-Policy": "same-origin", "Cache-Control": "no-store" };
+const token = randomBytes(32).toString("hex");
 let donePayload;
 const done = new Promise((resolve) => { donePayload = resolve; });
 const routes = {
@@ -155,9 +157,15 @@ const routes = {
 const server = http.createServer((req, res) => {
   const url = new URL(req.url, "http://127.0.0.1");
   if (req.method === "POST" && url.pathname === "/done") {
+    if (url.searchParams.get("token") !== token) { res.writeHead(403, headers); res.end("forbidden"); return; }
     const chunks = [];
     req.on("data", (c) => chunks.push(c));
-    req.on("end", () => { res.writeHead(200, headers); res.end("ok"); donePayload(JSON.parse(Buffer.concat(chunks).toString("utf8"))); });
+    req.on("end", () => {
+      try {
+        const payload = JSON.parse(Buffer.concat(chunks).toString("utf8"));
+        res.writeHead(200, headers); res.end("ok"); donePayload(payload);
+      } catch { res.writeHead(400, headers); res.end("invalid JSON"); }
+    });
     return;
   }
   const route = routes[url.pathname];
@@ -165,20 +173,42 @@ const server = http.createServer((req, res) => {
   res.writeHead(200, { ...headers, "Content-Type": route[0], "Content-Length": Buffer.byteLength(route[1]) });
   res.end(route[1]);
 });
-await new Promise((resolve) => server.listen(0, "127.0.0.1", resolve));
-const profile = fs.mkdtempSync(path.join(os.tmpdir(), "sdn-ap-browser-"));
-const { command, args, env } = launch(`http://127.0.0.1:${server.address().port}/?threads=${JSON.stringify(THREADS)}`, profile);
-const child = spawn(command, args, { stdio: "ignore", env: { ...process.env, ...env } });
+let profile, child, timerId;
+let cleanupPromise;
+const cleanup = () => cleanupPromise ??= (async () => {
+  clearTimeout(timerId);
+  if (child?.pid) {
+    // detached creates this test's process group; a negative PID addresses only that group.
+    try { process.kill(-child.pid, "SIGKILL"); } catch (e) { if (e.code !== "ESRCH") console.warn(`browser cleanup: ${e.message}`); }
+    if (child.exitCode === null && child.signalCode === null) await new Promise((resolve) => child.once("close", resolve));
+  }
+  server.closeAllConnections();
+  if (server.listening) await new Promise((resolve) => server.close(resolve));
+  if (profile) {
+    try { fs.rmSync(profile, { recursive: true, force: true, maxRetries: 5, retryDelay: 100 }); }
+    catch (e) { console.warn(`WARNING: browser profile cleanup: ${e.message}`); }
+  }
+})();
+const onInt = () => { void cleanup().then(() => process.exit(130)); };
+const onTerm = () => { void cleanup().then(() => process.exit(143)); };
+process.once("SIGINT", onInt);
+process.once("SIGTERM", onTerm);
 let browser;
 try {
-  const timer = new Promise((_, reject) => setTimeout(() => reject(new Error("the page did not report within 15 minutes")), 15 * 60 * 1000));
-  const exited = new Promise((_, reject) => child.on("exit", (code, signal) => reject(new Error(`the browser exited before reporting (code ${code}, signal ${signal})`))));
+  await new Promise((resolve, reject) => { server.once("error", reject); server.listen(0, "127.0.0.1", resolve); });
+  profile = fs.mkdtempSync(path.join(os.tmpdir(), "sdn-ap-browser-"));
+  const { command, args, env } = launch(`http://127.0.0.1:${server.address().port}/?threads=${JSON.stringify(THREADS)}&token=${token}`, profile);
+  child = spawn(command, args, { detached: true, stdio: "ignore", env: { ...process.env, ...env } });
+  const timer = new Promise((_, reject) => { timerId = setTimeout(() => reject(new Error("the page did not report within 15 minutes")), 15 * 60 * 1000); });
+  const exited = new Promise((_, reject) => {
+    child.once("error", reject);
+    child.once("exit", (code, signal) => reject(new Error(`the browser exited before reporting (code ${code}, signal ${signal})`)));
+  });
   browser = await Promise.race([done, timer, exited]);
 } finally {
-  child.removeAllListeners("exit");
-  child.kill("SIGKILL");  // the process this test started, by its handle
-  server.close();
-  fs.rmSync(profile, { recursive: true, force: true });
+  await cleanup();
+  process.removeListener("SIGINT", onInt);
+  process.removeListener("SIGTERM", onTerm);
 }
 
 // ---------------------------------------------------------------------------------------------------------------- the assertions

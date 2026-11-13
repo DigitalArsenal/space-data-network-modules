@@ -10,4 +10,4 @@ const runWorker = (threads) => new Promise((resolve) => {
 });
 const out = { crossOriginIsolated: self.crossOriginIsolated, userAgent: navigator.userAgent, runs: {} };
 try { for (const t of threadCounts) out.runs[t] = await runWorker(t); } catch (e) { out.fatal = String(e); }
-await fetch("/done", { method: "POST", body: JSON.stringify(out) });
+await fetch(`/done?token=${encodeURIComponent(new URLSearchParams(location.search).get("token"))}`, { method: "POST", body: JSON.stringify(out) });
