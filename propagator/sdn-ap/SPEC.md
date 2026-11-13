@@ -167,6 +167,12 @@ would otherwise have answered. That includes the decay answers of SPEC 16.25:
 
 The message names how many allocations failed since the method began and the largest.
 
+A method's mark counts every thread's failures, because its batch spans the pool. A step that runs on one thread
+compares that thread's own count (`mem::thread_failures`). That covers a set's initialization (AP's tables, the slow
+terms, the odd zonal G1 table) and an epoch-store slot's build. On a pool lane, another lane's refused growth never fails
+it. Merged with 0.6.53's initialization, which compared the instance's count, it had: a set no growth had refused was
+refused, not deferred, and its slot kept the refusal.
+
 **AP initialization storage (0.6.53).** Shared sample arrays use counted allocations; each memo is local to one
 initialization and retains the scalar evaluator's operation order. An inclination column is keyed by inclination,
 degree, order, and quadrature size; a changed inclination or degree rebuilds its columns. Against 0.6.52, the measured
