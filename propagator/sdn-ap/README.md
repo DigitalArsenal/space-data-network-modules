@@ -702,6 +702,11 @@ wants the deep look-ahead chooses between the line and the covariance in the sam
 execution thread, reads no frame during refill, and uses at most 32 rows per interactive call. A dead pool returns -20,
 preserves committed reads, and quarantines the instance for disposal.
 
+On the measured 100,000-object recipe without covariance, four pool threads build the initial two-cell fill at
+3,271 rows/s and the rolling sweep at 3,253 rows/s, about 3.1 times the unchanged serial control. Calls capped at 32 rows
+have a 95th-percentile duration of about 15.6 ms and a measured maximum of 38.7 ms. SPEC 19.10 gives the host, complete
+0/4/8/15-thread measurements, paired-round variance checks, and the separate memory costs of covariance.
+
 ## SGP4XP status
 
 `src/xp_theory.inc` is the semi-analytic theory of SPEC.md (side A, closed-modules main ef9e2169): six mean equinoctial elements

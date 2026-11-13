@@ -6631,6 +6631,49 @@ segments: eight rounds cover a whole first fill and eight cover a rolling refill
 middle-half ratio range exceeds 5% of the median. Reported whole-catalog execution times sum measured segments and exclude
 the interleaved controls, load, and pool startup.
 
+On 2026-11-13, the complete 100,000-object recipe without covariance was measured on an Apple M3 Ultra with 28 cores,
+256 GiB RAM, macOS arm64, and Node 25.4.0. Four identically loaded instances execute each segment in A B B A order,
+where A is the unchanged serial binary and B is the pooled binary. Eight segment rounds collectively cover a complete
+sweep; they are not eight independent full-catalog sweeps. Initial fill builds 200,000 rows (two cells per object),
+and rolling builds 100,000 rows after a 48-minute advance. Current-frame coverage is asserted halfway through initial
+fill. Both phases compare exact frame bits, logical counters, and row counts against A and assert no in-batch growth.
+
+All four configurations satisfy the middle-half-width limit of 5% of the median round ratio. The eight-thread case
+requires three complete cycles (24 rounds per phase); at 16 rounds its initial-fill width is 5.54%. The other cases
+require one cycle. Times below are medians of measured complete-sweep execution sums. Ratios are medians of paired
+round ratios, a separate statistic that does not equal the quotient of the time medians in general.
+
+| Pool threads | Rounds per phase | Initial serial / pooled seconds | Initial rows/s | Rolling serial / pooled seconds | Rolling rows/s |
+| --- | --- | --- | --- | --- | --- |
+| 0 | 8 | 191.211 / 190.982 | 1,047.2 | 96.886 / 96.768 | 1,033.4 |
+| 4 | 8 | 190.380 / 61.140 | 3,271.2 | 96.453 / 30.739 | 3,253.2 |
+| 8 | 24 | 189.722 / 53.911 | 3,709.8 | 97.086 / 26.191 | 3,818.0 |
+| 15 | 8 | 192.011 / 47.333 | 4,225.4 | 97.667 / 24.005 | 4,165.8 |
+
+| Pool threads | Initial median ratio (middle half) | Rolling median ratio (middle half) |
+| --- | --- | --- |
+| 0 | 1.002 (1.001–1.002) | 1.001 (1.000–1.002) |
+| 4 | 3.115 (3.095–3.130) | 3.138 (3.109–3.149) |
+| 8 | 3.626 (3.555–3.682) | 3.713 (3.637–3.770) |
+| 15 | 4.061 (4.029–4.075) | 4.044 (4.034–4.119) |
+
+Every measured call is capped at 32 rows. Call durations include synchronous pool completion and caller commit:
+
+| Pool threads | Initial p50 / p95 / maximum ms | Rolling p50 / p95 / maximum ms |
+| --- | --- | --- |
+| 0 | 30.886 / 46.236 / 80.034 | 31.122 / 47.407 / 80.770 |
+| 4 | 11.538 / 15.576 / 38.633 | 11.491 / 15.637 / 38.308 |
+| 8 | 11.318 / 14.136 / 49.513 | 11.225 / 13.954 / 47.563 |
+| 15 | 10.964 / 12.538 / 38.779 | 10.975 / 12.519 / 51.764 |
+
+Four, eight, and fifteen threads exceed the 2,100-row/s target in both measured phases; zero threads preserve the serial
+baseline. These are host- and catalog-specific measurements, not a latency guarantee. Four threads provide the
+measured 3.1-times improvement with the lower memory requirements above. Covariance is excluded from this timing
+matrix; its complete one-instance memory costs are measured separately above.
+
+The unsigned control binary has SHA-256 `0e1ed45a4a98de7bffbe353125f8fbcc9de8b155286cd60b8dae671ff176beda`;
+the unsigned pooled binary has SHA-256 `4eda56422ca9137240766f684728b96c26c2f8794290d93ba6ea73401ff37a33`.
+
 ## References
 
 - Payne, T., Hoots, F., Butkus, A., Slatton, Z., and Nguyen, D. (2022).
