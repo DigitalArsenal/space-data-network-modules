@@ -60,7 +60,10 @@ template <class T> class Array {
   void clear() { while (size_) p_[--size_].~T(); }
   void pop_back() { p_[--size_].~T(); }
   size_t size() const { return size_; }
+  size_t capacity() const { return capacity_; }
   bool empty() const { return size_ == 0; }
+  /// Room for one more: the capacity at least doubles, so n insertions make O(log n) allocations (SPEC 1.6: counted, refused by name).
+  bool grow_one() { return size_ < capacity_ || reserve(capacity_ ? capacity_ * 2 : 16); }
   T* data() { return p_; }
   const T* data() const { return p_; }
   T* begin() { return p_; }
@@ -70,6 +73,46 @@ template <class T> class Array {
   T& operator[](size_t k) { return p_[k]; }
   const T& operator[](size_t k) const { return p_[k]; }
   T& back() { return p_[size_ - 1]; }
+};
+
+/// Elements held in blocks of kBlock, each block allocated (counted, SPEC 1.6) when the one before it is full: the memory follows the elements
+/// actually stored, never a count read from the payload's framing (a payload of minimal frames names up to a twelfth of its length in records), and
+/// no element moves when it grows (a doubling array would hold the old and the new array at once). Callers make room (grow_one) before push_back.
+template <class T, size_t kBlock = 1024> class Blocks {
+  Array<T*> blocks_;
+  size_t size_ = 0;
+ public:
+  Blocks() = default;
+  Blocks(const Blocks&) = delete;
+  Blocks& operator=(const Blocks&) = delete;
+  ~Blocks() { clear(); }
+  bool grow_one() {
+    if (size_ < blocks_.size() * kBlock) return true;
+    if (!blocks_.grow_one()) return false;
+    T* b = static_cast<T*>(mem::malloc(kBlock * sizeof(T)));
+    if (b == nullptr) return false;
+    blocks_.push_back(b);
+    return true;
+  }
+  void push_back(T value) { new (&(*this)[size_]) T(std::move(value)); ++size_; }
+  void clear() {
+    while (size_) { --size_; (*this)[size_].~T(); }
+    for (T* b : blocks_) std::free(b);
+    blocks_.clear();
+  }
+  size_t size() const { return size_; }
+  T& operator[](size_t k) { return blocks_[k / kBlock][k % kBlock]; }
+  const T& operator[](size_t k) const { return blocks_[k / kBlock][k % kBlock]; }
+  template <class B, class V> struct Iter {
+    B* b; size_t k;
+    V& operator*() const { return (*b)[k]; }
+    Iter& operator++() { ++k; return *this; }
+    bool operator!=(const Iter& o) const { return k != o.k; }
+  };
+  Iter<Blocks, T> begin() { return {this, 0}; }
+  Iter<Blocks, T> end() { return {this, size_}; }
+  Iter<const Blocks, const T> begin() const { return {this, 0}; }
+  Iter<const Blocks, const T> end() const { return {this, size_}; }
 };
 
 struct Config {
@@ -330,16 +373,8 @@ inline int build(Store& st, const Config& cfg) {
     bool installed = false;
     ~Unwind() { if (!installed) clear(s); }
   } unwind{st};
-  // Count framing without decoding. Malformed input is still diagnosed in the original decode order.
-  size_t count = 0;
-  for (uint32_t i = 0; i < plugin_get_input_count(); ++i) {
-    const plugin_input_frame_t* f = plugin_get_input_frame(i);
-    if (f != nullptr && f->port_id != nullptr && std::strcmp(f->port_id, "ocm") == 0)
-      each_record(f->payload, f->payload_length, [&](const uint8_t*, uint32_t) { ++count; return true; });
-  }
-  Array<Record> recs;
-  if (!recs.reserve(count) || !st.entries.reserve(count) || !st.series.reserve(count))
-    return mem::refuse_if_out_of_memory(), 3;
+  // The decoded records are held in blocks allocated as they arrive: no allocation follows a count read from the payload's framing (SPEC 1.6).
+  Blocks<Record> recs;
   bool refused = false;
   for (uint32_t i = 0; i < plugin_get_input_count(); ++i) {
     const plugin_input_frame_t* f = plugin_get_input_frame(i);
@@ -354,6 +389,7 @@ inline int build(Store& st, const Config& cfg) {
       r.atmosphere = intern(st, r);
       if (mem::refuse_if_out_of_memory()) { delete r.cov; refused = true; return false; }
       r.weather = ocm::Weather{};
+      if (!recs.grow_one()) { delete r.cov; refused = true; mem::refuse_if_out_of_memory(); return false; }
       recs.push_back(std::move(r));
       return true;
     });
@@ -367,7 +403,7 @@ inline int build(Store& st, const Config& cfg) {
   // the series: (NORAD_CAT_ID, INTERNATIONAL_DESIGNATOR, MEAN_ELEMENT_THEORY, ORIGINATOR), each by epoch (a later record
   // of the same epoch replaces)
   Array<uint32_t> order, keep;
-  if (!order.reserve(recs.size()) || !keep.reserve(recs.size())) {
+  if (!order.reserve(recs.size()) || !keep.reserve(recs.size()) || !st.entries.reserve(recs.size()) || !st.series.reserve(recs.size())) {
     for (Record& r : recs) delete r.cov;
     return mem::refuse_if_out_of_memory(), 3;
   }
