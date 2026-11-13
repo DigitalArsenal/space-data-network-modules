@@ -1463,16 +1463,17 @@ struct alignas(16) SpRow {
 };
 static_assert(sizeof(SpRow) == 16, "");
 
-/// The first-order tesseral terms of one set, grouped into SIMD blocks and baked at a mean state (SPEC 16). The block
-/// arrays live in one allocation (`mem`) sized for `cap_blks` blocks and `cap_rows` rows: a thread's own cache holds
-/// kMaxBlks (a set's terms are grouped there), a set's cache from the pool (SetCaches) exactly its total_blks.
-/// The bake points are cells of the mean state (sp_sync): the baked values are a function of the state's cells
-/// alone, never of the states evaluated before.
 /// A grouping's id (SpEvalCache::group_id), unique in the instance whichever thread groups.
 inline uint64_t sp_next_group_id() {
   static uint64_t next = 1;
   return __atomic_fetch_add(&next, 1, __ATOMIC_RELAXED);
 }
+
+/// The first-order tesseral terms of one set, grouped into SIMD blocks and baked at a mean state (SPEC 16). The block
+/// arrays live in one allocation (`mem`) sized for `cap_blks` blocks and `cap_rows` rows: a thread's own cache holds
+/// kMaxBlks (a set's terms are grouped there), a set's cache from the pool (SetCaches) exactly its total_blks.
+/// The bake points are cells of the mean state (sp_sync): the baked values are a function of the state's cells
+/// alone, never of the states evaluated before.
 struct SpEvalCache {
   static constexpr int kMaxBlks = 768;
   static constexpr int kMaxRows = 384;
@@ -1483,7 +1484,7 @@ struct SpEvalCache {
   uint32_t table_tag = 0;
   float f0_uc = -1e30f, f0_ic = -1e30f, fn_uc = -1e30f;
   bool grouped_ok = false, res_overflow = false, uil_b_dirty = false;
-  uint64_t group_id = 0;  ///< the grouping this cache holds (sp_rebuild_cache), kept by a set's copy of it (sp_compact_blk_c)
+  uint64_t group_id = 0;  ///< the grouping this cache holds (sp_rebuild_cache), kept by a set's copy of it (sp_compact_copy)
   double a0 = 0.0, e0 = 0.0, da_base = 0.0;
   double a = -1.0, e = -1.0, n = -1.0, ci = -10.0;
   double a_bake = -1.0, e_bake = -1.0, e_bake_a = -1.0, e_pe_bake = -1.0, de_pe_thresh = 5.0e-7;
@@ -1514,7 +1515,7 @@ struct SpEvalCache {
   float* blk_mf = nullptr;
   float* blk_w = nullptr;
   float* blk_q = nullptr;
-  float* blk_c = nullptr;     ///< the terms' coefficients by lane (F's, grouped); a set's cache holds none (sp_blk_c)
+  float* blk_c = nullptr;     ///< the grouped coefficients; a compact cache borrows the matching thread grouping or rebuilds from F
   float* blk_p = nullptr;
   float* blk_a = nullptr;
   float* blk_e = nullptr;
@@ -1560,7 +1561,8 @@ inline bool sp_storage(SpEvalCache& sc, int blks, int rows, bool with_c) {
 }
 
 /// A set's cache: `src` (grouped and baked in a thread's cache) with storage for exactly its blocks and rows and
-/// without blk_c (sp_blk_c rebuilds it from F when a base or resonant bake needs it). nullptr out of memory.
+/// without blk_c. A bake borrows the matching thread grouping or rebuilds from F; a resonant-only rebuild
+/// writes only resonant blocks into temporary storage. Returns nullptr out of memory.
 inline SpEvalCache* sp_compact_copy(const SpEvalCache& src) {
   SpEvalCache* d = sdnap::mem::counted(new (std::nothrow) SpEvalCache(src));
   if (d == nullptr) return nullptr;
@@ -1588,10 +1590,6 @@ inline SpEvalCache* sp_compact_copy(const SpEvalCache& src) {
   return d;
 }
 
-/// A set's blk_c for one bake, per thread: the lanes' coefficients from F (store_lane's layout), zero in empty lanes.
-/// `blocks` (`count` of them): those blocks only, the others left as they are (the resonant bake reads its own blocks
-/// alone, stack #441);
-/// nullptr: every block (the base bake).
 inline thread_local float* g_sp_blk_c = nullptr;
 /// The thread's blk_c storage (192 KiB), made on first use or ahead (pool::warm_thread: a pool thread makes its caches
 /// before any batch, stack #487).
@@ -1602,6 +1600,8 @@ inline float* sp_blk_c_storage() {
   }
   return g_sp_blk_c;
 }
+/// Rebuild block coefficients from F, zeroing empty vector positions. With `blocks`, write only those `count`
+/// blocks; nullptr writes every block. A resonant-only bake leaves only its resonant blocks valid in this storage.
 inline float* sp_blk_c(const SpEvalCache& sc, const uint16_t* blocks = nullptr, int count = 0) {
   float* const c = sp_blk_c_storage();
   const int n = blocks != nullptr ? count : sc.total_blks;
@@ -2783,11 +2783,9 @@ inline bool sp_matches(const SpEvalCache& sc, const SpCombCoef* F, int count, ui
 
 constexpr int64_t kSpPeAtBake = INT64_MIN;  ///< the pe cell of a derivative pass: the pe blocks at the ae bake's e
 
-/// The coefficients a set's compact cache bakes from (blk_c) for a base bake (every block) or a resonant bake alone
-/// (`blocks`): the thread's own cache's when the compact cache is a copy of the grouping that cache still holds (the
-/// same group_id: the set's terms were grouped there and copied, sp_claim; grouping writes F's coefficients into the
-/// vector positions sp_blk_c writes them to, and nothing writes them after), else rebuilt from F. A warm set flown alone
-/// rebuilds none (stack #441).
+/// A compact cache borrows coefficients from the thread cache when their grouping ids match; otherwise it
+/// rebuilds from F. A base bake reads every block. A resonant-only bake reads only the requested blocks,
+/// leaving only those blocks valid in temporary storage. Grouping writes coefficients that baking does not modify.
 inline float* sp_compact_blk_c(const SpEvalCache& sc, const uint16_t* blocks = nullptr, int count = 0) {
   const SpEvalCache* th = g_sp_eval_cache_ptr;
   if (th != nullptr && th != &sc && th->blk_c != nullptr && th->grouped_ok && sc.group_id != 0 && th->group_id == sc.group_id)
