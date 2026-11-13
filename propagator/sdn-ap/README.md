@@ -1,6 +1,6 @@
 # sdn-ap-propagator
 
-Version 0.6.48 (dist cfb4dbce).
+Version 0.6.48 (dist 564fa16c).
 
 General-perturbations propagation of whole catalogs in one isomorphic WASM module (browser and WasmEdge), with two
 theories and AP, an advanced propagator that builds on the entire history of astrodynamics ($PCF FORCES selects its drag
@@ -23,9 +23,20 @@ Build: `npm run build` (module SDK compiler lane, clang `wasm32-wasip1-threads`,
 `dist/isomorphic/module.wasm`; it reads ERFA from this repository. No build data is fetched.
 
 AP's zonal tail at epoch eccentricity at or below 0.3 carries long-period harmonics through |w| = 6 in its mean-element
-rates (SPEC 16.3, stack #595). Its eccentricity coefficients come from a finite Hansen sum and are re-anchored beyond
-0.002 from their reference. The same-field tests bound the day-1 and day-5 once-per-revolution in-track terms by 10 m
-on the 400 km/e0.05/i55 and 300 km/e0.01/i55 pairs. The output map and the terms above e 0.3 retain their definitions.
+rates (SPEC 16.3, stack #595). Finite Hansen coefficients use a 0.002 eccentricity grid whose cell center depends on
+the state alone, with a floor at e 0.01. The largest offset above the floor is 0.001. The five-day crossing test's
+excess second difference is 0.000682 m; the boundary-side same-field residual difference is 0.004882 m.
+The original hp400/e0.05/i55 and hp300/e0.01/i55 pairs have maximum 3D errors of 14.515642 and 15.180303 m,
+within the 20 m bound, and day-1/day-5 once-per-revolution amplitudes below 10 m. The e0 0.2999 control comparison
+is 0.796426 m, including approximation and truncation. SPEC 16.3 gives the value/slope envelopes and controls.
+
+The degree70 table costs 6,768 bytes per set versus 1,552 before the added harmonics. A 3,992-byte per-thread cache
+holds cell coefficients independently of semimajor axis. Alternating degree70/order31 five-day fits against 0.6.48
+cost 1.242354 times as much at hp300/e0.01/i55 and 1.755229 times at hp800/e0.05/i20. Warm and cold state costs
+are tabulated in SPEC 16.3; cold day-7 calls for the measured decaying orbit cost 6,262.855 versus 3,697.333 µs.
+A covariance bank shares the nominal table: legacy |w| <= 1 entries depend on nominal e0 (a measured 1.854 m
+five-day difference for a set 2e-4 away); the added contribution is bit-identical under either owner.
+The output map and the terms above e 0.3 retain their definitions.
 
 ## Interface
 
