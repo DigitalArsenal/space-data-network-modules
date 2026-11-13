@@ -150,13 +150,14 @@ for (const [reserves, staging] of deadOnly ? [] : [[2, 0], [99, 0], [0, 1]]) {
 }
 if (!deadOnly) console.log("deferred growth refusal, counted OOM, reserve halving and serial fallbacks: pass");
 
-const refuses = async (f, t) => {
+const refuses = async (f, t, quarantined = true) => {
   const old = { stats: f.stats(), cells: cells(f), frame: f.at(t) };
   assert.equal(f.open(2e6), -20);
   assert.deepEqual(f.refill(t, 2880, 64), { rc: -20, left: [0, 0], stored: 0, tombstones: 0, unstored: 0, visits: 0, stalled: -1, due: 0 });
   f.close();
   for (const methodId of ["load_epochs_open", "load_epochs_part", "load_epochs_close", "load_epochs"])
-    assert.equal((await f.h.invoke({ methodId, inputs: [] })).errorCode, "pool-dead", methodId);
+    assert.equal((await f.h.invoke({ methodId, inputs: [] })).errorCode,
+      !quarantined && ["load_epochs_part", "load_epochs_close"].includes(methodId) ? "load-not-open" : "pool-dead", methodId);
   const status = f.x.sdnap_alloc(16), out = f.x.sdnap_alloc(192);
   new Int32Array(f.mem(), status, 4).fill(-123);
   assert.equal(f.x.sdnap_propagate_soa(...f.jd(t), 0, 4, 0, out, status), -20);
@@ -205,7 +206,7 @@ if (!refusalOnly) {
   f.x.test_hold(2);
   const answer = f.epochsAt(t);
   assert.equal(answer.rc, -20); assert.ok(answer.status.every(s => s === 9));
-  await refuses(f, t);
+  await refuses(f, t, false);
   await f.h.destroy();
   console.log("later batch death, complete mutation refusal, defined outputs, and prior epoch-pool death: pass");
 }
