@@ -5805,6 +5805,7 @@ struct BranchScope {
 /// AP: the per-object tables of what the call selected (tess::active()); nothing without a selection. False out of memory.
 /// The eccentricity switches are s.ctx.branch's (xp_init), never e.eo's own.
 inline bool ap_init(const Elements& e, double n0, int8_t res, XpSat& s) {
+  const auto mem_mark = mem::failures();
   const tess::Terms& t = s.ctx.selected_terms;
   const Branch& br = s.ctx.branch;
   s.ctx.n0 = n0;
@@ -5846,8 +5847,12 @@ inline bool ap_init(const Elements& e, double n0, int8_t res, XpSat& s) {
         const res::TermSet ts = res::class_terms(res);
         res::GTaylor* g = static_cast<res::GTaylor*>(sdnap::mem::malloc(ts.count * sizeof(res::GTaylor)));
         if (g == nullptr) return false;
-        for (int j = 0; j < ts.count; ++j) g[j] = res::g_taylor(ts.t[j].l, ts.t[j].p, ts.t[j].q, e.eo);
+        constexpr double h = 5e-4;
+        res::HansenSamples samples[] = {res::HansenSamples(e.eo - 2.0 * h), res::HansenSamples(e.eo - h),
+          res::HansenSamples(e.eo), res::HansenSamples(e.eo + h), res::HansenSamples(e.eo + 2.0 * h)};
+        for (int j = 0; j < ts.count; ++j) g[j] = res::g_taylor(ts.t[j].l, ts.t[j].p, ts.t[j].q, e.eo, samples);
         s.ctx.res_taylor = g;
+        if (mem::failures() != mem_mark) return false;
       }
     }
   }
@@ -5881,7 +5886,7 @@ inline bool ap_init(const Elements& e, double n0, int8_t res, XpSat& s) {
     if (t.slow && sd0 >= 2 && res == 0 && !s.ctx.long_period && br.wide_tess == 0) {
       tess::ShallowTerms& sc = tess::shallow_scratch();
       tess::shallow_terms(sd0, n0, e.eo, e.xincl, sc);
-      tess::slow_terms_low(sd0, n0, e.eo, e.xincl, sc);
+      if (tess::slow_terms_low(sd0, n0, e.eo, e.xincl, sc) < 0) return false;
       if (sc.count > sc.old_count) slow_list = &sc;
       s.ctx.slow_extra = sc.count - sc.old_count;
     }
@@ -5987,6 +5992,7 @@ inline bool ap_init(const Elements& e, double n0, int8_t res, XpSat& s) {
       if (kept == nullptr) return false;
       tess::zonal_visit_terms(zd, wide, e.xincl, e.eo, kept);
       s.ctx.zt = kept;
+      if (mem::failures() != mem_mark) return false;
       s.ctx.zt_degree = zd;
       s.ctx.zt_wide = wide ? 1 : 0;
     }

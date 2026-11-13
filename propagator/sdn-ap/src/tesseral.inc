@@ -372,7 +372,36 @@ inline void normalized_Fk3(int m, int k, int lmax, double i0, double h, double* 
     for (int l = 0; l <= lmax; ++l) outs[s][l] *= inv_N;
 }
 
-inline void normalized_Fk_dF(int m, int k, int lmax, double i0, double* F0, double* dF0) {
+// Keyed by inclination, degree, m and NF; lives for one slow_terms_low call.
+struct NormalizedFkSamples {
+  struct Sample {
+    double col[104], dcol[104], x, alpha_x, cml, sml, dcml, dsml;
+    bool ready = false, derivative[2] = {false, false};
+  };
+  struct Column { int m, NF; mem::InitTable<Sample> samples; Column* next = nullptr; };
+  Column* columns = nullptr;
+  double inclination = 0.0;
+  int degree = -1;
+  ~NormalizedFkSamples() { clear(); }
+  void clear() {
+    while (columns) { auto* c = columns; columns = c->next; delete c; }
+  }
+  Sample* get(int m, int NF, int count, double i0, int lmax) {
+    if (degree != -1 && (std::memcmp(&inclination, &i0, sizeof(i0)) != 0 || degree != lmax)) {
+      assert(false && "inclination memo input changed");
+      clear();
+    }
+    inclination = i0; degree = lmax;
+    for (auto* c = columns; c; c = c->next) if (c->m == m && c->NF == NF) return c->samples.data;
+    auto* c = mem::counted(new (std::nothrow) Column{});
+    if (!c) return nullptr;
+    if (!c->samples.allocate(count)) { delete c; return nullptr; }
+    c->m = m; c->NF = NF; c->next = columns; columns = c;
+    return c->samples.data;
+  }
+};
+
+inline void normalized_Fk_dF(int m, int k, int lmax, double i0, double* F0, double* dF0, NormalizedFkSamples* shared = nullptr) {
   double si0, ci0;
   fm::sincos(i0, si0, ci0);
   if (std::fabs(ci0) < 1e-3) {
@@ -396,7 +425,7 @@ inline void normalized_Fk_dF(int m, int k, int lmax, double i0, double* F0, doub
   fm::sincos(du, sdu, cdu);
   fm::sincos(k * du, sdku, cdku);
   double su = 0.0, cu = 1.0, sku = 0.0, cku = 1.0;
-  double col[104], dcol[104];
+  auto* samples = shared ? shared->get(m, NF, j_top + 1, i0, lmax) : nullptr;
   for (int j = 0; j <= j_top; ++j) {
     if (j > 0) {
       const double nsu = su * cdu + cu * sdu;
@@ -406,19 +435,36 @@ inline void normalized_Fk_dF(int m, int k, int lmax, double i0, double* F0, doub
       cku = cku * cdku - sku * sdku;
       sku = nsku;
     }
-    const double w_j = (j == 0 || 2 * j == NF_HALF) ? 0.5 : 1.0;
-    const double x = si0 * su, c2 = 1.0 - x * x, c = std::sqrt(c2);
-    const double inv_c = 1.0 / c, inv_c2 = inv_c * inv_c;
-    legendre_column(L, x, c, col);
-    const double alpha_x = ci0 * su * inv_c2;
-    const double beta_phi = -m * x * cu * inv_c2;
-    dcol[m] = -alpha_x * (m * x * col[m]);
-    for (int l = m + 1; l <= lmax; ++l) dcol[l] = alpha_x * (L.d[l] * col[l - 1] - l * x * col[l]);
-    double sml = 0.0, cml = 1.0;
-    if (m > 0) complex_pow(cu * inv_c, ci0 * su * inv_c, m, cml, sml);
-    cml *= w_j;
-    sml *= w_j;
-    const double dcml = -beta_phi * sml, dsml = beta_phi * cml;
+    NormalizedFkSamples::Sample local;
+    auto& v = samples ? samples[j] : local;
+    if (!v.ready) {
+      const double w_j = (j == 0 || 2 * j == NF_HALF) ? 0.5 : 1.0;
+      const double x = si0 * su, c2 = 1.0 - x * x, c = std::sqrt(c2);
+      const double inv_c = 1.0 / c, inv_c2 = inv_c * inv_c;
+      legendre_column(L, x, c, v.col);
+      v.x = x;
+      v.alpha_x = ci0 * su * inv_c2;
+      const double beta_phi = -m * x * cu * inv_c2;
+      double sml = 0.0, cml = 1.0;
+      if (m > 0) complex_pow(cu * inv_c, ci0 * su * inv_c, m, cml, sml);
+      cml *= w_j;
+      sml *= w_j;
+      v.cml = cml; v.sml = sml;
+      v.dcml = -beta_phi * sml; v.dsml = beta_phi * cml;
+      v.ready = true;
+    }
+    // Only the consumed parity is differentiated; another k can fill the other.
+    if (!v.derivative[l0 & 1]) {
+      const double x = v.x, alpha_x = v.alpha_x;
+      if ((l0 & 1) == (m & 1)) v.dcol[m] = -alpha_x * (m * x * v.col[m]);
+      int first = m + 1;
+      if ((first & 1) != (l0 & 1)) ++first;
+      for (int l = first; l <= lmax; l += 2) v.dcol[l] = alpha_x * (L.d[l] * v.col[l - 1] - l * x * v.col[l]);
+      v.derivative[l0 & 1] = true;
+    }
+    const double* col = v.col;
+    const double* dcol = v.dcol;
+    const double cml = v.cml, sml = v.sml, dcml = v.dcml, dsml = v.dsml;
     for (int l = l0; l <= lmax; l += 2) {
       const double Pl = col[l], dPl = dcol[l];
       const double f1 = Pl * cml, f2 = Pl * sml;
@@ -4146,14 +4192,55 @@ inline void node_G(int l, int p, int q, double e, double& G, double& dG) {
   dG /= N;
 }
 
+/// The wide zonal table's shared samples retain separate sin/cos calls and
+/// std::pow; replacing those operations would change their rounding.
+// Keyed by eccentricity and l; lives for one initialization call.
+struct NodeGSamples {
+  struct Sample { double ar, cf, sf, M, nu; };
+  double e, eta;
+  mem::InitTable<Sample> samples;
+  mem::InitTable<double> powers[71];
+  explicit NodeGSamples(double eccentricity) : e(eccentricity), eta(std::sqrt(1.0 - e * e)) {
+    constexpr int N = 256;
+    if (!samples.allocate(N)) return;
+    for (int k = 0; k < N; ++k) {
+      const double E = kTwoPi * k / N, sE = std::sin(E), cE = std::cos(E), ar = 1.0 / (1.0 - e * cE);
+      const double cf = (cE - e) * ar, sf = eta * sE * ar, M = E - e * sE;
+      samples[k] = {ar, cf, sf, M, std::atan2(sf, cf)};
+    }
+  }
+  void get(int l, int p, int q, double& G, double& dG) {
+    G = dG = 0.0;
+    if (samples.empty()) return;
+    auto& power = powers[l];
+    if (power.empty()) {
+      if (!power.allocate(samples.size())) return;
+      for (size_t k = 0; k < samples.size(); ++k) power[k] = std::pow(samples[k].ar, l);
+    }
+    const int w = l - 2 * p, j = w + q;
+    G = 0.0; dG = 0.0;
+    for (size_t k = 0; k < samples.size(); ++k) {
+      const auto& v = samples[k];
+      const double ph = w * v.nu - j * v.M, cp = std::cos(ph), sp = std::sin(ph);
+      const double ak = power[k];
+      G += ak * cp;
+      dG += ak * ((l + 1) * v.ar * v.cf * cp - w * v.sf * (2.0 + e * v.cf) / (eta * eta) * sp);
+    }
+    G /= 256;
+    dG /= 256;
+  }
+};
+
 struct OddZonalG1 {
   bool ready = false;
   double g1[72]{};
 };
 inline thread_local OddZonalG1 g_odd_zonal_g1{};
 [[gnu::noinline]] inline void init_odd_zonal_g1(OddZonalG1& r) {
-  for (int l = 7; l <= 70; l += 2) r.g1[l] = res::hansen_G(l, (l - 1) / 2, -1, 1e-3) / 1e-3;
-  r.ready = true;
+  const auto mark = mem::failures();
+  res::HansenSamples samples(1e-3);
+  for (int l = 7; l <= 70; l += 2) r.g1[l] = samples.get(l, (l - 1) / 2, -1) / 1e-3;
+  r.ready = mem::failures() == mark;
 }
 inline const OddZonalG1& odd_zonal_g1() {
   OddZonalG1& r = g_odd_zonal_g1;
@@ -4261,6 +4348,7 @@ inline void zonal_visit_terms(int degree, bool wide, double i0, double e0, float
     }
     return;
   }
+  NodeGSamples samples(e0);
   double f[72], fp[72], fm[72];
   for (int l = 6; l <= degree; ++l) {
     const int wl = l;
@@ -4268,7 +4356,7 @@ inline void zonal_visit_terms(int degree, bool wide, double i0, double e0, float
       const int p = (l - w) / 2, q = -w;
       normalized_Fk3(0, w, l, i0, h, f, fp, fm);
       double G, dG;
-      node_G(l, p, q, e0, G, dG);
+      samples.get(l, p, q, G, dG);
       const double g1 = dG, g0 = G - dG * e0;
       float* t = F + 4 * idx++;
       t[0] = static_cast<float>(f[l]);
@@ -4738,12 +4826,26 @@ inline int shallow_terms(int degree, double n, double e0, double i0, ShallowTerm
 /// A term's angle rate (rad/min) at the J2 secular rates: psi-dot = w omega-dot + j M-dot + m (Omega-dot - theta-dot).
 inline double slow_rate(const SecularRates& sr, int w, int j, int m) { return w * sr.argp + j * sr.mdot + m * (sr.node - kOmegaE); }
 
+/// The field magnitudes retain std::hypot's rounding, including its scaling.
+inline double slow_field_magnitude(int l, int m) {
+  struct Table { double value[71][71]{}; bool ready[71][71]{}; };
+  static thread_local Table table;
+  if (!table.ready[l][m]) {
+    table.value[l][m] = std::hypot(kEgmC[l][m], kEgmS[l][m]);
+    table.ready[l][m] = true;
+  }
+  return table.value[l][m];
+}
+
 /// A slow term's along-track amplitude through the mean motion (m): 3 |j| A / (a psi-dot^2), A = mu / a^(l+1) |F G| |C, S|
 /// (the potential's coefficient of the term), at the epoch elements.
-inline double slow_size_m(int l, int m, int j, double fg, double a, double psidot) {
-  double amp = kMu / a;
-  for (int k = 0; k < l; ++k) amp /= a;
-  const double A = amp * std::fabs(fg) * std::hypot(kEgmC[l][m], kEgmS[l][m]);
+inline double slow_size_m(int l, int m, int j, double fg, double a, double psidot, double amplitude = -1.0) {
+  double amp = amplitude;
+  if (amp < 0.0) {
+    amp = kMu / a;
+    for (int k = 0; k < l; ++k) amp /= a;
+  }
+  const double A = amp * std::fabs(fg) * slow_field_magnitude(l, m);
   const double pd = std::fabs(psidot) > 1e-15 ? std::fabs(psidot) : 1e-15;
   return 3.0 * std::abs(j) * A / (a * pd * pd) * kRe * 1e3;
 }
@@ -4752,10 +4854,13 @@ inline double slow_size_m(int l, int m, int j, double fg, double a, double psido
 /// mu / a^(l+1) |F dG/de| |C, S|, times 2 a (once per revolution along track; a radially). A term of q other than 0 has G of
 /// order e^|q|, so its size through the mean motion vanishes as e does while this one does not: at e 0 a q = +-1 term acts on
 /// the orbit through e and omega alone.
-inline double slow_size_e_m(int l, int m, double fdg, double a, double n, double psidot) {
-  double amp = kMu / a;
-  for (int k = 0; k < l; ++k) amp /= a;
-  const double A = amp * std::fabs(fdg) * std::hypot(kEgmC[l][m], kEgmS[l][m]);
+inline double slow_size_e_m(int l, int m, double fdg, double a, double n, double psidot, double amplitude = -1.0) {
+  double amp = amplitude;
+  if (amp < 0.0) {
+    amp = kMu / a;
+    for (int k = 0; k < l; ++k) amp /= a;
+  }
+  const double A = amp * std::fabs(fdg) * slow_field_magnitude(l, m);
   const double pd = std::fabs(psidot) > 1e-15 ? std::fabs(psidot) : 1e-15;
   return 2.0 * A / (n * a * pd) * kRe * 1e3;
 }
@@ -4799,6 +4904,114 @@ inline void slow_G(int l, int p, int q, int j, double e0, double& G, double& dG)
   }
 }
 
+/// Per-eccentricity samples for the low slow set. Each recurrence, power and sum
+/// uses exact_G's operand order; only values independent of a term are shared.
+// Keyed by eccentricity, l, j and w; lives for one initialization call.
+struct SlowExactSamples {
+  struct Sample { double ar, cE, sE, cf, sf, M; };
+  struct Pair { double c, s; };
+  double e, inv_eta;
+  mem::InitTable<Sample> samples;
+  mem::InitTable<double> powers[71];
+  mem::InitTable<Pair> phases[kSlowJMax + 1], waves[kSlowJMax + 2 * kSlowQMax + 1];
+  explicit SlowExactSamples(double eccentricity) : e(eccentricity) {
+    const int N = e < 0.01 ? 32 : e < 0.1 ? 64 : e < 0.8 ? 128 : (e < 0.95 ? 512 : 4096);
+    const double eta = std::sqrt(1.0 - e * e);
+    inv_eta = 1.0 / eta;
+    const double dE = kTwoPi / N;
+    double sdE, cdE, sE, cE;
+    fm::sincos(dE, sdE, cdE);
+    fm::sincos(0.5 * dE, sE, cE);
+    double E = 0.5 * dE;
+    if (!samples.allocate(N / 2)) return;
+    for (int i = 0; i < N / 2; ++i) {
+      if (i > 0) {
+        const double nsE = sE * cdE + cE * sdE;
+        cE = cE * cdE - sE * sdE;
+        sE = nsE;
+        E += dE;
+      }
+      const double ar = 1.0 / (1.0 - e * cE);
+      samples[i] = {ar, cE, sE, (cE - e) * ar, eta * sE * ar, E - e * sE};
+    }
+  }
+  void exact(int l, int p, int q, double& G, double& dG) {
+    G = dG = 0.0;
+    if (samples.empty()) return;
+    const int w = l - 2 * p, j = w + q, aw = w < 0 ? -w : w;
+    auto& wave = waves[w + kSlowQMax];
+    auto& phase = phases[j];
+    auto& power = powers[l];
+    if (wave.empty()) {
+      if (!wave.allocate(samples.size())) return;
+      for (size_t i = 0; i < samples.size(); ++i) {
+        const auto& v = samples[i];
+        Pair z; res::cpow_uint(v.cf, w < 0 ? -v.sf : v.sf, aw, z.c, z.s); wave[i] = z;
+      }
+    }
+    if (phase.empty()) {
+      if (!phase.allocate(samples.size())) return;
+      for (size_t i = 0; i < samples.size(); ++i) {
+        Pair z; fm::sincos(j * samples[i].M, z.s, z.c); phase[i] = z;
+      }
+    }
+    if (power.empty()) {
+      if (!power.allocate(samples.size())) return;
+      for (size_t i = 0; i < samples.size(); ++i) power[i] = res::pow_uint(samples[i].ar, l);
+    }
+    double sumG = 0.0, sumdG = 0.0;
+    for (size_t i = 0; i < samples.size(); ++i) {
+      const auto& v = samples[i];
+      const double cp = wave[i].c * phase[i].c + wave[i].s * phase[i].s;
+      const double sp = wave[i].s * phase[i].c - wave[i].c * phase[i].s;
+      const double ak = power[i];
+      sumG += ak * cp;
+      sumdG += ak * (l * v.ar * v.cE * cp - (w * v.ar * inv_eta + j) * v.sE * sp);
+    }
+    const double inv_halfN = 1.0 / static_cast<int>(samples.size());
+    G = sumG * inv_halfN;
+    if (e >= 2e-4 && e + 2e-4 < 1.0) dG = sumdG * inv_halfN;
+    else {
+      double Gs;
+      const res::HansenSeries* hs = res::hansen_series(l, p, q);
+      if (hs != nullptr) res::series_G(*hs, e, Gs, dG);
+      else dG = 0.0;
+    }
+  }
+};
+
+/// The low set's memo excludes m, which enters neither G nor its derivative.
+// Keyed by fixed eccentricity and (j, q, l); lives for one initialization call.
+struct SlowGMemo {
+  struct Value { bool ready = false; double G, dG; };
+  mem::InitTable<Value> values;
+  std::unique_ptr<SlowExactSamples> center, plus, minus;
+  explicit SlowGMemo() { values.allocate((kSlowJMax + 1) * (2 * kSlowQMax + 1) * 71); }
+  void get(int l, int p, int q, int j, double e, double& G, double& dG) {
+    G = dG = 0.0;
+    if (values.empty()) return;
+    auto& v = values[(j * (2 * kSlowQMax + 1) + q + kSlowQMax) * 71 + l];
+    if (!v.ready) {
+      if (q == 0 && e < 0.03) slow_G(l, p, q, j, e, v.G, v.dG);
+      else {
+        if (!center) center.reset(mem::counted(new (std::nothrow) SlowExactSamples(e)));
+        if (!center) return;
+        center->exact(l, p, q, v.G, v.dG);
+        if (q != 0 && e < 2e-4) {
+          constexpr double h = 2e-4;
+          if (!plus) { plus.reset(mem::counted(new (std::nothrow) SlowExactSamples(e + h))); minus.reset(mem::counted(new (std::nothrow) SlowExactSamples(e - h))); }
+          if (!plus || !minus) return;
+          double Gp, Gm, d;
+          plus->exact(l, p, q, Gp, d); minus->exact(l, p, q, Gm, d);
+          v.dG = (Gp - Gm) / (2.0 * h);
+        }
+      }
+      v.ready = true;
+    }
+    G = v.G; dG = v.dG;
+  }
+};
+
 /// The slow set's own terms (SPEC 16.18, the low table; Terms::slow), appended to the shallow set's: every (l, m, p, q) of the
 /// field to slow_degree_cap() with j = l - 2p + q from 1 to kSlowJMax and |q| up to slow_q_max() (0 as it lands) whose own rate is inside
 /// kShallowSelect bands at the epoch and whose size reaches kSlowKeepM, except the shallow set's own (j = 1, q = 0, to its
@@ -4809,6 +5022,13 @@ inline int slow_terms_low(int shallow_degree, double n, double e0, double i0, Sh
   const SecularRates sr = secular_rates(n, e0, i0);
   const double a = std::pow(kKe / n, kX2o3), band = kShallowSelect * kShallowBand * n;
   const int qmax = slow_q_max() < 0 ? 0 : slow_q_max() > kSlowQMax ? kSlowQMax : slow_q_max();
+  const auto mem_mark = mem::failures();
+  SlowGMemo gmemo;
+  if (mem::failures() != mem_mark) return -1;
+  NormalizedFkSamples inclination;
+  double amplitudes[71];
+  amplitudes[0] = kMu / a;
+  for (int l = 1; l <= L; ++l) amplitudes[l] = amplitudes[l - 1] / a;
   double F[72], dF[72];
   for (int j = 1; j <= kSlowJMax; ++j)
     for (int m = 2; m <= L; ++m)
@@ -4824,15 +5044,17 @@ inline int slow_terms_low(int shallow_degree, double n, double e0, double i0, Sh
         // a family whose series the embedded field ends after one or two degrees (leading degree 69 or 70): left out, a limit of
         // the field, not of the method (AP and a numerical propagator at 70 x 70 would both hold a series the real field continues)
         if (l0 >= kSlowDegree - 1) continue;
-        normalized_Fk_dF(m, w, L, i0, F, dF);
+        normalized_Fk_dF(m, w, L, i0, F, dF, &inclination);
+        if (mem::failures() != mem_mark) return -1;
         for (int l = l0; l <= L; l += 2) {
           if (j == 1 && q == 0 && l <= shallow_degree) continue;  // the shallow set's own term
           const int pp = (l - w) / 2;
           if (pp < 0 || pp > l) continue;
           double G, dG;
-          slow_G(l, pp, q, j, e0, G, dG);
+          gmemo.get(l, pp, q, j, e0, G, dG);
+          if (mem::failures() != mem_mark) return -1;
           // the larger of its size through the mean motion and through the eccentricity vector reaches the cut
-          if (slow_size_m(l, m, j, F[l] * G, a, psidot) < kSlowKeepM && slow_size_e_m(l, m, F[l] * dG, a, n, psidot) < kSlowKeepM) continue;
+          if (slow_size_m(l, m, j, F[l] * G, a, psidot, amplitudes[l]) < kSlowKeepM && slow_size_e_m(l, m, F[l] * dG, a, n, psidot, amplitudes[l]) < kSlowKeepM) continue;
           if (out.count >= kShallowMax) { ++out.over; continue; }  // counted: the diagnostic lists such a term as code 7
           res::ResCoef& c = out.c[out.count++];
           c.l = static_cast<int8_t>(l);
@@ -4867,6 +5089,9 @@ inline int slow_terms_wide(int degree, int cls, double n, double e0, double i0, 
   const SecularRates sr = secular_rates(n, e0, i0);
   const double a = std::pow(kKe / n, kX2o3), band = kShallowSelect * kShallowBand * n;
   const res::TermSet carried = res::class_terms(cls);
+  double amplitudes[71];
+  amplitudes[0] = kMu / a;
+  for (int l = 1; l <= L; ++l) amplitudes[l] = amplitudes[l - 1] / a;
   double F[72], dF[72];
   for (int m = 1; m <= L; ++m)
     for (int w = -L; w <= L; ++w) {
@@ -4895,7 +5120,7 @@ inline int slow_terms_wide(int degree, int cls, double n, double e0, double i0, 
           double G, dG;
           res::exact_G(l, pp, q, e0, G, dG);
           if (!std::isfinite(F[l] * G) || !std::isfinite(F[l] * dG) || !std::isfinite(dF[l] * G)) continue;
-          if (!(slow_size_m(l, m, j, F[l] * G, a, psidot) >= kSlowKeepM)) continue;
+          if (!(slow_size_m(l, m, j, F[l] * G, a, psidot, amplitudes[l]) >= kSlowKeepM)) continue;
           if (count == room) {
             room = room == 0 ? 256 : 2 * room;
             res::ResCoef* grown = static_cast<res::ResCoef*>(sdnap::mem::realloc(*out, static_cast<size_t>(room) * sizeof(res::ResCoef)));
