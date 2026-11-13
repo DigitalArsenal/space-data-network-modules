@@ -81,7 +81,7 @@ function leastSquares(points){
   assert.ok(Math.abs(A[k][k])>1e-12);for(let i=k+1;i<4;i++){const q=A[i][k]/A[k][k];for(let j=k;j<=4;j++)A[i][j]-=q*A[k][j];}}
  const x=Array(4);for(let i=3;i>=0;i--){let y=A[i][4];for(let j=i+1;j<4;j++)y-=A[i][j]*x[j];x[i]=y/A[i][i];}return x;
 }
-export async function fitZonalTruth(modulePath,truth,{zonal=70,tesseral=0}={}){
+export async function fitZonalTruth(modulePath,truth,{zonal=70,tesseral=0,residuals=false}={}){
  const h=await createStandaloneHarness('browser',modulePath,{surface:'direct'});
  const config=configuration({theory:'AP',forces:{EPHEMERIS_SOURCE:'',HAS_MAXIMUM_TESSERAL_DEGREE:true,MAXIMUM_TESSERAL_DEGREE:tesseral,HAS_MAXIMUM_DEGREE:true,MAXIMUM_DEGREE:zonal,
   SOLID_TIDES:1,ATMOSPHERE_MODEL:pcfAtmosphereFamily.JACCHIA70,WEATHER_SOURCE:pcfWeatherSource.THEORY_FLUX_MODEL},
@@ -95,5 +95,6 @@ export async function fitZonalTruth(modulePath,truth,{zonal=70,tesseral=0}={}){
   const E=Math.atan2(rv/Math.sqrt(MU*a),1-rr/a);return {h:k/12,D:1000*Math.hypot(...d),T:1000*d.reduce((s,x,j)=>s+x*along[j],0),M:E-e*Math.sin(E)};});
  const oncePerRev=[1,2,3,4,5].map(day=>{const points=profile.filter(p=>p.h>=24*(day-1)&&(day===5?p.h<=120:p.h<24*day));const x=leastSquares(points);return Math.hypot(x[2],x[3]);});
  const result={D:Math.max(...profile.map(p=>p.D)),oncePerRev,fitS,fitRmsM:fittedOf(set).wrms*1000,sha256:sha(fs.readFileSync(modulePath))};
+ if(residuals)result.residuals=flown.map((s,k)=>[s.X-truth.lines[k].X,s.Y-truth.lines[k].Y,s.Z-truth.lines[k].Z].map(v=>1000*v));
  await h.close?.();return result;
 }
