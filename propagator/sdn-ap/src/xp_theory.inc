@@ -6121,7 +6121,7 @@ inline int32_t xp_init(const Elements& e, XpSat& s) {
   const double span = 8.0 * kMinutesPerDay;
   int32_t stride = static_cast<int32_t>(std::ceil(span / (kSparse * step)));
   s.stride = stride < 1 ? 1 : stride;
-  decay_epoch(s);  // SPEC 16.25: an epoch past the rule is decayed at every time (one test of the epoch node, its own rates)
+  decay_epoch(s);  // SPEC 16.25: an epoch past the rule is decayed at every time (one test of the epoch node: its drag part where the gate passes)
   return kPropOk;
 }
 
@@ -6688,7 +6688,7 @@ inline bool run_grow(XpSat& s, SetCaches& c, NodeRun& r, int32_t want) {
 
 /// SPEC 16.25 (stack #564): where an AP flight ends, decayed. (b) the mean perigee height a (1 - e) - R_E under kDecayFloorKm;
 /// (a) with drag, more perigee radius lost over one revolution, or over the grid's next step where that is longer,
-/// |d(a (1 - e))/dt| max(P, h), than one density scale height H at the mean perigee (the set's own atmosphere and weather):
+/// max(0, -d(a (1 - e))/dt_drag) max(P, h), than one density scale height H at the mean perigee (the set's own atmosphere and weather):
 /// past it the averaged rates no longer describe the orbit, and the grid's next node is not an orbit (stack #564's seeds: the
 /// last node before the jump loses 0.58 H a revolution and 1.15 H over its 2.9 h step; the node after it has its perigee at
 /// -283 km). H is looked up only once the loss passes kDecayTestKm (below it no height the atmospheres reach has H under it).
@@ -6714,9 +6714,24 @@ inline double decay_density(const RateContext& ctx, double t, const Vec3& pu, do
   H -= kTwoPi * std::floor(H / kTwoPi);
   return node_density(ctx.atmosphere, dt, fl, dca, d50, sp, cp, sdsun, cdsun, H, alpha, theta_g, nh);
 }
-/// A node's two decay tests as quantities that cross 0 at the rule: qb = kDecayFloorKm - h_p (km), qa = ln(loss / H)
-/// (-1e300 without drag, under kDecayTestKm unless `full`, or where the atmosphere gives no gradient). Decayed when either is
-/// 0 or more. The node's rates are its own (the step's), so the test adds no rate evaluation.
+/// The drag's own part of the averaged rates (SPEC 3.4) at mean state y and time t, `out` in state order (zero where the set has no
+/// drag or the state fails the 9.9 tests): the same call the rates make for their drag term, and no other force.
+inline bool drag_rates_at(const RateContext& ctx, double t, const double* y, double* out) {
+  for (int j = 0; j < 6; ++j) out[j] = 0.0;
+  if (!(ctx.bterm > 0.0) || state_test(ctx, y) != 0) return false;
+  const Frame fr = frame_of(y);
+  const Kepler k = kepler_of(y, fr.a);
+  const AngleTrig ag = angle_trig(k);
+  const Bodies b = ctx.ap_third_body ? bodies_at_ap(ctx.d50_epoch + t / kMinutesPerDay) : bodies_at(ctx.d50_epoch + t / kMinutesPerDay);
+  drag_part(ctx, t, y, fr, k, ag, b, out);
+  return true;
+}
+/// A node's two decay tests as quantities that cross 0 at the rule: qb = kDecayFloorKm - h_p (km), qa = ln(loss / H), loss the
+/// perigee radius's fall by DRAG over one revolution or over the grid's next step where that is longer (the drag's own da/dt (1 - e)
+/// less a de/dt, counted only where it lowers the perigee: the Sun and Moon move the mean perigee of a highly eccentric orbit by more
+/// than a scale height a revolution, and a perigee that rises or falls under them is not decay) (-1e300 without drag, under
+/// kDecayTestKm unless `full`, or where the atmosphere gives no gradient). Decayed when either is 0 or more. The loss is the drag
+/// term's own mean rates, evaluated at the node (a full drag_part); the node's whole rates only gate that evaluation (below).
 struct DecayQ {
   double qa, qb;
 };
@@ -6731,7 +6746,15 @@ inline DecayQ decay_q(const RateContext& ctx, const Node& nd, bool full) {
   // km per revolution, or per grid step where the step is longer: the averaged rates must follow the decay over the step the
   // grid takes next from this node (next_node's)
   const double step = ctx.long_period ? long_period_step(ctx) : averaged_step(ctx, n);
-  const double loss = std::fabs(adot * (1.0 - e) - a * edot) * std::fmax(kTwoPi / n, step) * kRe;
+  // the gate uses the magnitudes of the whole rates' two perigee terms. The Sun and Moon can open it on an eccentric set that
+  // never decays, adding a drag evaluation at each node; the drag-only loss below decides the rule, not this gate.
+  const double reach = (std::fabs(adot * (1.0 - e)) + std::fabs(a * edot)) * std::fmax(kTwoPi / n, step) * kRe;
+  if (!(reach > 0.0) || (!full && !(reach > kDecayTestKm))) return q;
+  double dd[6];
+  if (!drag_rates_at(ctx, nd.t, y, dd)) return q;
+  const double adot_d = -kX2o3 * a / n * dd[kN];
+  const double edot_d = e > 0.0 ? (y[kAf] * dd[kAf] + y[kAg] * dd[kAg]) / e : 0.0;
+  const double loss = std::fmax(0.0, -(adot_d * (1.0 - e) - a * edot_d)) * std::fmax(kTwoPi / n, step) * kRe;
   if (!(loss > 0.0) || (!full && !(loss > kDecayTestKm))) return q;
   const Kepler k = kepler_of(y, fr.a);
   Vec3 r, v;
@@ -6746,7 +6769,7 @@ inline DecayQ decay_q(const RateContext& ctx, const Node& nd, bool full) {
 }
 inline bool decayed(const DecayQ& q) { return q.qa >= 0.0 || q.qb >= 0.0; }
 /// The crossing's time between node a (not decayed) and node b (decayed), direction dir: the earlier of the two tests' roots,
-/// each linear in its quantity between the two nodes (no rate evaluation); a test already met at a gives a's time.
+/// each linear in its quantity between the two nodes (the nodes' two tests, the earlier node's evaluated in full); a test already met at a gives a's time.
 inline double decay_cross_t(const RateContext& ctx, const Node& a, const Node& b, const DecayQ& qb, int dir) {
   const DecayQ qa = decay_q(ctx, a, true);
   auto root = [&](double x0, double x1) {

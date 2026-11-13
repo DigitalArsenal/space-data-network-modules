@@ -478,7 +478,8 @@ inline thread_local bool g_decay_back = false;  ///< the crossing g_decay_jd nam
 
 /// Set k of series s at t (minutes from J2000): TEME state, and the covariance when `P` is given (false: none). `jd` (the
 /// split Julian date of t, when the caller has it) times a carried forecast to the microsecond's fraction.
-inline int32_t state_of(Store& st, Series& s, uint32_t k, double t, double* r, double* v, double* P, bool& have_p, const double* jd = nullptr) {
+inline int32_t state_of(Store& st, Series& s, uint32_t k, double t, double* r, double* v, double* P, bool& have_p, const double* jd = nullptr,
+                        bool start_bank = false) {
   have_p = false;
   if (const int32_t rc = rows_cover(st, st.entries[s.first + k], t)) return rc;
   if (const carried::Track* tr = st.entries[s.first + k].track.get()) {
@@ -497,7 +498,7 @@ inline int32_t state_of(Store& st, Series& s, uint32_t k, double t, double* r, d
       return kPropOk;
     }
   }
-  Slot& q = slot_of(st, s, k, P != nullptr);
+  Slot& q = slot_of(st, s, k, P != nullptr || start_bank);
   if (q.error != 0) return q.error;
   // the theory's time from the set's epoch (SPEC 9): an AP set's from the split Julian date when the caller has it, the
   // expression propagate uses, so the store and propagate fly one time (minutes from J2000 round it by up to 1e-7 s
@@ -684,9 +685,12 @@ inline int32_t at(Store& st, Series& s, double t, double* r, double* v, double* 
     // so the state leaves set a with its position and velocity and arrives on set b with its own, following the orbit
     double r1a[3], v1a[3], r1b[3], v1b[3];
     bool hd;
+    // the probes at the window's end start the call's covariance bank (no evaluation: the blend reads the nominals' states there and
+    // nothing of the bank), so a refused probe names the record's earliest crossing, a moved set's included, whichever epoch is
+    // asked first, and an epoch before every crossing is answered as it always was
     if (const int32_t e = state_of(st, s, static_cast<uint32_t>(c.a), t, ra, va, P != nullptr ? Pa : nullptr, ha, jd)) return e;
-    if (const int32_t e = state_of(st, s, static_cast<uint32_t>(c.a), c.t1, r1a, v1a, nullptr, hd)) return e;
-    if (const int32_t e = state_of(st, s, static_cast<uint32_t>(c.b), c.t1, r1b, v1b, nullptr, hd)) return e;
+    if (const int32_t e = state_of(st, s, static_cast<uint32_t>(c.a), c.t1, r1a, v1a, nullptr, hd, nullptr, P != nullptr)) return e;
+    if (const int32_t e = state_of(st, s, static_cast<uint32_t>(c.b), c.t1, r1b, v1b, nullptr, hd, nullptr, P != nullptr)) return e;
     const double T = (c.t1 - c.t0) * 60.0, uu = sfrac;  // seconds
     const double h01 = uu * uu * (3.0 - 2.0 * uu), h11 = uu * uu * (uu - 1.0);
     const double d01 = 6.0 * uu * (1.0 - uu) / T, d11 = uu * (3.0 * uu - 2.0);
