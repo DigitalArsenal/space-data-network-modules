@@ -31,7 +31,7 @@ const split = value => { const w = Math.floor(value - 0.5) + 0.5; return [w, val
 const call = (methodId, inputs = []) => h.invoke({ methodId, inputs });
 const ok = r => assert.equal(r.statusCode, 0, `${r.errorCode}: ${r.errorMessage}`);
 const refusal = (r, code) => { assert.equal(r.statusCode, 3); assert.equal(r.errorCode, code); };
-const state = (index, when = jd) => { const rc = x.plugin_propagate(when, index, structs); return { rc, bytes: bytes(structs, 64), values: Array.from(f64(structs, 6)), flags: new DataView(mem()).getUint32(structs + 60, true) }; };
+const state = (index, when = jd) => { const rc = x.plugin_propagate(when, index, structs); return { rc, bytes: bytes(structs, 64), values: Array.from(f64(structs + 8, 6)), flags: new DataView(mem()).getUint32(structs + 60, true) }; };
 const bulk = (when = jd, count = 7) => { assert.equal(x.plugin_propagate_all_positions(when, positions, count), Math.min(7, count)); return bytes(positions, Math.min(7, count) * 24); };
 async function load(parts = [records]) {
   ok(await call('load_epochs_open'));
@@ -50,9 +50,9 @@ function checkMapped() {
   for (let i = 0; i < 7; ++i) {
     const q = state(i);
     assert.deepEqual(q.bytes, batch.subarray(64 * i, 64 * i + 64));
-    assert.deepEqual(q.bytes.subarray(0, 24), all.subarray(24 * i, 24 * i + 24));
+    assert.deepEqual(q.bytes.subarray(8, 32), all.subarray(24 * i, 24 * i + 24));
     assert.equal(q.bytes[56], 3); assert.deepEqual(q.bytes.subarray(57, 60), Buffer.alloc(3));
-    assert.equal(new DataView(q.bytes.buffer, q.bytes.byteOffset).getFloat64(48, true), jd);
+    assert.equal(new DataView(q.bytes.buffer, q.bytes.byteOffset).getFloat64(0, true), jd);
     const raw = rawOrder[i];
     const stock = i === 1 || i === 3;
     const rc = stock ? x.sdnap_epochs_at(w, frac, raw, 1, 3, planes, statuses, 0) : x.sdnap_frames_at(w, frac, raw, 1, 3, planes, statuses);
@@ -60,7 +60,7 @@ function checkMapped() {
     const status = new Int32Array(mem(), statuses, 1)[0];
     if (status === 0) {
       assert.equal(q.rc, 0); assert.equal(q.flags & 1, 1);
-      assert.deepEqual(q.bytes.subarray(0, 48), bytes(planes, 48));
+      assert.deepEqual(q.bytes.subarray(8, 56), bytes(planes, 48));
       if (!stock) {
         assert.equal(x.sdnap_epochs_at(w, frac, raw, 1, 3, planes, statuses, 0), 0);
         const direct = Array.from(f64(planes, 6));
