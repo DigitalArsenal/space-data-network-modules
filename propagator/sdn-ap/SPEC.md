@@ -205,25 +205,25 @@ A set's theory reads some or all of them:
 - an SGP4XP set without AP's terms reads the step cache alone (its rates).
 
 What a set reads is made, through the accounting, before the thread's first state or initialization of such a set: all
-nine for AP, and before any threaded batch; the step cache alone for an SGP4XP flight, where 0.6.52 made it, in the set's
+nine for AP, and before any threaded batch; the step cache alone for an SGP4XP flight, where 0.6.55 made it, in the set's
 first rates. A state or an initialization on a thread where one cannot be had is refused with the theory's refusal code (in
 a method: `out-of-memory`). An epoch-store slot is left as it was, and the next state asks again. A row-store row
 (`sdnap_init_elements`, `ingest_omm`) whose set was refused at its initialization holds that refusal until the store is
 built again. Where the node store or the node slots cannot be had, a node is computed at each use without them, to the
 same numbers.
 
-Through 0.6.54 each was made at its first use. The coefficient block is first used when a set's tesseral cache is baked
+Through 0.6.55 each was made at its first use. The coefficient block is first used when a set's tesseral cache is baked
 again from its table, a day or so into a flight. When the memory was full by then, the module aborted there (a wasm
 `unreachable`). Take 547 AP sets at 500 km in an instance held to 128 MiB, flown a day and then two days after their
 epoch (test/memory-limit.e2e.mjs):
-- 0.6.54 answers 541 of them in the first pass, then aborts at the second pass's first set;
-- now 539 answer in each pass and 8 are refused (the coefficient block, made first, takes two sets' room);
+- 0.6.55 answers 543 of them in the first pass, then aborts at the second pass's first set;
+- now 541 answer in each pass and 6 are refused (the coefficient block, made first, takes two sets' room);
 - every state answered equals the same state at the default maximum, bit for bit.
 
 The same test holds three other entries at their limits, every answer the default maximum's bit for bit:
-- the store's covariance (400 copies of a fitted record, 128 MiB): 68 covariances answered, the rest NaN or refused;
+- the store's covariance (400 copies of a fitted record, 128 MiB): 69 covariances answered, the rest NaN or refused;
 - a threaded row-store batch (2,000 AP rows, two pool threads, 128 MiB);
-- 6,000 SGP4XP sets without AP's terms at 80 MiB: 2,329 answer, the sets 0.6.54 answers and no other.
+- 6,000 SGP4XP sets without AP's terms at 80 MiB: 2,480 answer, the sets 0.6.55 answers and no other.
 
 The pool's list of the sets that hold caches (SPEC 9) grows through the accounting as well. When the list cannot grow, the
 set holds no caches and flies on the thread's.
@@ -2908,7 +2908,7 @@ own set as its bank's nominal (12.3's set 0), as `propagate` always has:
 The fit's covariance (12.1) keeps its own construction: its bank is the fit's parameter vector, whose J the fit solved
 with.
 
-Through 0.6.54 those entries built set 0 again from the parameter vector (12.1's p, then back to elements):
+Through 0.6.55 those entries built set 0 again from the parameter vector (12.1's p, then back to elements):
 - set 0's elements could differ from the record's in their last bits;
 - the store held a second copy of every table;
 - the moved sets then matched set 0 exactly in all six elements, so their differences took other paths (12.3's flags of a
@@ -2930,12 +2930,12 @@ its epoch and every 30 minutes for 120 hours, TEME; test/store-covariance.e2e.mj
   `sdnap_covariance_at`'s, given the minutes `propagate` computes.
 - **Times that differ in their last bits** (the caller's split Julian date made from milliseconds, up to 0.16 µs off):
   - the store's covariance differs from `propagate`'s by up to 1.4e-3 of its largest element, with 161 records over 1e-6;
-  - through 0.6.54 it differed by up to 1.46, with 213 records over 1e-6;
+  - through 0.6.55 it differed by up to 1.46, with 213 records over 1e-6;
   - the remainder is the noise of the BTERM and AGOM difference columns on orbits that drag and radiation barely move:
     zeroing those two columns brings every record under 1e-6 (stack #624).
 - **The borrowing changes nothing.** Against set 0 with tables of its own, every state, status and covariance element is
   equal (227,022 states and 8,162,496 elements, in stores of 40).
-- **Against 0.6.54**, in stores of 40:
+- **Against 0.6.55**, in stores of 40:
   - states and statuses are equal;
   - the store's covariance changes on 385 records: 86 by more than 1e-6 of its largest element, and up to 0.80 of it (a
     position variance at hour 103.5 on a 5,000 km perigee record at e 0.9);
@@ -2944,13 +2944,13 @@ its epoch and every 30 minutes for 120 hours, TEME; test/store-covariance.e2e.mj
   - their returned state changes on 378 records, by up to 0.15 m and 18 µm/s (47 over 1 mm); it is now the record's own
     set's;
   - `propagate`'s states and covariance are unchanged on every record.
-- **At the family grids' limit**, 0.6.54 refused (code 1) states this build answers: set 0 shares the slot's
-  schedule-node grids.
+- **At the family grids' limit** (stores of 150), 0.6.55 refuses (code 1) 11,636 states on 51 records that this build
+  answers, because set 0 shares the slot's schedule-node grids. Every state both builds answer is equal.
 - **At the epoch**, every entry's P(0) is 12.3's to within 3.2e-16 of its largest element.
 
 `_stats`' bytes count the bank: its bodies, and every table and grid its sets own, each holder of a grid its share.
-Through 0.6.54 the count held the propagator alone (2.9 KB of a bank of about 240 KB), and a copy reading its anchor's
-grid counted none of it.
+Through 0.6.55 the count held the propagator and its copy of the epoch covariance alone (2.2 KB of a bank of about
+233 KB: 1,000 copies of a fitted 500 km record at 31/70, README), and a copy reading its anchor's grid counted none of it.
 
 **14.5 Calls.** `load_epochs`; the resident exports `sdnap_epochs_count`, `_stats` (the load's counts and the store's
 bytes), `_series` (identity and epochs), `_select` (the sets and the weight at a time), `_set_at` (one set without
