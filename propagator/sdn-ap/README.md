@@ -683,7 +683,7 @@ entries; a first fill takes about 1.2 ms an object on one thread, 120 s for 100,
 the eccentric sets above e 0.03, which cost 11 ms a row); wide sets (e above 0.05 in the zero-revolution class, above 0.3 in the resonance classes, with tesseral
 terms), series of several sets, sets with a forecast or a hand-over and SGP4 sets are answered by AP's entries (47 % of the
 stored synthetic set is served; 92.1 % of a public catalog's objects have eccentricity at or under 0.05); the serial-refill baseline at 100,000 objects has
-84 MB of cells and an instance of about 270 MB, while no wide object is flown in it (a wide set holds about 10 MB); the
+84 MB of cells and an instance of 269.7 MB with covariance and 15 idle pool threads, using a three-minute look-ahead and serial refill (SPEC 19.6). Pooled builders and two-cell configurations have the distinct totals in SPEC 19.10. No wide object is flown in these instances (a wide set holds about 10 MB); the
 host runs its own refill loop (SPEC 19.1) and calls the frames from one thread, never during a pool batch.
 
 A frame of every object at one instant from short Chebyshev cells of AP's own states: 0.26 times the cost of SGP4 through

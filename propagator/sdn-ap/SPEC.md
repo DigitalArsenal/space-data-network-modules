@@ -6252,7 +6252,9 @@ The threading contract: one host thread calls the instance sequentially. No fram
 or other batch overlaps a refill. `sdnap_threads(n)` starts pool threads; the caller also computes rows. Refill batches hold
 at most 32 distinct objects, one row per claim. Each row owns its output bytes and allocation-failure mark. The caller owns
 the object table, slab, sweep, placement, compaction, and logical counters. Shared constant tables are initialized before
-publication; force bindings and caches are thread-local. `Store::short_day` retains its atomic write.
+publication; force bindings and caches are thread-local. The shared relaxed atomic stores are `Store::short_day`,
+`Atmosphere::one_a_day`, and `Atmosphere::before_rows`. Every concurrent builder stores the same value: the short-day
+and before-rows marks only become true, and one-a-day is derived from the immutable weather rows.
 `sdnap_frames_at` remains a pure read. Scheduling, failure recovery, and the host contract are detailed in 19.10.
 
 ### 19.1 Entries
@@ -6461,7 +6463,7 @@ Complete one-instance pooled-refill measurements and their limits are in 19.10.
 
 One block, allocated at open, counted, of exactly the budget given: the table (32 bytes a series, padded to 64, 3.2 MB at
 100,000) and the slab. The host's rule for the budget: 850 bytes for each object served, 32 bytes for each series and 1 MiB.
-Measured by `node test/frames-memory.e2e.mjs` (about 7 minutes, 3 GB of the host's memory; it asserts that the slab holds at most 850 bytes for each object served, that no row is refused, that every served object is served, and that the instance total is under 300 MB decimal with and without a pool; the other figures below are printed)
+The historical serial-refill measurement by `node test/frames-memory.e2e.mjs` asserts slab use of at most 850 bytes per served object, no refused rows, complete coverage, and an instance total under 300 MB decimal for its short look-ahead. Its pool threads do not build cells. The pooled-refill totals and covariance configurations are in 19.10. The historical figures below were measured
 at 100,000 objects, seeded sets with epochs spread over one window, loaded in parts of 1,000, filled at one instant, then the
 windows turned over (48 minutes in steps of one):
 
@@ -6481,7 +6483,7 @@ heap grows beside the initial pages it does not use); (2) load in parts of at mo
 test/frames-memory.e2e.mjs` prints it: 15 threads, 37.7 MB). With the rules and this block: the recipe's instance holds 269.7
 MB with 15 pool threads (180.5 + 89.2 block, 0 growth) and 232.0 MB without a pool; the public shares 263.0 and 225.3 MB; a
 browser tab following the rules measured 239.7 MB without a pool for 100,000 AP records with covariance, and 272.8 MB at
-open with 15 threads. The test asserts both totals under 300 MB decimal. The host's own output planes of a frame (5.2 MB at
+open with 15 threads. These are historical serial-refill totals, not bounds for pooled builders or two cells per object. The host's own output planes of a frame (5.2 MB at
 100,000 objects) are inside the instance and counted. What the instance holds besides the block: the first row on a thread
 makes that thread's caches (SPEC 9: 1.8 MB, once, kept); a fill grew the instance by no more than 4 MiB in the test, 0 at
 100,000. After a load the instance holds 33 to 38 MB more than the store's own count: the load's high-water (staging and the
@@ -6555,7 +6557,7 @@ batch bounds storage, not duration. Speculative rows after a genuine allocation 
 quarantines the frames instance and retains its pending buffers. Two cells per object require a larger slab; covariance
 and a deep look-ahead compete for the same instance memory budget.
 
-Collection reads the sweep without changing it and stops at a repeated object, a pass boundary, or 32 candidate rows.
+Collection reads the sweep without changing it and stops at a repeated object, a pass boundary, or the smaller of 32 candidate rows and the rows the call still allows.
 After completion, the caller replays visits, promotions, logical counters, reclaim, and placement in serial order.
 Duplicate priorities retain their serial meaning. A growth-refused row is retried with growth permitted at its own commit
 position. A counted allocation failure without a growth refusal stops the logical prefix; no later speculative result is
@@ -6610,7 +6612,7 @@ The fifteen-thread recipe also exceeds the line with one cell and covariance, by
 line with one covariance-bearing cell or two cells without covariance. These cases have zero logical allocation failures,
 zero slab failures, and zero memory growth inside batches.
 
-The synthetic public-share mix has 92,100 eligible objects and 7,900 unsupported objects; cell counts below are per eligible
+The synthetic public-share mix in `test/lib/frame-catalog.mjs` has 92,100 eligible objects and 7,900 unsupported objects; cell counts below are per eligible
 object, with all 100,000 records and frame outputs included in each instance total:
 
 | Pool threads | One cell, covariance | Two cells, covariance | Two-cell excess above 300,000,000 | Two cells, no covariance |
@@ -6668,7 +6670,7 @@ round ratios, a separate statistic that does not equal the quotient of the time 
 | 8 | 3.626 (3.555–3.682) | 3.713 (3.637–3.770) |
 | 15 | 4.061 (4.029–4.075) | 4.044 (4.034–4.119) |
 
-Every measured call is capped at 32 rows. Call durations include synchronous pool completion and caller commit:
+Every measured call is capped at 32 rows. Call durations include synchronous pool completion and caller commit. The zero-thread latency row comes from the `FRAMES_THREADS=0` result of `test/frames-pool-cost.mjs` (recorded as `timing-0.json`):
 
 | Pool threads | Initial p50 / p95 / maximum ms | Rolling p50 / p95 / maximum ms |
 | --- | --- | --- |

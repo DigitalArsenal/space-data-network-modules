@@ -3,8 +3,9 @@
 // A cell holds six polynomials (position, velocity; position alone with the position-only flag) over one window of a grid anchored at its
 // record's epoch. A window that cannot be served is stored as a tombstone: a header-only cell with the reason. The store of cells is a slab
 // allocated at sdnap_frames_open through the counted allocator; a refill row allocates only its cold set, released inside the row (the first
-// row on a thread also makes that thread's caches, kept: SPEC 9). Nothing here is written to a record, and no export of the epoch store
-// reads a cell; the only write to the store is its short-day scratch field, which every export sets before it reads it (rows_cover).
+// row on a thread also makes that thread's caches, kept: SPEC 9). No export of the epoch store reads a cell.
+// Shared relaxed atomic stores set short_day, atmosphere one_a_day, and atmosphere before_rows;
+// concurrent builders store the same value derived from immutable weather rows.
 // One host thread: frames and refills are called one after the other, never during a batch of the pool.
 // -----------------------------------------------------------------------------
 
