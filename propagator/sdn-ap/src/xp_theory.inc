@@ -5817,7 +5817,10 @@ inline bool ap_init(const Elements& e, double n0, int8_t res, XpSat& s) {
         const res::TermSet ts = res::class_terms(res);
         res::GTaylor* g = static_cast<res::GTaylor*>(sdnap::mem::malloc(ts.count * sizeof(res::GTaylor)));
         if (g == nullptr) return false;
-        for (int j = 0; j < ts.count; ++j) g[j] = res::g_taylor(ts.t[j].l, ts.t[j].p, ts.t[j].q, e.eo);
+        constexpr double h = 5e-4;
+        res::HansenSamples samples[] = {res::HansenSamples(e.eo - 2.0 * h), res::HansenSamples(e.eo - h),
+          res::HansenSamples(e.eo), res::HansenSamples(e.eo + h), res::HansenSamples(e.eo + 2.0 * h)};
+        for (int j = 0; j < ts.count; ++j) g[j] = res::g_taylor(ts.t[j].l, ts.t[j].p, ts.t[j].q, e.eo, samples);
         s.ctx.res_taylor = g;
       }
     }

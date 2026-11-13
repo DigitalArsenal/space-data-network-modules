@@ -4078,13 +4078,50 @@ inline void node_G(int l, int p, int q, double e, double& G, double& dG) {
   dG /= N;
 }
 
+/// The wide zonal table's shared samples retain separate sin/cos calls and
+/// std::pow; replacing those operations would change their rounding.
+struct NodeGSamples {
+  struct Sample { double ar, cf, sf, M, nu; };
+  double e, eta;
+  std::vector<Sample> samples;
+  std::vector<double> powers[71];
+  explicit NodeGSamples(double eccentricity) : e(eccentricity), eta(std::sqrt(1.0 - e * e)) {
+    constexpr int N = 256;
+    samples.reserve(N);
+    for (int k = 0; k < N; ++k) {
+      const double E = kTwoPi * k / N, sE = std::sin(E), cE = std::cos(E), ar = 1.0 / (1.0 - e * cE);
+      const double cf = (cE - e) * ar, sf = eta * sE * ar, M = E - e * sE;
+      samples.push_back({ar, cf, sf, M, std::atan2(sf, cf)});
+    }
+  }
+  void get(int l, int p, int q, double& G, double& dG) {
+    auto& power = powers[l];
+    if (power.empty()) {
+      power.reserve(samples.size());
+      for (const auto& v : samples) power.push_back(std::pow(v.ar, l));
+    }
+    const int w = l - 2 * p, j = w + q;
+    G = 0.0; dG = 0.0;
+    for (size_t k = 0; k < samples.size(); ++k) {
+      const auto& v = samples[k];
+      const double ph = w * v.nu - j * v.M, cp = std::cos(ph), sp = std::sin(ph);
+      const double ak = power[k];
+      G += ak * cp;
+      dG += ak * ((l + 1) * v.ar * v.cf * cp - w * v.sf * (2.0 + e * v.cf) / (eta * eta) * sp);
+    }
+    G /= 256;
+    dG /= 256;
+  }
+};
+
 struct OddZonalG1 {
   bool ready = false;
   double g1[72]{};
 };
 inline thread_local OddZonalG1 g_odd_zonal_g1{};
 [[gnu::noinline]] inline void init_odd_zonal_g1(OddZonalG1& r) {
-  for (int l = 7; l <= 70; l += 2) r.g1[l] = res::hansen_G(l, (l - 1) / 2, -1, 1e-3) / 1e-3;
+  res::HansenSamples samples(1e-3);
+  for (int l = 7; l <= 70; l += 2) r.g1[l] = samples.get(l, (l - 1) / 2, -1) / 1e-3;
   r.ready = true;
 }
 inline const OddZonalG1& odd_zonal_g1() {
@@ -4193,6 +4230,7 @@ inline void zonal_visit_terms(int degree, bool wide, double i0, double e0, float
     }
     return;
   }
+  NodeGSamples samples(e0);
   double f[72], fp[72], fm[72];
   for (int l = 6; l <= degree; ++l) {
     const int wl = l;
@@ -4200,7 +4238,7 @@ inline void zonal_visit_terms(int degree, bool wide, double i0, double e0, float
       const int p = (l - w) / 2, q = -w;
       normalized_Fk3(0, w, l, i0, h, f, fp, fm);
       double G, dG;
-      node_G(l, p, q, e0, G, dG);
+      samples.get(l, p, q, G, dG);
       const double g1 = dG, g0 = G - dG * e0;
       float* t = F + 4 * idx++;
       t[0] = static_cast<float>(f[l]);
