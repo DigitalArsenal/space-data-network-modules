@@ -1,4 +1,7 @@
 #!/usr/bin/env node
+// The AP fit identity reference is the fixed added-zonal-term artifact at 3a5fb74c: the added terms move the low-
+// orbit fit by 7.622102 m / 8.557788 mm/s when both fits fly on this build at daily epochs over seven days; every
+// bound is retained.
 // E2E (stack #479, #541; SPEC 12.1, the iteration ceiling): a pass of `fit` ends when it converges, under a ceiling of
 // 1,000 iterations where the fit solves no drag term (the set above the drag, or a drag term its prior holds) and 40 where it
 // solves one; a record whose fit ended at its ceiling states CONVERGED false and says so in its OD COMMENT, and
@@ -51,7 +54,7 @@ import { seedOcm, rowsThrough, flight, spwStream, ocmOf } from './lib/ocm.mjs';
 import { configuration, prior, pcfPriorForm } from './lib/pcf.mjs';
 import { spwConstantText } from './lib/spw-constant.mjs';
 requireTruth('ea4576901f9e8dc21af2c24feb7887645706ef934488cb9756a0b5c21ab47934'); // FFM 2.3.0 (modules 48a00fd6)
-const BEFORE = { version: '0.6.43', commit: '5f55f314b484483998d3f0fc6744f6f9b9101457', sha256: 'f33e071fc77ccca6198ed7641c348957a947606460276fc9e8a926892a991935' };
+const BEFORE = { version: '0.6.48', commit: '3a5fb74c8e12f825160eea58624dbc85a2cbacc5', sha256: 'b2de5af7e03753e57aebf781c49c824552706a16c563ca60b1dbb71d1a2358c6' };
 const CASES = [
   // above the drag: on 0.6.43 converged in 11 iterations, no pass at a ceiling
   { name: 'above the drag: e 0.9, perigee 10,000 km, i 55, the Sun and Moon', epoch: '2026-02-20T00:00:00.000', n: 0.1309803096, e: 0.9, i: 55, raan: 39.8, argp: 61.2, ma: 150.9,
@@ -117,10 +120,10 @@ for (const c of CASES) {
   const row = { case: c.name, iterations: [sa.ITERATIONS, sb.ITERATIONS], converged: [sa.CONVERGED, sb.CONVERGED], ceilingMet: met, comment: ca };
   results.push(row);
   console.log(JSON.stringify({ fitCeiling: row }));
-  assert.equal(JSON.stringify(a.MEAN_ELEMENTS), JSON.stringify(b.MEAN_ELEMENTS), `${c.name}: the elements field for field 0.6.43's`);
-  assert.equal(JSON.stringify(sa), JSON.stringify(sb), `${c.name}: FIT_STATISTICS field for field 0.6.43's`);
+  assert.equal(JSON.stringify(a.MEAN_ELEMENTS), JSON.stringify(b.MEAN_ELEMENTS), `${c.name}: the elements field for field 0.6.48's`);
+  assert.equal(JSON.stringify(sa), JSON.stringify(sb), `${c.name}: FIT_STATISTICS field for field 0.6.48's`);
   assert.equal(sa.CONVERGED, true, `${c.name}: CONVERGED ${sa.CONVERGED}`);
-  assert.deepEqual(ca, cb, `${c.name}: the OD COMMENT 0.6.43's`);
+  assert.deepEqual(ca, cb, `${c.name}: the OD COMMENT 0.6.48's`);
   assert.ok(!ca.some((l) => l.startsWith('fit: not converged')), `${c.name}: no ceiling line`);
   assert.deepEqual(met, c.met, `${c.name}: the passes at a ceiling (at 1,000; at any other) ${JSON.stringify(c.met)}`);
 }

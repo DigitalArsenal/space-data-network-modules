@@ -1,4 +1,7 @@
 #!/usr/bin/env node
+// The fit and flight reference is the fixed added-zonal-term artifact at 3a5fb74c: the added terms change the fit
+// from 45 to 30 iterations and move its record by 489.114461 m / 545.131494 mm/s at the five epochs from 6 to 96
+// hours; every bound is retained.
 // E2E (stack #564; SPEC 16.25): a fit whose trial sets meet the decay rule keeps iterating. A set that decays inside the fit's arc is
 // refused (decay.e2e.mjs); the fit's finite-difference columns bump the drag term, and a bumped set may cross the rule inside the arc
 // while the iterate itself does not. Such a column is differenced below the iterate; it is never a reason to end a pass as converged.
@@ -37,7 +40,7 @@ import { seedOcm, rowsThrough, flight, spwStream, ocmOf } from './lib/ocm.mjs';
 import { configuration } from './lib/pcf.mjs';
 import { spwConstantText } from './lib/spw-constant.mjs';
 requireTruth('ea4576901f9e8dc21af2c24feb7887645706ef934488cb9756a0b5c21ab47934'); // FFM 2.3.0 (modules 48a00fd6)
-const BEFORE = { version: '0.6.45', commit: 'b1a08e44fdfa3dfee105c8a4d7a2c4c19f814215', sha256: 'edc9b14b5226337cebdf1d1932517f11eb311b5e73b7ff40d52b7b41e3feac46' };
+const BEFORE = { version: '0.6.48', commit: '3a5fb74c8e12f825160eea58624dbc85a2cbacc5', sha256: 'b2de5af7e03753e57aebf781c49c824552706a16c563ca60b1dbb71d1a2358c6' };
 const CASE = { name: 'perigee 200 km, e 0.01, i 55, B 0.0235', epoch: '2026-10-29T00:00:00.000', hp: 200, e: 0.01, i: 55, raan: 40, argp: 90, ma: 0, truthB: 0.0235 };
 const DAY = 864e5, MU = 398600.4418, RE = 6378.137, iso = (ms) => new Date(ms).toISOString().replace('Z', '');
 const kernel = fs.readFileSync(new URL('../../../files/orbit-products/tests/fixtures/de440/de440-2026.bsp', import.meta.url));
@@ -91,8 +94,8 @@ console.log(JSON.stringify({ decayFit: summary }));
 // what a column refused as decayed used to do: the pass ended as converged at its start (no step tested), the radiation pass among
 // them, so the record kept AGOM 0 and a fit RMS 1.21 times 0.6.45's (this case, flown on the first form of the rule)
 assert.ok(agom(A) !== 0, `the radiation pass solves a radiation term: AGOM ${agom(A)}`);
-assert.ok(sa.FIT_RMS_KM <= 1.1 * sb.FIT_RMS_KM, `the fit RMS ${sa.FIT_RMS_KM} km is at most 1.10 times 0.6.45's ${sb.FIT_RMS_KM} km`);
-assert.ok(sa.ITERATIONS >= 0.9 * sb.ITERATIONS, `the passes iterate: ${sa.ITERATIONS} iterations against 0.6.45's ${sb.ITERATIONS}`);
+assert.ok(sa.FIT_RMS_KM <= 1.1 * sb.FIT_RMS_KM, `the fit RMS ${sa.FIT_RMS_KM} km is at most 1.10 times 0.6.48's ${sb.FIT_RMS_KM} km`);
+assert.ok(sa.ITERATIONS >= 0.9 * sb.ITERATIONS, `the passes iterate: ${sa.ITERATIONS} iterations against 0.6.48's ${sb.ITERATIONS}`);
 const odLines = A.ORBIT_DETERMINATION.COMMENT ?? [];
 assert.ok(sa.CONVERGED === true || odLines.some((l) => l.includes('could not be differenced')), `CONVERGED ${sa.CONVERGED}: a pass that tested no step names why`);
 assert.ok(odLines.some((l) => l.startsWith('decays at ')), 'the record states where the set decays');
@@ -126,12 +129,12 @@ await again.close?.();
   const days = ['2026-10-29T06:00:00.000', '2026-10-30T00:00:00.000', '2026-10-31T00:00:00.000', '2026-11-01T00:00:00.000', '2026-11-02T00:00:00.000'];
   for (const method of ['propagate', 'propagate_epochs']) {
     const a = await flyRecord(now, method, days), b = await flyRecord(was, method, days);
-    for (const [who, f] of [['this build', a], ['0.6.45', b]]) {
+    for (const [who, f] of [['this build', a], ['0.6.48', b]]) {
       assert.equal(f.states.length, days.length, `${method}: ${who} answers ${f.states.length} states`);
       assert.equal(f.cov.length, days.length, `${method}: ${who} states ${f.cov.length} covariance lines for ${days.length} epochs`);
       assert.ok(f.cov.every((c) => c.length === 21), `${method}: ${who}'s covariance lines hold ${f.cov.map((c) => c.length)} values, 21 each expected`);
     }
-    assert.equal(JSON.stringify([a.states, a.cov]), JSON.stringify([b.states, b.cov]), `${method} of the fit's record: this build's states and covariances are not 0.6.45's`);
+    assert.equal(JSON.stringify([a.states, a.cov]), JSON.stringify([b.states, b.cov]), `${method} of the fit's record: this build's states and covariances are not 0.6.48's`);
   }
   // propagate_epochs past the crossing (the record decays about 3 h after its 120 h arc)
   const past = [...days, '2026-11-03T06:00:00.000'];

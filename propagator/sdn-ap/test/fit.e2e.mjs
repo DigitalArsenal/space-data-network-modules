@@ -1,4 +1,7 @@
 #!/usr/bin/env node
+// The stored covariance and frame-flight references and the fitted-record reference use the added zonal long-period
+// terms: the stored flight moves 1.761589 m over 48 h and 4.677655 m / 2.959278 mm/s over seven days; every bound
+// is retained.
 // E2E (task modules-sdn-ap-ocm-write-20261103): fit writes one typed $OCM per block, and nothing else.
 // - On the inputs of the 0.4.0 fixtures (test/lib/fixture-inputs.mjs): 24 h of propagator/ffm's 550 km trajectory,
 //   fitted under AP's forces (gravity caps 31 and 20, NRLMSISE-00 on daily $SPW rows) and under stock SGP4XP (Jacchia
@@ -68,8 +71,8 @@ const fit = (config, spw = rows.bytes) => h.invoke({ methodId: "fit", inputs: [
 
 const cases = [
   { name: "AP", fixture: "ap-fit-0.4.0.omm", stored: "ap-fit-0.6.42.ocm", config: configuration({ theory: "AP", forces: AP_FORCES }), spw: rows.bytes, theory: 5, weather: pcfWeatherSource.RECORDS,
-    fitReference: "ap-fit-0.6.43.ocm",
-    recorded: { version: "0.6.43", cov: "ap-fit-0.6.42-0.6.43.cov", [pcfOutputFrame.EME2000]: "ap-fit-0.6.42.eme2000-0.6.43.oem", [pcfOutputFrame.TEME]: "ap-fit-0.6.42.teme-0.6.43.oem" } },
+    fitReference: "ap-fit-0.6.48.ocm",
+    recorded: { version: "0.6.48", cov: "ap-fit-0.6.42-0.6.48.cov", [pcfOutputFrame.EME2000]: "ap-fit-0.6.42.eme2000-0.6.48.oem", [pcfOutputFrame.TEME]: "ap-fit-0.6.42.teme-0.6.48.oem" } },
   { name: "XP", fixture: "xp-fit-0.4.0.omm", stored: "xp-fit-0.6.4.ocm", config: configuration({ theory: "SGP4XP", forces: XP_FORCES }), spw: null, theory: 1, weather: pcfWeatherSource.THEORY_FLUX_MODEL },
 ];
 // The fit and the flight apart (no byte identity through a fit). The fit: this build's fitted record flown 7 days (EPOCHS,
@@ -293,7 +296,7 @@ for (const c of cases) {
   if (!s) continue;
   // the fit: this build's fitted record against the reference record (SGP4XP: the stored record; AP: 0.6.43's fit, ap-fit-0.6.43.ocm), both
   // flown by this build; its $ODR names its own $OCM
-  const refName = c.fitReference ? "0.6.43's fit" : "the stored (0.6.4's fit)";
+  const refName = c.fitReference ? "0.6.48's fit" : "the stored (0.6.4's fit)";
   const [pf, ps] = [await flight(h, s.fitted, pcfOutputFrame.TEME), await flight(h, s.reference, pcfOutputFrame.TEME)];
   check(pf.statusCode === 0 && ps.statusCode === 0, `${c.name}: propagate the fitted and the reference record: ${pf.errorCode ?? "ok"} | ${ps.errorCode ?? "ok"}`);
   if (pf.statusCode === 0 && ps.statusCode === 0) {

@@ -1,4 +1,6 @@
 #!/usr/bin/env node
+// The stored covariance and fitted-record references use the added zonal long-period terms, which move the stored
+// 48-hour flight by 1.761589 m / 0.996593 mm/s; every bound is retained.
 // E2E (task modules-sdn-ap-ocm-export-cov-20261103): the covariance side of fit's $OCM and the one $OMM export.
 // - fit of the 0.4.0 XP fixture's inputs (test/lib/fixture-inputs.mjs) writes COVARIANCE_DATA 8 x 8 LTM CARTPV in the
 //   record's TRAJ_REF_FRAME, COV_PARAMETER_KINDS [DRAG_AREA_OVER_MASS, SRP_AREA_OVER_MASS] with COV_PARAMETERS and
@@ -288,23 +290,23 @@ if (apBytes) {
   const ofFixture = (name) => new Float64Array(fixture(name).buffer.slice(0));
   // 0.6.45 (kDragShareStrong) states another share on the same fit: 0.6.43's record with its share and s_d restated as this
   // build's own fit states them (the record unpacked and packed again), so the comparison is of the fit and its flight
-  const fitRecordBytes = new Uint8Array(fixture("ap-fit-0.6.43.ocm"));
+  const fitRecordBytes = new Uint8Array(fixture("ap-fit-0.6.48.ocm"));
   const restated = OCM.getRootAsOCM(new flatbuffers.ByteBuffer(fitRecordBytes)).unpack();
   restated.COV_PROPAGATION.NON_GRAVITATIONAL_SHARE = acp.NON_GRAVITATIONAL_SHARE;
   restated.COV_PROPAGATION.NOISE_NON_GRAVITATIONAL_RAD_DAY2 = acp.NOISE_NON_GRAVITATIONAL_RAD_DAY2;
   const rb = new flatbuffers.Builder(4096);
   OCM.finishOCMBuffer(rb, restated.pack(rb));
   const fitRecordCov = covRaw(rb.asUint8Array());
-  check(fitRecordCov.status === 0, `sdnap_covariance_at of 0.6.43's fit, its share restated: ${fitRecordCov.status}`);
-  const flightD = covAt(storedBytes, ofFixture("ap-fit-0.6.42-0.6.43.cov")), fitD = covAt(apBytes, fitRecordCov.got);
+  check(fitRecordCov.status === 0, `sdnap_covariance_at of 0.6.48's fit, its share restated: ${fitRecordCov.status}`);
+  const flightD = covAt(storedBytes, ofFixture("ap-fit-0.6.42-0.6.48.cov")), fitD = covAt(apBytes, fitRecordCov.got);
   const floors = ["FLOOR_UU_KM2", "FLOOR_VU_KM2", "FLOOR_VV_KM2", "FLOOR_WU_KM2", "FLOOR_WV_KM2", "FLOOR_WW_KM2"];
   const recorded = OCM.getRootAsOCM(new flatbuffers.ByteBuffer(fitRecordBytes)).unpack();
   const floorRel = Math.max(...floors.map((f) => Math.abs(acp[f] - recorded.COV_PROPAGATION[f]) / Math.abs(recorded.COV_PROPAGATION[f])));
   const epochLargest = Math.max(...recorded.COVARIANCE_DATA.map(Math.abs));
   const epochRel = Math.max(...ap.COVARIANCE_DATA.map((v, k) => Math.abs(v - recorded.COVARIANCE_DATA[k]))) / epochLargest;
   console.log(`AP set: DRAG row s_e ${acp.NOISE_ECCENTRICITY_PER_DAY}, s_i ${acp.NOISE_INCLINATION_PER_DAY}, s_l ${acp.NOISE_MEAN_MOTION_RELATIVE}, c ${acp.NON_GRAVITATIONAL_SHARE}`);
-  console.log(`sdnap_covariance_at: the stored record against 0.6.43's of it ${flightD.differ} of ${42 * minutes.length} doubles differ, position ${(1000 * flightD.posM).toFixed(3)} mm, covariance ${flightD.covOfLargest.toExponential(2)} of a time's largest entry; ` +
-    `this build's fit against this build's of 0.6.43's fit ${(1000 * fitD.posM).toFixed(2)} mm, ${fitD.covOfLargest.toExponential(2)}; its epoch covariance ${epochRel.toExponential(2)} of that record's largest entry, its floors ${floorRel.toExponential(2)} relative`);
+  console.log(`sdnap_covariance_at: the stored record against 0.6.48's of it ${flightD.differ} of ${42 * minutes.length} doubles differ, position ${(1000 * flightD.posM).toFixed(3)} mm, covariance ${flightD.covOfLargest.toExponential(2)} of a time's largest entry; ` +
+    `this build's fit against this build's of 0.6.48's fit ${(1000 * fitD.posM).toFixed(2)} mm, ${fitD.covOfLargest.toExponential(2)}; its epoch covariance ${epochRel.toExponential(2)} of that record's largest entry, its floors ${floorRel.toExponential(2)} relative`);
   check(flightD.status === 0 && flightD.posM <= AP_COV_FLIGHT.posM && flightD.velMmS <= AP_COV_FLIGHT.velMmS && flightD.covOfLargest <= AP_COV_FLIGHT.covOfLargest,
     `sdnap_covariance_at of the stored AP record moved: ${JSON.stringify(flightD)} against ${JSON.stringify(AP_COV_FLIGHT)}`);
   check(fitD.status === 0 && fitD.posM <= AP_COV_FIT.posM && fitD.covOfLargest <= AP_COV_FIT.covOfLargest && epochRel <= AP_COV_FIT.epoch && floorRel <= AP_COV_FIT.floors,

@@ -1,4 +1,7 @@
 #!/usr/bin/env node
+// The state reference is the fixed added-zonal-term artifact at 3a5fb74c: the two decaying flights move 10.086909
+// and 99.241236 m before decay, and the two seven-day flights move 10.341851 and 978.629193 m (maximum velocity
+// change 409.566420 mm/s); every bound is retained.
 // E2E (stack #564, SPEC 16.25): an AP flight ends at its decay crossing, refused by name, and no state before it changes.
 // The rule, on the theory's own grid nodes: (a) more perigee radius lost over one revolution or over the grid's next step,
 // whichever is longer, than one density scale height at the mean perigee; (b) a mean perigee height under 100 km.
@@ -32,7 +35,7 @@ import { seedOcm, flight, rowsThrough, repackOcm, T } from './lib/ocm.mjs';
 import { spwFixtureRows } from './lib/spw-constant.mjs';
 import { scratchTemp } from './lib/scratch.mjs';
 
-const BASE = { commit: 'b1a08e44', sha256: 'edc9b14b' };  // 0.6.45, the build before the rule
+const BASE = { version: '0.6.48', commit: '3a5fb74c8e12f825160eea58624dbc85a2cbacc5', sha256: 'b2de5af7e03753e57aebf781c49c824552706a16c563ca60b1dbb71d1a2358c6' };  // Fixed AP identity reference
 const MU = 398600.4418, RE = 6378.137, H = 60, BOUND_M = 4.5;
 const epoch = '2026-10-29T00:00:00.000', t0 = Date.parse(epoch + 'Z');
 const iso = (s) => new Date(t0 + s * 1000).toISOString().replace('Z', '');
@@ -47,9 +50,9 @@ const seedOf = (c) => seedOcm({ epoch, n: nOf(c.hp, c.e), e: c.e, i: 55, raan: 4
 ensureBuilt();
 const modulesRoot = path.resolve(packageRoot, '../..');
 const baseBytes = execFileSync('git', ['-C', modulesRoot, 'show', `${BASE.commit}:propagator/sdn-ap/dist/isomorphic/module.wasm`], { maxBuffer: 1 << 26 });
-check(crypto.createHash('sha256').update(baseBytes).digest('hex').startsWith(BASE.sha256), `0.6.45 at ${BASE.commit} is not ${BASE.sha256}`);
+check(crypto.createHash('sha256').update(baseBytes).digest('hex').startsWith(BASE.sha256), `0.6.48 at ${BASE.commit} is not ${BASE.sha256}`);
 const scratch = scratchTemp('sdnap-decay-');
-const basePath = path.join(scratch, 'module-0.6.45.wasm');
+const basePath = path.join(scratch, 'module-0.6.48.wasm');
 fs.writeFileSync(basePath, baseBytes);
 const now = await createStandaloneHarness('browser', wasmPath, { surface: 'direct' });
 const base = await createStandaloneHarness('browser', basePath, { surface: 'direct' });
@@ -97,7 +100,7 @@ for (const c of SEEDS) {
   check(f.lines.length + Number(m[2]) === secs.length, `${c.name}: ${f.lines.length} answered and ${m[2]} refused of ${secs.length}`);
   check(f.lines.every((l) => msOf(l.epoch) < crossMs), `${c.name}: an answered epoch at or past the crossing`);
   const b = await fly(base, seed, secs.slice(0, f.lines.length));
-  check(!!b.lines && b.lines.every((l, k) => sameBits(l.s, f.lines[k].s)), `${c.name}: a state before the crossing differs from 0.6.45's (${b.error ?? ''})`);
+  check(!!b.lines && b.lines.every((l, k) => sameBits(l.s, f.lines[k].s)), `${c.name}: a state before the crossing differs from 0.6.48's (${b.error ?? ''})`);
   const worst = detector(f.lines.map((l) => l.s.slice(0, 3)));
   check(worst <= BOUND_M, `${c.name}: the jump detector reads ${worst.toFixed(3)} m before the crossing (at most ${BOUND_M} m)`);
   const after = await fly(now, seed, secs.filter((s) => t0 + s * 1000 > crossMs + 3600e3));
@@ -138,8 +141,8 @@ for (const c of [{ name: 'perigee 500 km, e 0.001, BTERM 0.01', hp: 500, e: 0.00
   const seed = seedOf(c), secs = Array.from({ length: (7 * 86400) / H + 1 }, (_, j) => j * H);
   const f = await fly(now, seed, secs), b = await fly(base, seed, secs);
   check(!!f.lines && !!b.lines && f.lines.length === secs.length && !f.comment && f.lines.every((l, k) => sameBits(l.s, b.lines[k].s)),
-    `${c.name}: 7 days at 60 s are not 0.6.45's bit for bit (${f.error ?? f.comment ?? ''} | ${b.error ?? ''})`);
-  console.log(`${c.name}: ${f.lines?.length ?? 0} states over 7 days, 0.6.45's bit for bit`);
+    `${c.name}: 7 days at 60 s are not 0.6.48's bit for bit (${f.error ?? f.comment ?? ''} | ${b.error ?? ''})`);
+  console.log(`${c.name}: ${f.lines?.length ?? 0} states over 7 days, 0.6.48's bit for bit`);
 }
 
 // sdnap_covariance_at past a record's crossing
