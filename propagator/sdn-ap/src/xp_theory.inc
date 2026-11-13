@@ -1866,6 +1866,21 @@ inline bool is_ap_ctx(const RateContext& ctx) {
   return ctx.ap_third_body != 0 || ctx.ap_resonance != 0 || ctx.ap_frame != 0;
 }
 
+/// Stack #583: whether xp_init keeps the output table's raw term list (RateContext::sp) beside its combined entries. A flight
+/// reads the combined table alone, so a stored or flown set does not keep it; the field census (census_rows reads each term's
+/// weight from it) sets it for the set it builds (KeepSpRaw), per thread.
+inline bool& keep_sp_raw() {
+  static thread_local bool keep = false;
+  return keep;
+}
+struct KeepSpRaw {
+  bool prev;
+  KeepSpRaw() : prev(keep_sp_raw()) { keep_sp_raw() = true; }
+  ~KeepSpRaw() { keep_sp_raw() = prev; }
+  KeepSpRaw(const KeepSpRaw&) = delete;
+  KeepSpRaw& operator=(const KeepSpRaw&) = delete;
+};
+
 /// SPEC 16.23 (stack #503, #532): the constant radial term the zonal theory leaves out, R_E, for the mean semi-major axis a
 /// (R_E) and cos^2 of the mean inclination. Held to the dynamics' mean rates, the theory's mean radius of a near-circular
 /// orbit sits (R_E^4 / a^3) [J2^2 (199 c^4 - 80 c^2 + 25) / 32 - J4 (15/64)(35 s^4 - 40 s^2 + 8)] above the true one (c, s
@@ -5865,7 +5880,8 @@ inline bool ap_init(const Elements& e, double n0, int8_t res, XpSat& s) {
   if (spd >= 2) {
     const int nd = t.tesseral > tess::kShallowCap ? tess::kShallowCap : t.tesseral;
     const bool wide_sp = br.wide_tess != 0;
-    if (within_share && same_inc && anchor->ctx.sp_comb != nullptr && anchor->ctx.sp_orig != nullptr &&
+    // the anchor's table (its raw list kept or not: stack #583), unless a caller swapped in other terms
+    if (within_share && same_inc && anchor->ctx.sp_comb != nullptr &&
         anchor->ctx.sp == anchor->ctx.sp_orig && anchor->ctx.sp_count == anchor->ctx.sp_orig_count &&
         wide_sp == (anchor->ctx.branch.wide_tess != 0)) {
       s.ctx.sp_comb = anchor->ctx.sp_comb;
@@ -5883,9 +5899,11 @@ inline bool ap_init(const Elements& e, double n0, int8_t res, XpSat& s) {
       // set takes its own degree): at most one entry each
       const bool fast_side = spd > tess::kSpCap;
       const int extra = fast_side && slow_list != nullptr ? slow_list->count - slow_list->old_count : 0;
-      // filled in this thread's scratch at the bounds, kept at the counts (tess::SpTableScratch: no hole left behind)
+      // filled in this thread's scratch at the bounds, kept at the counts (tess::SpTableScratch: no hole left behind). The
+      // raw term list only where the census builds the set (keep_sp_raw, stack #583): a flight reads the combined table alone
+      const bool raw = keep_sp_raw();
       tess::SpTableScratch* table = tess::sp_table_scratch(static_cast<size_t>(tess::sp_comb_bound(spd, wide_sp, extra)),
-                                                           static_cast<size_t>(tess::sp_bound(spd, wide_sp, extra)));
+                                                           raw ? static_cast<size_t>(tess::sp_bound(spd, wide_sp, extra)) : 0u);
       if (table == nullptr) return false;
       int raw_count = 0;
       // the fast side's band guard (sp_terms' n_end): the mean motion at the record's span's end at the set's own drag rate at
@@ -5900,18 +5918,21 @@ inline bool ap_init(const Elements& e, double n0, int8_t res, XpSat& s) {
         if (std::isfinite(dd[kN]) && dd[kN] > 0.0) n_end = n0 + dd[kN] * tess::kFastSpanMinutes;
       }
       const int comb_count =
-          tess::sp_terms(spd, nd, res, res == 0 && !s.ctx.long_period, wide_sp, n0, e.xincl, e.eo, table->comb, table->raw, &raw_count, slow_list,
-                         fast_side ? md : tess::kFastCap + 2, fast_side, n_end);
+          tess::sp_terms(spd, nd, res, res == 0 && !s.ctx.long_period, wide_sp, n0, e.xincl, e.eo, table->comb, raw ? table->raw : nullptr,
+                         &raw_count, slow_list, fast_side ? md : tess::kFastCap + 2, fast_side, n_end);
       tess::SpCombCoef* comb_kept =
           static_cast<tess::SpCombCoef*>(sdnap::mem::malloc((comb_count > 0 ? comb_count : 1) * sizeof(tess::SpCombCoef)));
       if (comb_kept == nullptr) return false;
-      tess::SpCoef* raw_kept = static_cast<tess::SpCoef*>(sdnap::mem::malloc((raw_count > 0 ? raw_count : 1) * sizeof(tess::SpCoef)));
-      if (raw_kept == nullptr) {
-        std::free(comb_kept);
-        return false;
+      tess::SpCoef* raw_kept = nullptr;
+      if (raw) {
+        raw_kept = static_cast<tess::SpCoef*>(sdnap::mem::malloc((raw_count > 0 ? raw_count : 1) * sizeof(tess::SpCoef)));
+        if (raw_kept == nullptr) {
+          std::free(comb_kept);
+          return false;
+        }
       }
       if (comb_count > 0) std::memcpy(comb_kept, table->comb, static_cast<size_t>(comb_count) * sizeof(tess::SpCombCoef));
-      if (raw_count > 0) std::memcpy(raw_kept, table->raw, static_cast<size_t>(raw_count) * sizeof(tess::SpCoef));
+      if (raw_kept != nullptr && raw_count > 0) std::memcpy(raw_kept, table->raw, static_cast<size_t>(raw_count) * sizeof(tess::SpCoef));
       s.ctx.sp_comb = comb_kept;
       s.ctx.sp_comb_count = comb_count;
       s.ctx.sp_ci0 = std::cos(e.xincl);
@@ -5973,9 +5994,9 @@ inline bool ap_init(const Elements& e, double n0, int8_t res, XpSat& s) {
       if (table == nullptr) return false;
       s.ctx.half_day_count = tess::half_day_terms(sd, e.xincl, e.eo, table, s.ctx.hd_a0, res);
       if (s.ctx.half_day_count < 0) { std::free(table); return false; }
-      // the one-day tail keeps what it filled: its amplitude cut leaves a few hundred of the bound's 2,016 entries at
-      // degree 31 (the half-day class's allocation is left as it was)
-      if (res == 1 && s.ctx.half_day_count > 0)
+      // each tail keeps what it filled (stack #583): the one-day tail's amplitude cut leaves a few hundred of the bound's 2,016
+      // entries at degree 31, the half-day tail about 119 of its 1,008; the entries are unchanged, only the unused bound goes
+      if (s.ctx.half_day_count > 0)
         if (void* kept = sdnap::mem::realloc(table, static_cast<size_t>(s.ctx.half_day_count) * sizeof(tess::HalfDayCoef)))
           table = static_cast<tess::HalfDayCoef*>(kept);
       s.ctx.half_day = table;
@@ -6331,7 +6352,11 @@ inline int field_census(int cap, double n, double e, double inc, double cut, dou
   s.ctx.resonance = s.ctx.branch.resonance;
   s.ctx.e0 = e;
   s.ctx.i0 = inc;
-  int count = ap_init(el, n, s.ctx.resonance, s) ? census_rows(s, cap, n, e, inc, cut, rows, max_rows) : -1;
+  int count = -1;
+  {
+    const KeepSpRaw keep;  // the census reads the table's terms one by one (stack #583)
+    if (ap_init(el, n, s.ctx.resonance, s)) count = census_rows(s, cap, n, e, inc, cut, rows, max_rows);
+  }
   if (count >= 0) count = census_radiation_row(s.ctx, count, rows, max_rows);
   xp_release(s);
   s.~XpSat();
@@ -7332,8 +7357,9 @@ inline int32_t xp_propagate_local(XpSat& s, double t, double r[3], double v[3], 
       (std::fabs(ym_p[kChi] - ym0[kChi]) + std::fabs(ym_p[kPsi] - ym0[kPsi])) < plane_lim &&
       (std::fabs(ym_m[kChi] - ym0[kChi]) + std::fabs(ym_m[kPsi] - ym0[kPsi])) < plane_lim;
   const double dlam_p = ym_p[kLam] - ym0[kLam], dlam_m = ym_m[kLam] - ym0[kLam];
-  const bool need_sp_any = (sp.ctx.mdaily != nullptr || sp.ctx.sp != nullptr || sp.ctx.wide != nullptr ||
-                            sm.ctx.mdaily != nullptr || sm.ctx.sp != nullptr || sm.ctx.wide != nullptr);
+  // the output table by its combined entries (a set keeps its raw term list only for the census: stack #583)
+  const bool need_sp_any = (sp.ctx.mdaily != nullptr || sp.ctx.sp_comb != nullptr || sp.ctx.wide != nullptr ||
+                            sm.ctx.mdaily != nullptr || sm.ctx.sp_comb != nullptr || sm.ctx.wide != nullptr);
   if (need_sp_any && !(can_share_sp && small_plane && std::fabs(dlam_p) < 0.15 && std::fabs(dlam_m) < 0.15))
     return 0;
   const bool need_srp_any = (sp.ctx.agom > 0.0 || sm.ctx.agom > 0.0);
@@ -7670,7 +7696,7 @@ inline bool xp_propagate_cov_at(XpSat* sats, int np, const int* slot, const bool
   const Bodies shared = s0.ctx.ap_third_body ? bodies_at_ap(s0.ctx.d50_epoch + t / kMinutesPerDay)
                                              : bodies_at(s0.ctx.d50_epoch + t / kMinutesPerDay);
   const bool can_share_3b = (t != 0.0) && !s0.ctx.long_period && s0.ctx.ap_third_body;
-  const bool can_share_sp = (t != 0.0) && (s0.ctx.mdaily != nullptr || s0.ctx.sp != nullptr || s0.ctx.wide != nullptr);
+  const bool can_share_sp = (t != 0.0) && (s0.ctx.mdaily != nullptr || s0.ctx.sp_comb != nullptr || s0.ctx.wide != nullptr);
   const bool can_share_srp = (t != 0.0) && s0.ctx.agom > 0.0;
   double d_3b0[6] = {0, 0, 0, 0, 0, 0}, dd_3b_dlam[6] = {0, 0, 0, 0, 0, 0};
   double d_sp0[6] = {0, 0, 0, 0, 0, 0}, dd_sp_dlam[6] = {0, 0, 0, 0, 0, 0}, d2_sp_dlam2[6] = {0, 0, 0, 0, 0, 0};
