@@ -1,14 +1,25 @@
 # Changelog
 
+## 0.6.59 — An AP set's state is a function of the set and the time
+
+On every release through 0.6.58, an AP set asked at a time after another time on the other side of its epoch, inside the first bracket either side, answered a state that
+differed from the same state asked once: the bracket after the epoch and the bracket before it shared one identity (the set's context and the lower node's index, 0 for both)
+in the tesseral and m-daily bake caches, and the drag-pass segment above e 0.3 was kept under the lower node's time alone, the epoch's for both. A time-ordered flight that
+crosses the epoch, which a catalog set asked at a clock time ahead of its epoch does, is such a series. Largest differences by class: a decaying set 714 mm, a transfer
+orbit 7.5 mm, e 0.25 1.8 mm, 500 km 0.30 mm, e 0.1 0.22 mm, 830 km 0.17 mm, half-day class 6.5 to 31 um, geosynchronous with tesseral 31 0.02 um; strong-drag sets with
+perigee under about 350 km up to 49.7 mm on the pooled path (0.6.58). The bracket's identity is now the set's context and the smaller of its two nodes' indexes (signed by
+side), and the drag-pass segment is kept under both nodes' times and the perigee time. A state no longer depends on what the set was asked before, on the caches it flew
+with, on the thread or on the order of the calls (SPEC 9). A set asked only after its epoch is unchanged to the bit. `test/state-purity.e2e.mjs` is the test.
+
 ## 0.6.58 — The epoch store's first pass on the pool; the memory grown in steps of 4 MiB
 
 `sdnap_epochs_at` without a covariance plane builds and flies each series' sets on the pool's threads, one thread a series, in chunks of 16 series, and every
 state and status is the calling thread's to the bit, but for the case below. A series holding a wide set (AP above e 0.05 in no resonance class, above e 0.3 in one) and a call with a
 covariance plane stay on the calling thread. A call runs in slices of at most 4,096 series, each reserving its room before its batch; no memory grows inside a
-batch, and a series that needed a growth is computed again on the calling thread. Such a series, or a set refused its caches inside a batch, can answer a
-different state when it is an AP set that was asked on both sides of its epoch before (one cache id for the brackets on both sides of a set's epoch; pull
-request 86 removes it): under a millimeter in every class measured but strong drag, where 49.7 mm was measured on one of eight sets with perigee under about
-350 km. Which series are deferred depends on the threads' timing, so two runs of the same calls can differ by that much (SPEC 9). `sbrk` keeps the allocator's break and grows the memory by at least 4 MiB at a
+batch, and a series that needed a growth is computed again on the calling thread. Such a series, or a set refused its caches inside a batch, answered a
+different state in 0.6.58 when it was an AP set that had been asked on both sides of its epoch before (one cache id for the brackets on both sides of a set's epoch; fixed in 0.6.59):
+under a millimeter in every class measured but strong drag, where 49.7 mm was measured on one of eight sets with perigee under about
+350 km. Which series are deferred depends on the threads' timing, so two runs of the same calls could differ by that much (SPEC 9). `sbrk` keeps the allocator's break and grows the memory by at least 4 MiB at a
 time, never serving pages a host grew. A pool thread's stack is 256 KiB, 192 KiB more of the instance a thread. `sdnap_pool_stats(out, count)` takes the number of
 doubles the caller has room for and writes at most 16 (among them the memory's growths, the epoch store's halved and serial slices, and the rows run on pool
 threads). After a batch taken for dead, `load_epochs` and `load_epochs_open` refuse `pool-dead` while a pool thread is active, leaving the store in place, and

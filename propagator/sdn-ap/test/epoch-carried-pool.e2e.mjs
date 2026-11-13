@@ -2,7 +2,7 @@
 // Scheduling equivalence for carried forecasts and theory states: TEME km/km/s and ECEF m/m/s, UTC October 2026.
 // 128 series: a fitted 500 km AP record carrying its forecast and the same fit without it, alternating, each series' mean
 // anomaly moved by its index (so two series swapped between rows cannot pass). Reference: the records in a fresh serial
-// instance; its digest is the one sdn-ap 0.6.57 (modules 6a807990) gives (BASE_DIGEST), so the serial path is 0.6.57's.
+// instance; its digest is the one sdn-ap 0.6.59 gives (BASE_DIGEST).
 // 1, 4 and 15 pool threads: every byte equal to the reference (states, statuses and sources), each with threaded batches
 // run (the pool's statistics). Zero-byte tolerance includes the status and source planes.
 import assert from 'node:assert/strict';
@@ -19,8 +19,11 @@ import {T,repackOcm} from './lib/ocm.mjs';
 const arg=(k,v)=>{const i=process.argv.indexOf(k);return i<0?v:process.argv[i+1]};
 const root=path.join(scratchRoot,'epoch-carried-pool');fs.mkdirSync(root,{recursive:true});
 const count=128,streamFile=path.join(root,'records.bin');
-// the reference's digest as sdn-ap 0.6.57 (modules 6a807990, wasm 652fa229) made it; 0.6.56 (85bc764c) gives the same
-const BASE_DIGEST='1f234b923bbba48a31a99b9c5ae025442c4aa2d7a8d57e12ebf47dd502778079';
+// the reference's digest as sdn-ap 0.6.59 makes it. The records are fitted by the module under test (carriedRecord), and a fit flies its set
+// on both sides of its epoch: through 0.6.58 (digest 1f234b923bbba48a31a99b9c5ae025442c4aa2d7a8d57e12ebf47dd502778079) the fitted bytes
+// followed the history of those flights, so they differ here; the states of the same records are the same series by series (the serial
+// reference's states equal each record flown alone in a fresh instance)
+const BASE_DIGEST='f88505dc0248e44ec27f8c99847e308b183d2ebb36787e629652e399a3503763';
 if(process.argv.includes('--case')){
  const threads=Number(arg('--threads',0)),label=arg('--label','case');
  const h=await createStandaloneHarness('browser',arg('--wasm',wasmPath),{surface:'direct',maxThreads:Math.max(1,threads),enableBrowserWasiThreads:threads>0});
@@ -56,11 +59,11 @@ function run(label,threads,file=wasmPath){
 }
 const reference=run('serial',0);
 if(process.argv.includes('--print-digest')){console.log(reference.r.digest);process.exit(0);}
-assert.equal(reference.r.digest,BASE_DIGEST,`the serial reference against sdn-ap 0.6.57's (${BASE_DIGEST})`);
+assert.equal(reference.r.digest,BASE_DIGEST,`the serial reference against sdn-ap 0.6.59's (${BASE_DIGEST})`);
 for(const threads of [1,4,15]){
  const t=run('threads-'+threads,threads);
  assert.ok(t.bytes.equals(reference.bytes),`${threads} pool threads`);
  assert.ok(t.r.batches>0,`${threads} pool threads: no threaded batch ran`);
 }
-console.log('EPOCH-CARRIED-POOL PASS: 128 distinct series, four instants, two frames, the serial reference 0.6.57\'s, 1/4/15 threads in threaded batches, every byte equal');
+console.log('EPOCH-CARRIED-POOL PASS: 128 distinct series, four instants, two frames, the serial reference 0.6.59\'s, 1/4/15 threads in threaded batches, every byte equal');
 process.exit(0);

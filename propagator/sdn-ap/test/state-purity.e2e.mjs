@@ -10,6 +10,12 @@
 // - mirrored pairs at fractions q of the first bracket on both sides of the epoch (-qH then +qH, +qH then -qH), at node
 //   times (+-H, +-2H), at the epoch and one millisecond either side of it;
 // - the store's blend of two sets of one series (sdnap_epochs_at), asked in orders, against the same asked once cold;
+// - a time-ordered flight across the epoch (300 states from one first bracket before it to one after it, in time order) of every set, each state
+//   after the crossing against its cold state;
+// - the pool: the sets and forty-seven others in one store on four pool threads, asked in one call at each time of a flight across the epoch and then
+//   shuffled, with room reserved and with every growth inside a batch refused (a series refused on its lane and flown again on the calling thread: counted,
+//   asserted), each set's state against the cold set;
+// - fifty medium-orbit objects asked at three times, at eight others and at the first three again, at 1 MB and at the default budget;
 // - the decaying set past its decay crossing: refused with status 4 (decayed), cold and after other asks;
 // - the two mechanisms of the defect this test was written for, each put back in a build of this checkout's sources: the
 //   bracket's id and the drag-pass segment's key. Each build must fail the mirrored pairs, and the id build must give the
@@ -366,6 +372,94 @@ if (!Object.keys(PATCH).length) {
     check(differ === 0, `${N} medium-orbit series at ${label}, asked ${timeMajor ? "time by time" : "series by series"} at 18 h and 30 h: ${differ} states of ${series} series differ from the set alone in a cold store (largest ${fmt(worst)})`);
     note("medium-orbit series", label, timeMajor ? "time by time" : "series by series", differ, 2 * N, worst);
     console.log(`${N} medium-orbit series, ${label}, ${timeMajor ? "time by time" : "series by series"}: ${differ} states of ${series} series differ from the set alone (largest ${fmt(worst)})`);
+  }
+}
+{
+  // the pool (SPEC 9): the thirteen sets and forty-seven others as one store on four pool threads, every series asked in one call at each time of a
+  // time-ordered flight across the epoch (240 calls from one and a half first brackets before the epoch to as many after), then the same times
+  // shuffled; the sets' states against the cold set asked once. Run twice: with the room the batches need reserved, and with every growth of the
+  // memory inside a batch refused (a series that needed one is refused on its lane and flown again on the calling thread, which must be counted)
+  const POOL_EXPORTS =
+    "static uint32_t g_test_deferred_n = 0;\n" +
+    "void sdnap_test_deferred(uint32_t k) { (void)k; ++g_test_deferred_n; }\n" +
+    'SDNAP_EXPORT("sdnap_test_pool_mode") void sdnap_test_pool_mode(int32_t refuse) { sdnap::pool::g_reserve_off = refuse != 0; }\n' +
+    'SDNAP_EXPORT("sdnap_test_deferred_count") uint32_t sdnap_test_deferred_count() { return g_test_deferred_n; }\n';
+  const sortLine = "    std::sort(deferred, deferred + n);\n";
+  const epochStore = (t) => {
+    const at = t.indexOf(sortLine);
+    if (at < 0 || t.indexOf(sortLine, at + 1) >= 0) throw new Error("the deferral's sort line is not exactly once in epoch_store.inc");
+    return "void sdnap_test_deferred(uint32_t k);\n" + t.replace(sortLine, () => sortLine + "    for (int32_t q = 0; q < n; ++q) sdnap_test_deferred(a + deferred[q]);\n");
+  };
+  const poolFile = buildDiagnostic("state-purity-pool", POOL_EXPORTS, patchTheory, { ...patchOthers, "epoch_store.inc": epochStore });
+  const kinds = names.map((n) => ORBITS[n]);
+  const sets = kinds.map((o, k) => recordOf(o, k, { norad: 92000 + k }));
+  const others = Array.from({ length: 47 }, (_, k) => recordOf(ORBITS["500 km"], 200 + k, { norad: 92100 + k }));
+  const all = [...sets, ...others];
+  const Hmin = Math.min(...names.map((n) => kept.get(n).probeMin)) * 2;
+  const flight = Array.from({ length: 240 }, (_, k) => EPOCH + Math.round(Hmin * MIN * (-1.5 + (3 * (k + 0.5)) / 240)));
+  const sample = flight.filter((t, k) => k % 3 === 1);
+  const refs = sets.map(() => new Map());
+  for (let k = 0; k < sets.length; ++k) for (const t of sample) { const r = await coldBlend(shippedFile, [sets[k]], 0, t); refs[k].set(t, r.slice(1)); check(isBlend([0, ...r.slice(1)]), `pool: ${names[k]}: a cold reference is not a state`); }
+  for (const refuse of [false, true]) {
+    const h = await createStandaloneHarness("browser", poolFile, { surface: "direct", maxThreads: 4, enableBrowserWasiThreads: true });
+    const x = h.instance.exports;
+    check(x.sdnap_threads(4) === 4, "pool: 4 threads not granted");
+    const r = await h.invoke({ methodId: "load_epochs", inputs: [{ portId: "ocm", typeRef: T("OCM"), payload: Buffer.concat(all.map(prefixed)) }] });
+    if (r.statusCode !== 0) throw new Error(`pool load_epochs ${r.errorCode}: ${r.errorMessage}`);
+    const count = all.length, out = x.sdnap_alloc(48 * count), status = x.sdnap_alloc(4 * count), stats = x.sdnap_alloc(128);
+    x.sdnap_test_pool_mode(refuse ? 1 : 0);
+    const index = new Map(); { const p = x.sdnap_alloc(24); for (let i = 0; i < count; ++i) { x.sdnap_epochs_series(i, p, 0, 0); index.set(new Float64Array(h.memory.buffer, p, 3)[0], i); } x.sdnap_free(p); }
+    const asks = async (label, order) => {
+      let differ = 0, compared = 0, worstM = 0;
+      for (const t of order) {
+        const [w, f] = jd(t);
+        if (x.sdnap_epochs_at(w, f, 0, count, 0, out, status, 0) !== 0) throw new Error("pool: sdnap_epochs_at failed");
+        const v = new Float64Array(h.memory.buffer, out, 6 * count), c = new Int32Array(h.memory.buffer, status, count);
+        if (!sample.includes(t)) continue;
+        for (let k = 0; k < sets.length; ++k) {
+          const i = index.get(92000 + k), got = [c[i], ...[0, 1, 2, 3, 4, 5].map((q) => v[q * count + i])], ref = refs[k].get(t);
+          ++compared; if (!same(got, ref)) { ++differ; worstM = Math.max(worstM, got[0] !== ref[0] ? Infinity : Math.max(...[1, 2, 3].map((q) => Math.abs(got[q] - ref[q]))) * 1000); }
+        }
+      }
+      note("pool, 4 threads", refuse ? "no reserve" : "reserved", label, differ, compared, worstM);
+      check(differ === 0, `pool on 4 threads, ${refuse ? "every growth in a batch refused" : "room reserved"}, ${label}: ${differ} of ${compared} states differ from the cold set (largest ${fmt(worstM)})`);
+      return compared;
+    };
+    const n1 = await asks("time-ordered flight across the epoch", flight);
+    const n2 = await asks("the same times shuffled", shuffle(flight));
+    compared.set("pool", (compared.get("pool") ?? 0) + n1 + n2);
+    x.sdnap_pool_stats(stats, 16);
+    const pool = Array.from(new Float64Array(h.memory.buffer, stats, 16)), deferred = x.sdnap_test_deferred_count();
+    check(pool[1] > 0 && pool[14] > 0 && pool[15] >= 2, `pool, ${refuse ? "no reserve" : "reserved"}: batches ${pool[1]}, rows on pool threads ${pool[14]}, pool threads with rows ${pool[15]} (some, and at least two threads, expected)`);
+    if (refuse) check(pool[2] > 0 && pool[3] > 0 && deferred > 0, `pool, no reserve: refusals ${pool[2]}, deferrals ${pool[3]}, series flown again on the calling thread ${deferred} (all above 0 expected)`);
+    else check(pool[2] === 0 && pool[3] === 0 && deferred === 0, `pool, room reserved: refusals ${pool[2]}, deferrals ${pool[3]}, series flown again ${deferred} (0 expected)`);
+    console.log(`pool, 4 threads, ${refuse ? "every growth in a batch refused" : "room reserved"}: ${n1 + n2} states of ${sets.length} sets equal to the cold set; ${pool[1]} batches, ${pool[14]} rows on ${pool[15]} pool threads, refusals ${pool[2]}, deferrals ${pool[3]}, flown again on the calling thread ${deferred} series`);
+  }
+}
+{
+  // the frames lane's case: fifty medium-orbit objects (the half-day, 8 h and 16 h classes, varying a little) asked at three times, then at other times, then the
+  // first three again, at a 1 MB cache budget (sets are reclaimed between) and at the default; every revisit and every state against the object alone in a cold store
+  const N = 50;
+  let bs = 20261115;
+  const br = () => ((bs = (bs * 1664525 + 1013904223) >>> 0) / 4294967296);
+  const classes = [2.0056, 3.0, 1.5];
+  const recs = Array.from({ length: N }, (_, k) => recordOf({ n: classes[k % 3] + 0.002 * (br() - 0.5), e: 0.005 + 0.004 * br(), i: 50 + 15 * br(), bterm: 0.001, tesseral: 31 }, k, { norad: 93000 + k }));
+  const first = [3, 9, 21].map((h) => EPOCH + h * 60 * MIN);
+  const others2 = [-5, -1, 0.5, 6, 14, 27, 40, 70].map((h) => EPOCH + Math.round(h * 60 * MIN));
+  const sequence = [...first, ...others2, ...first];
+  const coldOf = [];
+  for (let k = 0; k < N; ++k) { const m = new Map(); for (const t of [...first, ...others2]) m.set(t, await asked(shippedFile, [recs[k]], (q) => q.at(0, 0, t))); coldOf.push(m); }
+  check(coldOf.every((m) => [...m.values()].every(isState)), "fifty medium-orbit objects: a cold reference is not a state");
+  for (const [label, file, mb] of [["default budget", shippedFile, 0], ["1 MB", probeFile, 1]]) for (const objectMajor of [false, true]) {
+    const m = await open(file, { budgetMb: mb }); await m.load(recs);
+    const index = new Map(); for (let i = 0; i < N; ++i) index.set(m.series(i)[0], i);
+    let differ = 0, worstM = 0, n = 0;
+    const one = (k, t) => { const g = m.at(index.get(93000 + k), 0, t), r = coldOf[k].get(t); ++n; if (!same(g, r)) { ++differ; worstM = Math.max(worstM, sizeM(g, r)); } };
+    if (objectMajor) for (let k = 0; k < N; ++k) for (const t of sequence) one(k, t);
+    else for (const t of sequence) for (let k = 0; k < N; ++k) one(k, t);
+    note("fifty medium-orbit objects", label, objectMajor ? "object by object" : "time by time", differ, n, worstM);
+    check(differ === 0, `fifty medium-orbit objects at ${label}, ${objectMajor ? "object by object" : "time by time"} (three times, eight others, the first three again): ${differ} of ${n} states differ from the object alone in a cold store (largest ${fmt(worstM)})`);
+    console.log(`fifty medium-orbit objects, ${label}, ${objectMajor ? "object by object" : "time by time"}: ${differ} of ${n} states differ from the object alone (largest ${fmt(worstM)})`);
   }
 }
 // every set was flown and compared; a partial run (a set filter, a patched build, the quick fractions) says so
