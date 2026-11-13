@@ -50,7 +50,7 @@ SDNAP_EXPORT("test_cell_size") uint32_t test_cell_size(uint32_t p) {
 SDNAP_EXPORT("test_staging_bytes") uint32_t test_staging_bytes() { return sizeof(sdnap::frames::Batch); }
 SDNAP_EXPORT("test_warm") uint32_t test_warm(uint32_t site) {
   sdnap::pool::test_warm_site = site;
-  return sdnap::pool::test_warm_max;
+  return __atomic_load_n(&sdnap::pool::test_warm_max, __ATOMIC_RELAXED);
 }
 `;
 const wasm = process.env.FRAMES_POOL_DIAGNOSTIC ?? buildDiagnostic("frames-pool", probe, s => s, {
@@ -69,7 +69,7 @@ const wasm = process.env.FRAMES_POOL_DIAGNOSTIC ?? buildDiagnostic("frames-pool"
     "inline uint32_t test_reserve_fail = 0, test_reserve_calls = 0;\ninline bool reserve_room(size_t bytes) {\n  ++test_reserve_calls;\n  if (test_reserve_fail) { --test_reserve_fail; return false; }"),
     "inline bool warm_thread() {", "inline uint32_t test_warm_site = 0, test_warm_max = 0;\ninline bool warm_thread() {"),
     "  if (g_warm) return true;", "  if (g_warm) return true;\n  mem::test_warming = true; mem::test_warm_count = 0; mem::test_warm_at = test_warm_site;"),
-    "  return g_warm;", "  mem::test_warming = false;\n  if (mem::test_warm_count > test_warm_max) test_warm_max = mem::test_warm_count;\n  return g_warm;")
+    "  return g_warm;", "  mem::test_warming = false;\n  uint32_t old = __atomic_load_n(&test_warm_max, __ATOMIC_RELAXED);\n  while (old < mem::test_warm_count && !__atomic_compare_exchange_n(&test_warm_max, &old, mem::test_warm_count, false, __ATOMIC_RELAXED, __ATOMIC_RELAXED)) {}\n  return g_warm;")
 });
 const pop = population([["leo500", 34], ["hp490", 2], ["ecc05", 2], ["geo", 2], ["underground", 2], ["wide", 2]], 20261113, 48);
 const open = async threads => { const f = await openFrames({ wasm, threads }); await f.load(pop); return f; };
@@ -175,7 +175,7 @@ if (warmOnly || (!deadOnly && !refusalOnly)) {
   reference.open(2e6); const wanted = reference.refill(t, 2880, 32);
   const probe = await openFrames({ wasm });
   assert.equal(probe.x.sdnap_threads(4), 4);
-  const sites = probe.x.test_warm(0); assert.ok(sites >= 9);
+  const sites = probe.x.test_warm(0); assert.equal(sites, 8, "counted startup allocations");
   await probe.h.destroy();
   for (let site = 1; site <= sites; ++site) {
     const f = await openFrames({ wasm });
