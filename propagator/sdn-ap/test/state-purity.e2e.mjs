@@ -34,7 +34,7 @@
 // milliseconds); it measured 92 s on one busy core.
 //   node test/state-purity.e2e.mjs
 // STATE_PURITY_AS_0_6_56=1 runs it on this checkout's sources with the two mechanisms put back (this checkout with OLD_ID and
-// OLD_DRAG_KEY, which is 0.6.56's behavior in these two keys; it fails, printing for each set how far the second state of a
+// OLD_DRAG_KEY, which is the behavior of these two keys through 0.6.58; it fails, printing for each set how far the second state of a
 // pair is from the cold set: the sizes by class of the defect); STATE_PURITY_DECAY_BTERM=b sets the decaying set's BTERM (its
 // size follows the drag).
 // Control and partial runs: STATE_PURITY_PATCH names a module whose default export maps source file names to text
@@ -88,7 +88,7 @@ const swap = (from, to) => (t) => { const at = t.indexOf(from); if (at < 0 || t.
 // found by the lower node's time alone
 const OLD_ID = swap("static_cast<uint32_t>(std::min(lo.index, hi.index));", "static_cast<uint32_t>(lo.index);");
 const OLD_DRAG_KEY = swap("c.node_t[q] == lo.t && c.hi_t[q] == hi.t &&", "c.node_t[q] == lo.t &&");
-// STATE_PURITY_AS_0_6_56=1: this checkout's sources with both put back (the module of release 0.6.56 in behavior): the test then fails
+// STATE_PURITY_AS_0_6_56=1: this checkout's sources with both put back (this checkout with OLD_ID and OLD_DRAG_KEY: the two keys as they were through 0.6.58): the test then fails
 // and prints, per set, how far a state asked after another on the other side of the epoch is from the cold set
 const PATCH = process.env.STATE_PURITY_AS_0_6_56 ? { "xp_theory.inc": (t) => OLD_DRAG_KEY(OLD_ID(t)) }
   : process.env.STATE_PURITY_PATCH ? (await import(pathToFileURL(path.resolve(process.env.STATE_PURITY_PATCH)).href)).default : {};
@@ -285,12 +285,12 @@ if (names.includes("decaying set")) {
   console.log("decaying set past its crossing: refused with status 4 cold and after other asks, own and thread caches; the states asked around the refusal equal their cold states");
 }
 if (!Object.keys(PATCH).length) {
-  // the control builds: each of the two mechanisms of the fix put back as it was in 0.6.56, one at a time, in a build of this
+  // the control builds: each of the two mechanisms of the fix put back as it was through 0.6.58, one at a time, in a build of this
   // checkout's sources. Each must fail this test where it is the cause: the mirrored pairs (the first bracket's 0.1 and 0.5 on both sides,
   // either order) of the sets named, against the cold references made on the fixed build above
   const controls = [
-    ["the bracket id of 0.6.56 (the lower node's index: one id for the brackets before and after the epoch)", OLD_ID, ["500 km", "half-day e 0.005", "e 0.1", "transfer orbit"]],
-    ["the drag-pass key of 0.6.56 (the lower node's time alone)", OLD_DRAG_KEY, ["Molniya", "transfer orbit"]],
+    ["the bracket id of 0.6.58 (the lower node's index: one id for the brackets before and after the epoch)", OLD_ID, ["500 km", "half-day e 0.005", "e 0.1", "transfer orbit"]],
+    ["the drag-pass key of 0.6.58 (the lower node's time alone)", OLD_DRAG_KEY, ["Molniya", "transfer orbit"]],
   ];
   let controlRuns = 0, flightDiffer = 0;
   for (const [what, transform, setNames] of controls) {
