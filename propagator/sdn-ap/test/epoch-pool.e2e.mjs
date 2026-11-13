@@ -45,6 +45,11 @@ function records() {
         tesseral: k % 31 === 0 ? 70 : k % 2 ? 31 : 12, zonal: 20, slow: k % 19 === 0 });
       if (k % 2 === 0) b = repackOcm(b, t => {
         for (const [key, value] of Object.entries(covTemplate)) if (key.startsWith('COV')) t[key] = value;
+        t.PROVENANCE = covTemplate.PROVENANCE;
+        t.COV_SIZE = 6; t.COV_PARAMETER_KINDS = []; t.COV_PARAMETERS = []; t.COV_REALISM = [];
+        t.COV_UNITS = ['km', 'km', 'km', 'km/s', 'km/s', 'km/s'];
+        t.COVARIANCE_DATA = Array.from({ length: 21 }, (_, j) => [0, 2, 5].includes(j) ? 1e-2 : [9, 14, 20].includes(j) ? 1e-8 : 0);
+        for (const key of Object.keys(t.COV_PROPAGATION)) t.COV_PROPAGATION[key] = 0;
       });
       result.push(prefix(b));
     }
@@ -110,7 +115,7 @@ void sdnap_test_epoch_mode(int32_t mode) {
   sdnap::pool::g_reserve_off = mode == 2;
 }
 `;
-const diagnostic = buildDiagnostic('epoch-pool-poison', extra);
+const diagnostic = arg('--diagnostic', null) ?? buildDiagnostic('epoch-pool-poison', extra);
 const results = [];
 function run(label, file, threads, options = []) {
   const output = execFileSync(process.execPath, [fileURLToPath(import.meta.url), '--case', '--label', label, '--wasm', file,
