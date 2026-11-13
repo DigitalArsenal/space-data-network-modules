@@ -139,7 +139,7 @@ integrator used, and the elements of later times do not follow from integrating 
 
 ### 1.6 Memory *[stack #497]*
 
-The module's own malloc, calloc, realloc and aligned_alloc calls, and its two nothrow news (the theories' tables and
+The module's own malloc, calloc, realloc and aligned_alloc calls, and its counted nothrow news (the theories' tables and
 grids, the set caches, the fit's arrays, the stores), go through one accounting (`sdnap::mem`), which counts the
 allocations that fail and the largest request.
 
@@ -151,6 +151,18 @@ would otherwise have answered. That includes the decay answers of SPEC 16.25:
 - a record whose last pass stopped on a column it could not difference.
 
 The message names how many allocations failed since the method began and the largest.
+
+**AP initialization storage (0.6.53).** Shared sample arrays use counted allocations; each memo is local to one
+initialization and retains the scalar evaluator's operation order. An inclination column is keyed by inclination,
+degree, order, and quadrature size; a changed inclination or degree rebuilds its columns. Against 0.6.50, the measured
+allocator peak for one synthetic 15.2 rev/day, e = 0.001, i = 97.4 degree set with tesseral degree 70, zonal degree 20,
+and slow terms is 53,420 versus 1,340,432 bytes after shared caches are warm. Both builds retain 53,420 bytes for that
+set and release them all. In a fresh instance both peak at 4,011,224 bytes because persistent caches dominate.
+The added 71 by 71 field-magnitude table occupies 45,376 bytes per thread. The largest measured initialization
+stack frame is half_day_terms at 25,936 bytes; ap_init uses 3,664 bytes, against the pool thread's 65,536-byte stack.
+These are individual compiler frame sizes, not a bound on accumulated call depth. The invoking thread builds row
+sets and lazy epoch slots; pool threads fly the prepared row sets.
+
 Through 0.6.47 such a call answered one of five ways:
 - the theory's refusal of the elements (`element-set-refused`);
 - a state not reached (`propagation-failed`);
