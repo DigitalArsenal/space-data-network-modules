@@ -57,6 +57,7 @@ std::set<std::string> products;
 std::vector<uint32_t> work;
 std::set<uint32_t> dropped;
 Bytes pending,chosen,object_weather;
+bool metadata_only=false,retry_fallback=false;Bytes fallback_annotation;
 bool compose_only=false,run_fit=false,complete_scan=true,capacity_limited=false,seed_complete=true,identity_complete=true,index_complete=true,weather_complete=true,removal_guard=false;
 struct Poison {unsigned count=0;std::string source;};
 constexpr size_t state_limit=4096;
@@ -164,8 +165,9 @@ int build_work(){
  diagnostics.add("resident-bytes="+std::to_string(retained)+" retained-triples="+std::to_string(triples));
  work.clear();for(const auto& entry:identities)work.push_back(entry.first);for(const auto& entry:index)if(!identities.count(entry.first))work.push_back(entry.first);
  size_t active=0,removed=0;for(const auto& entry:index){const auto* c=GetSizePrefixedCAT(entry.second.data());if(!c->PRODUCTS()||!c->PRODUCTS()->size())continue;++active;
-  const auto identity=identities.find(entry.first);if(identity==identities.end()||!seeds.count(entry.first)||decayed(identity->second))++removed;}
+  const auto identity=identities.find(entry.first);if(dropped.count(entry.first))continue;const bool known_decay=identity!=identities.end()&&decayed(identity->second);const bool absent=!capacity_limited&&complete_scan&&seed_complete&&identity_complete&&index_complete&&(identity==identities.end()||!seeds.count(entry.first));if(known_decay||absent)++removed;}
  if(active&&double(removed)/active>cfg.max_removal_fraction){removal_guard=true;diagnostics.add("mass-removal guard: proposed="+std::to_string(removed)+" active="+std::to_string(active)+"; raise catalog.max_removal_fraction explicitly","bounds");}
+ if(!index_complete){++diagnostics.deferred;diagnostics.add("index scan incomplete; unselected objects deferred and source retried on the following tick","bounds");}
  if(!complete_scan)++diagnostics.deferred;if(capacity_limited){diagnostics.add("scan partial: read="+std::to_string(seen)+" retained-bytes="+std::to_string(retained)+" catalog.max_records="+std::to_string(cfg.max_records)+" catalog.max_bytes="+std::to_string(cfg.max_bytes)+"; raise the binding setting or partition the catalog; removals disabled","bounds");}
  std::stable_sort(work.begin(),work.end(),[](uint32_t a,uint32_t b){
   auto age=[](uint32_t id){const auto p=index.find(id);return p==index.end()?int64_t(0):instant(text(GetSizePrefixedCAT(p->second.data())->PRODUCTS_AS_OF()));};
@@ -180,7 +182,7 @@ int page(const plugin_input_frame_t* f) {
  const auto* q=GetSizePrefixedQRP(p);const auto& scan=scans[scan_at];
  if(q->KIND()!=qrpKind::Page||q->STATUS()!=qrpStatus::Ok||text(q->SCHEMA_NAME())!=scan.schema+".fbs"||text(q->PROVIDER_ID())!=scan.provider||text(q->SOURCE_NAME())!=scan.name)return stop("Complete read failed or changed its source filter.");
  if(scan.schema=="NEV"&&seen>2*state_limit)return stop("Operational state exceeds bounded read; compact the source before resuming.");
- if(++pages>10000){if(scan.schema=="SPW")weather_complete=false;complete_scan=false;diagnostics.add("source="+scan.name+" exceeds 10000 pages; increase catalog.page_size");cursor.clear();pages=0;++scan_at;return scan_at<scans.size()?query():complete_reads();}
+ if(++pages>10000){if(scan.schema=="SPW")weather_complete=false;if(scan.schema=="NEV")state_complete=false;if(scan.schema=="OMM")seed_complete=false;if(scan.schema=="CAT"){if(scan.name=="catalog-index"&&scan.provider==cfg.provider)index_complete=false;else identity_complete=false;}complete_scan=false;diagnostics.add("source="+scan.name+" exceeds 10000 pages; increase catalog.page_size");cursor.clear();pages=0;++scan_at;return scan_at<scans.size()?query():complete_reads();}
  size_t off=n,count=0;while(off<f->payload_length){if(f->payload_length-off<4)return stop("Truncated page record.");const auto len=size_t(flatbuffers::ReadScalar<uint32_t>(p+off))+4;if(len>f->payload_length-off)return stop("Truncated page record.");
  if(!retain(p+off,len)){
   if(scan.schema=="SPW")weather_complete=false;
@@ -191,7 +193,7 @@ int page(const plugin_input_frame_t* f) {
    NEVT log;log.NODE_ID=cfg.provider;log.GENERATED_AT_MS=now;auto e=std::make_unique<NEVEventT>();e->TIME_MS=now;e->KIND=nevEventKind::Warning;e->SUBJECT=key;e->COUNT=count;e->DETAIL=source;log.EVENTS.push_back(std::move(e));
    flatbuffers::FlatBufferBuilder b;FinishSizePrefixedNEVBuffer(b,NEV::Pack(b,&log));poison_updates.insert(poison_updates.end(),b.GetBufferPointer(),b.GetBufferPointer()+b.GetSize());}
   if(count<3){if(scan.schema=="OMM")seed_complete=false;if(scan.schema=="CAT"&&scan.provider==cfg.identity_provider&&scan.name==cfg.identity_source)identity_complete=false;}
-  if(scan.schema=="CAT"&&scan.provider==cfg.provider&&scan.name=="catalog-index")index_complete=false;
+  if(count<3&&scan.schema=="CAT"&&scan.provider==cfg.provider&&scan.name=="catalog-index")index_complete=false;
  }
  off+=len;++count;}
  if(count!=q->RECORD_COUNT())return stop("Complete-read count mismatch.");
@@ -208,7 +210,7 @@ int compose() {
   flatbuffers::FlatBufferBuilder b;FinishSizePrefixedCATBuffer(b,CAT::Pack(b,fresh.get()));cat.assign(b.GetBufferPointer(),b.GetBufferPointer()+b.GetSize());
  }
  XMTT x;x.INTEGRATE_RECIPE=std::make_unique<XMTIntegrateRecipeT>();x.INTEGRATE_RECIPE->AS_OF_MS=now;
- QRPT q;q.KIND=qrpKind::Page;q.STATUS=qrpStatus::Ok;q.MESSAGE=reason+"; catalog-input="+signature+";";
+ QRPT q;q.KIND=qrpKind::Page;q.STATUS=qrpStatus::Ok;q.MESSAGE=reason+"; catalog-input="+signature+";"+(identity==identities.end()?std::string():" catalog-identity="+digest(identity->second)+";");
  flatbuffers::FlatBufferBuilder b;FinishSizePrefixedXMTBuffer(b,XMT::Pack(b,&x));
  if(push("recipe","XMT",{b.GetBufferPointer(),b.GetBufferPointer()+b.GetSize()})||push("catalog","CAT",cat))return stop("Cannot queue catalog replacement.");
  b.Clear();FinishQRPBuffer(b,QRP::Pack(b,&q));if(push("selection","QRP",{b.GetBufferPointer(),b.GetBufferPointer()+b.GetSize()}))return stop("Cannot queue selection reason.");
@@ -281,7 +283,7 @@ bool attempt_deferred(){const auto id=work[at];
 int next_object() {
  for(;at<work.size()&&done<cfg.batch;++at){
   if(!budget_left()){++diagnostics.deferred;diagnostics.add("object elapsed budget reserve exhausted","bounds");return finish();}object_start=Clock::now();
-  const auto id=work[at];if(id%cfg.partitions!=cfg.partition)continue;compose_only=false;chosen.clear();signature.clear();reason.clear();object_weather.clear();const auto s=seeds.find(id);const auto identity=identities.find(id);const auto old=index.find(id);
+  const auto id=work[at];if(id%cfg.partitions!=cfg.partition)continue;compose_only=false;metadata_only=false;retry_fallback=false;chosen.clear();signature.clear();reason.clear();object_weather.clear();const auto s=seeds.find(id);const auto identity=identities.find(id);const auto old=index.find(id);
   if(dropped.count(id)||(!index_complete&&old==index.end())||(capacity_limited&&(old==index.end()||s==seeds.end()||identity==identities.end()))){++diagnostics.deferred;continue;}
   const bool removed=identity==identities.end()||s==seeds.end()||decayed(identity->second);
   const auto* previous=old==index.end()?nullptr:GetSizePrefixedCAT(old->second.data());
@@ -298,10 +300,14 @@ int next_object() {
   const auto low=iso(s->second.epoch-216000000-86400000).substr(0,10),high=iso(s->second.epoch-216000000+30LL*86400000).substr(0,10);
   if(run_fit)for(auto i=weather.lower_bound(low);i!=weather.end()&&i->first<=high;++i)object_weather.insert(object_weather.end(),i->second.begin(),i->second.end());
   const std::string policy=cfg.recipe+"/"+std::to_string(cfg.nonres_e)+"/"+std::to_string(cfg.res_e)+"/"+std::to_string(cfg.max_rms)+"/"+std::to_string(cfg.max_error);
-  signature=fit_seed_signature(omm)+"/"+(run_fit?weather_signature():std::string("no-weather"))+"/"+ephem::sha256_hex(reinterpret_cast<const uint8_t*>(policy.data()),policy.size())+"/"+digest(identity->second);
+  signature=fit_seed_signature(omm)+"/"+(run_fit?weather_signature():std::string("no-weather"))+"/"+ephem::sha256_hex(reinterpret_cast<const uint8_t*>(policy.data()),policy.size());
   signature+="/"+std::string(expired?"old":future?"future":eligible?"fit":"excluded");
-  if(previous&&previous->PRODUCTS()&&previous->PRODUCTS()->size()==1){const auto* p=previous->PRODUCTS()->Get(0);if(!text(p->RECORD_CID()).empty()&&text(p->SELECTION_REASON()).find("catalog-input="+signature+";")!=std::string::npos&&(!expired||p->KIND()!=catalogProductKind::ApElements)&&
-   !(text(p->SELECTION_REASON()).find("future-seed")!=std::string::npos&&!future))continue;}
+  if(previous&&previous->PRODUCTS()&&previous->PRODUCTS()->size()==1){const auto* p=previous->PRODUCTS()->Get(0);const auto selection=text(p->SELECTION_REASON());
+   if(!text(p->RECORD_CID()).empty()&&selection.find("catalog-input="+signature+";")!=std::string::npos&&selection.find("retry-fit;")==std::string::npos&&(!expired||p->KIND()!=catalogProductKind::ApElements)){
+    if(selection.find("catalog-identity="+digest(identity->second)+";")!=std::string::npos)continue;
+    if(attempt_deferred())continue;metadata_only=true;return save_attempt();
+   }
+  }
   reason=expired?"old-span fallback":future?"future-seed fallback":!eligible?"outside configured AP class":"accepted exact-W fit";run_fit=!expired&&!future&&eligible;
   if(attempt_deferred())continue;
   return save_attempt();
@@ -309,6 +315,11 @@ int next_object() {
  return finish();
 }
 int start_chain() {
+ if(metadata_only){const auto id=work[at];auto fresh=std::unique_ptr<CATT>(GetSizePrefixedCAT(identities.at(id).data())->UnPack());auto old=std::unique_ptr<CATT>(GetSizePrefixedCAT(index.at(id).data())->UnPack());
+  fresh->PRODUCTS=std::move(old->PRODUCTS);fresh->PRODUCTS_AS_OF=iso(now);
+  for(auto& product:fresh->PRODUCTS){auto& r=product->SELECTION_REASON;const auto pos=r.find(" catalog-identity=");if(pos!=std::string::npos)r.erase(pos);r+=" catalog-identity="+digest(identities.at(id))+";";}
+  flatbuffers::FlatBufferBuilder b;FinishSizePrefixedCATBuffer(b,CAT::Pack(b,fresh.get()));return ingest({b.GetBufferPointer(),b.GetBufferPointer()+b.GetSize()},true);
+ }
  if(compose_only)return compose();
  const auto& seed=seeds.at(work[at]);const auto s=seeds.find(work[at]);const auto* omm=GetSizePrefixedOMM(seed.data.data());
   if(!run_fit){phase=Phase::Chain;return push("fallback_seed","OMM",{s->second.data.begin()+4,s->second.data.end()});}
@@ -325,14 +336,14 @@ bool transient_refusal(const std::string& code) {
 }
 int chain() {
  const auto* fallback=input("fallback"),*candidate=input("candidate"),*decision=input("chain_status");if(phase!=Phase::Chain||!decision)return stop("Unexpected chain outcome.");
- flatbuffers::Verifier qv(decision->payload,decision->payload_length);if(!VerifyQRPBuffer(qv))return fail_object("Invalid chain outcome.");const auto* q=GetQRP(decision->payload);if(!fallback)return fail_object("chain: "+text(q->ERROR_CODE())+" "+text(q->MESSAGE()),!transient_refusal(text(q->ERROR_CODE())));
+ flatbuffers::Verifier qv(decision->payload,decision->payload_length);if(!VerifyQRPBuffer(qv))return fail_object("Invalid chain outcome.",true);const auto* q=GetQRP(decision->payload);if(!fallback)return fail_object("chain: "+text(q->ERROR_CODE())+" "+text(q->MESSAGE()),!transient_refusal(text(q->ERROR_CODE())));
  const auto& seed=seeds.at(work[at]);const plugin_input_frame_t* use=fallback;
- if(run_fit&&candidate&&q->STATUS()==qrpStatus::Ok){flatbuffers::Verifier v(candidate->payload,candidate->payload_length);if(!VerifyOCMBuffer(v))return fail_object("Invalid fit record.");const auto* o=GetOCM(candidate->payload);const auto* stats=o->ORBIT_DETERMINATION()?o->ORBIT_DETERMINATION()->FIT_STATISTICS():nullptr;
+ if(run_fit&&candidate&&q->STATUS()==qrpStatus::Ok){flatbuffers::Verifier v(candidate->payload,candidate->payload_length);if(!VerifyOCMBuffer(v))return fail_object("Invalid fit record.",true);const auto* o=GetOCM(candidate->payload);const auto* stats=o->ORBIT_DETERMINATION()?o->ORBIT_DETERMINATION()->FIT_STATISTICS():nullptr;
   if(stats&&stats->FIT_STATES()==2161&&std::isfinite(stats->FIT_RMS_KM())&&stats->FIT_RMS_KM()<=cfg.max_rms&&std::isfinite(stats->FIT_MAX_KM())&&stats->FIT_MAX_KM()<=cfg.max_error&&std::llabs(instant(text(stats->FIT_START()))-(seed.epoch-216000000))<=1&&std::llabs(instant(text(stats->FIT_STOP()))-(seed.epoch+432000000))<=1)use=candidate;else reason="fit-statistics refusal fallback";
  }else if(run_fit){const auto code=text(q->ERROR_CODE());reason="fit refusal fallback: "+code;
-  if(transient_refusal(code))return fail_object("transient chain refusal: "+code);
+  if(transient_refusal(code)){retry_fallback=true;reason+="; retry-fit;";}
  }
- flatbuffers::Verifier ov(use->payload,use->payload_length);if(!VerifyOCMBuffer(ov))return fail_object("Invalid selected orbit.");
+ flatbuffers::Verifier ov(use->payload,use->payload_length);if(!VerifyOCMBuffer(ov))return fail_object("Invalid selected orbit.",true);
  Bytes framed;
  if(use==candidate){
   // Keep the fit's entire original buffer at an eight-byte-aligned offset.
@@ -344,6 +355,7 @@ int chain() {
   auto record=std::unique_ptr<OCMT>(GetOCM(use->payload)->UnPack());if(!record->HEADER)record->HEADER=std::make_unique<HeaderT>();record->HEADER->COMMENT.push_back(reason);
   flatbuffers::FlatBufferBuilder b;FinishSizePrefixedOCMBuffer(b,OCM::Pack(b,record.get()));framed.assign(b.GetBufferPointer(),b.GetBufferPointer()+b.GetSize());
  }
+ if(retry_fallback){fallback_annotation=std::move(framed);return save_attempt(false,"transient fit refusal");}
  if(push("annotate_orbit","OCM",framed)||push("annotate_seed","OMM",seed.data))return fail_object("Cannot queue population annotation.");phase=Phase::Annotate;return 0;
 }
 int storage_failure(const std::string& message){if(++storage_failures>=3)return stop("Storage circuit breaker after three consecutive object failures.");return fail_object(message);}
@@ -365,17 +377,17 @@ int advance() {
  if(input("query_status"))return 0;
  if(input("chain_status"))return chain();
  if(const auto* f=input("annotation_status")){
-  if(phase!=Phase::Annotate)return stop("Unexpected annotation outcome.");flatbuffers::Verifier v(f->payload,f->payload_length);if(!VerifyQRPBuffer(v))return fail_object("Invalid annotation outcome.");const auto* q=GetQRP(f->payload);return fail_object("annotation: "+text(q->ERROR_CODE())+" "+text(q->MESSAGE()));
+  if(phase!=Phase::Annotate)return stop("Unexpected annotation outcome.");flatbuffers::Verifier v(f->payload,f->payload_length);if(!VerifyQRPBuffer(v))return fail_object("Invalid annotation outcome.",true);const auto* q=GetQRP(f->payload);return fail_object("annotation: "+text(q->ERROR_CODE())+" "+text(q->MESSAGE()),!transient_refusal(text(q->ERROR_CODE())));
  }
  if(const auto* f=input("annotated")){
-  if(phase!=Phase::Annotate)return stop("Unexpected annotation.");flatbuffers::Verifier v(f->payload,f->payload_length);if(!VerifySizePrefixedOCMBuffer(v))return fail_object("Invalid annotation.");chosen=bytes(f);const auto* o=GetSizePrefixedOCM(chosen.data());if(o->COV_REALISM())for(const auto* l:*o->COV_REALISM())if(text(l->EVIDENCE()).rfind("no population covariance",0)==0)reason+="; "+text(l->EVIDENCE());if(products.count(cid(chosen)))return compose();
+  if(phase!=Phase::Annotate)return stop("Unexpected annotation.");flatbuffers::Verifier v(f->payload,f->payload_length);if(!VerifySizePrefixedOCMBuffer(v))return fail_object("Invalid annotation.",true);chosen=bytes(f);const auto* o=GetSizePrefixedOCM(chosen.data());if(o->COV_REALISM())for(const auto* l:*o->COV_REALISM())if(text(l->EVIDENCE()).rfind("no population covariance",0)==0)reason+="; "+text(l->EVIDENCE());if(products.count(cid(chosen)))return compose();
   QRPT q;q.KIND=qrpKind::Request;q.SCHEMA_NAME="OCM.fbs";q.PROVIDER_ID=cfg.provider;q.SOURCE_NAME="catalog-products";q.BATCH_ID="catalog-"+digest(chosen);q.LIMIT=1;q.MAX_BYTES=8*1024*1024;
   flatbuffers::FlatBufferBuilder b;FinishQRPBuffer(b,QRP::Pack(b,&q));phase=Phase::Lookup;return push("query","QRP",{b.GetBufferPointer(),b.GetBufferPointer()+b.GetSize()});
  }
  if(const auto* f=input("compose_status")){
   if(phase!=Phase::Compose)return stop("Unexpected composition outcome.");flatbuffers::Verifier v(f->payload,f->payload_length);
-  if(!VerifyQRPBuffer(v))return fail_object("Invalid composition outcome.");const auto* q=GetQRP(f->payload);
-  if(q->STATUS()!=qrpStatus::Ok)return fail_object("compose: "+text(q->ERROR_CODE())+" "+text(q->MESSAGE()));
+  if(!VerifyQRPBuffer(v))return fail_object("Invalid composition outcome.",true);const auto* q=GetQRP(f->payload);
+  if(q->STATUS()!=qrpStatus::Ok)return fail_object("compose: "+text(q->ERROR_CODE())+" "+text(q->MESSAGE()),!transient_refusal(text(q->ERROR_CODE())));
  }
  if(const auto* f=input("replacement")){if(phase!=Phase::Compose)return stop("Unexpected index replacement.");return ingest(bytes(f),true);}
  if(const auto* f=input("stored")){
@@ -384,11 +396,12 @@ int advance() {
    if(!text(r->REFUSED()).empty()||text(r->SCHEMA())!="NEV.fbs"||text(r->PROVIDER_ID())!=cfg.provider||text(r->SOURCE_NAME())!=state_source()||text(r->BATCH_ID())!=pending_batch||(phase!=Phase::PoisonStored&&r->INSERTED()>1))return stop("Attempt storage refused; object processing stopped.");
    if(phase==Phase::PoisonStored)return build_work();
    if(phase==Phase::SuccessStored){++at;return next_object();}
-   if(phase==Phase::AttemptStored)return start_chain();++at;return next_object();
+   if(phase==Phase::AttemptStored)return start_chain();
+   if(retry_fallback&&!fallback_annotation.empty()){auto framed=std::move(fallback_annotation);fallback_annotation.clear();if(push("annotate_orbit","OCM",framed)||push("annotate_seed","OMM",seeds.at(work[at]).data))return stop("Cannot queue retry fallback annotation.");phase=Phase::Annotate;return 0;}++at;return next_object();
   }
   if((phase!=Phase::ProductStored&&phase!=Phase::IndexStored)||!text(r->REFUSED()).empty()||text(r->SCHEMA())!=pending_schema+".fbs"||text(r->PROVIDER_ID())!=cfg.provider||text(r->BATCH_ID())!=pending_batch||text(r->SOURCE_NAME())!=(phase==Phase::ProductStored?"catalog-products":"catalog-index")||r->INSERTED()>1)return storage_failure("Storage refused or did not acknowledge the complete deterministic batch.");
   if(phase==Phase::ProductStored){products.insert(cid(chosen));return compose();}
-  allowance=std::max(allowance,2*std::chrono::duration<double,std::milli>(Clock::now()-object_start).count());index[work[at]]=pending;storage_failures=0;++done;attempts.erase(work[at]);return persist_events(Phase::SuccessStored);
+  allowance=std::max(allowance,2*std::chrono::duration<double,std::milli>(Clock::now()-object_start).count());index[work[at]]=pending;storage_failures=0;++done;if(retry_fallback){++at;return next_object();}attempts.erase(work[at]);return persist_events(Phase::SuccessStored);
  }
  return stop("Incomplete controller response.");
 }
