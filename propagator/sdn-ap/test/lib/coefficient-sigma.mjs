@@ -45,6 +45,9 @@ inline void coefficient_sigma_case(double* out) {
 `;
 export function buildSigma(){
  return buildDiagnostic('coefficient-sigma',String.raw`
+SDNAP_EXPORT("sdnap_test_time_tables_ready") int sdnap_test_time_tables_ready() {
+ return ::NDAT > 0 && ::changes != nullptr;
+}
 SDNAP_EXPORT("sdnap_test_sigma") int sdnap_test_sigma(int c,int order,int warm,int threaded,double* out) {
  using namespace sdnap::pool;
  test_case=c;test_order=order;test_warm=warm;

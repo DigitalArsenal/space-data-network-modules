@@ -15,7 +15,10 @@ for(const cell of [0,1])for(let c=0;c<labels.length;c++){
  for(const threads of [1,4])for(let order=0;order<3;order++)for(const warm of [0,1]){
   const h=await createStandaloneHarness('browser',file,{surface:'direct',maxThreads:threads,enableBrowserWasiThreads:threads>1});
   const x=h.instance.exports,p=x.sdnap_alloc(4*32*8);
-  if(threads>1)assert.equal(x.sdnap_threads(threads),threads);
+  if(threads>1){
+   assert.equal(x.sdnap_threads(threads),threads);
+   assert.equal(x.sdnap_test_time_tables_ready(),1,'shared time tables must be ready before the first batch');
+  }
   assert.equal(x.sdnap_test_sigma(c+6*cell,order,warm,threads>1?1:0,p),0);
   const rows=Array.from({length:threads>1?4:1},(_,i)=>Array.from(new Float64Array(h.memory.buffer,p+i*32*8,32)));
   for(const row of rows){
