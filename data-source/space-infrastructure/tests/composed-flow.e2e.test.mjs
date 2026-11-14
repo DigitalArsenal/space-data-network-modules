@@ -67,6 +67,9 @@ async function runFlow(wasmSource) {
         case "http.request": {
           const url = Buffer.from(call.raw.url).toString();
           assert.equal(call.params.METHOD, "GET");
+          assert.match(Buffer.from(call.raw.headers ?? []).toString(),
+            /(?:^|\r\n)User-Agent: SpaceDataNetwork\/1\.1 \(https:\/\/github\.com\/DigitalArsenal\/space-data-network-modules\)/,
+            "public-source requests identify the retriever, as Wikimedia requires");
           assert.ok(Object.hasOwn(cassette, url), `uncached HTTP request: ${url}`);
           assert.ok(!urls.includes(url), `repeated HTTP request: ${url}`);
           urls.push(url);

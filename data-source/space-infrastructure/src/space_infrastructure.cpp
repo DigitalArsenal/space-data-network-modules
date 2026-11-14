@@ -837,6 +837,7 @@ extern "C" int plan_sources(void) {
     request.URL = url;
     request.TIMEOUT_MS = 90000;
     request.MAX_BYTES = kMaxBody;
+    sdn_source_http::identify(request);
     flatbuffers::FlatBufferBuilder b(512 + url.size());
     R::FinishHttpRequestBuffer(b, R::HttpRequest::Pack(b, &request));
     if (push("request", "HttpRequest.fbs", "HREQ", "HttpRequest", b.GetBufferPointer(), b.GetSize()) < 0) return fail("output-failed", "A request could not be written.");
