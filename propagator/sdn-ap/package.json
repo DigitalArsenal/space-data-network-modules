@@ -24,6 +24,7 @@
     "bench": "node test/bench.mjs"
   },
   "devDependencies": {
+    "esbuild": "0.28.0",
     "flatc-wasm": "26.1.38",
     "space-data-module-sdk": "0.9.14",
     "spacedatastandards.org": "1.279.0"
