@@ -166,6 +166,15 @@ extern "C" int annotate_population() {
   if (!orbit->MEAN_ELEMENTS() || !orbit->METADATA() || !orbit->METADATA()->NORAD_CAT_ID() ||
       orbit->METADATA()->NORAD_CAT_ID() != omm->NORAD_CAT_ID())
     return fail("seed-mismatch", "The seed and orbit must identify the same object.");
+  Instant seed_epoch,record_epoch;bool epoch_matches=false;
+  if(parse_instant(omm->EPOCH(),&seed_epoch)){
+    if(orbit->MEAN_ELEMENTS()->MEAN_ELEMENT_THEORY()==meanElementSource::AP){
+      const auto* stats=orbit->ORBIT_DETERMINATION()?orbit->ORBIT_DETERMINATION()->FIT_STATISTICS():nullptr;Instant start,stop;
+      epoch_matches=stats&&parse_instant(stats->FIT_START(),&start)&&parse_instant(stats->FIT_STOP(),&stop)&&
+        std::abs(seconds_between(seed_epoch,start)+216000)<.001&&std::abs(seconds_between(seed_epoch,stop)-432000)<.001;
+    }else epoch_matches=parse_instant(orbit->MEAN_ELEMENTS()->EPOCH(),&record_epoch)&&std::abs(seconds_between(seed_epoch,record_epoch))<.001;
+  }
+  if(!epoch_matches)return fail("seed-epoch-mismatch","The seed epoch must match the ingested epoch or the exact-W fit interval.");
   if (orbit->COVARIANCE_BLOCKS()) for (const auto* block : *orbit->COVARIANCE_BLOCKS())
     if (block->COV_ID() && block->COV_ID()->str().rfind("population/", 0) == 0)
       return fail("already-annotated", "Annotate the original fitted or fallback record once.");
@@ -203,14 +212,14 @@ extern "C" int annotate_population() {
       for (int c = 0; c <= a; ++c, ++k) rtn[6*a+c] = rtn[6*c+a] = covariance[k] * factor;
     axes_of(r, v, axes); rotate6(axes, rtn, inertial, false);
     if (!std::all_of(inertial, inertial + 36, [](double x) { return std::isfinite(x); }))
-      return fail("invalid-models", "The population matrix is not finite.");
+      { uncovered="NON_FINITE: population matrix is not finite";break; }
     sp::Label label;
     label.rule = model.pooled ? 4 : 3; label.method = model.pooled ? "e14-s3-kc-pooled" : "e14-s3-kc";
     label.model_id = model.id; label.regime = options.regimes[anchor.regime].id;
     label.age_days = age; label.age_index = bin; label.calibration = "UNCALIBRATED";
     sp::population_verdict(model, anchor.regime, bin, &label);
     label.calibration = "UNCALIBRATED";
-    label.evidence = model.evidence + " | population prior; not calibrated for this object";
+    label.evidence = model.evidence + " | SGP4 seed population prior; RTN rotated with the seed SGP4 state; not AP-fit error; not calibrated for this object";
     auto block = std::make_unique<OCMCovarianceBlockT>();
     block->COV_ID = "population/" + std::to_string(i);
     block->COV_BASIS = "EMPIRICAL"; block->COV_BASIS_ID = model.id;

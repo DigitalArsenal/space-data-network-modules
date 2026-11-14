@@ -105,6 +105,7 @@ test('malformed, mismatched, duplicate and repeated annotation inputs are refuse
   for(const original of [products[0].subarray(0,20),Buffer.concat([products[0],products[0]])])assert.notEqual((await annotate(original)).statusCode,0);
   const other=Object.assign(OMM.getRootAsOMM(new fb.ByteBuffer(ommBytes)).unpack(),{NORAD_CAT_ID:999998});
   assert.equal((await annotate(products[0],pack(other,'OMM'))).errorCode,'seed-mismatch');
+  const wrongEpoch={...seed,EPOCH:'2026-01-01T00:00:00'};for(const product of products)assert.equal((await annotate(product,pack(Object.assign(OMM.getRootAsOMM(new fb.ByteBuffer(ommBytes)).unpack(),wrongEpoch),'OMM'))).errorCode,'seed-epoch-mismatch');
   assert.notEqual((await annotate(products[0],seedBytes,[frame('ocm','OCM',products[0])])).statusCode,0);
   assert.equal((await annotate(await accepted(products[0]))).errorCode,'already-annotated');
 });
