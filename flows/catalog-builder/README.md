@@ -46,7 +46,7 @@ relabeled `old-span fallback` when its seed expires. Deterministic refusals
 wait for input changes. A backward clock defers affected selections before
 fitting or storage, with one clock diagnostic per tick.
 
-Before dispatch, the controller stores and awaits acknowledgment of an `$NEV`
+Before numerical dispatch or removal composition, the controller stores and awaits acknowledgment of an `$NEV`
 operational event in `catalog-attempts`. Its subject identifies the object,
 its detail identifies the input signature and outcome, and its count records
 attempts for those inputs. These events are separate from product/index
@@ -232,3 +232,29 @@ The final-by-default rule covers every returned code, including dynamic date
 and parameter suffixes. A resource refusal never becomes a stored physical
 refusal. A repeated deterministic fallback with the same signature emits no
 product or index write.
+
+### Refusal code inventory
+
+The ingestion/flight/fit helper inventory below is final for identical inputs,
+except the four resource/delivery codes identified above. The helpers also
+guard cases excluded by exact W; those guards retain the same classification.
+
+- `abi.inc`: `elements-other-theory`.
+- `constants.inc`: `out-of-memory`.
+- `pcf.inc`: `configuration`, `configuration-missing`, `configuration-refused`, `invalid-configuration`.
+- `ingest_omm.inc`: `invalid-omm`, `missing-omm`, `out-of-memory`, `output-failed`, `unsupported-center`.
+- `propagate.inc`: `element-set-refused`, `frame-failed`, `output-failed`, `propagation-failed`.
+- `fit_oem.inc`: `fit-failed`, `fit-implausible`, `invalid-oem`, `invalid-pvn`, `missing-oem`, `output-failed`, `provenance-count`, `reference-frame-conflict`, `reference-frame-undeclared`, `too-few-states`, `unsupported-center`, `unsupported-frame`, `unsupported-time-system`, `weather-rows-short`.
+- `fit.inc`: `fit-at-branch-limit`.
+- `ocm.inc`: `atmosphere-unsupported`, `atmosphere-weather-mismatch`, `cov-parameter-order`, `cov-parameter-unknown`, `cov-parameter-unnamed`, `cov-size`, `cov-units`, `dcl-not-flown`, `density-correction-atmosphere-mismatch`, `density-correction-cid-missing`, `density-correction-missing`, `density-correction-unselected`, `elements-other-theory`, `frame-pairing-invalid`, `gravity-model-mismatch`, `grid-not-flown`, `invalid-density-correction`, `invalid-ocm`, `mean-element-theory-unspecified`, `mean-elements-missing`, `missing-ocm`, `omm-not-flown`, `orb-averaging-mismatch`, `radiation-model-mismatch`, `radiation-model-superseded`, `solid-tides-unsupported`, `spw-not-flown`, `unsupported-center`, `weather-rows-invalid`, `weather-rows-missing`, `weather-rows-short`, `weather-rows-unselected`, `weather-source-unspecified`.
+- `oem.inc`: `bad-grid`, `output-failed`, `too-many-states`.
+- `atmosphere_inputs.inc`: `density-correction-missing`, `density-correction-unselected`, `invalid-density-correction`, `weather-rows-invalid`, `weather-rows-missing`, `weather-rows-unselected`.
+- `carried.inc`: `carried-basis-unsupported`, `carried-gap`, `carried-records-missing`, `carried-segment-invalid`, `carried-state-data`, `carried-type-mismatch`, `carried-type-unsupported`, `carried-velocity-coefficients`, `carry-not-covered`, `carry-order`, `carry-states-sparse`, `carry-tolerance`, `frame-failed`, `frame-pairing-invalid`.
+
+Dynamic final codes are `user-defined-parameters:<count>`,
+`decayed:<epoch>`, `decayed-in-arc:<epoch>`,
+`parameter-not-modeled:<parameter>`, `theory-not-flown:<theory>`, and the
+`weather-rows-invalid:<day>` / `weather-rows-short:<day>` variants. Empty or
+unrecognized codes are final contract failures. The inventory and the
+final-by-default classifier prevent a new deterministic code from silently
+becoming a periodic product rewrite.

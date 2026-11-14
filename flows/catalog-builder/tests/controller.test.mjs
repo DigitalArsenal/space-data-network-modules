@@ -166,6 +166,7 @@ try{
   records('CAT.fbs','synthetic','identities').push(...objectIds.map(id=>pack(Object.assign(new C.CATT(),{NORAD_CAT_ID:id,OBJECT_NAME:'SYNTHETIC'}),'CAT')));
   records('OMM.fbs','synthetic','primary').push(...objectIds.map(id=>seed(id)));records('SPW.fbs','synthetic','weather').push(...split(Buffer.from(weather)));control.destroy();control=await createControl();};
  await reset();await tick(now);trapComposeObject=Math.min(...ids);store.set(key('CAT.fbs','synthetic','identities'),records('CAT.fbs','synthetic','identities').filter(b=>C.CAT.getSizePrefixedRootAsCAT(new fb.ByteBuffer(b)).NORAD_CAT_ID()!==trapComposeObject));
+ const newerSelection=current().get(Math.max(...ids));newerSelection.PRODUCTS_AS_OF=new Date(now+1).toISOString();records('CAT.fbs','synthetic-node','catalog-index').push(pack(newerSelection,'CAT'));
  records('OMM.fbs','synthetic','primary').push(seed(Math.max(...ids),.31));await assert.rejects(()=>tick(now+1000),WebAssembly.RuntimeError);trapComposeObject=undefined;control.destroy();control=await createControl();
  const removalTrap=await tick(now+600000);assert.equal(removalTrap.indexes,1,'a trapped removal does not block a later changed object');assert.match(removalTrap.notice.reason,/in-progress attempt deferred/);
  assert.equal((await tick(now+1201001)).indexes,1,'removal resumes after durable backoff');
