@@ -1880,6 +1880,8 @@ struct RateContext {
   XpSat* wide_anchor;                 ///< the nominal set whose grids this copy reads (GridShareScope); nullptr: its own
 };
 
+static_assert(sizeof(RateContext) == 344, "The coefficient form occupies existing context padding");
+
 inline uint64_t hd_table_id(const RateContext& ctx) { return (ctx.shared_mask & 1) ? ctx.cov_anchor_id : ctx.ctx_id; }
 inline uint64_t sh_table_id(const RateContext& ctx) { return (ctx.shared_mask & 8) ? ctx.cov_anchor_id : ctx.ctx_id; }
 inline uint64_t zt_table_id(const RateContext& ctx) { return (ctx.shared_mask & 16) ? ctx.cov_anchor_id : ctx.ctx_id; }
@@ -6174,7 +6176,9 @@ inline int32_t xp_init(const Elements& e, XpSat& s) {
   }
   const double n0 = e.xno;  // Brouwer (SPEC 1.1)
   s.ctx.selected_terms = tess::active();
-  s.ctx.continuity_form = tess::continuity_form(n0, e.eo, e.bterm, s.ctx.selected_terms.tesseral > 0 || s.ctx.selected_terms.zonal > 0);
+  const XpSat* nominal = cov_bank_anchor();
+  s.ctx.continuity_form = nominal != nullptr && nominal != &s ? nominal->ctx.continuity_form
+      : tess::continuity_form(n0, e.eo, e.bterm, s.ctx.selected_terms.tesseral > 0 || s.ctx.selected_terms.zonal > 0);
   // SPEC 1.6 (stack #600): the thread's caches the set's theory reads (AP's terms selected: all nine; otherwise the step
   // cache), before its first table; a thread that cannot make them refuses the set (the failure counted: a method refuses as
   // out-of-memory, an epoch-store slot initializes again at its next state)
@@ -6185,7 +6189,6 @@ inline int32_t xp_init(const Elements& e, XpSat& s) {
   // the branch, once, from the epoch elements (SPEC 6 Bands, 16.7); a covariance's moved set (inside its nominal's
   // CovBankScope) takes its nominal's, so the columns difference one branch's theory (SPEC 12.3); a fit's trial set inside
   // a BranchScope takes the pinned one
-  const XpSat* nominal = cov_bank_anchor();
   s.ctx.branch = nominal != nullptr && nominal != &s ? nominal->ctx.branch
                  : g_branch_pin != nullptr          ? *g_branch_pin
                                                     : branch_of(n0, e.eo, s.ctx.selected_terms.tesseral > 0 || s.ctx.selected_terms.zonal > 0);

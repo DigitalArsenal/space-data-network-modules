@@ -96,7 +96,7 @@ kpa = sp_cell_rel(a_state, 2e-6, a_part);
 
   }
   const uint64_t aid = anchored ? g_sp_anchor.id : 0;
-  const bool full = table_id == 0 || mc.table_id != table_id || mc.F != F || mc.degree != degree || mc.f0 != F[0] ||
+  const bool full = table_id == 0 || mc.coefficient_form != SDNAP_COEFFICIENT_FORM || mc.table_id != table_id || mc.F != F || mc.degree != degree || mc.f0 != F[0] ||
                     mc.f1 != F[1] || !mc.keys_valid || mc.anchor_id != aid || kfa != mc.kf_a || kfe != mc.kf_e;
 
   mc.on_bracket = anchored;
@@ -152,6 +152,7 @@ if (md != nullptr) {
     mc.F = F;
     mc.table_id = table_id;
     mc.keys_valid = true;
+    mc.coefficient_form = SDNAP_COEFFICIENT_FORM;
     mc.anchor_id = aid;
     mc.kf_a = kfa;
     mc.kf_e = kfe;
@@ -264,7 +265,7 @@ if (md != nullptr) {
 
 [[gnu::always_inline]] inline bool md_keys_hold(const MdailyEvalCache& mc, const float* F, int degree, double t, uint64_t table_id) {
   const SpAnchor& an = g_sp_anchor;
-  if (!mc.on_bracket || !mc.keys_valid || table_id == 0 || mc.table_id != table_id || mc.F != F || mc.degree != degree ||
+  if (mc.coefficient_form != SDNAP_COEFFICIENT_FORM || !mc.on_bracket || !mc.keys_valid || table_id == 0 || mc.table_id != table_id || mc.F != F || mc.degree != degree ||
       mc.f0 != F[0] || mc.f1 != F[1] || !an.valid || an.h == 0.0 || an.id != mc.anchor_id || an.tlo != mc.kb_tlo ||
       an.h != mc.kb_h)
     return false;
@@ -945,7 +946,7 @@ kaa = sp_cell_rel(a, 1.8e-6, a_ae);
 
     if (!derivative && sc.n_pe_blks > 0) kpe = sp_cell_abs(e, sc.de_pe_thresh, e_pe);
   }
-  const bool fresh = !sc.keys_valid || sc.anchor_id != aid;
+  const bool fresh = !sc.keys_valid || sc.coefficient_form != SDNAP_COEFFICIENT_FORM || sc.anchor_id != aid;
   const bool base = fresh || kba != sc.kb_a || kbe != sc.kb_e || kbc != sc.kb_c;
   bool ae = base || kaa != sc.kae_a || kae != sc.kae_e;
   const bool pe = ae || kpe != sc.kpe;
@@ -1027,6 +1028,7 @@ res = pe || kra != sc.kr_a || krc != sc.kr_c || kre != sc.kr_e;
   sc.kae_e = kae;
   sc.kpe = kpe;
   sc.keys_valid = true;
+  sc.coefficient_form = SDNAP_COEFFICIENT_FORM;
   note_keys();
 }
 
@@ -1036,7 +1038,7 @@ res = pe || kra != sc.kr_a || krc != sc.kr_c || kre != sc.kr_e;
   if (sc.n_res_blks > 0) return false;
 #endif
   const SpAnchor& an = g_sp_anchor;
-  if (!sc.on_bracket || !sc.keys_valid || !an.valid || an.h == 0.0 || an.id != sc.anchor_id || an.tlo != sc.kb_tlo ||
+  if (sc.coefficient_form != SDNAP_COEFFICIENT_FORM || !sc.on_bracket || !sc.keys_valid || !an.valid || an.h == 0.0 || an.id != sc.anchor_id || an.tlo != sc.kb_tlo ||
       an.h != sc.kb_h)
     return false;
   const double q = (t - an.tlo) / an.h;

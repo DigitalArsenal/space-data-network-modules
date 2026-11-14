@@ -517,6 +517,7 @@ struct MdailyEvalCache {
   float f0 = -1e30f, f1 = -1e30f;
   double a = -1.0, a_bake = -1.0, e2 = -1.0;
   bool keys_valid = false;
+  uint8_t coefficient_form = 0;
   uint64_t anchor_id = 0;                ///< the bracket the bakes were made on (0: state cells)
   int64_t kf_a = 0, kf_e = 0, kp_a = 0;  ///< the points of the full bake (a, e^2) and of the a bake (mdaily_sync_cache)
   /// keys made on a bracket: its first time and length and the parts of each bake (md_keys_hold); false: cell keys
@@ -1253,6 +1254,7 @@ struct SpEvalCache {
   double a_res = -1.0, e_res = -1.0, ci_res = -10.0;
   // the cells the current bakes were made at (sp_sync): base (a, e^2, cos i), ae (a, e), pe (e), res (a, cos i, e^2)
   bool keys_valid = false;
+  uint8_t coefficient_form = 0;
   uint64_t anchor_id = 0;  ///< the bracket the bakes were made on (0: state cells)
   int64_t kb_a = 0, kb_e = 0, kb_c = 0, kae_a = 0, kae_e = 0, kpe = 0, kr_a = 0, kr_c = 0, kr_e = 0;
   /// keys made on a bracket: its first time and length and the parts of each level (sp_keys_hold; n_pe 0: no pe point
