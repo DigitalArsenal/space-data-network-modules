@@ -1,7 +1,7 @@
 # Catalog reconciliation flow
 
 Population annotation increases record size. Fitting consumes CPU; durable
-attempt events add writes before processing; publication adds retained SDS
+attempt snapshots add writes before processing; publication adds retained SDS
 copies. Instance replacement adds startup cost. Sustained throughput and
 compression of this configuration are unmeasured. [Resident capacity](PERFORMANCE.md)
 describes a synthetic memory fixture, not processing or publication capacity.
@@ -72,9 +72,11 @@ no-batch result. `Info`, `Skipped`, `Missing` and `Expired` without a batch do
 not receive that exemption and can widen retrieval backoff. One deferred
 object therefore does not slow an otherwise healthy timer.
 
-Product lookup and storage refusals are isolated per object. Three consecutive
-storage failures stop dispatch for the tick; a completed selection resets
-that count. Annotation/composer refusals return typed outcomes. Transport
+Product lookup refusals are isolated per object. Three consecutive lookup
+failures stop dispatch for the tick; a staged selection resets that count.
+A refused product or index generation batch stops the invocation and preserves
+the previous committed selection. Durable attempts retain prepared batch references
+for recovery after backoff. Annotation/composer refusals return typed outcomes. Transport
 corruption and failed source-page queries stop the scan.
 
 A matching committed selection avoids any OCM read. After recomputation,
@@ -436,12 +438,13 @@ the schema-wide anonymous-read boundary.
 
 ## Build and validation
 
+The bundled exact-W chain uses `sdn-ap` 0.6.58 with chain adapter 0.1.0.
 Build the unsigned `sdn-ap` generated translation unit, then from this directory:
 
 ```sh
 SDM_MODULE_UNSIGNED_BUILD=1 node build.mjs
 SDM_MODULE_UNSIGNED_BUILD=1 node build-flow.mjs
-node --test tests/controller.test.mjs tests/sdk_compat.test.mjs
+node --test tests/controller.test.mjs tests/production.test.mjs tests/sdk_compat.test.mjs
 ```
 
 `CATALOG_BUILD_DIR` selects chain output; `CATALOG_FLOW_BUILD_DIR` selects
