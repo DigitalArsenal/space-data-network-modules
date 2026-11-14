@@ -193,7 +193,11 @@ bool retain(const uint8_t* p,size_t n) {
     retained=retained-(size?size+256:0)+one.size()+256;
     const auto batch_at=detail.find("product-batch="),batch_end=detail.find(';',batch_at);
     const auto batch=batch_at==std::string::npos||batch_end==std::string::npos?std::string():detail.substr(batch_at+14,batch_end-batch_at-14);
-    attempts[id]={std::move(one),detail.substr(first+6,last-first-6),unsigned(std::min<uint64_t>(e->COUNT(),8)),e->TIME_MS(),detail.rfind("final ",0)==0,seq,batch};attempts.at(id).read_bytes=attempts.at(id).data.size()+256;trim_state();
+    attempts[id]={std::move(one),detail.substr(first+6,last-first-6),unsigned(std::min<uint64_t>(e->COUNT(),8)),e->TIME_MS(),detail.rfind("final ",0)==0,seq,batch};attempts.at(id).read_bytes=attempts.at(id).data.size()+256;
+    const bool suspect=detail.find("instance-interrupted;")!=std::string::npos;
+    if(id==interruption_suspect&&!suspect)interruption_suspect=0;
+    if(suspect&&(!interruption_suspect||!attempts.count(interruption_suspect)||seq>=attempts.at(interruption_suspect).sequence))interruption_suspect=id;
+    trim_state();
    }
   }
  } else if(scan.schema=="OMM") {
