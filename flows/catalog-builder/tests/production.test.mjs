@@ -74,3 +74,6 @@ test('configured AP class follows eccentricity limits and every resonance-band b
   }finally{h.destroy();}
  }
 });
+
+import {verifyPageConfig} from './page-config.mjs';
+test('durable page bounds accept typed configuration and reject invalid settings',verifyPageConfig);
