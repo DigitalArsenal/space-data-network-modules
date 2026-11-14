@@ -7,6 +7,7 @@ import {createStandaloneHarness} from 'space-data-module-sdk/testing/isomorphic'
 import {OEM} from 'spacedatastandards.org/lib/js/OEM/OEM.js';
 import {QRP} from 'spacedatastandards.org/lib/js/QRP/QRP.js';
 import {qrpKind} from 'spacedatastandards.org/lib/js/QRP/qrpKind.js';
+import {qrpStatus} from 'spacedatastandards.org/lib/js/QRP/qrpStatus.js';
 import {frame, pack, ommBytes, flightPcf, fitPcf, weather} from './fixtures.mjs';
 
 const root = fileURLToPath(new URL('..', import.meta.url));
@@ -38,6 +39,7 @@ test('exact-W adapter preserves both direct propagator records byte for byte', a
     const got = await a.invoke({methodId: 'run_chain', inputs: inputs(true)});
     assert.equal(got.statusCode, 0, got.errorMessage);
     assert.equal(outcome(got).KIND, qrpKind.Page, outcome(got).MESSAGE);
+    assert.equal(outcome(got).STATUS, qrpStatus.Ok);
     assert.deepEqual(payload(got, 'elements'), payload(expected, 'elements'));
     assert.deepEqual(payload(got, 'fallback'), sgp4);
   } finally { a.destroy(); b.destroy(); }
@@ -49,6 +51,7 @@ test('refused fit emits a named outcome and SGP4 fallback, with no partial AP ou
     const refused = await h.invoke({methodId: 'run_chain', inputs: inputs(false)});
     assert.equal(refused.statusCode, 0, refused.errorMessage);
     assert.equal(outcome(refused).KIND, qrpKind.Error);
+    assert.equal(outcome(refused).STATUS, qrpStatus.Error);
     assert.match(outcome(refused).ERROR_CODE, /weather/);
     assert.ok(payload(refused, 'fallback')?.length);
     assert.equal(payload(refused, 'elements'), undefined);

@@ -9,5 +9,6 @@
   "dependencies": {
     "space-data-module-sdk": "0.9.14",
     "spacedatastandards.org": "1.279.0"
-  }
+  },
+  "version": "0.0.1"
 }

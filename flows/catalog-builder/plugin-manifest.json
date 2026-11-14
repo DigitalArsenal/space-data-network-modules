@@ -1,7 +1,7 @@
 {
   "pluginId": "com.digitalarsenal.flows.catalog-builder.chain",
   "name": "Catalog exact-W chain",
-  "version": "0.6.58",
+  "version": "0.0.1",
   "description": "Runs the unchanged propagator methods with full usable bounds and reports a typed outcome beside the SGP4 fallback.",
   "pluginFamily": "propagator",
   "capabilities": [],
@@ -163,7 +163,7 @@
   "schemasUsed": [],
   "buildArtifacts": [
     {
-      "artifactId": "sdn-ap-propagator-isomorphic",
+      "artifactId": "catalog-chain-isomorphic",
       "kind": "wasm",
       "path": "dist/isomorphic/module.wasm",
       "target": "browser,wasmedge"

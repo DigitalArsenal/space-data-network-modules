@@ -13,6 +13,7 @@ static int emit(const char* port, const char* code, const std::vector<uint8_t>& 
 static int finish(int status, const std::vector<uint8_t>& fallback, const std::vector<uint8_t>& candidate = {}) {
   catalog_wire::QRPT outcome;
   outcome.KIND = status == 0 ? catalog_wire::qrpKind::Page : catalog_wire::qrpKind::Error;
+  outcome.STATUS = status == 0 ? catalog_wire::qrpStatus::Ok : catalog_wire::qrpStatus::Error;
   outcome.SCHEMA_NAME = "OCM.fbs";
   outcome.ERROR_CODE = error_code;
   outcome.MESSAGE = error_message;
