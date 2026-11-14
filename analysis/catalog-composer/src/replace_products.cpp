@@ -2,6 +2,12 @@
 // The caller stores the product before publishing this index record.
 extern "C" int replace_products() {
   using namespace integrate;
+  // A rejected replacement is a typed outcome so a flow can continue.
+  const auto refuse=[](const char* code,const std::string& message){
+    QRPT q;q.KIND=qrpKind::Error;q.STATUS=qrpStatus::Error;q.ERROR_CODE=code;q.MESSAGE=message;
+    flatbuffers::FlatBufferBuilder b;FinishQRPBuffer(b,QRP::Pack(b,&q));
+    return plugin_push_output_ex("decision","QRP.fbs","$QRP",PLUGIN_PAYLOAD_WIRE_FORMAT_FLATBUFFER,"QRP",0,0,b.GetBufferPointer(),b.GetSize())<0?500:0;
+  };
   const plugin_input_frame_t *catalog = nullptr, *product = nullptr, *decision = nullptr, *recipe_frame = nullptr;
   for (uint32_t i = 0; i < plugin_get_input_count(); ++i) {
     const auto* f = plugin_get_input_frame(i);

@@ -297,6 +297,15 @@
       "toPortId": "notice",
       "backpressurePolicy": "queue",
       "queueDepth": 2
+    },
+    {
+      "edgeId": "composer-decision-control-compose_status",
+      "fromNodeId": "composer",
+      "fromPortId": "decision",
+      "toNodeId": "control",
+      "toPortId": "compose_status",
+      "backpressurePolicy": "queue",
+      "queueDepth": 2
     }
   ],
   "triggers": [

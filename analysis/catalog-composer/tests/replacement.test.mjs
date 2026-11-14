@@ -43,8 +43,8 @@ test('removal emits an explicit empty product vector with an as-of time; replay 
  assert.deepEqual(output(await replace(first,null,now+1000)),removed);
 });
 
-test('older timestamps, mismatched objects, concatenated records, and repeated inputs fail without output',async()=>{
+test('older timestamps, mismatched objects, concatenated records, and repeated inputs emit a typed refusal without a catalog output',async()=>{
  const first=output(await replace(catalog,product(O.meanElementSource.AP)));
  const cases=[await replace(first,null,now-1),await replace(catalog,product(O.meanElementSource.AP,999998)),await replace(Buffer.concat([catalog,catalog]),null),await replace(catalog,null,now,[frame('catalog','CAT',catalog)])];
- for(const r of cases){assert.notEqual(r.statusCode,0);assert.equal(r.outputs.length,0);}
+ for(const r of cases){assert.equal(r.statusCode,0);assert.equal(r.outputs.length,1);assert.equal(r.outputs[0].portId,'decision');const q=Q.QRP.getRootAsQRP(new fb.ByteBuffer(r.outputs[0].payload));assert.equal(q.STATUS(),Q.qrpStatus.Error);assert.equal(q.ERROR_CODE(),'invalid-replacement');}
 });

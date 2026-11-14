@@ -54,13 +54,28 @@ std::set<std::string> products;
 std::vector<uint32_t> work;
 Bytes pending,chosen,object_weather;
 bool run_fit=false;
+struct Retry {unsigned attempts=0;int64_t after=0;std::string reason;};
+std::map<uint32_t,Retry> retries;
+struct Diagnostics {
+ size_t invalid=0,failed=0,deferred=0;std::vector<std::string> examples;
+ void add(const std::string& value){if(examples.size()<16)examples.push_back(value);}
+ std::string summary()const{std::string out="invalid="+std::to_string(invalid)+" failed="+std::to_string(failed)+" deferred="+std::to_string(deferred);for(const auto& e:examples)out+="; "+e;return out;}
+} diagnostics;
+int next_object();
+int fail_object(const std::string& message){
+ if(at>=work.size())return 1;
+ const auto id=work[at];auto& retry=retries[id];retry.attempts=std::min(retry.attempts+1,8u);
+ retry.after=now+std::min<int64_t>(86400000,60000LL*(1LL<<(retry.attempts-1)));retry.reason=message;
+ ++diagnostics.failed;diagnostics.add("object="+std::to_string(id)+" reason="+message+" retry="+iso(retry.after));
+ ++at;return next_object();
+}
 int push(const char* port,const char* code,const Bytes& data) {
  const std::string schema=std::string(code)+".fbs",id=(std::strlen(code)==3?"$":"")+std::string(code);
  return plugin_push_output_ex(port,schema.c_str(),id.c_str(),PLUGIN_PAYLOAD_WIRE_FORMAT_FLATBUFFER,code,0,0,data.data(),data.size())<0?500:0;
 }
 int notice(const std::string& message,bool failed=false) {
- R::FlowNoticeT n;n.KIND=failed?R::flowNoticeKind_Info:done?R::flowNoticeKind_Info:R::flowNoticeKind_Unchanged;
- n.SCHEMA="CAT.fbs";n.PROVIDER_ID=cfg.provider;n.SOURCE_NAME="catalog-index";n.REASON=message;n.COUNT=done;
+ R::FlowNoticeT n;n.KIND=(failed||diagnostics.failed||diagnostics.invalid)?(done?R::flowNoticeKind_Skipped:R::flowNoticeKind_Missing):diagnostics.deferred?R::flowNoticeKind_Skipped:done?R::flowNoticeKind_Info:R::flowNoticeKind_Unchanged;
+ n.SCHEMA="CAT.fbs";n.PROVIDER_ID=cfg.provider;n.SOURCE_NAME="catalog-index";n.REASON=message+"; "+diagnostics.summary();n.COUNT=done;
  flatbuffers::FlatBufferBuilder b;R::FinishFlowNoticeBuffer(b,R::FlowNotice::Pack(b,&n));
  return plugin_push_output_ex("notice","FlowNotice.fbs","FNTC",PLUGIN_PAYLOAD_WIRE_FORMAT_FLATBUFFER,"FlowNotice",0,0,b.GetBufferPointer(),b.GetSize())<0?500:0;
 }
@@ -113,7 +128,9 @@ int page(const plugin_input_frame_t* f) {
  const auto* q=GetSizePrefixedQRP(p);const auto& scan=scans[scan_at];
  if(q->KIND()!=qrpKind::Page||q->STATUS()!=qrpStatus::Ok||text(q->SCHEMA_NAME())!=scan.schema+".fbs"||text(q->PROVIDER_ID())!=scan.provider||text(q->SOURCE_NAME())!=scan.name)return stop("Complete read failed or changed its source filter.");
  if(++pages>10000)return stop("Complete sweep exceeds its page bound.");
- size_t off=n,count=0;while(off<f->payload_length){if(f->payload_length-off<4)return stop("Truncated page record.");const auto len=size_t(flatbuffers::ReadScalar<uint32_t>(p+off))+4;if(len>f->payload_length-off||!retain(p+off,len))return stop("Invalid record or complete sweep exceeds its configured bound.");off+=len;++count;}
+ size_t off=n,count=0;while(off<f->payload_length){if(f->payload_length-off<4)return stop("Truncated page record.");const auto len=size_t(flatbuffers::ReadScalar<uint32_t>(p+off))+4;if(len>f->payload_length-off)return stop("Truncated page record.");
+ if(!retain(p+off,len)){++diagnostics.invalid;diagnostics.add(scan.schema+"/"+scan.name+" record-sha256="+digest(Bytes(p+off,p+off+len)));}
+ off+=len;++count;}
  if(count!=q->RECORD_COUNT())return stop("Complete-read count mismatch.");
  const auto next=text(q->NEXT_CURSOR());if(!next.empty()){if(next==cursor||!count)return stop("Complete read did not advance.");cursor=next;return query();}
  cursor.clear();++scan_at;if(scan_at<scans.size())return query();
@@ -142,7 +159,7 @@ int ingest(const Bytes& data,bool is_index) {
 }
 int next_object() {
  for(;at<work.size()&&done<cfg.batch;++at){
-  const auto id=work[at];if(id%cfg.partitions!=cfg.partition)continue;chosen.clear();signature.clear();reason.clear();object_weather.clear();const auto s=seeds.find(id);const auto identity=identities.find(id);const auto old=index.find(id);
+  const auto id=work[at];if(id%cfg.partitions!=cfg.partition)continue;const auto retry=retries.find(id);if(retry!=retries.end()&&now<retry->second.after){++diagnostics.deferred;continue;}chosen.clear();signature.clear();reason.clear();object_weather.clear();const auto s=seeds.find(id);const auto identity=identities.find(id);const auto old=index.find(id);
   const bool removed=identity==identities.end()||s==seeds.end()||(GetSizePrefixedCAT(identity->second.data())->DECAY_DATE()&&!text(GetSizePrefixedCAT(identity->second.data())->DECAY_DATE()).empty()&&text(GetSizePrefixedCAT(identity->second.data())->DECAY_DATE())<=iso(now).substr(0,10));
   const auto* previous=old==index.end()?nullptr:GetSizePrefixedCAT(old->second.data());
   if(removed){if(!previous||!previous->PRODUCTS()||!previous->PRODUCTS()->size())continue;reason="object removed from the configured current sources";return compose();}
@@ -168,13 +185,13 @@ int next_object() {
  return finish();
 }
 int chain() {
- const auto* fallback=input("fallback"),*candidate=input("candidate"),*decision=input("chain_status");if(phase!=Phase::Chain||!fallback||!decision)return stop("Incomplete chain outcome.");
- flatbuffers::Verifier qv(decision->payload,decision->payload_length);if(!VerifyQRPBuffer(qv))return stop("Invalid chain outcome.");const auto* q=GetQRP(decision->payload);
+ const auto* fallback=input("fallback"),*candidate=input("candidate"),*decision=input("chain_status");if(phase!=Phase::Chain||!decision)return stop("Unexpected chain outcome.");
+ flatbuffers::Verifier qv(decision->payload,decision->payload_length);if(!VerifyQRPBuffer(qv))return fail_object("Invalid chain outcome.");const auto* q=GetQRP(decision->payload);if(!fallback)return fail_object("chain: "+text(q->ERROR_CODE())+" "+text(q->MESSAGE()));
  const auto& seed=seeds.at(work[at]);const plugin_input_frame_t* use=fallback;
- if(run_fit&&candidate&&q->STATUS()==qrpStatus::Ok){flatbuffers::Verifier v(candidate->payload,candidate->payload_length);if(!VerifyOCMBuffer(v))return stop("Invalid fit record.");const auto* o=GetOCM(candidate->payload);const auto* stats=o->ORBIT_DETERMINATION()?o->ORBIT_DETERMINATION()->FIT_STATISTICS():nullptr;
+ if(run_fit&&candidate&&q->STATUS()==qrpStatus::Ok){flatbuffers::Verifier v(candidate->payload,candidate->payload_length);if(!VerifyOCMBuffer(v))return fail_object("Invalid fit record.");const auto* o=GetOCM(candidate->payload);const auto* stats=o->ORBIT_DETERMINATION()?o->ORBIT_DETERMINATION()->FIT_STATISTICS():nullptr;
   if(stats&&stats->FIT_STATES()==2161&&std::isfinite(stats->FIT_RMS_KM())&&stats->FIT_RMS_KM()<=cfg.max_rms&&std::isfinite(stats->FIT_MAX_KM())&&stats->FIT_MAX_KM()<=cfg.max_error&&instant(text(stats->FIT_START()))==seed.epoch-216000000&&instant(text(stats->FIT_STOP()))==seed.epoch+432000000)use=candidate;else reason="fit-statistics refusal fallback";
  }else if(run_fit)reason="fit refusal fallback: "+text(q->ERROR_CODE());
- flatbuffers::Verifier ov(use->payload,use->payload_length);if(!VerifyOCMBuffer(ov))return stop("Invalid selected orbit.");auto record=std::unique_ptr<OCMT>(GetOCM(use->payload)->UnPack());
+ flatbuffers::Verifier ov(use->payload,use->payload_length);if(!VerifyOCMBuffer(ov))return fail_object("Invalid selected orbit.");auto record=std::unique_ptr<OCMT>(GetOCM(use->payload)->UnPack());
  if(use==fallback){if(!record->HEADER)record->HEADER=std::make_unique<HeaderT>();record->HEADER->COMMENT.push_back(reason);}
  flatbuffers::FlatBufferBuilder b;FinishSizePrefixedOCMBuffer(b,OCM::Pack(b,record.get()));
  if(push("annotate_orbit","OCM",{b.GetBufferPointer(),b.GetBufferPointer()+b.GetSize()})||push("annotate_seed","OMM",seed.data))return stop("Cannot queue population annotation.");phase=Phase::Annotate;return 0;
@@ -182,21 +199,26 @@ int chain() {
 int advance() {
  if(input("tick")){
   if(!configure())return stop("Invalid catalog ModuleConfig.");const auto* f=input("tick");flatbuffers::Verifier v(f->payload,f->payload_length);if(!R::VerifyTimerTickBuffer(v))return stop("Invalid timer tick.");now=R::GetTimerTick(f->payload)->FIRED_MS();if(now<=0)return stop("Timer requires a positive UTC time.");
-  seeds.clear();identities.clear();index.clear();weather.clear();products.clear();scans=cfg.seeds;scans.push_back({"CAT",cfg.identity_provider,cfg.identity_source});scans.push_back({"SPW",cfg.weather_provider,cfg.weather_source});scans.push_back({"CAT",cfg.provider,"catalog-index"});scans.push_back({"OCM",cfg.provider,"catalog-products"});scan_at=pages=seen=retained=done=at=0;cursor.clear();return query();
+  diagnostics=Diagnostics{};seeds.clear();identities.clear();index.clear();weather.clear();products.clear();scans=cfg.seeds;scans.push_back({"CAT",cfg.identity_provider,cfg.identity_source});scans.push_back({"SPW",cfg.weather_provider,cfg.weather_source});scans.push_back({"CAT",cfg.provider,"catalog-index"});scans.push_back({"OCM",cfg.provider,"catalog-products"});scan_at=pages=seen=retained=done=at=0;cursor.clear();return query();
  }
  if(const auto* f=input("query_status")){flatbuffers::Verifier v(f->payload,f->payload_length);if(!VerifyQRPBuffer(v)||GetQRP(f->payload)->KIND()==qrpKind::Error)return stop("Complete read failed; no partial sweep is committed.");}
  if(const auto* f=input("page"))return page(f);
  if(input("query_status"))return 0;
  if(input("chain_status"))return chain();
  if(const auto* f=input("annotated")){
-  if(phase!=Phase::Annotate)return stop("Unexpected annotation.");flatbuffers::Verifier v(f->payload,f->payload_length);if(!VerifySizePrefixedOCMBuffer(v))return stop("Invalid annotation.");chosen=bytes(f);const auto* o=GetSizePrefixedOCM(chosen.data());if(o->COV_REALISM())for(const auto* l:*o->COV_REALISM())if(text(l->EVIDENCE()).rfind("no population covariance",0)==0)reason+="; "+text(l->EVIDENCE());if(products.count(cid(chosen)))return compose();return ingest(chosen,false);
+  if(phase!=Phase::Annotate)return stop("Unexpected annotation.");flatbuffers::Verifier v(f->payload,f->payload_length);if(!VerifySizePrefixedOCMBuffer(v))return fail_object("Invalid annotation.");chosen=bytes(f);const auto* o=GetSizePrefixedOCM(chosen.data());if(o->COV_REALISM())for(const auto* l:*o->COV_REALISM())if(text(l->EVIDENCE()).rfind("no population covariance",0)==0)reason+="; "+text(l->EVIDENCE());if(products.count(cid(chosen)))return compose();return ingest(chosen,false);
+ }
+ if(const auto* f=input("compose_status")){
+  if(phase!=Phase::Compose)return stop("Unexpected composition outcome.");flatbuffers::Verifier v(f->payload,f->payload_length);
+  if(!VerifyQRPBuffer(v))return fail_object("Invalid composition outcome.");const auto* q=GetQRP(f->payload);
+  if(q->STATUS()!=qrpStatus::Ok)return fail_object("compose: "+text(q->ERROR_CODE())+" "+text(q->MESSAGE()));
  }
  if(const auto* f=input("replacement")){if(phase!=Phase::Compose)return stop("Unexpected index replacement.");return ingest(bytes(f),true);}
  if(const auto* f=input("stored")){
   flatbuffers::Verifier v(f->payload,f->payload_length);if(!R::VerifyIngestResultBuffer(v))return stop("Invalid storage acknowledgment.");const auto* r=R::GetIngestResult(f->payload);
   if((phase!=Phase::ProductStored&&phase!=Phase::IndexStored)||!text(r->REFUSED()).empty()||text(r->SCHEMA())!=pending_schema+".fbs"||text(r->PROVIDER_ID())!=cfg.provider||text(r->BATCH_ID())!=pending_batch||text(r->SOURCE_NAME())!=(phase==Phase::ProductStored?"catalog-products":"catalog-index")||r->INSERTED()>1)return stop("Storage refused or did not acknowledge the complete deterministic batch.");
   if(phase==Phase::ProductStored){products.insert(cid(chosen));return compose();}
-  index[work[at]]=pending;++done;++at;return next_object();
+  index[work[at]]=pending;retries.erase(work[at]);++done;++at;return next_object();
  }
  return stop("Incomplete controller response.");
 }
