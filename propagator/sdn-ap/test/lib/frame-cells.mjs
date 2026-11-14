@@ -1,6 +1,7 @@
 // Shared by the frames tests (SPEC 19): a seeded population of AP sets across the orbit regime, loaded one series each (distinct catalog numbers), and the calls of
 // the frames entries over one instance. The module computes every number; this file moves bytes.
 import { createStandaloneHarness } from "space-data-module-sdk/testing/isomorphic";
+import { ownHarness } from "./end.mjs";
 import { T, seedOcm, rowsThrough } from "./ocm.mjs";
 import { spwRows } from "./fixture-inputs.mjs";
 import { wasmPath } from "./module.mjs";
@@ -58,7 +59,7 @@ const prefixed = (u) => { const b = Buffer.alloc(4 + u.length); b.writeUInt32LE(
 
 /** An instance of the module (wasm: the one under test, or `wasm`) with the frames entries wrapped. `threads`: a pool of that many threads (the pool exists, the frames run on the calling thread). */
 export async function openFrames({ wasm = wasmPath, initialMemoryBytes, threads = 0 } = {}) {
-  const h = await createStandaloneHarness("browser", wasm, { surface: "direct", maxThreads: Math.max(1, threads), enableBrowserWasiThreads: threads > 0, ...(initialMemoryBytes ? { initialMemoryBytes } : {}) });
+  const h = ownHarness(await createStandaloneHarness("browser", wasm, { surface: "direct", maxThreads: Math.max(1, threads), enableBrowserWasiThreads: threads > 0, ...(initialMemoryBytes ? { initialMemoryBytes } : {}) }));
   const x = h.instance.exports, mem = () => h.memory.buffer;
   if (threads > 0) x.sdnap_threads(threads);
   let n = 0, out = 0, status = 0, scratch = 0, result = 0, posOnly = false;
@@ -102,6 +103,13 @@ export async function openFrames({ wasm = wasmPath, initialMemoryBytes, threads 
     ap(i, ms, k = 0) {
       const [w, f] = api.jd(ms);
       const rc = x.sdnap_epochs_set_at(i, k, w, f, scratch);
+      return rc === 0 ? Array.from(new Float64Array(mem(), scratch, 6)) : null;
+    },
+    /** AP's own state of series i at `minutes` after the integer-millisecond instant `epochMs` (km, km/s, TEME): the time is split into a whole day and a fraction without
+     *  adding the minutes to the epoch in one double, whose rounding (0.24 microseconds at this date) would move a state of a low orbit by 2 mm */
+    apFrom(i, epochMs, minutes, k = 0) {
+      const day = Math.floor(epochMs / DAY), total = epochMs - day * DAY + minutes * 60000, extra = Math.floor(total / DAY);
+      const rc = x.sdnap_epochs_set_at(i, k, day + extra + 2440587.5, (total - extra * DAY) / DAY, scratch);
       return rc === 0 ? Array.from(new Float64Array(mem(), scratch, 6)) : null;
     },
     /** sdnap_epochs_at over the whole store: planes copy and status copy */

@@ -1734,6 +1734,8 @@ those switches. Calls requesting covariance remain serial. The atmosphere and fo
 NRLMSISE-00's mutable state belong to each thread. Constant drag, gravity and leap-second tables are initialized before
 the batch. The context identifier, short-period generation tag and grouping identifier are cache keys only.
 
+The pool's threads wait for batches for the life of the instance and the module has no export that stops them (`plugin_destroy` frees the store only): a Node host ends them by destroying its harness, which terminates the instance's wasi-thread workers (`test/pool-end.e2e.mjs`), or by ending the process; a Node process that did neither stays alive after its script ends.
+
 Two rules keep one pool thread's work out of another's:
 - **A set leaves the cache pool under the pool's lock.** A store's set releasing its caches does so under the pool's lock,
   whether it still holds them or not. A reclaim on another thread drops a set's caches and stores the unlock of the set's
@@ -6493,7 +6495,7 @@ What gets worse:
 One block, allocated at open, counted, of exactly the budget given: the table (32 bytes a series, padded to 64, 3.2 MB at
 100,000) and the slab; the same allocation holds 4 KiB more after the block, the cell under construction, outside the budget. An instance that never opens frames holds
 no such scratch; its static data is 576 bytes larger than 0.6.59's for the frames' state. The host's rule for the budget: 850 bytes for each object served, 32 bytes for each series and 1 MiB.
-Measured by `node test/frames-memory.e2e.mjs` (about 7 minutes, 3 GB of the host's memory; it asserts that the slab holds at most 850 bytes for each object served, that no row is refused, that every object the entry serves is served except the few whose window at the fill's instant cannot meet the bound (strong drag only, at most 0.1 % of the objects served; the test prints the count), and that the instance total is under 300 MB decimal with and without a pool; the other figures below are printed)
+Measured by `node test/frames-memory.e2e.mjs` (about 7 minutes, 3 GB of the host's memory; it asserts that the slab holds at most 850 bytes for each object served, that no row is refused, that every object the entry serves is served except those whose 3-minute window at the fill's instant holds a step of AP's own position output above 8 mm (2 of the recipe's 100,000 objects, 9.02 and 8.90 mm, both strong drag; none of the public catalog's; the test asserts the counts and measures each step from AP's states every 0.05 s), and that the instance total is under 300 MB decimal with and without a pool; the other figures below are printed)
 at 100,000 objects, seeded sets with epochs spread over one window, loaded in parts of 1,000, filled at one instant, then the
 windows turned over (48 minutes in steps of one):
 

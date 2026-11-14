@@ -25,6 +25,7 @@ import assert from "node:assert/strict";
 import { buildDiagnostic, failureSeam, failureProbe } from "./lib/ap-diagnostic.mjs";
 import { population, ocmOfObject, openFrames, epochOf, EPOCH, EPOCH_MS, DAY, STAT, STATUS, CODE } from "./lib/frame-cells.mjs";
 import { repackOcm } from "./lib/ocm.mjs";
+import { endTest } from "./lib/end.mjs";
 import { OCMTrajectoryBlockT } from "spacedatastandards.org/lib/js/OCM/OCMTrajectoryBlock.js";
 import { CLASSES, harness, carriedRecord } from "./lib/carried.mjs";
 
@@ -739,4 +740,4 @@ const T_START = Date.now();
   finish("allocation failures", t0);
 }
 console.log(`FRAMES PASS (${((Date.now() - T_START) / 1000).toFixed(0)} s)`);
-process.exit(0);  // the pool threads of the threaded instances end with the process
+await endTest(0);
