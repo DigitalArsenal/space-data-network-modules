@@ -551,11 +551,8 @@ struct MdailyDerivatives {
 };
 static_assert(sizeof(MdailyDerivatives) == 768);
 inline thread_local MdailyDerivatives* g_mdaily_set_derivatives = nullptr;
-struct MdailyThreadDerivatives {
-  MdailyDerivatives* rows = nullptr;
-  ~MdailyThreadDerivatives() { delete rows; }
-};
-inline thread_local MdailyThreadDerivatives g_mdaily_thread_derivatives{};
+/// Like the tesseral thread cache, these rows live for the module instance.
+inline thread_local MdailyDerivatives* g_mdaily_thread_derivatives = nullptr;
 
 #ifdef __wasm_simd128__
 /// An allocation failure uses the double rows with the same float rounding.
@@ -572,7 +569,7 @@ inline thread_local MdailyEvalCache* g_mdaily_set_cache = nullptr;
 inline MdailyEvalCache& mdaily_eval_cache() { return g_mdaily_set_cache != nullptr ? *g_mdaily_set_cache : g_mdaily_eval_cache; }
 inline MdailyDerivatives* mdaily_derivatives() {
   if (g_mdaily_set_derivatives != nullptr) return g_mdaily_set_derivatives;
-  auto& rows = g_mdaily_thread_derivatives.rows;
+  auto& rows = g_mdaily_thread_derivatives;
   if (rows == nullptr) {
     rows = sdnap::mem::counted(new (std::nothrow) MdailyDerivatives{});
     if (rows != nullptr) g_mdaily_eval_cache.keys_valid = false;
