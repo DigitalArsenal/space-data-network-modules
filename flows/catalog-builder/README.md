@@ -192,8 +192,7 @@ and stored AP/SGP4 equality to original fields/states/formal covariance.
 Covariance tests construct axes independently, compare an exact signed-axis
 case, and rotate the population model using an independently propagated seed.
 The paged connector validates frame lengths/counts and byte/row limits; the
-host contract has `TestStorageIndexPageCompleteSnapshots` coverage. Signing,
-trust and signed-out reads are excluded.
+host contract has `TestStorageIndexPageCompleteSnapshots` coverage. A loopback publication check uses throwaway signing identities, verifies snapshot and changed-batch imports into a separate consumer store, and rejects untrusted signatures and tampered shards. Anonymous-read policy is inspected without changing it; deployment is excluded.
 
 ## Chain refusal classification
 

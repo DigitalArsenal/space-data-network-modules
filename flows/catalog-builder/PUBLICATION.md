@@ -88,10 +88,9 @@ of paired catalog snapshots or announcements. Live failed/in-progress entries mu
 backoff. Reclamation must preserve pending publication bytes and active product
 references; live expiry alone does not prove safe journal reclamation.
 
-Signing, announcement delivery, consumer trust, signed-out reads and deployment
-are outside these checks. Current-generation snapshot export, superseding-batch
-recovery and publication reclamation require host validation with the intended
-configuration; no obsolete fixture counts are presented as that evidence.
+A native synthetic build produces 256 AP selections. A loopback integration check runs the production publication signer/exporter and verification/import path with a test IPFS pin adapter and a separate consumer store. Two snapshot announcements plus two changed-batch announcements import 514 records and reconstruct the publisher's 256 selections exactly. The consumer rejects an announcement signed by a second untrusted test key and rejects a tampered shard before import. Both Ed25519 keys are randomly generated in process memory; no key file or signed test artifact is distributed.
+
+This is a local integration check, not a deployed daemon, public gossip/DHT or live IPFS-network test. The test adapter carries announcements over loopback HTTP. The schema allow-list is inspected; anonymous record-route behavior is not changed or claimed as a live access test. Production publication retention/reclamation sizing and deployment require host validation with the intended configuration.
 
 ## Consumer trust and anonymous reads
 
