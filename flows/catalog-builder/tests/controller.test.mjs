@@ -3,7 +3,7 @@ import fs from 'node:fs';import * as fb from 'flatbuffers';import assert from 'n
 import * as C from 'spacedatastandards.org/lib/js/CAT/main.js';import * as O from 'spacedatastandards.org/lib/js/OCM/main.js';import * as Q from 'spacedatastandards.org/lib/js/QRP/main.js';import {OMM} from 'spacedatastandards.org/lib/js/OMM/OMM.js';import {SPW} from 'spacedatastandards.org/lib/js/SPW/SPW.js';
 import {encodeTimerTick,decodeIngestRequest,encodeIngestResult,decodeFlowNotice} from 'space-data-module-sdk/runtime-contracts';
 import {createBrowserModuleHarness} from 'space-data-module-sdk/host/browser-module';import {createStandaloneHarness} from 'space-data-module-sdk/testing/isomorphic';
-import {ommBytes,weather} from './fixtures.mjs';
+import {ommBytes,weather,checkPcf} from './fixtures.mjs';
 test('controller reconciles changed inputs, refusal, expiry, removal, and interruption through compiled modules',async()=>{
 const repo=fileURLToPath(new URL('../../../',import.meta.url)),controlDir=process.env.CATALOG_CONTROLLER_DIR||fileURLToPath(new URL('../dist/flow/control',import.meta.url));
 const pack=(r,c,pref=true)=>{const b=new fb.Builder(8192);pref?b.finishSizePrefixed(r.pack(b),'$'+c):b.finish(r.pack(b),'$'+c);return Buffer.from(b.asUint8Array());};
@@ -24,7 +24,9 @@ const createControl=()=>createBrowserModuleHarness({wasmSource:fs.readFileSync(c
 let control=await createControl();const chain=await createStandaloneHarness('browser',repo+'/flows/catalog-builder/dist/isomorphic/module.wasm',{surface:'direct',enableBrowserWasiThreads:false});
 const gp=await createBrowserModuleHarness({wasmSource:fs.readFileSync(repo+'/analysis/gp-error-model/dist/isomorphic/module.wasm'),manifest:manifest(repo+'/analysis/gp-error-model'),surface:'direct'});
 const composer=await createBrowserModuleHarness({wasmSource:fs.readFileSync(repo+'/analysis/catalog-composer/dist/isomorphic/module.wasm'),manifest:manifest(repo+'/analysis/catalog-composer'),surface:'direct'});
-const evidence={synthetic:true,stages:[]};
+const evidence={synthetic:true,stages:[]};const fitOriginals=new Map(),verified=new Set(),sizes=[];
+const ap=await createStandaloneHarness('browser',process.env.SDNAP_WASM||repo+'/propagator/sdn-ap/dist/isomorphic/module.wasm',{surface:'direct',enableBrowserWasiThreads:false});
+const fly=async payload=>{const r=await ap.invoke({methodId:'propagate',inputs:[frame('ocm','OCM',payload),frame('configuration','PCF',checkPcf)]});assert.equal(r.statusCode,0,r.errorMessage);return Buffer.from(r.outputs.find(f=>f.portId==='ephemeris').payload);};
 async function tick(time,kill=false){
  let response=await control.invoke({methodId:'advance',inputs:[frame('tick','TimerTick',encodeTimerTick({triggerId:'refresh',firedMs:time}))]});
  const counters={fits:0,fallbacks:0,products:0,indexes:0,pages:0,duplicateProducts:0};
@@ -39,12 +41,23 @@ async function tick(time,kill=false){
    const fit=!!out.seed;fit?counters.fits++:counters.fallbacks++;
    const inputs=fit?[frame('omm','OMM',out.seed.payload),...['flight_config','fit_config','weather'].filter(p=>out[p]).map(p=>out[p])]:[frame('omm','OMM',out.fallback_seed.payload)];
    const r=await chain.invoke({methodId:fit?'run_chain':'ingest_seed',inputs});assert.equal(r.statusCode,0,r.errorMessage);
+   const fitted=r.outputs.find(f=>f.portId==='elements');if(fitted)fitOriginals.set(O.OCM.getRootAsOCM(new fb.ByteBuffer(fitted.payload)).unpack().METADATA.NORAD_CAT_ID,Buffer.from(fitted.payload));
    input=r.outputs.map(f=>({...f,portId:{fallback:'fallback',elements:'candidate',decision:'chain_status'}[f.portId]}));
   }else if(out.annotate_orbit){
    const r=await gp.invoke({methodId:'annotate_population_flow',inputs:[frame('ocm','OCM',out.annotate_orbit.payload),frame('elements','OMM',out.annotate_seed.payload)]});assert.equal(r.statusCode,0,r.errorMessage);input=r.outputs.map(f=>({...f,portId:f.portId==='decision'?'annotation_status':'annotated'}));
   }else if(out.meta){
    const m=decodeIngestRequest(out.meta.payload);assert.match(m.tags.batchId,out.index_records?/^catalog-[0-9a-f]{64}:complete$/:/^catalog-[0-9a-f]{64}$/);const b=Buffer.from((out.product_records??out.index_records).payload);const destination=records(m.schema,m.tags.providerId,m.tags.sourceName);const exists=destination.some(x=>hash(x)===hash(b));if(!exists)destination.push(b);
-   if(out.product_records){++counters.products;if(exists)++counters.duplicateProducts;if(kill){control.destroy();control=await createControl();evidence.stages.push({...counters,killedAfterProduct:true});return counters;}}
+   if(out.product_records){
+    const product=O.OCM.getSizePrefixedRootAsOCM(new fb.ByteBuffer(b)).unpack();const id=product.METADATA.NORAD_CAT_ID;
+    if(product.MEAN_ELEMENTS.MEAN_ELEMENT_THEORY===O.meanElementSource.AP&&!verified.has(id)){
+      const original=fitOriginals.get(id);assert.ok(original);assert.ok(b.indexOf(original)>=0,'stored product embeds the entire fit output unchanged');
+      const originalFields=O.OCM.getRootAsOCM(new fb.ByteBuffer(original)).unpack(),storedFields=structuredClone(product);
+      for(const key of ['COV_REALISM','COVARIANCE_BLOCKS']){assert.deepEqual(storedFields[key].slice(0,originalFields[key].length),originalFields[key]);delete storedFields[key];delete originalFields[key];}
+      assert.deepEqual(storedFields,originalFields,'every original fit field survives storage');
+      assert.deepEqual(await fly(b.subarray(4)),await fly(original),'stored product states and formal covariance match the fit output bit for bit');
+      verified.add(id);sizes.push({fit:original.length,stored:b.length});
+    }
+    ++counters.products;if(exists)++counters.duplicateProducts;if(kill){control.destroy();control=await createControl();evidence.stages.push({...counters,killedAfterProduct:true});return counters;}}
    else {++counters.indexes;const cat=C.CAT.getSizePrefixedRootAsCAT(new fb.ByteBuffer(b)).unpack();if(cat.PRODUCTS.length){assert.ok(records('OCM.fbs','synthetic-node','catalog-products').length>0,'product exists before index');}}
    input=[frame('stored','IngestResult',encodeIngestResult({schema:m.schema,...m.tags,inserted:exists?0:1,reconciledDuplicates:0}))];
   }else if(out.recipe){
@@ -124,7 +137,7 @@ try{
  delete cfg['catalog.invocation_budget_ms'];cfg['catalog.partition_count']=2;
  cfg['catalog.partition_index']=2;control.destroy();control=await createControl();
  await assert.rejects(()=>tick(now+6*86400000+3000));
- evidence.passed=true;
-}catch(e){evidence.failure=e.stack;throw e;}finally{control.destroy();chain.destroy();gp.destroy();composer.destroy();}
+ console.log(JSON.stringify({storedFitComparisons:sizes.length,meanFitBytes:sizes.reduce((a,s)=>a+s.fit,0)/sizes.length,meanStoredBytes:sizes.reduce((a,s)=>a+s.stored,0)/sizes.length}));evidence.passed=true;
+}catch(e){evidence.failure=e.stack;throw e;}finally{control.destroy();chain.destroy();gp.destroy();composer.destroy();ap.destroy();}
 
 });

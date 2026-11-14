@@ -56,7 +56,7 @@ std::map<std::string,Bytes> weather;
 std::set<std::string> products;
 std::vector<uint32_t> work;
 Bytes pending,chosen,object_weather;
-bool run_fit=false,complete_scan=true;
+bool run_fit=false,complete_scan=true,capacity_limited=false;
 struct Retry {unsigned attempts=0;int64_t after=0;std::string reason;};
 std::map<uint32_t,Retry> retries;
 struct Diagnostics {
@@ -113,19 +113,30 @@ bool retain(const uint8_t* p,size_t n) {
  if(scan.schema=="OMM") {
   flatbuffers::Verifier v(p,n);if(!VerifySizePrefixedOMMBuffer(v))return false;const auto* o=GetSizePrefixedOMM(p);const auto epoch=instant(text(o->EPOCH()));const auto id=o->NORAD_CAT_ID();if(!id||epoch<0)return false;if(id%cfg.partitions!=cfg.partition)return true;
   auto found=seeds.find(id);if(found==seeds.end()||scan_at<found->second.rank||(scan_at==found->second.rank&&epoch>=found->second.epoch)){
-   const auto old_size=found==seeds.end()?0:found->second.data.size();if(!room(old_size)){complete_scan=false;return true;}account(old_size);seeds[id]={std::move(data),epoch,scan_at};}
+   const auto old_size=found==seeds.end()?0:found->second.data.size();if(!room(old_size)){complete_scan=false;capacity_limited=true;return true;}account(old_size);seeds[id]={std::move(data),epoch,scan_at};}
  } else if(scan.schema=="SPW") {
-  flatbuffers::Verifier v(p,n);if(!VerifySizePrefixedSPWBuffer(v))return false;const auto* w=GetSizePrefixedSPW(p);if(!w->DATE()||instant(text(w->DATE())+"T00:00:00Z")<0)return false;const auto old=weather.find(text(w->DATE()));const auto size=old==weather.end()?0:old->second.size();if(!room(size)){complete_scan=false;return true;}account(size);weather[text(w->DATE())]=std::move(data);
+  flatbuffers::Verifier v(p,n);if(!VerifySizePrefixedSPWBuffer(v))return false;const auto* w=GetSizePrefixedSPW(p);if(!w->DATE()||instant(text(w->DATE())+"T00:00:00Z")<0)return false;const auto old=weather.find(text(w->DATE()));const auto size=old==weather.end()?0:old->second.size();if(!room(size)){complete_scan=false;capacity_limited=true;return true;}account(size);weather[text(w->DATE())]=std::move(data);
  } else if(scan.schema=="CAT") {
   flatbuffers::Verifier v(p,n);if(!VerifySizePrefixedCATBuffer(v))return false;const auto* c=GetSizePrefixedCAT(p);if(!c->NORAD_CAT_ID())return false;if(c->NORAD_CAT_ID()%cfg.partitions!=cfg.partition)return true;
   auto& target=scan.name=="catalog-index"&&scan.provider==cfg.provider?index:identities;
   const auto old=target.find(c->NORAD_CAT_ID());
-  if(&target==&identities||old==target.end()||instant(text(c->PRODUCTS_AS_OF()))>=instant(text(GetSizePrefixedCAT(old->second.data())->PRODUCTS_AS_OF()))){const auto size=old==target.end()?0:old->second.size();if(!room(size)){complete_scan=false;return true;}account(size);target[c->NORAD_CAT_ID()]=std::move(data);}
+  if(&target==&identities||old==target.end()||instant(text(c->PRODUCTS_AS_OF()))>=instant(text(GetSizePrefixedCAT(old->second.data())->PRODUCTS_AS_OF()))){const auto size=old==target.end()?0:old->second.size();if(!room(size)){complete_scan=false;capacity_limited=true;return true;}account(size);target[c->NORAD_CAT_ID()]=std::move(data);}
  } else if(scan.schema=="OCM") {flatbuffers::Verifier v(p,n);if(!VerifySizePrefixedOCMBuffer(v))return false;products.insert(cid(data));}
  else return false;
  return true;
 }
 int next_object();
+int build_work(){
+ work.clear();for(const auto& entry:identities)work.push_back(entry.first);for(const auto& entry:index)if(!identities.count(entry.first))work.push_back(entry.first);
+ size_t active=0,removed=0;for(const auto& entry:index){const auto* c=GetSizePrefixedCAT(entry.second.data());if(!c->PRODUCTS()||!c->PRODUCTS()->size())continue;++active;
+  const auto identity=identities.find(entry.first);if(identity==identities.end()||!seeds.count(entry.first)||(GetSizePrefixedCAT(identity->second.data())->DECAY_DATE()&&text(GetSizePrefixedCAT(identity->second.data())->DECAY_DATE())<=iso(now).substr(0,10)))++removed;}
+ if(active&&double(removed)/active>cfg.max_removal_fraction){complete_scan=false;diagnostics.add("mass-removal guard: proposed="+std::to_string(removed)+" active="+std::to_string(active)+"; raise catalog.max_removal_fraction explicitly");}
+ if(!complete_scan)++diagnostics.deferred;if(capacity_limited){diagnostics.add("scan partial: read="+std::to_string(seen)+" retained-bytes="+std::to_string(retained)+" catalog.max_records="+std::to_string(cfg.max_records)+" catalog.max_bytes="+std::to_string(cfg.max_bytes)+"; raise the binding setting or partition the catalog; removals disabled");}
+ std::stable_sort(work.begin(),work.end(),[](uint32_t a,uint32_t b){
+  auto age=[](uint32_t id){const auto p=index.find(id);return p==index.end()?int64_t(0):instant(text(GetSizePrefixedCAT(p->second.data())->PRODUCTS_AS_OF()));};
+  return age(a)<age(b);});
+ at=0;return next_object();
+}
 int page(const plugin_input_frame_t* f) {
  if(phase!=Phase::Scan||!f||f->payload_length<12)return stop("Unexpected or empty complete-read response.");
  const auto* p=f->payload;const auto n=flatbuffers::ReadScalar<uint32_t>(p)+size_t(4);
@@ -133,22 +144,14 @@ int page(const plugin_input_frame_t* f) {
  if(!VerifySizePrefixedQRPBuffer(v))return stop("Complete read failed; restart the sweep from its first page.");
  const auto* q=GetSizePrefixedQRP(p);const auto& scan=scans[scan_at];
  if(q->KIND()!=qrpKind::Page||q->STATUS()!=qrpStatus::Ok||text(q->SCHEMA_NAME())!=scan.schema+".fbs"||text(q->PROVIDER_ID())!=scan.provider||text(q->SOURCE_NAME())!=scan.name)return stop("Complete read failed or changed its source filter.");
- if(++pages>10000){complete_scan=false;diagnostics.add("source="+scan.name+" exceeds 10000 pages; increase catalog.page_size");cursor.clear();pages=0;++scan_at;return scan_at<scans.size()?query():finish();}
+ if(++pages>10000){complete_scan=false;diagnostics.add("source="+scan.name+" exceeds 10000 pages; increase catalog.page_size");cursor.clear();pages=0;++scan_at;return scan_at<scans.size()?query():build_work();}
  size_t off=n,count=0;while(off<f->payload_length){if(f->payload_length-off<4)return stop("Truncated page record.");const auto len=size_t(flatbuffers::ReadScalar<uint32_t>(p+off))+4;if(len>f->payload_length-off)return stop("Truncated page record.");
  if(!retain(p+off,len)){complete_scan=false;++diagnostics.invalid;diagnostics.add(scan.schema+"/"+scan.name+" record-sha256="+digest(Bytes(p+off,p+off+len)));}
  off+=len;++count;}
  if(count!=q->RECORD_COUNT())return stop("Complete-read count mismatch.");
  const auto next=text(q->NEXT_CURSOR());if(!next.empty()){if(next==cursor||!count)return stop("Complete read did not advance.");cursor=next;return query();}
  cursor.clear();pages=0;++scan_at;if(scan_at<scans.size())return query();
- work.clear();for(const auto& entry:identities)work.push_back(entry.first);for(const auto& entry:index)if(!identities.count(entry.first))work.push_back(entry.first);
- size_t active=0,removed=0;for(const auto& entry:index){const auto* c=GetSizePrefixedCAT(entry.second.data());if(!c->PRODUCTS()||!c->PRODUCTS()->size())continue;++active;
-  const auto identity=identities.find(entry.first);if(identity==identities.end()||!seeds.count(entry.first)||(GetSizePrefixedCAT(identity->second.data())->DECAY_DATE()&&text(GetSizePrefixedCAT(identity->second.data())->DECAY_DATE())<=iso(now).substr(0,10)))++removed;}
- if(active&&double(removed)/active>cfg.max_removal_fraction){complete_scan=false;diagnostics.add("mass-removal guard: proposed="+std::to_string(removed)+" active="+std::to_string(active)+"; raise catalog.max_removal_fraction explicitly");}
- if(!complete_scan){++diagnostics.deferred;diagnostics.add("scan partial: read="+std::to_string(seen)+" retained-bytes="+std::to_string(retained)+" catalog.max_records="+std::to_string(cfg.max_records)+" catalog.max_bytes="+std::to_string(cfg.max_bytes)+"; raise the binding setting or partition the catalog; removals disabled");}
- std::stable_sort(work.begin(),work.end(),[](uint32_t a,uint32_t b){
-  auto age=[](uint32_t id){const auto p=index.find(id);return p==index.end()?int64_t(0):instant(text(GetSizePrefixedCAT(p->second.data())->PRODUCTS_AS_OF()));};
-  return age(a)<age(b);});
- at=0;return next_object();
+ return build_work();
 }
 int compose() {
  const auto id=work[at];const auto old=index.find(id);const auto identity=identities.find(id);
@@ -246,7 +249,7 @@ int chain() {
 int advance() {
  if(input("tick")){
   if(!configure())return stop("Invalid catalog ModuleConfig.");const auto* f=input("tick");flatbuffers::Verifier v(f->payload,f->payload_length);if(!R::VerifyTimerTickBuffer(v))return stop("Invalid timer tick.");now=R::GetTimerTick(f->payload)->FIRED_MS();if(now<=0)return stop("Timer requires a positive UTC time.");
-  diagnostics=Diagnostics{};tick_start=Clock::now();allowance=cfg.allowance_ms;complete_scan=true;seeds.clear();identities.clear();index.clear();weather.clear();products.clear();scans=cfg.seeds;scans.push_back({"CAT",cfg.identity_provider,cfg.identity_source});scans.push_back({"SPW",cfg.weather_provider,cfg.weather_source});scans.push_back({"CAT",cfg.provider,"catalog-index"});scan_at=pages=seen=retained=done=at=0;cursor.clear();return query();
+  diagnostics=Diagnostics{};tick_start=Clock::now();allowance=cfg.allowance_ms;complete_scan=true;capacity_limited=false;seeds.clear();identities.clear();index.clear();weather.clear();products.clear();scans=cfg.seeds;scans.push_back({"CAT",cfg.identity_provider,cfg.identity_source});scans.push_back({"SPW",cfg.weather_provider,cfg.weather_source});scans.push_back({"CAT",cfg.provider,"catalog-index"});scan_at=pages=seen=retained=done=at=0;cursor.clear();return query();
  }
  if(const auto* f=input("query_status")){flatbuffers::Verifier v(f->payload,f->payload_length);if(!VerifyQRPBuffer(v)||GetQRP(f->payload)->KIND()==qrpKind::Error)return stop("Complete read failed; no partial sweep is committed.");}
  if(const auto* f=input("page")){
