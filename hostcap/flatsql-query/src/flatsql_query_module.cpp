@@ -33,6 +33,7 @@
 
 #include <algorithm>
 #include <cstdint>
+#include <cmath>
 #include <memory>
 #include <cstdio>
 #include <cstring>
@@ -681,6 +682,27 @@ int index_page(void) {
     if (!VerifyQRPBuffer(verifier) || GetQRP(frame->payload)->KIND() != qrpKind_Request) {
         plugin_set_error("invalid-request-frame", "index_page takes a QRP Request.");
         return 400;
+    }
+    flatbuffers::FlatBufferBuilder configured;
+    plugin_input_frame_t effective = *frame;
+    if (const auto* config = frame_for("config")) {
+        flatbuffers::Verifier check(config->payload, config->payload_length);
+        if (!sdn::runtime::VerifyModuleConfigBuffer(check)) {
+            plugin_set_error("invalid-config", "config must be a ModuleConfig."); return 400;
+        }
+        auto request = std::unique_ptr<QRPT>(GetQRP(frame->payload)->UnPack());
+        const auto* entries = sdn::runtime::GetModuleConfig(config->payload)->ENTRIES();
+        if (entries) for (const auto* entry : *entries) {
+            const std::string key = entry->KEY() ? entry->KEY()->str() : "";
+            const double value = entry->NUMBER_VALUE();
+            if (entry->KIND() != sdn::runtime::configValueKind_Number || !std::isfinite(value) || std::floor(value) != value ||
+                (key != "limit" && key != "max_bytes") || value < (key == "limit" ? 1 : 12) || value > (key == "limit" ? 1000 : 8388608)) {
+                plugin_set_error("invalid-config", "config accepts bounded numeric limit and max_bytes."); return 400;
+            }
+            if (key == "limit") request->LIMIT = uint32_t(value); else request->MAX_BYTES = uint64_t(value);
+        }
+        FinishQRPBuffer(configured, QRP::Pack(configured, request.get()));
+        effective.payload = configured.GetBufferPointer(); effective.payload_length = configured.GetSize(); frame = &effective;
     }
     const QRP& request = *GetQRP(frame->payload);
     QrpContext ctx;
