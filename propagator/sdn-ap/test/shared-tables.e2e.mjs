@@ -36,7 +36,7 @@ inline void leap_hook(int phase,int pointer) {
 }
 inline void table_probe() {
  switch(table_target){
- case 0:{double d;eraDat(2026,1,1,0.0,&d);break;}
+ case 0:{double a,b;frames::utc_to_tt(2451545.0+table_target,0.4,a,b);break;}
  case 1:(void)drag::table_heights();break;
  case 2:(void)drag::table();break;
  case 3:(void)xpt::tess::egm_tables();break;
