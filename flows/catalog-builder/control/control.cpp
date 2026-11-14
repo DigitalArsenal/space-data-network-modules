@@ -11,6 +11,7 @@
 #include <string>
 #include <vector>
 #include <cmath>
+#include <cstring>
 #include <cstdio>
 #include <ctime>
 #include <algorithm>
@@ -87,7 +88,7 @@ int query() {
 // an equal-epoch correction takes the later arrival. Earlier configured sources
 // take precedence, independent of their relative ingestion order.
 bool retain(const uint8_t* p,size_t n) {
- const auto& scan=scans[scan_at];Bytes data(p,p+n);retained+=n;
+ const auto& scan=scans[scan_at];Bytes data(p,p+n);retained+=scan.schema=="OCM"?128:n;
  if(retained>cfg.max_bytes||++seen>cfg.max_records)return false;
  if(scan.schema=="OMM") {
   flatbuffers::Verifier v(p,n);if(!VerifySizePrefixedOMMBuffer(v))return false;const auto* o=GetSizePrefixedOMM(p);const auto epoch=instant(text(o->EPOCH()));const auto id=o->NORAD_CAT_ID();if(!id||epoch<0)return false;
@@ -139,7 +140,7 @@ int ingest(const Bytes& data,bool is_index) {
 }
 int next_object() {
  for(;at<work.size()&&done<cfg.batch;++at){
-  const auto id=work[at];chosen.clear();signature.clear();reason.clear();object_weather.clear();const auto s=seeds.find(id),identity=identities.find(id),old=index.find(id);
+  const auto id=work[at];chosen.clear();signature.clear();reason.clear();object_weather.clear();const auto s=seeds.find(id);const auto identity=identities.find(id);const auto old=index.find(id);
   const bool removed=identity==identities.end()||s==seeds.end()||(GetSizePrefixedCAT(identity->second.data())->DECAY_DATE()&&!text(GetSizePrefixedCAT(identity->second.data())->DECAY_DATE()).empty()&&text(GetSizePrefixedCAT(identity->second.data())->DECAY_DATE())<=iso(now).substr(0,10));
   const auto* previous=old==index.end()?nullptr:GetSizePrefixedCAT(old->second.data());
   if(removed){if(!previous||!previous->PRODUCTS()||!previous->PRODUCTS()->size())continue;reason="object removed from the configured current sources";return compose();}
@@ -160,7 +161,7 @@ int next_object() {
   flatbuffers::FlatBufferBuilder b;FinishPCFBuffer(b,PCF::Pack(b,&flight));if(push("flight_config","PCF",{b.GetBufferPointer(),b.GetBufferPointer()+b.GetSize()}))return stop("Cannot queue flight policy.");
   PCFT fit;fit.THEORY=pcfTheory::AP;fit.FORCES=std::make_unique<PCFForceModelT>();fit.FORCES->ATMOSPHERE_MODEL=pcfAtmosphereFamily::NRLMSISE00;fit.FORCES->WEATHER_SOURCE=pcfWeatherSource::RECORDS;fit.FORCES->HAS_MAXIMUM_DEGREE=true;fit.FORCES->MAXIMUM_DEGREE=20;
   if(omm->ECCENTRICITY()<=.048){fit.FORCES->HAS_MAXIMUM_TESSERAL_DEGREE=true;fit.FORCES->MAXIMUM_TESSERAL_DEGREE=31;}fit.FIT=std::make_unique<PCFFitPolicyT>();fit.FIT->WEATHER_HORIZON_DAYS=30;
-  b.Clear();b.ForceDefaults(true);FinishPCFBuffer(b,PCF::Pack(b,&fit));if(push("fit_config","PCF",{b.GetBufferPointer(),b.GetBufferPointer()+b.GetSize()})||push("weather","SPW",object_weather)||push("seed","OMM",{s->second.data.begin()+4,s->second.data.end()}))return stop("Cannot queue exact-W inputs.");phase=Phase::Chain;return 0;
+  b.Clear();b.ForceDefaults(true);FinishPCFBuffer(b,PCF::Pack(b,&fit));if(push("fit_config","PCF",{b.GetBufferPointer(),b.GetBufferPointer()+b.GetSize()})||(!object_weather.empty()&&push("weather","SPW",object_weather))||push("seed","OMM",{s->second.data.begin()+4,s->second.data.end()}))return stop("Cannot queue exact-W inputs.");phase=Phase::Chain;return 0;
  }
  return finish();
 }
@@ -178,10 +179,12 @@ int chain() {
 }
 int advance() {
  if(input("tick")){
-  if(phase!=Phase::Idle)return 0;if(!configure())return stop("Invalid catalog ModuleConfig.");const auto* f=input("tick");flatbuffers::Verifier v(f->payload,f->payload_length);if(!R::VerifyTimerTickBuffer(v))return stop("Invalid timer tick.");now=R::GetTimerTick(f->payload)->FIRED_MS();if(now<=0)return stop("Timer requires a positive UTC time.");
+  if(!configure())return stop("Invalid catalog ModuleConfig.");const auto* f=input("tick");flatbuffers::Verifier v(f->payload,f->payload_length);if(!R::VerifyTimerTickBuffer(v))return stop("Invalid timer tick.");now=R::GetTimerTick(f->payload)->FIRED_MS();if(now<=0)return stop("Timer requires a positive UTC time.");
   seeds.clear();identities.clear();index.clear();weather.clear();products.clear();scans=cfg.seeds;scans.push_back({"CAT",cfg.identity_provider,cfg.identity_source});scans.push_back({"SPW",cfg.weather_provider,cfg.weather_source});scans.push_back({"CAT",cfg.provider,"catalog-index"});scans.push_back({"OCM",cfg.provider,"catalog-products"});scan_at=pages=seen=retained=done=at=0;cursor.clear();return query();
  }
+ if(const auto* f=input("query_status")){flatbuffers::Verifier v(f->payload,f->payload_length);if(!VerifyQRPBuffer(v)||GetQRP(f->payload)->KIND()==qrpKind::Error)return stop("Complete read failed; no partial sweep is committed.");}
  if(const auto* f=input("page"))return page(f);
+ if(input("query_status"))return 0;
  if(input("chain_status"))return chain();
  if(const auto* f=input("annotated")){
   if(phase!=Phase::Annotate)return stop("Unexpected annotation.");flatbuffers::Verifier v(f->payload,f->payload_length);if(!VerifySizePrefixedOCMBuffer(v))return stop("Invalid annotation.");chosen=bytes(f);const auto* o=GetSizePrefixedOCM(chosen.data());if(o->COV_REALISM())for(const auto* l:*o->COV_REALISM())if(text(l->EVIDENCE()).rfind("no population covariance",0)==0)reason+="; "+text(l->EVIDENCE());return ingest(chosen,false);
