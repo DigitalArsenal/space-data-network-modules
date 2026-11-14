@@ -226,10 +226,19 @@ int chain() {
   const bool permanent=code.rfind("weather-rows-",0)==0||code=="fit-implausible"||code=="invalid-omm"||code.rfind("unsupported-",0)==0;
   if(!permanent)reason+="; retry-at="+iso(now+600000);
  }
- flatbuffers::Verifier ov(use->payload,use->payload_length);if(!VerifyOCMBuffer(ov))return fail_object("Invalid selected orbit.");auto record=std::unique_ptr<OCMT>(GetOCM(use->payload)->UnPack());
- if(use==fallback){if(!record->HEADER)record->HEADER=std::make_unique<HeaderT>();record->HEADER->COMMENT.push_back(reason);}
- flatbuffers::FlatBufferBuilder b;FinishSizePrefixedOCMBuffer(b,OCM::Pack(b,record.get()));
- if(push("annotate_orbit","OCM",{b.GetBufferPointer(),b.GetBufferPointer()+b.GetSize()})||push("annotate_seed","OMM",seed.data))return stop("Cannot queue population annotation.");phase=Phase::Annotate;return 0;
+ flatbuffers::Verifier ov(use->payload,use->payload_length);if(!VerifyOCMBuffer(ov))return fail_object("Invalid selected orbit.");
+ Bytes framed;
+ if(use==candidate){
+  // Keep the fit's entire original buffer at an eight-byte-aligned offset.
+  framed.resize(use->payload_length+16);std::memcpy(framed.data()+16,use->payload,use->payload_length);
+  flatbuffers::WriteScalar<uint32_t>(framed.data(),framed.size()-4);
+  flatbuffers::WriteScalar<uint32_t>(framed.data()+4,flatbuffers::ReadScalar<uint32_t>(use->payload)+12);
+  std::memcpy(framed.data()+8,"$OCM",4);
+ }else{
+  auto record=std::unique_ptr<OCMT>(GetOCM(use->payload)->UnPack());if(!record->HEADER)record->HEADER=std::make_unique<HeaderT>();record->HEADER->COMMENT.push_back(reason);
+  flatbuffers::FlatBufferBuilder b;FinishSizePrefixedOCMBuffer(b,OCM::Pack(b,record.get()));framed.assign(b.GetBufferPointer(),b.GetBufferPointer()+b.GetSize());
+ }
+ if(push("annotate_orbit","OCM",framed)||push("annotate_seed","OMM",seed.data))return fail_object("Cannot queue population annotation.");phase=Phase::Annotate;return 0;
 }
 int advance() {
  if(input("tick")){

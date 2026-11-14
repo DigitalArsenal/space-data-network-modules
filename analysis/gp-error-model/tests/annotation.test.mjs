@@ -23,7 +23,7 @@ test.before(async()=>{
   try {
     const r=await chain.invoke({methodId:'run_chain',inputs:[frame('omm','OMM',ommBytes),frame('flight_config','PCF',flightPcf),frame('fit_config','PCF',fitPcf),frame('weather','SPW',weather)]});
     assert.equal(r.statusCode,0,r.errorMessage);
-    products=['elements','fallback'].map(port=>{const raw=r.outputs.find(f=>f.portId===port)?.payload;assert.ok(raw,port);return pack(O.OCM.getRootAsOCM(new fb.ByteBuffer(raw)).unpack(),'OCM');});
+    products=['elements','fallback'].map(port=>{const raw=r.outputs.find(f=>f.portId===port)?.payload;assert.ok(raw,port);const framed=Buffer.alloc(raw.length+16);Buffer.from(raw).copy(framed,16);framed.writeUInt32LE(framed.length-4,0);framed.writeUInt32LE(Buffer.from(raw).readUInt32LE(0)+12,4);framed.write('$OCM',8);return framed;});
   } finally {chain.destroy();}
   ap=await createStandaloneHarness('browser',process.env.SDNAP_WASM || new URL('../../../propagator/sdn-ap/dist/isomorphic/module.wasm',import.meta.url).pathname,{surface:'direct',enableBrowserWasiThreads:false});
 });
@@ -38,7 +38,7 @@ test('annotation retains the entire original buffer and every original root refe
     assert.ok(annotated.length < original.length + 6000, 'bounded annotation overhead');
     const start=Buffer.from(annotated).indexOf(Buffer.from(original));assert.ok(start>=0,'all original byte ranges retained verbatim');
     const a=before.unpack(), b=after.unpack();
-    for(const key of ['COVARIANCE_BLOCKS','COV_REALISM','COV_CALIBRATION']){delete a[key];delete b[key];}
+    for(const key of ['COVARIANCE_BLOCKS','COV_REALISM']){delete a[key];delete b[key];}
     assert.deepEqual(b,a,'all other fields retained, including posterior and propagation block');
     // Independently follow every original pointer field: the new root must reference
     // the original copied table/vector/string, not a reconstructed equivalent.

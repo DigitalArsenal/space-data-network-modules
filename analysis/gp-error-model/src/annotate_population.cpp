@@ -120,21 +120,25 @@ std::vector<uint8_t> append(const uint8_t* data, size_t size, const OCM* orbit,
   b.ForceDefaults(true);
   for (flatbuffers::voffset_t field = 4; field < vsize; field += 2) {
     const auto at = flatbuffers::ReadScalar<flatbuffers::voffset_t>(vtable + field);
-    if (!at || field == OCM::VT_COVARIANCE_BLOCKS || field == OCM::VT_COV_REALISM || field == OCM::VT_COV_CALIBRATION) continue;
+    if (!at || field == OCM::VT_COVARIANCE_BLOCKS || field == OCM::VT_COV_REALISM) continue;
     const auto* value = root + at;
-    switch (field) {
-      case OCM::VT_STATE_STEP_SIZE: b.AddElement<double>(field, flatbuffers::ReadScalar<double>(value), 0); break;
-      case OCM::VT_ORB_REVNUM: b.AddElement<uint32_t>(field, flatbuffers::ReadScalar<uint32_t>(value), 0); break;
-      case OCM::VT_TRAJ_TYPE: case OCM::VT_STATE_VECTOR_SIZE: case OCM::VT_COV_ORDERING:
-      case OCM::VT_COV_SIZE: case OCM::VT_TRAJ_BASIS:
-        b.AddElement<uint8_t>(field, *value, 0); break;
-      default:
-        b.AddOffset(field, flatbuffers::Offset<void>(offset(value + flatbuffers::ReadScalar<flatbuffers::uoffset_t>(value))));
+    const auto* type=OCMTypeTable();const size_t slot=(field-4)/2;
+    if(slot>=type->num_elems)return {};
+    const auto code=type->type_codes[slot];
+    if(code.is_repeating||code.base_type==flatbuffers::ET_STRING||code.base_type==flatbuffers::ET_SEQUENCE){
+      b.AddOffset(field,flatbuffers::Offset<void>(offset(value+flatbuffers::ReadScalar<flatbuffers::uoffset_t>(value))));continue;
+    }
+    // Copy scalar bit patterns with the width from the generated schema metadata.
+    switch(code.base_type){
+      case flatbuffers::ET_UTYPE:case flatbuffers::ET_BOOL:case flatbuffers::ET_CHAR:case flatbuffers::ET_UCHAR:b.AddElement<uint8_t>(field,*value,0);break;
+      case flatbuffers::ET_SHORT:case flatbuffers::ET_USHORT:b.AddElement<uint16_t>(field,flatbuffers::ReadScalar<uint16_t>(value),0);break;
+      case flatbuffers::ET_INT:case flatbuffers::ET_UINT:case flatbuffers::ET_FLOAT:b.AddElement<uint32_t>(field,flatbuffers::ReadScalar<uint32_t>(value),0);break;
+      case flatbuffers::ET_LONG:case flatbuffers::ET_ULONG:case flatbuffers::ET_DOUBLE:b.AddElement<uint64_t>(field,flatbuffers::ReadScalar<uint64_t>(value),0);break;
+      default:return {};
     }
   }
   b.AddOffset(OCM::VT_COVARIANCE_BLOCKS, block_vector);
   b.AddOffset(OCM::VT_COV_REALISM, label_vector);
-  b.AddElement<int8_t>(OCM::VT_COV_CALIBRATION, static_cast<int8_t>(covarianceCalibration::Uncalibrated), 0);
   const auto result = flatbuffers::Offset<OCM>(b.EndTable(start));
   FinishSizePrefixedOCMBuffer(b, result);
   return {b.GetBufferPointer(), b.GetBufferPointer() + b.GetSize()};
@@ -233,6 +237,8 @@ extern "C" int annotate_population() {
     labels.push_back(std::move(formal));
   }
   const auto output = append(input->payload, input->payload_length, orbit, blocks, labels);
+  flatbuffers::Verifier output_verifier(output.data(),output.size());
+  if(output.empty()||!VerifySizePrefixedOCMBuffer(output_verifier))return fail("invalid-output","Annotated orbit failed verification.");
   return plugin_push_output_ex("ocm", "OCM.fbs", "$OCM", PLUGIN_PAYLOAD_WIRE_FORMAT_FLATBUFFER,
       "OCM", 0, 0, output.data(), output.size()) < 0 ? fail("output", "Cannot emit annotated orbit.") : 0;
 }

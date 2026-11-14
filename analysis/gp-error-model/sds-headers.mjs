@@ -4,4 +4,4 @@ import createFlatc from "flatc-wasm/module";
 import { generateSdsHeaders as generate, standardsRoot } from "../../scripts/lib/sds-cpp-headers.mjs";
 
 export { standardsRoot };
-export const generateSdsHeaders = (roots, from) => generate(roots, from, createFlatc);
+export const generateSdsHeaders = (roots, from) => generate(roots, from, createFlatc, true);
