@@ -1,5 +1,6 @@
 import test from 'node:test';import {fileURLToPath} from 'node:url';
 import fs from 'node:fs';import * as fb from 'flatbuffers';import assert from 'node:assert/strict';import {createHash} from 'node:crypto';
+import * as N from 'spacedatastandards.org/lib/js/NEV/main.js';
 import * as C from 'spacedatastandards.org/lib/js/CAT/main.js';import * as O from 'spacedatastandards.org/lib/js/OCM/main.js';import * as Q from 'spacedatastandards.org/lib/js/QRP/main.js';import {OMM} from 'spacedatastandards.org/lib/js/OMM/OMM.js';import {SPW} from 'spacedatastandards.org/lib/js/SPW/SPW.js';
 import {encodeTimerTick,decodeIngestRequest,encodeIngestResult,decodeFlowNotice} from 'space-data-module-sdk/runtime-contracts';
 import {createBrowserModuleHarness} from 'space-data-module-sdk/host/browser-module';import {createStandaloneHarness} from 'space-data-module-sdk/testing/isomorphic';
@@ -24,10 +25,10 @@ const createControl=()=>createBrowserModuleHarness({wasmSource:fs.readFileSync(c
 let control=await createControl();const chain=await createStandaloneHarness('browser',repo+'/flows/catalog-builder/dist/isomorphic/module.wasm',{surface:'direct',enableBrowserWasiThreads:false});
 const gp=await createBrowserModuleHarness({wasmSource:fs.readFileSync(repo+'/analysis/gp-error-model/dist/isomorphic/module.wasm'),manifest:manifest(repo+'/analysis/gp-error-model'),surface:'direct'});
 const composer=await createBrowserModuleHarness({wasmSource:fs.readFileSync(repo+'/analysis/catalog-composer/dist/isomorphic/module.wasm'),manifest:manifest(repo+'/analysis/catalog-composer'),surface:'direct'});
-const evidence={synthetic:true,stages:[]};const fitOriginals=new Map(),verified=new Set(),sizes=[];
+const evidence={synthetic:true,stages:[]};const fitOriginals=new Map(),fallbackOriginals=new Map(),verified=new Set(),fallbackVerified=new Set(),sizes=[];
 const ap=await createStandaloneHarness('browser',process.env.SDNAP_WASM||repo+'/propagator/sdn-ap/dist/isomorphic/module.wasm',{surface:'direct',enableBrowserWasiThreads:false});
 const fly=async payload=>{const r=await ap.invoke({methodId:'propagate',inputs:[frame('ocm','OCM',payload),frame('configuration','PCF',checkPcf)]});assert.equal(r.statusCode,0,r.errorMessage);return Buffer.from(r.outputs.find(f=>f.portId==='ephemeris').payload);};
-let refusalCode,trapObject;
+let refusalCode,trapObject,lookupFailure=false,storageFailure=false,pageDelay=0;
 const trap=new WebAssembly.Instance(new WebAssembly.Module(Uint8Array.from([0,97,115,109,1,0,0,0,1,4,1,96,0,0,3,2,1,0,7,8,1,4,116,114,97,112,0,0,10,5,1,3,0,0,11]))).exports.trap;
 async function tick(time,kill=false){
  let response=await control.invoke({methodId:'advance',inputs:[frame('tick','TimerTick',encodeTimerTick({triggerId:'refresh',firedMs:time}))]});
@@ -36,20 +37,22 @@ async function tick(time,kill=false){
   assert.equal(response.statusCode,0,response.errorMessage);const out=Object.fromEntries(response.outputs.map(f=>[f.portId,f]));let input=[];
   if(out.notice){counters.notice=decodeFlowNotice(out.notice.payload);evidence.stages.push(counters);return counters;}
   if(out.query){
+   if(pageDelay)await new Promise(resolve=>setTimeout(resolve,pageDelay));
    ++counters.pages;const q=Q.QRP.getRootAsQRP(new fb.ByteBuffer(out.query.payload)).unpack();if(q.SCHEMA_NAME==='OCM.fbs')assert.match(q.BATCH_ID,/^catalog-[0-9a-f]{64}$/,'only deterministic product lookup reads OCM');const data=records(q.SCHEMA_NAME,q.PROVIDER_ID,q.SOURCE_NAME).filter(b=>!q.BATCH_ID||q.BATCH_ID==='catalog-'+hash(b));const [offset,head]=q.CURSOR?q.CURSOR.split(':').map(Number):[0,data.length];const page=data.slice(offset,Math.min(head,offset+q.LIMIT));const end=offset+page.length;
    const header=Object.assign(new Q.QRPT(),{KIND:Q.qrpKind.Page,STATUS:Q.qrpStatus.Ok,SCHEMA_NAME:q.SCHEMA_NAME,PROVIDER_ID:q.PROVIDER_ID,SOURCE_NAME:q.SOURCE_NAME,BATCH_ID:q.BATCH_ID,RECORD_COUNT:page.length,TOTAL_COUNT:BigInt(head),NEXT_CURSOR:end<head?end+':'+head:null});
-   input=[frame('page','QRP',Buffer.concat([pack(header,'QRP'),...page])),frame('query_status','QRP',out.query.payload)];
+   input=lookupFailure&&q.SCHEMA_NAME==='OCM.fbs'?[frame('query_status','QRP',pack(Object.assign(new Q.QRPT(),{KIND:Q.qrpKind.Error,STATUS:Q.qrpStatus.Invalid,ERROR_CODE:'host-failed'}),'QRP',false))]:[frame('page','QRP',Buffer.concat([pack(header,'QRP'),...page])),frame('query_status','QRP',out.query.payload)];
   }else if(out.seed||out.fallback_seed){
    const fit=!!out.seed;fit?counters.fits++:counters.fallbacks++;if(OMM.getRootAsOMM(new fb.ByteBuffer((out.seed??out.fallback_seed).payload)).NORAD_CAT_ID()===trapObject)trap();
    const inputs=fit?[frame('omm','OMM',out.seed.payload),...['flight_config','fit_config','weather'].filter(p=>out[p]).map(p=>out[p])]:[frame('omm','OMM',out.fallback_seed.payload)];
    const r=await chain.invoke({methodId:fit?'run_chain':'ingest_seed',inputs});assert.equal(r.statusCode,0,r.errorMessage);
+   const fallback=r.outputs.find(f=>f.portId==='fallback');if(fallback)fallbackOriginals.set(O.OCM.getRootAsOCM(new fb.ByteBuffer(fallback.payload)).unpack().METADATA.NORAD_CAT_ID,Buffer.from(fallback.payload));
    const fitted=r.outputs.find(f=>f.portId==='elements');if(fitted)fitOriginals.set(O.OCM.getRootAsOCM(new fb.ByteBuffer(fitted.payload)).unpack().METADATA.NORAD_CAT_ID,Buffer.from(fitted.payload));
    input=r.outputs.map(f=>({...f,portId:{fallback:'fallback',elements:'candidate',decision:'chain_status'}[f.portId]}));
    if(fit&&refusalCode){input=input.filter(f=>!['candidate','chain_status'].includes(f.portId));input.push(frame('chain_status','QRP',pack(Object.assign(new Q.QRPT(),{KIND:Q.qrpKind.Error,STATUS:Q.qrpStatus.Invalid,ERROR_CODE:refusalCode}),'QRP',false)));}
   }else if(out.annotate_orbit){
    const r=await gp.invoke({methodId:'annotate_population_flow',inputs:[frame('ocm','OCM',out.annotate_orbit.payload),frame('elements','OMM',out.annotate_seed.payload)]});assert.equal(r.statusCode,0,r.errorMessage);input=r.outputs.map(f=>({...f,portId:f.portId==='decision'?'annotation_status':'annotated'}));
   }else if(out.meta){
-   const m=decodeIngestRequest(out.meta.payload);assert.match(m.tags.batchId,out.state_records?/^catalog-attempt-[0-9a-f]{64}$/:out.index_records?/^catalog-[0-9a-f]{64}:complete$/:/^catalog-[0-9a-f]{64}$/);const b=Buffer.from((out.product_records??out.index_records??out.state_records).payload);const destination=records(m.schema,m.tags.providerId,m.tags.sourceName);const exists=destination.some(x=>hash(x)===hash(b));if(!exists)destination.push(b);
+   const m=decodeIngestRequest(out.meta.payload);assert.match(m.tags.batchId,out.state_records?/^catalog-attempt-[0-9a-f]{64}$/:out.index_records?/^catalog-[0-9a-f]{64}:complete$/:/^catalog-[0-9a-f]{64}$/);const b=Buffer.from((out.product_records??out.index_records??out.state_records).payload);const destination=records(m.schema,m.tags.providerId,m.tags.sourceName);const exists=destination.some(x=>hash(x)===hash(b));if(!exists&&!(storageFailure&&out.product_records))destination.push(...split(b));
    if(out.product_records){
     const product=O.OCM.getSizePrefixedRootAsOCM(new fb.ByteBuffer(b)).unpack();const id=product.METADATA.NORAD_CAT_ID;
     if(product.MEAN_ELEMENTS.MEAN_ELEMENT_THEORY===O.meanElementSource.AP&&!verified.has(id)){
@@ -60,9 +63,16 @@ async function tick(time,kill=false){
       assert.deepEqual(await fly(b.subarray(4)),await fly(original),'stored product states and formal covariance match the fit output bit for bit');
       verified.add(id);sizes.push({fit:original.length,stored:b.length});
     }
+    if(product.MEAN_ELEMENTS.MEAN_ELEMENT_THEORY===O.meanElementSource.SGP4&&!fallbackVerified.has(id)){
+     const original=fallbackOriginals.get(id);assert.ok(original);const raw=O.OCM.getRootAsOCM(new fb.ByteBuffer(original)).unpack();
+     const stored=O.OCM.getSizePrefixedRootAsOCM(new fb.ByteBuffer(b)).unpack();
+     for(const k of ['COV_REALISM','COVARIANCE_BLOCKS']){assert.deepEqual(stored[k].slice(0,raw[k].length),raw[k]);delete stored[k];delete raw[k];}
+     assert.deepEqual(stored.HEADER.COMMENT.slice(0,raw.HEADER.COMMENT.length),raw.HEADER.COMMENT);assert.equal(stored.HEADER.COMMENT.length,raw.HEADER.COMMENT.length+1);stored.HEADER.COMMENT=raw.HEADER.COMMENT;
+     assert.deepEqual(stored,raw,'fallback repack preserves every original field');assert.deepEqual(await fly(b.subarray(4)),await fly(original),'stored fallback preserves SGP4 states and formal covariance');fallbackVerified.add(id);
+    }
     ++counters.products;if(exists)++counters.duplicateProducts;if(kill){control.destroy();control=await createControl();evidence.stages.push({...counters,killedAfterProduct:true});return counters;}}
    else if(out.index_records){++counters.indexes;const cat=C.CAT.getSizePrefixedRootAsCAT(new fb.ByteBuffer(b)).unpack();if(cat.PRODUCTS.length){assert.ok(records('OCM.fbs','synthetic-node','catalog-products').length>0,'product exists before index');}}
-   input=[frame('stored','IngestResult',encodeIngestResult({schema:m.schema,...m.tags,inserted:exists?0:1,reconciledDuplicates:0}))];
+   input=[frame('stored','IngestResult',encodeIngestResult({schema:m.schema,...m.tags,inserted:exists?0:1,reconciledDuplicates:0,refused:storageFailure&&out.product_records?'synthetic disk refusal':undefined}))];
   }else if(out.recipe){
    const r=await composer.invoke({methodId:'replace_products',inputs:[out.recipe,out.catalog,{...out.selection,portId:'decision'},...(out.selected?[{...out.selected,portId:'ocm_products'}]:[])]});assert.equal(r.statusCode,0,r.errorMessage);input=r.outputs.map(f=>({...f,portId:f.portId==='decision'?'compose_status':'replacement'}));
   }else throw Error('No progress: '+Object.keys(out));
@@ -119,7 +129,7 @@ try{
  records('SPW.fbs','synthetic','weather').push(pack(badWeather,'SPW'));
  records('OCM.fbs','synthetic-node','catalog-products').push(pack(new C.CATT(),'CAT'));
  records('OMM.fbs','synthetic','primary').push(...ids.map(id=>seed(id,.4)));
- const poisoned=await tick(now+6*86400000+3000);assert.equal(poisoned.indexes,2);assert.match(poisoned.notice.reason,/invalid=4/);assert.equal(poisoned.notice.kind,'skipped');
+ const poisoned=await tick(now+6*86400000+3000);assert.equal(poisoned.indexes,2);assert.match(poisoned.notice.reason,/invalid=4/);assert.equal(poisoned.notice.kind,'info');
  // An ingestion failure between two healthy identifiers cannot starve the last.
  const three=[999996,999997,999998];
  store.set(key('CAT.fbs','synthetic','identities'),three.map(id=>pack(Object.assign(new C.CATT(),{NORAD_CAT_ID:id,OBJECT_NAME:'SYNTHETIC'}),'CAT')));
@@ -133,12 +143,12 @@ try{
  store.set(key('OMM.fbs','synthetic','primary'),ids.map(id=>seed(id,.6)));
  const ahead=current().get(ids[1]);ahead.PRODUCTS_AS_OF=new Date(now+8*86400000).toISOString();records('CAT.fbs','synthetic-node','catalog-index').push(pack(ahead,'CAT'));
  control.destroy();control=await createControl();const backwards=await tick(now+6*86400000+6000);
- assert.match(backwards.notice.reason,/compose: invalid-replacement/);assert.ok(backwards.indexes>=1);
+ assert.match(backwards.notice.reason,/clock precedes/);assert.equal(backwards.products,1,'clock rollback does not create an orphan');assert.ok(backwards.indexes>=1);
  // Future seeds become eligible without a content change.
  store.clear();records('CAT.fbs','synthetic','identities').push(...ids.map(id=>pack(Object.assign(new C.CATT(),{NORAD_CAT_ID:id,OBJECT_NAME:'SYNTHETIC'}),'CAT')));
  records('OMM.fbs','synthetic','primary').push(...ids.map(id=>seed(id)));
  records('SPW.fbs','synthetic','weather').push(...split(Buffer.from(weather)));
- control.destroy();control=await createControl();const future=await tick(now-86400000-1000);assert.equal(future.fits,0);assert.equal(future.fallbacks,2);
+ control.destroy();control=await createControl();const future=await tick(Date.parse(obj.EPOCH+'Z')-1000);assert.equal(future.fits,0);assert.equal(future.fallbacks,2);
  const eligible=await tick(now);assert.equal(eligible.fits,2);
  cfg['catalog.batch_size']=1;control.destroy();control=await createControl();records('OMM.fbs','synthetic','primary').push(...ids.map(id=>seed(id,.7)));
  await tick(now+100);const served=[...current()].find(([,c])=>Date.parse(c.PRODUCTS_AS_OF)===now+100)[0];const waiting=ids.find(id=>id!==served);
@@ -149,11 +159,35 @@ try{
  cfg['catalog.max_bytes']=512*1024*1024;control.destroy();control=await createControl();await assert.rejects(()=>tick(now+400));delete cfg['catalog.max_bytes'];
  cfg['catalog.max_removal_fraction']=.25;store.set(key('OMM.fbs','synthetic','primary'),[]);control.destroy();control=await createControl();
  const guarded=await tick(now+1000);assert.equal(guarded.indexes,0);assert.match(guarded.notice.reason,/mass-removal guard/);
- cfg['catalog.invocation_budget_ms']=1000;control.destroy();control=await createControl();const budget=await tick(now+2000);assert.equal(budget.fits+budget.fallbacks,0);assert.equal(budget.notice.kind,'skipped');
- delete cfg['catalog.invocation_budget_ms'];cfg['catalog.partition_count']=2;
+ cfg['catalog.invocation_budget_ms']=1000;control.destroy();control=await createControl();const budget=await tick(now+2000);assert.equal(budget.fits+budget.fallbacks,0);assert.equal(budget.notice.kind,'unchanged');
+ delete cfg['catalog.invocation_budget_ms'];
+ const reset=async (objectIds=ids)=>{store.clear();cfg['catalog.max_removal_fraction']=1;cfg['catalog.batch_size']=4;cfg['catalog.partition_count']=1;cfg['catalog.partition_index']=0;
+  records('CAT.fbs','synthetic','identities').push(...objectIds.map(id=>pack(Object.assign(new C.CATT(),{NORAD_CAT_ID:id,OBJECT_NAME:'SYNTHETIC'}),'CAT')));
+  records('OMM.fbs','synthetic','primary').push(...objectIds.map(id=>seed(id)));records('SPW.fbs','synthetic','weather').push(...split(Buffer.from(weather)));control.destroy();control=await createControl();};
+ await reset();trapObject=Math.min(...ids);await assert.rejects(()=>tick(now),WebAssembly.RuntimeError);control.destroy();control=await createControl();trapObject=undefined;
+ const afterTrap=await tick(now+600000);assert.equal(afterTrap.fits,1,'fresh guest sets aside the trapped first object and reaches the later object');assert.match(afterTrap.notice.reason,/in-progress attempt deferred/);
+ control.destroy();control=await createControl();assert.equal((await tick(now+1200001)).fits,1,'durable attempt becomes retryable after backoff');
+ console.log('PASS durable attempt acknowledgment, Wasm trap, fresh-instance progress and backoff');
+ // A weather defect does not prevent a known decay removal or make a source absence unknown.
+ records('SPW.fbs','synthetic','weather').push(pack(badWeather,'SPW'));
+ const decay=C.CAT.getSizePrefixedRootAsCAT(new fb.ByteBuffer(records('CAT.fbs','synthetic','identities')[0])).unpack();decay.DECAY_DATE=new Date(now).toISOString().slice(0,10);records('CAT.fbs','synthetic','identities').push(pack(decay,'CAT'));
+ records('OMM.fbs','synthetic','primary').push(pack(badSeed,'OMM'));
+ assert.equal((await tick(now+1201000)).indexes,1,'known decay survives malformed weather and seed rows');
+ for(let i=0;i<3;i++){control.destroy();control=await createControl();const observed=await tick(now+1202000+i*1000);assert.match(observed.notice.reason,/invalid=2/);assert.doesNotMatch(observed.notice.reason,/invalid record-sha256/,'unchanged poison reported once, then counted');}
+ records('OMM.fbs','synthetic','primary').splice(0,2);const quarantined=await tick(now+1210000);assert.equal(quarantined.indexes,1,'three observations quarantine poison without permanently disabling absence removal');
+ console.log('PASS per-source poison quarantine and independent decay removal');
+ await reset([999994,999995,999996,999997]);lookupFailure=true;await assert.rejects(()=>tick(now),/Storage circuit breaker/);lookupFailure=false;
+ assert.equal(records('OCM.fbs','synthetic-node','catalog-products').length,0);
+ const failureLog=records('NEV.fbs','synthetic-node','catalog-attempts').map(b=>N.NEV.getSizePrefixedRootAsNEV(new fb.ByteBuffer(b)).unpack().EVENTS[0]);assert.equal(failureLog.filter(e=>e.DETAIL.startsWith('in progress')).length,3,'host-wide lookup failure attempts only three objects');
+ await reset([999994,999995,999996,999997]);storageFailure=true;await assert.rejects(()=>tick(now),/Storage circuit breaker/);storageFailure=false;
+ assert.equal(records('OCM.fbs','synthetic-node','catalog-products').length,0);
+ console.log('PASS lookup isolation and three-refusal storage circuit breaker');
+ await reset();cfg['catalog.invocation_budget_ms']=3000;pageDelay=1150;control.destroy();control=await createControl();const scanBudget=await tick(now);assert.equal(scanBudget.pages,1,'elapsed scan time consumes budget; a frozen clock fails this assertion');assert.equal(scanBudget.fits+scanBudget.fallbacks,0);assert.equal(scanBudget.notice.kind,'unchanged');pageDelay=0;delete cfg['catalog.invocation_budget_ms'];
+ console.log('PASS elapsed monotonic scan budget');
+ cfg['catalog.partition_count']=2;
  cfg['catalog.partition_index']=2;control.destroy();control=await createControl();
  await assert.rejects(()=>tick(now+6*86400000+3000));
- console.log(JSON.stringify({storedFitComparisons:sizes.length,meanFitBytes:sizes.reduce((a,s)=>a+s.fit,0)/sizes.length,meanStoredBytes:sizes.reduce((a,s)=>a+s.stored,0)/sizes.length}));evidence.passed=true;
+ console.log(JSON.stringify({storedFitComparisons:sizes.length,storedFallbackComparisons:fallbackVerified.size,meanFitBytes:sizes.reduce((a,s)=>a+s.fit,0)/sizes.length,meanStoredBytes:sizes.reduce((a,s)=>a+s.stored,0)/sizes.length}));evidence.passed=true;
 }catch(e){evidence.failure=e.stack;throw e;}finally{control.destroy();chain.destroy();gp.destroy();composer.destroy();ap.destroy();}
 
 });

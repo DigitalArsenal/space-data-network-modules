@@ -248,7 +248,7 @@ int next_object() {
   const bool removed=identity==identities.end()||s==seeds.end()||decayed(identity->second);
   const auto* previous=old==index.end()?nullptr:GetSizePrefixedCAT(old->second.data());
   if(previous&&instant(text(previous->PRODUCTS_AS_OF()))>now){++diagnostics.deferred;if(!clock_reported){diagnostics.add("clock precedes a stored selection; affected objects deferred before dispatch","clock");clock_reported=true;}continue;}
-  if(removed){const bool decay=identity!=identities.end()&&decayed(identity->second);if(removal_guard||(!decay&&(!complete_scan||!seed_complete||!identity_complete))||!index_complete)continue;if(!previous||!previous->PRODUCTS()||!previous->PRODUCTS()->size())continue;reason="object removed from the configured current sources";++diagnostics.removed;diagnostics.add("object="+std::to_string(id)+" removal: "+reason,"removal");return compose();}
+  if(removed){const bool decay=identity!=identities.end()&&decayed(identity->second);if(removal_guard||(!decay&&(!complete_scan||!seed_complete||!identity_complete))||(!decay&&!index_complete))continue;if(!previous||!previous->PRODUCTS()||!previous->PRODUCTS()->size())continue;reason="object removed from the configured current sources";++diagnostics.removed;diagnostics.add("object="+std::to_string(id)+" removal: "+reason,"removal");return compose();}
   const auto* omm=GetSizePrefixedOMM(s->second.data.data());
   const double n=omm->MEAN_MOTION()*6.2831853071795864769/1440;
   const bool resonant=n>.0035003818&&n<=.015751718;
