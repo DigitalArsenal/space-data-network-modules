@@ -43,7 +43,7 @@ async function tick(time,kill=false){
   }else if(out.annotate_orbit){
    const r=await gp.invoke({methodId:'annotate_population',inputs:[frame('ocm','OCM',out.annotate_orbit.payload),frame('elements','OMM',out.annotate_seed.payload)]});assert.equal(r.statusCode,0,r.errorMessage);input=r.outputs.map(f=>({...f,portId:'annotated'}));
   }else if(out.meta){
-   const m=decodeIngestRequest(out.meta.payload);const b=Buffer.from((out.product_records??out.index_records).payload);const destination=records(m.schema,m.tags.providerId,m.tags.sourceName);const exists=destination.some(x=>hash(x)===hash(b));if(!exists)destination.push(b);
+   const m=decodeIngestRequest(out.meta.payload);assert.match(m.tags.batchId,out.index_records?/^catalog-[0-9a-f]{64}:complete$/:/^catalog-[0-9a-f]{64}$/);const b=Buffer.from((out.product_records??out.index_records).payload);const destination=records(m.schema,m.tags.providerId,m.tags.sourceName);const exists=destination.some(x=>hash(x)===hash(b));if(!exists)destination.push(b);
    if(out.product_records){++counters.products;if(exists)++counters.duplicateProducts;if(kill){control.destroy();control=await createControl();evidence.stages.push({...counters,killedAfterProduct:true});return counters;}}
    else {++counters.indexes;const cat=C.CAT.getSizePrefixedRootAsCAT(new fb.ByteBuffer(b)).unpack();if(cat.PRODUCTS.length){assert.ok(records('OCM.fbs','synthetic-node','catalog-products').length>0,'product exists before index');}}
    input=[frame('stored','IngestResult',encodeIngestResult({schema:m.schema,...m.tags,inserted:exists?0:1,reconciledDuplicates:0}))];

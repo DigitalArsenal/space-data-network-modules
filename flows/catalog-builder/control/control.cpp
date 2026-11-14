@@ -131,7 +131,9 @@ int compose() {
  if(!chosen.empty()&&push("selected","OCM",chosen))return stop("Cannot queue selected product.");phase=Phase::Compose;return 0;
 }
 int ingest(const Bytes& data,bool is_index) {
- pending=data;pending_schema=is_index?"CAT":"OCM";pending_batch="catalog-"+digest(data);
+ pending=data;pending_schema=is_index?"CAT":"OCM";pending_batch="catalog-"+digest(data)+(is_index?":complete":"");
+ // Each acknowledged replacement is one complete generation. Its product is
+ // durable before this terminal index batch; removals need no product write.
  R::IngestRequestT request;request.SCHEMA=pending_schema+".fbs";request.RECONCILE=R::reconcileMode_Duplicates;request.TAGS=std::make_unique<R::SourceTagsT>();
  request.TAGS->PROVIDER_ID=cfg.provider;request.TAGS->SOURCE_NAME=is_index?"catalog-index":"catalog-products";request.TAGS->BATCH_ID=pending_batch;request.TAGS->CONTENT_KEY_ID="public";
  flatbuffers::FlatBufferBuilder b;R::FinishIngestRequestBuffer(b,R::IngestRequest::Pack(b,&request));
