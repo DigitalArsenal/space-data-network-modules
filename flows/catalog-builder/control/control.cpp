@@ -333,7 +333,7 @@ int start_chain() {
 // Only resource and delivery failures can change without a changed input.
 // Unknown codes fail closed as deterministic; recipe revision permits retry.
 bool transient_refusal(const std::string& code) {
- return code=="out-of-memory"||code=="pool-dead"||code=="output-failed"||code=="host-failed";
+ return code=="out-of-memory"||code=="pool-dead"||code=="output-failed"||code=="output"||code=="host-failed";
 }
 int chain() {
  const auto* fallback=input("fallback"),*candidate=input("candidate"),*decision=input("chain_status");if(phase!=Phase::Chain||!decision)return stop("Unexpected chain outcome.");
