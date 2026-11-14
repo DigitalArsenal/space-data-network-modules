@@ -113,6 +113,11 @@ try{
  records('SPW.fbs','synthetic','weather').push(...split(Buffer.from(weather)));
  control.destroy();control=await createControl();const future=await tick(now-86400000-1000);assert.equal(future.fits,0);assert.equal(future.fallbacks,2);
  const eligible=await tick(now);assert.equal(eligible.fits,2);
+ cfg['catalog.batch_size']=1;control.destroy();control=await createControl();records('OMM.fbs','synthetic','primary').push(...ids.map(id=>seed(id,.7)));
+ await tick(now+100);const served=[...current()].find(([,c])=>Date.parse(c.PRODUCTS_AS_OF)===now+100)[0];const waiting=ids.find(id=>id!==served);
+ records('OMM.fbs','synthetic','primary').push(seed(served,.8));await tick(now+200);assert.equal(Date.parse(current().get(waiting).PRODUCTS_AS_OF),now+200,'oldest unserved selection precedes another change to the recently served object');
+ cfg['catalog.batch_size']=4;
+
  cfg['catalog.max_removal_fraction']=.25;store.set(key('OMM.fbs','synthetic','primary'),[]);control.destroy();control=await createControl();
  const guarded=await tick(now+1000);assert.equal(guarded.indexes,0);assert.match(guarded.notice.reason,/mass-removal guard/);
  cfg['catalog.invocation_budget_ms']=1000;control.destroy();control=await createControl();const budget=await tick(now+2000);assert.equal(budget.fits+budget.fallbacks,0);assert.equal(budget.notice.kind,'skipped');

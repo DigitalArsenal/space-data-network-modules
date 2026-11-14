@@ -497,3 +497,18 @@ test("index_page: surplus request frames are refused before a host call", async 
   assert.equal(out.errorCode, "batched-input-frames");
   assert.equal(calls.length, 0);
 });
+
+test("index_page: rejects malformed framing, counts and oversized replies", async (t) => {
+  const b = new flatbuffers.Builder(256);
+  b.finishSizePrefixed(Object.assign(new QRP.QRPT(), { KIND: QRP.qrpKind.Page, RECORD_COUNT: 1 }).pack(b), "$QRP");
+  const header = b.asUint8Array();
+  for (const suffix of [new Uint8Array(), Uint8Array.of(255,255,255,255), Uint8Array.of(0,0,0,0), Uint8Array.of(1,2)]) {
+    const stream = new Uint8Array(header.length + suffix.length); stream.set(header); stream.set(suffix,header.length);
+    const {harness}=await harnessFor(t,()=>({result:{ROWS:1n},raw:{stream}}));
+    const out=sandboxOutputs(await harness.invoke({methodId:"index_page",inputs:[qrpFrame("query",{SCHEMA_NAME:"CAT.fbs",LIMIT:1,MAX_BYTES:4096n})]}));
+    assert.equal(out.decision.KIND,QRP.qrpKind.Error);assert.equal(out.page,null);
+  }
+  const {harness}=await harnessFor(t,()=>({result:{ROWS:1n},raw:{stream:header}}));
+  const out=sandboxOutputs(await harness.invoke({methodId:"index_page",inputs:[qrpFrame("query",{SCHEMA_NAME:"CAT.fbs",LIMIT:1,MAX_BYTES:12n})]}));
+  assert.equal(out.decision.KIND,QRP.qrpKind.Error);assert.match(out.decision.MESSAGE,/limits/);
+});
