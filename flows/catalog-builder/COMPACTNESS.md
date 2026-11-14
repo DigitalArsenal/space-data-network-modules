@@ -1,8 +1,8 @@
 # Population annotation encoding
 
-Two synthetic stored AP products average 9,592 bytes against 4,536 bytes of
-raw fit output. This is a small functional sample, not a real-catalog transfer
-estimate. The fit's original buffer is embedded unchanged with aligned framing;
+Annotation adds covariance blocks and realism metadata to each product.
+Raw catalog size and compressed transfer size for this configuration are
+unmeasured. The fit's original buffer is embedded with aligned framing;
 no native-object repack expands its fields.
 
 Seven symmetric 6-by-6 matrices contain 147 distinct values: 1,176 bytes as
@@ -22,9 +22,8 @@ the chain's own raw output and the stored product. Repeated chain and annotation
 invocations produce identical bytes. A separate signed-axis permutation checks
 covariance rotation against a hand-computed result with zero tolerance.
 
-A 1,000-record compression benchmark with repacked fit inputs and shorter labels
-measured 9,857,952 raw bytes, 2,248,888 bytes at gzip level 6 and 113,293 bytes
-at zstd level 3. Its near-circular phases and shared weather favor compression.
-Those figures describe that benchmark encoding; compression and full-catalog
-scaling of the raw-fit-preserving output are unmeasured. Indexes, sidecars,
-retained publication copies and transport overhead add further bytes.
+Indexes, operational attempt history, retained publication copies, sidecars and
+transport overhead add bytes. No compression or catalog-size projection is
+attached to this encoding. The ingestion-only SGP4 path repacks to add its
+stable reason comment; compiled tests compare every original field and
+bit-identical propagated states/formal covariance after storage.

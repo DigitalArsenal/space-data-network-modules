@@ -1,11 +1,8 @@
 # Catalog publication requirements
 
-Two synthetic stored products average 9,592 bytes against 4,536 bytes of raw
-fit output. Durable publication adds a synchronous retained SDS copy before
-storage commits. Retained writes serialize, and snapshot selection/export also
-consume bounded memory. Numerical throughput measurements exclude this path.
-Pending and referenced bytes must survive reclamation; host retention capacity
-and reclamation behavior require independent verification.
+Durable publication adds retained SDS copies and synchronous writes. Attempt
+state adds separate operational writes before numerical work. Snapshot export
+and reclamation consume storage and memory. Sustained capacity is unmeasured.
 
 ## Producer and host contract
 
@@ -77,59 +74,22 @@ in full. Duplicate content identifiers are harmless. Empty product lists remove
 selected products. Consumers must have every referenced product before exposing
 a completed index selection.
 
-## Verified behavior
+## Validation boundary
 
-Unsigned synthetic export fixtures use repacked fitted products, an all-product
-scan controller and a host without automatic journal reclamation. They exercise
-the publication contract with inert signing and transport boundaries. The
-raw-fit-preserving controller has separate native first-build and browser
-recovery coverage. Export-fixture counts below describe their tested encoding:
+The compiled controller tests cover product-before-index ordering, deterministic
+batch reuse after interruption, unchanged refusals, operational attempt recovery,
+removals and equality of stored AP/SGP4 fields and propagation to their inputs.
+The native first-build check exercises actual storage pages and acknowledgment
+of operational events before fitting. Older export-fixture byte counts and
+throughput readings do not describe this controller.
 
-- First build, unchanged tick, equal-epoch correction, refused fit, weather
-  recovery, old-span fallback, and removal pass. A SIGKILL after product storage
-  resumes with only the missing index write.
-- Two editions of 32 objects retain and export all four changed batches after
-  superseding ingestion and restart: two CAT and two OCM batches. The older CAT
-  export remains readable.
-- Initial storage plus three daily metadata revisions produces exactly 32 CAT
-  entries and 32 selected compact products in every snapshot. Each snapshot has
-  315,456 product bytes and 10,752 CAT bytes; export indexes add 13,472 and 15,417
-  bytes respectively. These fixtures reuse fitted synthetic products and do not
-  represent daily numerical refits.
-- The native controller's actual initial snapshot plus 13 post-cutoff exports
-  matches a fresh compact snapshot, with identical selected product bytes, one
-  fallback, and one removal. All 17 changed batches survive: ten CAT and seven
-  OCM. Completed publication receipts suppress restart replay.
-- Process failures at storage commit, shard creation, announcement handoff, and
-  completion recover using actual exported SDS files. Repeated announcement at
-  the handoff boundary requires content-identifier deduplication.
-- Captured selection, retention, rate-limit recovery, and production sequencing
-  tests cover product-only SIGKILL, live expiry, concurrent updates during
-  export, and refusal to publish an index after product export fails.
+Operational `catalog-attempts` events are not selected products and are not part
+of paired catalog snapshots or announcements. Their latest per-object state
+must survive restart. A host retention policy that deletes it removes failure
+backoff. Reclamation must preserve pending publication bytes and active product
+references; live expiry alone does not prove safe journal reclamation.
 
-The separate-current-source control remains unsafe: replacing products before
-its index leaves all 32 selected references unresolved. Compactness depends on
-a consistent completed-generation export, not separate source replacement.
-
-## Capacity and excluded behavior
-
-The export-fixture host bounds retained state at 100,000 journal entries and 200,000
-indexed retained records, with 4,096 pending batches per source. It also bounds
-reference metadata at 128 MiB, selections at 100,000 records, shard-index metadata
-at 64 MiB, and individual payloads at 16 MiB. In that configuration, completed history consumes these
-limits. Each changed object normally adds a product and an index transaction;
-a first build of 100,000 objects therefore exceeds the journal-entry bound in
-one store. The 33,000-object first build consumes about 66,000 entries before
-further history. Compute/schedule arithmetic is not a sustained publication-rate
-guarantee. Larger or long-running catalogs require verified reclamation or separate stores
-and a supported drain/retirement procedure.
-
-Reclamation requires completed changed-batch publication and preservation of
-all retained-generation references. Retain-all completion policy retires no
-assets. Live expiry is not journal reclamation. A retained source can be retired
-only after pending and unapplied entries drain; whole-journal removal requires
-all sources to retire and the node to stop. Existing published bytes remain
-outside that storage cleanup.
-
-Signing, network announcement delivery, consumer trust verification, signed-out
-reads, deployment, and automatic journal reclamation are outside these tests.
+Signing, announcement delivery, consumer trust, signed-out reads and deployment
+are outside these checks. Current-generation snapshot export, superseding-batch
+recovery and publication reclamation require host validation with the intended
+configuration; no obsolete fixture counts are presented as that evidence.

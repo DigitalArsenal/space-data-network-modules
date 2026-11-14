@@ -1,10 +1,10 @@
 # Catalog reconciliation flow
 
-Population annotation increases record size: two synthetic stored AP products
-average 9,592 bytes against 4,536 bytes of raw fit output. Fitting costs CPU,
-and durable publication adds retained SDS bytes and synchronous writes.
-[Throughput measurements](PERFORMANCE.md) describe a benchmark configuration;
-they do not establish sustained capacity with publication retention.
+Population annotation increases record size. Fitting consumes CPU; durable
+attempt events add writes before processing; publication adds retained SDS
+copies. Instance replacement adds startup cost. Sustained throughput and
+compression of this configuration are unmeasured. [Resident capacity](PERFORMANCE.md)
+describes a synthetic memory fixture, not processing or publication capacity.
 
 The ten-minute timer reads configured OMM, CAT identity and SPW sources through
 `index_page`, chooses one product per object, stores that product, and replaces
@@ -20,7 +20,11 @@ recently served object do not precede an older unserved selection.
 
 The numerical seed fields read by ingestion, weather drivers read by fitting,
 recipe/acceptance settings and latest identity form the change signature.
-Element metadata alone does not cause a refit. Identity changes cause a fresh
+Element metadata alone does not cause a refit. Seed object identifiers, name,
+originator and provenance copied into the product remain those of its last
+numerical rebuild; a metadata-only seed reissue deliberately leaves them stale.
+The CAT selection uses the latest identity. Consumers use CAT for display
+identity and the product for the seed/provenance of its numerical state. Identity changes cause a fresh
 composition and recomputation. Weather revisions affect objects whose carried
 weather interval includes the revised date; changes outside that interval and
 to unused weather fields cause no refit. A revision inside many overlapping
@@ -32,24 +36,55 @@ The SGP4 flight samples GCRF states from seed epoch minus 2.5 days to plus
 5 days at 300-second spacing. The fit uses NRLMSISE00, supplied weather, gravity
 degree 20, a 30-day weather horizon from its epoch, and tesseral degree 31 at
 eccentricity at most 0.048. Acceptance requires 2,161 states, the exact interval,
-and configured RMS/maximum error limits. These are selection limits, not an
+within one millisecond, and configured RMS/maximum error limits. These are selection limits, not an
 accuracy certification. Weather rows span the day before the flight starts
 through the fit epoch plus 30 days, inclusive.
 
-Expired, future or excluded seeds use ingestion-only SGP4. Future seeds are
-reconsidered when their epoch arrives. Missing/invalid weather and physically
-refused fits wait for input changes. Resource and delivery refusals advance
-without publishing a fallback or a selection. A failed object advances to the following object. Per-instance
-failure backoff grows from one to 128 minutes and resets with the instance;
-Stored products and selections contain no attempt timestamp or counter.
+Expired, future or excluded seeds use ingestion-only SGP4 and do not hash
+weather. Future seeds are reconsidered at eligibility. Every fallback is
+relabeled `old-span fallback` when its seed expires. Deterministic refusals
+wait for input changes. A backward clock defers affected selections before
+fitting or storage, with one clock diagnostic per tick.
 
-Malformed records are counted and skipped. Notices contain bounded source/hash
-examples and object-failure reasons/retry times. `FlowNotice.KIND` is `Info`
-for a successful changed tick, `Unchanged` for a successful unchanged tick,
-`Skipped` for partial/deferred work, and `Missing` for failed work without a
-successful update. Transport corruption or a failed page query stops the scan.
-Incomplete sources suppress removals. Composer and annotation refusals return
-typed outcomes to the controller.
+Before dispatch, the controller stores and awaits acknowledgment of an `$NEV`
+operational event in `catalog-attempts`. Its subject identifies the object,
+its detail identifies the input signature and outcome, and its count records
+attempts for those inputs. These events are separate from product/index
+publication. A fresh instance reads the latest event per object. An unfinished
+attempt is deferred for 20 minutes, doubling to a 24-hour ceiling on repeated
+attempts; final failures await changed inputs. A committed matching selection
+supersedes its attempt marker. Failed state storage stops dispatch. Preserve
+these events across instance replacement; retention that removes an object's
+latest event also removes its crash backoff. Event history adds storage and
+scan cost. The flow does not compact operational event history. The changed
+signature format causes older selections to be recomputed once.
+
+Malformed records are counted and skipped. Bounded `$NEV` warnings record up
+to three observations per source/digest across instance replacement. The first
+observation supplies an example; repetitions only increase the invalid count.
+After three observations a malformed seed/identity row is quarantined and no
+longer makes that source incomplete. Quarantine can permit a missing-source
+removal; the mass-removal guard still applies. At most 4,096 quarantine keys
+are retained; excess unknown defects remain conservative for absence decisions.
+Weather defects do not disable removals. A known decay needs only that object's
+valid identity and retained selection. Missing-source removal needs complete
+seed and identity sources; unknown or dropped selection rows are never new work.
+
+Notice examples have separate four-example quotas for invalid records,
+failures, bounds, removals, clock and general information. Removal proposals
+have an aggregate count; their reasons are sampled, not a durable per-object
+removal log. Successful changed ticks use `Info`; bounded ticks without changes
+use `Unchanged`, including backoff and quarantine. Diagnostics distinguish
+these outcomes in `REASON`. Fatal scan/storage errors use `Missing` and fail
+the invocation. The node timer recognizes only `Unchanged` as a successful
+no-batch result. `Info`, `Skipped`, `Missing` and `Expired` without a batch do
+not receive that exemption and can widen retrieval backoff. One deferred
+object therefore does not slow an otherwise healthy timer.
+
+Product lookup and storage refusals are isolated per object. Three consecutive
+storage failures stop dispatch for the tick; a completed selection resets
+that count. Annotation/composer refusals return typed outcomes. Transport
+corruption and failed source-page queries stop the scan.
 
 A matching committed selection avoids any OCM read. After recomputation,
 recovery checks only the deterministic product batch, reusing identical stored
@@ -65,12 +100,18 @@ to those live sources; selection compaction occurs in memory.
 Read `CATProduct.KIND` before flying a selected record. `ApElements` and
 `Sgp4Elements` distinguish fitted AP and SGP4 fallback products. The stable
 `old-span fallback` selection-reason prefix identifies an expired seed.
+Independently check an AP product's `FIT_START` and `FIT_STOP` against the
+requested propagation time, including the configured validity margin. Do not
+fly a selected AP product outside that interval merely because the timer has
+not replaced it. Selection reasons describe the selection time, not a promise
+that a product remains valid as the consumer's clock advances. Request or use
+a suitable SGP4 product when the fitted span no longer covers the request.
 `CATProduct.STALE` means retirement by a maneuver in the standard; time expiry
 does not set it. CAT has no typed enum for a fallback's time-expiry reason.
 
 A nonempty `PRODUCTS_AS_OF` with zero products is a removal, whether the empty
 vector is present or omitted by a reader's repack. No index row means unprocessed,
-not removed. Removal reasons are retained in the tick notice; CAT has no field
+not removed. A bounded sample of removal reasons appears in the tick notice; CAT has no field
 for a reason on an empty selection. More than the configured share of active
 selections cannot be removed in a tick without an explicit setting increase.
 
@@ -115,8 +156,11 @@ and parallel arrays `catalog.seed_providers` and `catalog.seed_sources` (1–16)
 The resonance rule uses mean motion greater than 0.0035003818 and at most
 0.015751718 radians/minute. Resident accounting includes bytes plus 256 bytes
 per retained entry and replaces superseded entries. Other partitions' records
-are validated but not retained. A bounded partial scan reports read count and
-settings, processes retained work, and suppresses removals. Increase a binding
+are validated but not retained. Quarantine bookkeeping is separately bounded at 4,096 keys. A bounded partial scan reports read count and
+settings and processes only objects with retained seed, identity and selection
+when capacity is exceeded. Selection state is scanned first. Any dropped
+replacement makes that object ineligible for work. A partial scan suppresses
+absence removals; a known decay remains independently decidable. Increase a binding
 setting within its bounds or add partitions. Accounting is not total heap use;
 configure at least 4,096 memory pages (256 MiB). Full-catalog heap use is unmeasured.
 
@@ -126,7 +170,7 @@ duration. It is not a guarantee against a single slow or blocked operation.
 Configure `execution_timeout: 10m` with the 540-second controller budget and
 `release_after_run: true` so an interrupted instance is discarded. A host must
 replace a poisoned invocation before reuse; keeping an interrupted instance
-is unsupported. Instance replacement also adds instantiation/priming costs.
+is unsupported. Durable attempt events preserve failure backoff across that replacement.
 
 ## Build and validation
 
@@ -151,8 +195,11 @@ capacity. Failure backoff remains active.
 Synthetic compiled tests cover poisoned records, isolated failures, composer
 refusal, clock rollback, source precedence, changed-only updates, identity
 refresh, fairness, future/expired fallbacks, removals, deadline reserve,
-recovery, determinism and stored-product equality to raw fit fields/states/formal
-covariance. Covariance rotation also has an independent exact signed-axis case.
+recovery after a WebAssembly trap, deterministic refusals after instance
+replacement, poison quarantine, storage circuit breaking, submillisecond epochs,
+and stored AP/SGP4 equality to original fields/states/formal covariance.
+Covariance tests construct axes independently, compare an exact signed-axis
+case, and rotate the population model using an independently propagated seed.
 The paged connector validates frame lengths/counts and byte/row limits; the
 host contract has `TestStorageIndexPageCompleteSnapshots` coverage. Signing,
 trust and signed-out reads are excluded.

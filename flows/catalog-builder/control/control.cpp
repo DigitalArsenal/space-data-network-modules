@@ -106,7 +106,7 @@ bool configure() {
  return std::isfinite(cfg.max_removal_fraction)&&cfg.max_removal_fraction>=0&&cfg.max_removal_fraction<=1&&std::isfinite(cfg.margin)&&cfg.margin>=0&&cfg.nonres_e>=0&&cfg.nonres_e<=.05&&cfg.res_e>=0&&cfg.res_e<=.3&&std::isfinite(cfg.max_rms)&&cfg.max_rms>0&&std::isfinite(cfg.max_error)&&cfg.max_error>0;
 }
 int query() {
- if(scan_at>=scans.size())return 0;if(!budget_left()){++diagnostics.deferred;return finish();}
+ if(scan_at>=scans.size())return 0;if(!budget_left()){++diagnostics.deferred;diagnostics.add("scan elapsed budget exhausted before all sources completed","bounds");return finish();}
  const auto& s=scans[scan_at];QRPT q;q.KIND=qrpKind::Request;q.SCHEMA_NAME=s.schema+".fbs";q.PROVIDER_ID=s.provider;q.SOURCE_NAME=s.name;q.LIMIT=cfg.page;q.MAX_BYTES=8*1024*1024;q.CURSOR=cursor;
  flatbuffers::FlatBufferBuilder b;FinishQRPBuffer(b,QRP::Pack(b,&q));phase=Phase::Scan;
  return push("query","QRP",{b.GetBufferPointer(),b.GetBufferPointer()+b.GetSize()});
@@ -242,7 +242,7 @@ std::string weather_signature(){
 }
 int next_object() {
  for(;at<work.size()&&done<cfg.batch;++at){
-  if(!budget_left()){++diagnostics.deferred;return finish();}object_start=Clock::now();
+  if(!budget_left()){++diagnostics.deferred;diagnostics.add("object elapsed budget reserve exhausted","bounds");return finish();}object_start=Clock::now();
   const auto id=work[at];if(id%cfg.partitions!=cfg.partition)continue;chosen.clear();signature.clear();reason.clear();object_weather.clear();const auto s=seeds.find(id);const auto identity=identities.find(id);const auto old=index.find(id);
   if(dropped.count(id)||(!index_complete&&old==index.end())||(capacity_limited&&(old==index.end()||s==seeds.end()||identity==identities.end()))){++diagnostics.deferred;continue;}
   const bool removed=identity==identities.end()||s==seeds.end()||decayed(identity->second);
