@@ -38,7 +38,9 @@ try{
   for(const [records,times] of [[[sgp4,xp,ap,carry],[0,60,3600,86400]],[[sgp4,xp,ap,carry,decay],[0,21600,86400,259200,345600]]]){
    const inputs=flight(records,{output:{EPOCHS:times.map(iso),FRAME:frame}});
    const old=await base.invoke({methodId:'propagate_epochs',inputs}),got=await now.invoke({methodId:'propagate_epochs',inputs});
-   assert.equal(old.statusCode,0,old.errorCode);assert.deepEqual(got,old);compared++;
+   assert.equal(old.statusCode,0,old.errorCode);assert.equal(got.statusCode,old.statusCode);assert.equal(got.errorCode,old.errorCode);assert.equal(got.errorMessage,old.errorMessage);
+   assert.equal(got.outputs.length,old.outputs.length);
+   for(let i=0;i<old.outputs.length;i++){assert.equal(got.outputs[i].portId,old.outputs[i].portId);assert.deepEqual(got.outputs[i].typeRef,old.outputs[i].typeRef);assert.ok(Buffer.from(got.outputs[i].payload).equals(Buffer.from(old.outputs[i].payload)),`OEM bytes differ in call ${compared}, block ${i}`);}compared++;
   }
  }
  const inputs=flight([decay],{output:{EPOCHS:[iso(345600)],FRAME:pcfOutputFrame.TEME}});
