@@ -5,7 +5,8 @@
 //    to 0.05, resonance-class sets to 0.2, epochs spread over a day, strong drag at 250 to 560 km and BTERM 0.01 to 1, decaying sets, weather rows that start a day
 //    before the epoch), every served state is within 1 cm (3-D) and 1e-4 m/s (3-D) of AP's state for that record and time asked of a fresh instance, in every
 //    class, strong drag and decay included. The scan runs every second over a day at 0 and 5 days from the epoch and every 17 s over a day at -1, 2 and 10 days;
-//    the fresh asks are made at every 61st served second (every 5th sample at the other days), the count is printed; a window that cannot meet the bound is a
+//    the fresh asks are made at every 61st served second (every 5th sample at the other days), the count is printed, and every served second is also compared
+//    with the instance asked every second (a warm instance), which agrees with the fresh ask; a window that cannot meet the bound is a
 //    tombstone; the edges of windows and the epoch instant are checked;
 //  - a status depends on the record and the time alone: AP's refusal before the epoch does not reach the times after it; refused and failing windows are tombstones;
 //  - purity: two instances that fill their cells in different orders, with different cadences and a jump of the clock, return the same bits and statuses; an
@@ -76,13 +77,12 @@ const T_START = Date.now();
           const a = f.ap(i, t);
           assert.ok(a, `AP refuses where a frame is served: ${kind} ${i} at day ${day} + ${s} s`);
           const dp = dist3(a, q.planes, 0, f.count, i) * 1000, dv = dist3(a, q.planes, 3, f.count, i) * 1000;
-          // the asserted reference, for every kind: AP's state for the record and the time asked of a fresh instance (every set's first ask), at the instants of the
-          // scan that are a multiple of `coldEvery` seconds; the comparison with the same instance asked every second is asserted for the kinds without dense
-          // checks and printed for the others
-          if (!denseKinds.has(kind)) {
-            assert.ok(dp <= POS_BOUND, `${kind} ${i} at day ${day} + ${s} s: ${dp} m from the instance asked every second (3-D)`);
-            assert.ok(dv <= VEL_BOUND, `${kind} ${i} at day ${day} + ${s} s: ${dv} m/s from the instance asked every second (3-D)`);
-          } else warmWorst[kind] = Math.max(warmWorst[kind] ?? 0, dp);
+          // two references, both asserted for every kind: AP's state for the record and the time asked of a fresh instance (every set's first ask), at the
+          // instants of the scan that are a multiple of `coldEvery` seconds, and the instance asked every second (a warm instance), at every served second;
+          // the warm and the fresh instance agree, so both hold the same bound
+          assert.ok(dp <= POS_BOUND, `${kind} ${i} at day ${day} + ${s} s: ${dp} m from the instance asked every second (3-D)`);
+          assert.ok(dv <= VEL_BOUND, `${kind} ${i} at day ${day} + ${s} s: ${dv} m/s from the instance asked every second (3-D)`);
+          warmWorst[kind] = Math.max(warmWorst[kind] ?? 0, dp);
           if (isColdInstant) {
             const c = cold.ap(i, t);
             assert.ok(c, `AP asked of a fresh instance refuses where a frame is served: ${kind} ${i}`);
@@ -123,7 +123,7 @@ const T_START = Date.now();
   assert.ok(st[STAT.apTombstones] > 0, "the decaying sets leave AP-refusal tombstones");
   assert.ok(coldChecked > 20000, `${coldChecked} served states compared with AP asked of a fresh instance`);
   console.log(`share of the scanned times served: ${JSON.stringify(Object.fromEntries(["drag300", "drag250", "decay", "hp490", "hp520b01", "hp560b1", "leo500", "ecc", "shortrows"].map((k) => [k, +(shareKind[k][0] / shareKind[k][1]).toFixed(4)])))}`);
-  console.log(`asserted: ${coldChecked} served states against AP asked of a fresh instance (every kind), and every served second of the sets without dense checks against the instance asked every second; printed: the sets with dense checks against the instance asked every second, worst ${JSON.stringify(Object.fromEntries(Object.entries(warmWorst).map(([k, v]) => [k, +(v).toExponential(2)])))} m`);
+  console.log(`asserted: ${coldChecked} served states against AP asked of a fresh instance (every kind), and every served second of every kind against the instance asked every second, worst by kind ${JSON.stringify(Object.fromEntries(Object.entries(warmWorst).map(([k, v]) => [k, +(v).toExponential(2)])))} m`);
   console.log(`worst 3-D position ${(worstAll).toExponential(2)} m, velocity ${worstVelAll.toExponential(2)} m/s; by kind ${JSON.stringify(Object.fromEntries(Object.entries(worstByKind).map(([k, v]) => [k, +v.toExponential(2)])))}; points answered by a tombstone ${JSON.stringify(tombstonePoints)}`);
   finish("bound", t0);
 }
