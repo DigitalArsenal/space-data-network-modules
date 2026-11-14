@@ -1,14 +1,13 @@
 # Catalog publication requirements
 
-Evicting a final failure forgets its changed-input requirement: the object is fitted once more when reached and its outcome is recorded again. An evicted backoff retries sooner; an evicted poison is detected and recorded again on its source read. The attempt state is a cache of recent attempts; eviction removes no catalog product or selection.
+Evicting a final failure forgets its changed-input requirement: the object is fitted again when reached and its outcome is recorded again. Persistent failures beyond cache capacity can incur repeated fits across runs. An evicted backoff retries sooner. The attempt state is a cache of recent attempts; eviction removes no catalog product or selection.
 
 Recovery re-sends the selected product bytes, even when identical bytes remain in
 live storage. Durable publication adds retained SDS copies and synchronous writes. Attempt
 state adds separate operational writes before numerical work. Snapshot export
 and reclamation consume storage and memory. Sustained capacity is unmeasured.
 
-
-The combined attempt/poison cache holds at most 4,096 entries. Admission evicts the oldest unprotected entries by the sequence of their latest event; capacity never skips or stops an object build. Eviction is normal operation and the Info notice reports `evicted=<count>`. Staged selections, prepared product-batch references awaiting terminal-index acknowledgment, and the interruption suspect are protected. The batch-size bound is checked against the cache limit (`batch_size + 1 < state_limit`). An eviction forces a full `RECONCILE=Current` snapshot before dispatch so deleted entries cannot reappear after restart. Complete source reads prune unprotected objects absent from both identities and index; other unused entries age out through FIFO eviction.
+The combined attempt/poison cache holds at most 4,096 entries. Admission evicts the oldest unprotected entries by the sequence of their latest event; the entry bound never skips or stops an object build. Eviction is normal operation and the Info notice reports `evicted=<count>`. Staged selections and the interruption suspect are protected. Prepared product-batch references are protected during recovery reads; a complete read releases their pins for redispatch while retaining lookup hints. The run re-sends every selected product. If protected entries alone exceed the bound, the oldest recovery reference is evicted with an explicit warning in the notice; staged entries take priority. The batch-size bound is checked against the cache limit (`batch_size + 1 < state_limit`). Appended events imply eviction through the same FIFO during replay. Complete source reads prune unprotected objects absent from both identities and index; other unused entries age out through FIFO eviction.
 
 ## Producer and host contract
 
@@ -111,7 +110,7 @@ of operational events before fitting. Older export-fixture byte counts and
 throughput readings do not describe this controller.
 
 Operational `catalog-attempts` state (or the partition-specific source) are not selected products and are not part
-of paired catalog snapshots or announcements. Live failed/in-progress entries must survive restart. Single-object dispatch/failure markers are appended; boundary snapshots use current-source batch reconciliation to compact them and remove completed markers. A host retention policy that deletes it removes failure
+of paired catalog snapshots or announcements. Live failed/in-progress entries must survive restart. Single-object dispatch/failure markers and preparation deltas are appended; at most one full snapshot per run uses current-source batch reconciliation to compact them and remove completed markers. A host retention policy that deletes it removes failure
 backoff. Reclamation must preserve pending publication bytes and active product
 references; live expiry alone does not prove safe journal reclamation.
 
