@@ -1,7 +1,7 @@
 import test from 'node:test';import {fileURLToPath} from 'node:url';
 import fs from 'node:fs';import * as fb from 'flatbuffers';import assert from 'node:assert/strict';import {createHash} from 'node:crypto';
 import * as C from 'spacedatastandards.org/lib/js/CAT/main.js';import * as O from 'spacedatastandards.org/lib/js/OCM/main.js';import * as Q from 'spacedatastandards.org/lib/js/QRP/main.js';import {OMM} from 'spacedatastandards.org/lib/js/OMM/OMM.js';import {SPW} from 'spacedatastandards.org/lib/js/SPW/SPW.js';
-import {encodeTimerTick,decodeIngestRequest,encodeIngestResult} from 'space-data-module-sdk/runtime-contracts';
+import {encodeTimerTick,decodeIngestRequest,encodeIngestResult,decodeFlowNotice} from 'space-data-module-sdk/runtime-contracts';
 import {createBrowserModuleHarness} from 'space-data-module-sdk/host/browser-module';import {createStandaloneHarness} from 'space-data-module-sdk/testing/isomorphic';
 import {ommBytes,weather} from './fixtures.mjs';
 test('controller reconciles changed inputs, refusal, expiry, removal, and interruption through compiled modules',async()=>{
@@ -30,7 +30,7 @@ async function tick(time,kill=false){
  const counters={fits:0,fallbacks:0,products:0,indexes:0,pages:0,duplicateProducts:0};
  for(let count=0;count<10000;count++){
   assert.equal(response.statusCode,0,response.errorMessage);const out=Object.fromEntries(response.outputs.map(f=>[f.portId,f]));let input=[];
-  if(out.notice){evidence.stages.push(counters);return counters;}
+  if(out.notice){counters.notice=decodeFlowNotice(out.notice.payload);evidence.stages.push(counters);return counters;}
   if(out.query){
    ++counters.pages;const q=Q.QRP.getRootAsQRP(new fb.ByteBuffer(out.query.payload)).unpack();const data=records(q.SCHEMA_NAME,q.PROVIDER_ID,q.SOURCE_NAME);const [offset,head]=q.CURSOR?q.CURSOR.split(':').map(Number):[0,data.length];const page=data.slice(offset,Math.min(head,offset+q.LIMIT));const end=offset+page.length;
    const header=Object.assign(new Q.QRPT(),{KIND:Q.qrpKind.Page,STATUS:Q.qrpStatus.Ok,SCHEMA_NAME:q.SCHEMA_NAME,PROVIDER_ID:q.PROVIDER_ID,SOURCE_NAME:q.SOURCE_NAME,RECORD_COUNT:page.length,TOTAL_COUNT:BigInt(head),NEXT_CURSOR:end<head?end+':'+head:null});
@@ -48,7 +48,7 @@ async function tick(time,kill=false){
    else {++counters.indexes;const cat=C.CAT.getSizePrefixedRootAsCAT(new fb.ByteBuffer(b)).unpack();if(cat.PRODUCTS.length){assert.ok(records('OCM.fbs','synthetic-node','catalog-products').length>0,'product exists before index');}}
    input=[frame('stored','IngestResult',encodeIngestResult({schema:m.schema,...m.tags,inserted:exists?0:1,reconciledDuplicates:0}))];
   }else if(out.recipe){
-   const r=await composer.invoke({methodId:'replace_products',inputs:[out.recipe,out.catalog,{...out.selection,portId:'decision'},...(out.selected?[{...out.selected,portId:'ocm_products'}]:[])]});assert.equal(r.statusCode,0,r.errorMessage);input=r.outputs.map(f=>({...f,portId:'replacement'}));
+   const r=await composer.invoke({methodId:'replace_products',inputs:[out.recipe,out.catalog,{...out.selection,portId:'decision'},...(out.selected?[{...out.selected,portId:'ocm_products'}]:[])]});assert.equal(r.statusCode,0,r.errorMessage);input=r.outputs.map(f=>({...f,portId:f.portId==='decision'?'compose_status':'replacement'}));
   }else throw Error('No progress: '+Object.keys(out));
   response=await control.invoke({methodId:'advance',inputs:input});
  }
@@ -75,6 +75,33 @@ try{
   const part=await tick(now+6*86400000+2000);assert.equal(part.products,1);assert.equal(part.indexes,1);assert.equal(part.fits,0);
  }
  assert.equal([...current().values()].filter(c=>c.PRODUCTS.length===1).length,2);
+ // Poison one record in every source without losing healthy objects.
+ cfg['catalog.partition_count']=1;cfg['catalog.partition_index']=0;
+ control.destroy();control=await createControl();
+ const badSeed=OMM.getRootAsOMM(new fb.ByteBuffer(ommBytes)).unpack();badSeed.NORAD_CAT_ID=0;
+ records('OMM.fbs','synthetic','primary').push(pack(badSeed,'OMM'));
+ records('CAT.fbs','synthetic','identities').push(pack(new C.CATT(),'CAT'));
+ records('CAT.fbs','synthetic-node','catalog-index').push(pack(new C.CATT(),'CAT'));
+ const badWeather=SPW.getSizePrefixedRootAsSPW(new fb.ByteBuffer(split(Buffer.from(weather))[0])).unpack();badWeather.DATE='bad';
+ records('SPW.fbs','synthetic','weather').push(pack(badWeather,'SPW'));
+ records('OCM.fbs','synthetic-node','catalog-products').push(pack(new C.CATT(),'CAT'));
+ records('OMM.fbs','synthetic','primary').push(...ids.map(id=>seed(id,.4)));
+ const poisoned=await tick(now+6*86400000+3000);assert.equal(poisoned.indexes,2);assert.match(poisoned.notice.reason,/invalid=5/);assert.equal(poisoned.notice.kind,'Skipped');
+ // An ingestion failure between two healthy identifiers cannot starve the last.
+ const three=[999996,999997,999998];
+ store.set(key('CAT.fbs','synthetic','identities'),three.map(id=>pack(Object.assign(new C.CATT(),{NORAD_CAT_ID:id,OBJECT_NAME:'SYNTHETIC'}),'CAT')));
+ const failing=OMM.getRootAsOMM(new fb.ByteBuffer(ommBytes)).unpack();failing.NORAD_CAT_ID=three[1];failing.MEAN_MOTION=-1;
+ store.set(key('OMM.fbs','synthetic','primary'),[seed(three[0],.5),pack(failing,'OMM'),seed(three[2],.5)]);
+ cfg['catalog.batch_size']=4;control.destroy();control=await createControl();
+ const isolated=await tick(now+6*86400000+4000);assert.ok(isolated.indexes>=2);assert.match(isolated.notice.reason,/failed=1/);assert.match(isolated.notice.reason,/retry=/);assert.ok(current().get(three[2]).PRODUCTS.length);
+ const backoff=await tick(now+6*86400000+5000);assert.equal(backoff.fallbacks,0);assert.match(backoff.notice.reason,/deferred=1/);
+ // A backward clock causes a typed composer refusal, then a healthy update.
+ store.set(key('CAT.fbs','synthetic','identities'),ids.map(id=>pack(Object.assign(new C.CATT(),{NORAD_CAT_ID:id,OBJECT_NAME:'SYNTHETIC'}),'CAT')));
+ store.set(key('OMM.fbs','synthetic','primary'),ids.map(id=>seed(id,.6)));
+ const ahead=current().get(ids[1]);ahead.PRODUCTS_AS_OF=new Date(now+8*86400000).toISOString();records('CAT.fbs','synthetic-node','catalog-index').push(pack(ahead,'CAT'));
+ control.destroy();control=await createControl();const backwards=await tick(now+6*86400000+6000);
+ assert.match(backwards.notice.reason,/compose: invalid-replacement/);assert.ok(backwards.indexes>=1);
+ cfg['catalog.partition_count']=2;
  cfg['catalog.partition_index']=2;control.destroy();control=await createControl();
  await assert.rejects(()=>tick(now+6*86400000+3000));
  evidence.passed=true;

@@ -109,13 +109,13 @@ bool retain(const uint8_t* p,size_t n) {
   flatbuffers::Verifier v(p,n);if(!VerifySizePrefixedOMMBuffer(v))return false;const auto* o=GetSizePrefixedOMM(p);const auto epoch=instant(text(o->EPOCH()));const auto id=o->NORAD_CAT_ID();if(!id||epoch<0)return false;
   auto found=seeds.find(id);if(found==seeds.end()||scan_at<found->second.rank||(scan_at==found->second.rank&&epoch>=found->second.epoch))seeds[id]={std::move(data),epoch,scan_at};
  } else if(scan.schema=="SPW") {
-  flatbuffers::Verifier v(p,n);if(!VerifySizePrefixedSPWBuffer(v))return false;const auto* w=GetSizePrefixedSPW(p);if(!w->DATE())return false;weather[text(w->DATE())]=std::move(data);
+  flatbuffers::Verifier v(p,n);if(!VerifySizePrefixedSPWBuffer(v))return false;const auto* w=GetSizePrefixedSPW(p);if(!w->DATE()||instant(text(w->DATE())+"T00:00:00Z")<0)return false;weather[text(w->DATE())]=std::move(data);
  } else if(scan.schema=="CAT") {
   flatbuffers::Verifier v(p,n);if(!VerifySizePrefixedCATBuffer(v))return false;const auto* c=GetSizePrefixedCAT(p);if(!c->NORAD_CAT_ID())return false;
   auto& target=scan.name=="catalog-index"&&scan.provider==cfg.provider?index:identities;
   const auto old=target.find(c->NORAD_CAT_ID());
   if(&target==&identities||old==target.end()||instant(text(c->PRODUCTS_AS_OF()))>=instant(text(GetSizePrefixedCAT(old->second.data())->PRODUCTS_AS_OF())))target[c->NORAD_CAT_ID()]=std::move(data);
- } else if(scan.schema=="OCM") {products.insert(cid(data));}
+ } else if(scan.schema=="OCM") {flatbuffers::Verifier v(p,n);if(!VerifySizePrefixedOCMBuffer(v))return false;products.insert(cid(data));}
  else return false;
  return true;
 }
