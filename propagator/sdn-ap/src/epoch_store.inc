@@ -1518,7 +1518,7 @@ inline size_t series_reserve(Store& st, const pool::Job& j) {
       (xpt::keep_sp_raw() ? static_cast<uint64_t>(xpt::tess::sp_bound(degree, false, extra)) * sizeof(xpt::tess::SpCoef) : 0);
   const uint64_t bytes = retained + (ap_sets ? std::min<uint64_t>(ap_sets * (128ull << 10), room + (1u << 20)) +
       (j.threads + 1) * (table + sizeof(xpt::tess::SpTermsScratch)) : 0) + (8u << 20);
-  return static_cast<size_t>(std::min<uint64_t>(bytes + (wide ? (j.threads + 1) * (24ull << 20) + xpt::tess::kGridCacheBytes : 0), 1ull << 30));  // a slice's: far under 2^31 (sbrk's increment)
+  return static_cast<size_t>(std::min<uint64_t>(bytes + (wide ? (j.threads + 1) * (24ull << 20) + xpt::tess::grid_cache().budget : 0), 1ull << 30));  // a slice's: far under 2^31 (sbrk's increment)
 }
 }  // namespace epochs
 

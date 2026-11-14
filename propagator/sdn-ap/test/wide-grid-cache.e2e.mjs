@@ -23,7 +23,7 @@ for(const threads of [0,3,14])for(const kind of ['ascending','descending','shuff
   for(const k of map){const v=h.one(k);assert.equal(v.rc,0);assert.deepEqual(v.state,truth[k]);}
   for(let pass=0;pass<2;++pass){const v=h.batch();assert.equal(v.rc,0);assert.ok(v.status.every(x=>x===0));for(let k=0;k<count;k++)assert.deepEqual(Array.from({length:6},(_,z)=>v.values[z*count+k]),truth[k]);}
   const budget=h.budget();assert.equal(budget.rc,0);assert.ok(budget.out[1]<=budget.out[0]);
-  const old=budget.out[0];assert.equal(h.budget(1).rc,-1);assert.equal(h.budget().out[0],old);
+  assert.equal(h.budget(1).rc,0);assert.equal(h.budget().out[0],172362864);
   out.cases.push({threads:threads+1,order:kind,answered:count,budget:budget.out,linearBytes:h.h.memory.buffer.byteLength});save(out);
  }finally{await h.close();}
 }

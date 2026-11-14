@@ -154,13 +154,13 @@ extern "C" __attribute__((export_name("sdnap_wide_grid_stats"))) int32_t sdnap_w
 }
 // The minimum holds two maximum-size payloads for each of 16 pool threads and
 // the caller. Covariance sigma sets read their grids sequentially within a row.
-// A rejected reduction preserves the previous budget and all pinned payloads.
+// Positive requests below the minimum apply the minimum. Pinned payloads are preserved.
 extern "C" __attribute__((export_name("sdnap_wide_grid_budget"))) int32_t sdnap_wide_grid_budget(double bytes, double* out) {
   auto& c = grid_cache(); cache_lock(&c.word); int32_t rc = 0;
   if (bytes >= 1.0) {
-    if (!std::isfinite(bytes) || bytes < kGridMinimumBytes || bytes > double(SIZE_MAX)) rc = -1;
+    if (!std::isfinite(bytes) || bytes > double(SIZE_MAX)) rc = -1;
     else {
-      const size_t old = c.budget; c.budget = static_cast<size_t>(bytes);
+      const size_t old = c.budget; c.budget = std::max(kGridMinimumBytes, static_cast<size_t>(bytes));
       if (!grid_room(c, 0)) { c.budget = old; rc = -1; }
     }
   }

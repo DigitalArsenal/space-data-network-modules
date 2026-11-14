@@ -88,7 +88,8 @@ The output map and the terms above e 0.3 retain their definitions.
   thread that cannot make them answers the theory's refusal code.
   `sdnap_wide_grid_budget(bytes, out)` sets a strict payload residency budget, 192 MiB by default.
   The minimum is 172,362,864 bytes: two largest payloads for each of 16 pool threads and the caller.
-  Values below 1 read without changing it; updates below the minimum or above SIZE_MAX return -1.
+  Values below 1 read without changing it; positive updates below the minimum apply the minimum.
+  The applied budget is returned in out[0]; values above SIZE_MAX return -1.
   The four output doubles are the budget, resident bytes, payload count and unpinned payload count.
   Exact-key descriptors remain attached to sets; unpinned payloads are evicted in least-recently-used order.
   A miss rebuilds identical coefficients. Allocation or capacity refusal is counted and retryable.

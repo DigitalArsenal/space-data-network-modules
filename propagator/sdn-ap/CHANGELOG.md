@@ -2,6 +2,8 @@
 
 ## Unreleased — Bounded wide-grid payloads
 
+The default wide-grid payload budget changes from 512 to 192 MiB. Positive requests below the 172,362,864-byte minimum apply that minimum and return the applied value in out[0]. Hosts requesting smaller budgets must inspect that value.
+
 Steady passes over more wide sets than the cache holds rebuild payloads. Parallel construction also adds per-thread buffers and allocator reserve. For 1,000 distinct synthetic wide sets at the 192 MiB default budget, the median first / steady pass costs were 26.150 / 25.157 s on one total computation thread, 6.765 / 6.576 s on four, and 2.169 / 2.108 s on fifteen. Observed peak linear memory in these paired runs was 321,978,368, 814,809,088, and 1,290,272,768 bytes respectively. Resident grid accounting was bounded by 201,326,592 bytes; the observed full cache held 197,710,344 bytes. These are 1,000 wide sets, with no additional non-wide records.
 
 Each comparison has eight ABBA rounds. Four / one thread first-pass and steady-pass ratios are 0.2589 and 0.2614, with middle halves [0.2580, 0.2621] and [0.2609, 0.2623]. Fifteen / four ratios are 0.3188 and 0.3181, with middle halves [0.3173, 0.3222] and [0.3173, 0.3210]. All middle-half widths are below 5% of their medians. Loading and pool startup are excluded. The separate four-thread control in the second comparison measured 6.819 / 6.626 s; no unpaired fifteen / one ratio is asserted. `test/wide-grid-cost.mjs` records the raw rounds, loads, memory and state digests.

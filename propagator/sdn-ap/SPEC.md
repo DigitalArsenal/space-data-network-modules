@@ -4185,8 +4185,9 @@ instance began (out[2]).
   uses one checked reuse block of at most 8,216,562 bytes plus 31,744 workspace bytes. The grid
   constructor also uses 600 temporary family-index bytes. Allocation failure releases temporary
   storage and payload reservations, is counted, and permits retry. Arithmetic order is unchanged.
-- `sdnap_wide_grid_budget(bytes, out)` reads for values below 1. A finite whole-byte update from
-  the minimum through SIZE_MAX sets the bound; invalid updates return -1 and preserve the bound.
+- `sdnap_wide_grid_budget(bytes, out)` reads for values below 1. A finite update from 1
+  through SIZE_MAX sets the bound, rounded down to whole bytes and clamped to the minimum.
+  out[0] returns the applied bound; invalid updates return -1 and preserve the bound.
   An update that cannot evict enough unpinned storage also returns -1. out[0..3] contain the budget,
   resident accounting bytes, resident payload count and unpinned payload count. Read-only NaN
   follows the values-below-1 convention; positive infinity is rejected.
