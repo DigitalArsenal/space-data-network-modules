@@ -72,7 +72,7 @@ std::set<std::string> checked_batches;
 int flush_generation();
 int stage_selection(const Bytes& record);
 bool metadata_only=false,retry_fallback=false;Bytes fallback_annotation;
-bool compose_only=false,run_fit=false,complete_scan=true,capacity_limited=false,seed_complete=true,identity_complete=true,index_complete=true,weather_complete=true,removal_guard=false;
+bool compose_only=false,run_fit=false,complete_scan=true,capacity_limited=false,seed_complete=true,identity_complete=true,index_complete=true,weather_complete=true,removal_guard=false,index_defects=false;
 struct Poison {unsigned count=0;std::string source;uint64_t sequence=0;};
 constexpr size_t state_limit=4096,max_batch_size=1024;
 static_assert(max_batch_size+1<state_limit,"A generation and its interruption suspect fit in the attempt cache.");
@@ -229,7 +229,7 @@ int build_work(){
  diagnostics.add("resident-bytes="+std::to_string(retained)+" retained-triples="+std::to_string(triples));
  work.clear();for(const auto& entry:identities)work.push_back(entry.first);for(const auto& entry:index)if(!identities.count(entry.first))work.push_back(entry.first);
  size_t active=0,removed=0;for(const auto& entry:index){const auto* c=GetSizePrefixedCAT(entry.second.data());if(!c->PRODUCTS()||!c->PRODUCTS()->size())continue;++active;
-  const auto identity=identities.find(entry.first);if(dropped.count(entry.first))continue;const bool known_decay=identity!=identities.end()&&decayed(identity->second);const bool absent=!capacity_limited&&complete_scan&&seed_complete&&identity_complete&&index_complete&&(identity==identities.end()||!seeds.count(entry.first));if(known_decay||absent)++removed;}
+  const auto identity=identities.find(entry.first);if(dropped.count(entry.first))continue;const bool known_decay=identity!=identities.end()&&decayed(identity->second);const bool absent=!capacity_limited&&complete_scan&&seed_complete&&identity_complete&&index_complete&&!index_defects&&(identity==identities.end()||!seeds.count(entry.first));if(known_decay||absent)++removed;}
  if(active&&double(removed)/active>cfg.max_removal_fraction){removal_guard=true;diagnostics.add("mass-removal guard: proposed="+std::to_string(removed)+" active="+std::to_string(active)+"; raise catalog.max_removal_fraction explicitly","bounds");}
  if(!index_complete){++diagnostics.deferred;diagnostics.add("index scan incomplete; unselected objects deferred and source retried on the following tick","bounds");}
  if(!complete_scan)++diagnostics.deferred;if(capacity_limited){diagnostics.add("scan partial: read="+std::to_string(seen)+" retained-bytes="+std::to_string(retained)+" catalog.max_records="+std::to_string(cfg.max_records)+" catalog.max_bytes="+std::to_string(cfg.max_bytes)+"; raise the binding setting or partition the catalog; removals disabled","bounds");}
@@ -256,11 +256,11 @@ int page(const plugin_input_frame_t* f) {
   ++diagnostics.invalid;const auto source=scan.schema+"/"+scan.provider+"/"+scan.name;const auto key="catalog-invalid/"+digest(Bytes(p+off,p+off+len))+"/"+digest(Bytes(source.begin(),source.end()));
   unsigned count=poisons.count(key)?poisons[key].count:0;
   if(count==0)diagnostics.add(source+" invalid record-sha256="+digest(Bytes(p+off,p+off+len)),"invalid");
-  if(count<3&&poison_seen.insert(key).second){++count;poisons[key]={count,source,++state_sequence};trim_state();
+  if(poison_seen.insert(key).second){count=std::min(count+1,3u);poisons[key]={count,source,++state_sequence};trim_state();
    NEVT log;log.NODE_ID=cfg.provider;log.GENERATED_AT_MS=now;auto e=std::make_unique<NEVEventT>();e->TIME_MS=now;e->KIND=nevEventKind::Warning;e->SUBJECT=key;e->COUNT=count;e->DETAIL=poison_detail(poisons.at(key));log.EVENTS.push_back(std::move(e));
    flatbuffers::FlatBufferBuilder b;FinishSizePrefixedNEVBuffer(b,NEV::Pack(b,&log));poison_updates.insert(poison_updates.end(),b.GetBufferPointer(),b.GetBufferPointer()+b.GetSize());}
   if(count<3){if(scan.schema=="OMM")seed_complete=false;if(scan.schema=="CAT"&&scan.provider==cfg.identity_provider&&scan.name==cfg.identity_source)identity_complete=false;}
-  if(count<3&&scan.schema=="CAT"&&scan.provider==cfg.provider&&scan.name=="catalog-index")index_complete=false;
+  if(count<3&&scan.schema=="CAT"&&scan.provider==cfg.provider&&scan.name=="catalog-index")index_defects=true;
  }
  off+=len;++count;}
  if(count!=q->RECORD_COUNT())return stop("Complete-read count mismatch.");
@@ -421,7 +421,7 @@ int next_object() {
   const bool removed=identity==identities.end()||s==seeds.end()||decayed(identity->second);
   const auto* previous=old==index.end()?nullptr:GetSizePrefixedCAT(old->second.data());
   if(previous&&instant(text(previous->PRODUCTS_AS_OF()))>now){++diagnostics.deferred;if(!clock_reported){diagnostics.add("clock precedes a stored selection; affected objects deferred before dispatch","clock");clock_reported=true;}continue;}
-  if(removed){const bool decay=identity!=identities.end()&&decayed(identity->second);if(removal_guard||(!decay&&(!complete_scan||!seed_complete||!identity_complete))||(!decay&&!index_complete))continue;if(!previous||!previous->PRODUCTS()||!previous->PRODUCTS()->size())continue;reason="object removed from the configured current sources";signature=digest(old->second)+"/removed/"+(identity==identities.end()?"absent":digest(identity->second));if(attempt_deferred())continue;compose_only=true;++diagnostics.removed;diagnostics.add("object="+std::to_string(id)+" removal: "+reason,"removal");return save_attempt();}
+  if(removed){const bool decay=identity!=identities.end()&&decayed(identity->second);if(removal_guard||(!decay&&(!complete_scan||!seed_complete||!identity_complete))||(!decay&&(!index_complete||index_defects)))continue;if(!previous||!previous->PRODUCTS()||!previous->PRODUCTS()->size())continue;reason="object removed from the configured current sources";signature=digest(old->second)+"/removed/"+(identity==identities.end()?"absent":digest(identity->second));if(attempt_deferred())continue;compose_only=true;++diagnostics.removed;diagnostics.add("object="+std::to_string(id)+" removal: "+reason,"removal");return save_attempt();}
   const auto* omm=GetSizePrefixedOMM(s->second.data.data());
   const double n=omm->MEAN_MOTION()*6.2831853071795864769/1440;
   const bool resonant=n>.0035003818&&n<=.015751718;
@@ -495,7 +495,7 @@ int storage_failure(const std::string& message){if(++storage_failures>=3)return 
 int advance() {
  if(input("tick")){
   if(!configure())return stop("Invalid catalog ModuleConfig.");const auto* f=input("tick");flatbuffers::Verifier v(f->payload,f->payload_length);if(!R::VerifyTimerTickBuffer(v))return stop("Invalid timer tick.");now=R::GetTimerTick(f->payload)->FIRED_MS();if(now<=0)return stop("Timer requires a positive UTC time.");
-  staged.clear();product_batches.clear();generation_index.clear();staged_bytes=product_batch_at=pending_count=0;checked_batches.clear();lookup_cursor.clear();fallback_annotation.clear();diagnostics=Diagnostics{};state_complete=true;scan_exhausted=false;state_rows=state_appends=0;state_history_oversized=false;state_sequence=0;state_evicted=false;interruption_suspect=0;storage_failures=0;clock_reported=false;tick_start=Clock::now();allowance=cfg.allowance_ms;complete_scan=true;capacity_limited=false;seed_complete=identity_complete=index_complete=weather_complete=true;removal_guard=false;poisons.clear();poison_seen.clear();poison_updates.clear();dropped.clear();seeds.clear();identities.clear();index.clear();weather.clear();products.clear();attempts.clear();dirty_attempts.clear();scans={{"NEV",cfg.provider,state_source()},{"CAT",cfg.provider,"catalog-index"}};scans.insert(scans.end(),cfg.seeds.begin(),cfg.seeds.end());scans.push_back({"CAT",cfg.identity_provider,cfg.identity_source});scans.push_back({"SPW",cfg.weather_provider,cfg.weather_source});scan_at=pages=seen=retained=done=at=0;cursor.clear();return query();
+  staged.clear();product_batches.clear();generation_index.clear();staged_bytes=product_batch_at=pending_count=0;checked_batches.clear();lookup_cursor.clear();fallback_annotation.clear();diagnostics=Diagnostics{};state_complete=true;scan_exhausted=false;state_rows=state_appends=0;state_history_oversized=false;state_sequence=0;state_evicted=false;interruption_suspect=0;storage_failures=0;clock_reported=false;tick_start=Clock::now();allowance=cfg.allowance_ms;complete_scan=true;capacity_limited=false;seed_complete=identity_complete=index_complete=weather_complete=true;removal_guard=false;index_defects=false;poisons.clear();poison_seen.clear();poison_updates.clear();dropped.clear();seeds.clear();identities.clear();index.clear();weather.clear();products.clear();attempts.clear();dirty_attempts.clear();scans={{"NEV",cfg.provider,state_source()},{"CAT",cfg.provider,"catalog-index"}};scans.insert(scans.end(),cfg.seeds.begin(),cfg.seeds.end());scans.push_back({"CAT",cfg.identity_provider,cfg.identity_source});scans.push_back({"SPW",cfg.weather_provider,cfg.weather_source});scan_at=pages=seen=retained=done=at=0;cursor.clear();return query();
  }
  if(const auto* f=input("query_status")){flatbuffers::Verifier v(f->payload,f->payload_length);if(!VerifyQRPBuffer(v)||GetQRP(f->payload)->KIND()==qrpKind::Error){if(phase==Phase::Lookup)return storage_failure("Product lookup host failure.");return stop("Complete read failed; no partial sweep is committed.");}}
  if(const auto* f=input("page")){
