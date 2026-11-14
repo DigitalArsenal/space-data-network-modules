@@ -74,7 +74,7 @@ bool metadata_only=false,retry_fallback=false;Bytes fallback_annotation;
 bool compose_only=false,run_fit=false,complete_scan=true,capacity_limited=false,seed_complete=true,identity_complete=true,index_complete=true,weather_complete=true,removal_guard=false;
 struct Poison {unsigned count=0;std::string source;};
 constexpr size_t state_limit=4096;
-size_t state_rows=0;uint64_t state_sequence=0;bool state_complete=true,scan_exhausted=false;
+size_t state_rows=0,state_appends=0;uint64_t state_sequence=0;bool state_complete=true,state_history_oversized=false,scan_exhausted=false;
 std::string state_source(){return "catalog-attempts"+(cfg.partitions==1?std::string():"-"+std::to_string(cfg.partition)+"-of-"+std::to_string(cfg.partitions));}
 std::map<std::string,Poison> poisons;
 std::set<std::string> poison_seen;
@@ -207,8 +207,11 @@ int page(const plugin_input_frame_t* f) {
  if(!VerifySizePrefixedQRPBuffer(v))return stop("Complete read failed; restart the sweep from its first page.");
  const auto* q=GetSizePrefixedQRP(p);const auto& scan=scans[scan_at];
  if(q->KIND()!=qrpKind::Page||q->STATUS()!=qrpStatus::Ok||text(q->SCHEMA_NAME())!=scan.schema+".fbs"||text(q->PROVIDER_ID())!=scan.provider||text(q->SOURCE_NAME())!=scan.name)return stop("Complete read failed or changed its source filter.");
- if(scan.schema=="NEV"&&seen>2*state_limit+1)return stop("Operational state exceeds bounded read; compact the source before resuming.");
- if(++pages>10000){if(scan.schema=="SPW")weather_complete=false;if(scan.schema=="NEV")state_complete=false;if(scan.schema=="OMM")seed_complete=false;if(scan.schema=="CAT"){if(scan.name=="catalog-index"&&scan.provider==cfg.provider)index_complete=false;else identity_complete=false;}complete_scan=false;diagnostics.add("source="+scan.name+" exceeds 10000 pages; increase catalog.page_size");cursor.clear();pages=0;++scan_at;return scan_at<scans.size()?query():complete_reads();}
+ // A legacy history can hold three markers per entry. Read every page before
+ // Current reconciliation so an unread newer failure cannot be erased.
+ if(scan.schema=="NEV"&&seen>2*state_limit+1&&!state_history_oversized){state_history_oversized=true;diagnostics.add("Operational state history exceeds marker threshold; complete read followed by compaction.","bounds");}
+ const size_t page_limit=scan.schema=="NEV"?3*state_limit+3:10000;
+ if(++pages>page_limit){if(scan.schema=="SPW")weather_complete=false;if(scan.schema=="NEV")state_complete=false;if(scan.schema=="OMM")seed_complete=false;if(scan.schema=="CAT"){if(scan.name=="catalog-index"&&scan.provider==cfg.provider)index_complete=false;else identity_complete=false;}complete_scan=false;diagnostics.add("source="+scan.name+" exceeds "+std::to_string(page_limit)+" pages; increase catalog.page_size");cursor.clear();pages=0;++scan_at;return scan_at<scans.size()?query():complete_reads();}
  size_t off=n,count=0;while(off<f->payload_length){if(f->payload_length-off<4)return stop("Truncated page record.");const auto len=size_t(flatbuffers::ReadScalar<uint32_t>(p+off))+4;if(len>f->payload_length-off)return stop("Truncated page record.");
  if(!retain(p+off,len)){
   if(scan.schema=="SPW")weather_complete=false;
@@ -259,11 +262,11 @@ int ingest(const Bytes& data,bool is_index) {
  if(plugin_push_output_ex("meta","IngestRequest.fbs","INGQ",PLUGIN_PAYLOAD_WIRE_FORMAT_FLATBUFFER,"IngestRequest",0,0,b.GetBufferPointer(),b.GetSize())<0||push(is_index?"index_records":"product_records",pending_schema.c_str(),data))return stop("Cannot queue storage input.");
  phase=is_index?Phase::IndexStored:Phase::ProductStored;return 0;
 }
-// Dispatch and failure writes contain one marker. Boundary snapshots compact
-// the source through current-batch reconciliation; successes leave no event.
+// Dispatch and failure markers append up to the entry bound. The following
+// write and generation boundaries compact all entries; successes leave no event.
 int persist_events(Phase after) {
  if(!state_complete)return stop("Operational state incomplete; no replacement or dispatch is safe.");
- const bool single=after==Phase::AttemptStored||after==Phase::FailureStored;
+ const bool single=(after==Phase::AttemptStored||after==Phase::FailureStored)&&state_appends<state_limit;
  NEVT log;log.NODE_ID=cfg.provider;log.GENERATED_AT_MS=now;
  if(single)log.EVENTS.emplace_back(GetSizePrefixedNEV(attempts.at(work[at]).data.data())->EVENTS()->Get(0)->UnPack());
  else for(const auto& item:attempts)log.EVENTS.emplace_back(GetSizePrefixedNEV(item.second.data.data())->EVENTS()->Get(0)->UnPack());
@@ -273,7 +276,7 @@ int persist_events(Phase after) {
  pending_schema="NEV";pending_batch="catalog-attempt-"+digest(pending);
  R::IngestRequestT request;request.SCHEMA="NEV.fbs";request.RECONCILE=single?R::reconcileMode_None:R::reconcileMode_Current;request.TAGS=std::make_unique<R::SourceTagsT>();request.TAGS->PROVIDER_ID=cfg.provider;request.TAGS->SOURCE_NAME=state_source();request.TAGS->BATCH_ID=pending_batch;request.TAGS->CONTENT_KEY_ID="public";
  b.Clear();R::FinishIngestRequestBuffer(b,R::IngestRequest::Pack(b,&request));
- if(plugin_push_output_ex("meta","IngestRequest.fbs","INGQ",PLUGIN_PAYLOAD_WIRE_FORMAT_FLATBUFFER,"IngestRequest",0,0,b.GetBufferPointer(),b.GetSize())<0||push("state_records","NEV",pending))return stop("Cannot persist operational state.");phase=after;return 0;
+ if(plugin_push_output_ex("meta","IngestRequest.fbs","INGQ",PLUGIN_PAYLOAD_WIRE_FORMAT_FLATBUFFER,"IngestRequest",0,0,b.GetBufferPointer(),b.GetSize())<0||push("state_records","NEV",pending))return stop("Cannot persist operational state.");state_appends=single?state_appends+1:0;phase=after;return 0;
 }
 int store_generation_part(){
  if(product_batch_at<product_batches.size())return ingest(product_batches[product_batch_at].data,false);
@@ -450,7 +453,7 @@ int storage_failure(const std::string& message){if(++storage_failures>=3)return 
 int advance() {
  if(input("tick")){
   if(!configure())return stop("Invalid catalog ModuleConfig.");const auto* f=input("tick");flatbuffers::Verifier v(f->payload,f->payload_length);if(!R::VerifyTimerTickBuffer(v))return stop("Invalid timer tick.");now=R::GetTimerTick(f->payload)->FIRED_MS();if(now<=0)return stop("Timer requires a positive UTC time.");
-  staged.clear();product_batches.clear();generation_index.clear();staged_bytes=product_batch_at=pending_count=0;checked_batches.clear();lookup_cursor.clear();fallback_annotation.clear();diagnostics=Diagnostics{};state_complete=true;scan_exhausted=false;state_rows=0;state_sequence=0;storage_failures=0;clock_reported=false;tick_start=Clock::now();allowance=cfg.allowance_ms;complete_scan=true;capacity_limited=false;seed_complete=identity_complete=index_complete=weather_complete=true;removal_guard=false;poisons.clear();poison_seen.clear();poison_updates.clear();dropped.clear();seeds.clear();identities.clear();index.clear();weather.clear();products.clear();attempts.clear();scans={{"NEV",cfg.provider,state_source()},{"CAT",cfg.provider,"catalog-index"}};scans.insert(scans.end(),cfg.seeds.begin(),cfg.seeds.end());scans.push_back({"CAT",cfg.identity_provider,cfg.identity_source});scans.push_back({"SPW",cfg.weather_provider,cfg.weather_source});scan_at=pages=seen=retained=done=at=0;cursor.clear();return query();
+  staged.clear();product_batches.clear();generation_index.clear();staged_bytes=product_batch_at=pending_count=0;checked_batches.clear();lookup_cursor.clear();fallback_annotation.clear();diagnostics=Diagnostics{};state_complete=true;scan_exhausted=false;state_rows=state_appends=0;state_history_oversized=false;state_sequence=0;storage_failures=0;clock_reported=false;tick_start=Clock::now();allowance=cfg.allowance_ms;complete_scan=true;capacity_limited=false;seed_complete=identity_complete=index_complete=weather_complete=true;removal_guard=false;poisons.clear();poison_seen.clear();poison_updates.clear();dropped.clear();seeds.clear();identities.clear();index.clear();weather.clear();products.clear();attempts.clear();scans={{"NEV",cfg.provider,state_source()},{"CAT",cfg.provider,"catalog-index"}};scans.insert(scans.end(),cfg.seeds.begin(),cfg.seeds.end());scans.push_back({"CAT",cfg.identity_provider,cfg.identity_source});scans.push_back({"SPW",cfg.weather_provider,cfg.weather_source});scan_at=pages=seen=retained=done=at=0;cursor.clear();return query();
  }
  if(const auto* f=input("query_status")){flatbuffers::Verifier v(f->payload,f->payload_length);if(!VerifyQRPBuffer(v)||GetQRP(f->payload)->KIND()==qrpKind::Error){if(phase==Phase::Lookup)return storage_failure("Product lookup host failure.");return stop("Complete read failed; no partial sweep is committed.");}}
  if(const auto* f=input("page")){

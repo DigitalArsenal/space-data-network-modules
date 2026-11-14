@@ -56,7 +56,7 @@ export async function verifyStateBounds(){
   const first=await tick(now);assert.equal(first.fits,4096);assert.equal(latest(state).length,4096);
   console.log('STATE_BOUND_CONTROL '+JSON.stringify({objects:4097,dispatched:first.fits,writes:first.writes,maxRows:first.maxRows,retainedRows:state.length,snapshots:first.snapshots}));
   // Reconstruct the pre-compaction history, including the latest failure after the old read bound.
-  const legacy=history.slice(),expected=latest(legacy);state=legacy;history=[];
+  const legacy=history.slice(),expected=latest(legacy);state=legacy;history=[];cfg['catalog.page_size']=1;
   control.destroy();control=await create();
   const recovered=await tick(now+1000);
   assert.equal(recovered.fits,0);assert.equal(state.length,1);assert.deepEqual(latest(state),expected,'compaction preserves every latest failure, including events beyond the old read threshold');
