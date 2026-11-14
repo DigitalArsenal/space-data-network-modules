@@ -112,7 +112,7 @@ int push(const char* port,const char* code,const Bytes& data) {
  return plugin_push_output_ex(port,schema.c_str(),id.c_str(),PLUGIN_PAYLOAD_WIRE_FORMAT_FLATBUFFER,code,0,0,data.data(),data.size())<0?500:0;
 }
 int notice(const std::string& message,bool failed=false) {
- R::FlowNoticeT n;n.KIND=(failed||scan_exhausted)?R::flowNoticeKind_Missing:done?R::flowNoticeKind_Info:R::flowNoticeKind_Unchanged;
+ R::FlowNoticeT n;n.KIND=(failed||scan_exhausted)?R::flowNoticeKind_Missing:(done||diagnostics.deferred)?R::flowNoticeKind_Info:R::flowNoticeKind_Unchanged;
  n.SCHEMA="CAT.fbs";n.PROVIDER_ID=cfg.provider;n.SOURCE_NAME="catalog-index";n.REASON=message+"; "+diagnostics.summary();n.COUNT=done;
  flatbuffers::FlatBufferBuilder b;R::FinishFlowNoticeBuffer(b,R::FlowNotice::Pack(b,&n));
  return plugin_push_output_ex("notice","FlowNotice.fbs","FNTC",PLUGIN_PAYLOAD_WIRE_FORMAT_FLATBUFFER,"FlowNotice",0,0,b.GetBufferPointer(),b.GetSize())<0?500:0;
@@ -364,6 +364,10 @@ bool attempt_deferred(){const auto id=work[at];
    if(a.final||(attempt_detail(a).rfind("ready ",0)!=0&&now<after)){++diagnostics.deferred;diagnostics.add(a.final?"unchanged final failure":"in-progress attempt deferred after instance interruption");return true;}}
  return false;
 }
+bool capacity_deferred(uint32_t id){
+ if(attempts.count(id)||attempts.size()+poisons.size()<state_limit)return false;
+ ++diagnostics.deferred;diagnostics.add("Operational state capacity reached; new object deferred.","bounds");return true;
+}
 int next_object() {
  for(;at<work.size()&&staged.size()<cfg.batch;++at){
   if(!budget_left()){++diagnostics.deferred;diagnostics.add("object elapsed budget reserve exhausted","bounds");return finish();}object_start=Clock::now();
@@ -372,7 +376,7 @@ int next_object() {
   const bool removed=identity==identities.end()||s==seeds.end()||decayed(identity->second);
   const auto* previous=old==index.end()?nullptr:GetSizePrefixedCAT(old->second.data());
   if(previous&&instant(text(previous->PRODUCTS_AS_OF()))>now){++diagnostics.deferred;if(!clock_reported){diagnostics.add("clock precedes a stored selection; affected objects deferred before dispatch","clock");clock_reported=true;}continue;}
-  if(removed){const bool decay=identity!=identities.end()&&decayed(identity->second);if(removal_guard||(!decay&&(!complete_scan||!seed_complete||!identity_complete))||(!decay&&!index_complete))continue;if(!previous||!previous->PRODUCTS()||!previous->PRODUCTS()->size())continue;reason="object removed from the configured current sources";signature=digest(old->second)+"/removed/"+(identity==identities.end()?"absent":digest(identity->second));if(attempt_deferred())continue;compose_only=true;++diagnostics.removed;diagnostics.add("object="+std::to_string(id)+" removal: "+reason,"removal");return save_attempt();}
+  if(removed){const bool decay=identity!=identities.end()&&decayed(identity->second);if(removal_guard||(!decay&&(!complete_scan||!seed_complete||!identity_complete))||(!decay&&!index_complete))continue;if(!previous||!previous->PRODUCTS()||!previous->PRODUCTS()->size())continue;reason="object removed from the configured current sources";signature=digest(old->second)+"/removed/"+(identity==identities.end()?"absent":digest(identity->second));if(attempt_deferred()||capacity_deferred(id))continue;compose_only=true;++diagnostics.removed;diagnostics.add("object="+std::to_string(id)+" removal: "+reason,"removal");return save_attempt();}
   const auto* omm=GetSizePrefixedOMM(s->second.data.data());
   const double n=omm->MEAN_MOTION()*6.2831853071795864769/1440;
   const bool resonant=n>.0035003818&&n<=.015751718;
@@ -389,11 +393,11 @@ int next_object() {
   if(previous&&previous->PRODUCTS()&&previous->PRODUCTS()->size()==1){const auto* p=previous->PRODUCTS()->Get(0);const auto selection=text(p->SELECTION_REASON());
    if(!text(p->RECORD_CID()).empty()&&selection.find("catalog-input="+signature+";")!=std::string::npos&&selection.find("retry-fit;")==std::string::npos&&(!expired||p->KIND()!=catalogProductKind::ApElements)){
     if(selection.find("catalog-identity="+digest(identity->second)+";")!=std::string::npos)continue;
-    if(attempt_deferred())continue;metadata_only=true;return save_attempt();
+    if(attempt_deferred()||capacity_deferred(id))continue;metadata_only=true;return save_attempt();
    }
   }
   reason=expired?"old-span fallback":future?"future-seed fallback":!eligible?"outside configured AP class":"accepted exact-W fit";run_fit=!expired&&!future&&eligible;
-  if(attempt_deferred())continue;
+  if(attempt_deferred()||capacity_deferred(id))continue;
   return save_attempt();
  }
  return finish();
