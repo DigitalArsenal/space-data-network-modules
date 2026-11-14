@@ -6589,6 +6589,22 @@ the host opens and refills a new budget. One owning thread serializes load, refi
 refill can delay a display update. Direct path requests allocate theory caches temporarily and release the path entity's
 caches on completion. These changes add no concurrent-reader guarantee or implicit refill.
 
+Direct-record memory measurements use unsigned 32-bit Wasm builds and synthetic 500 km SGP4XP records, no covariance,
+one state per record at one hour, and no frame cells. `sizeof(XpSat)` is 5,864 bytes. Initial term-table allocation is
+0 bytes for the low circular and eccentric low cases, 1,404 bytes for the medium-orbit case and 1,308 bytes for the
+geosynchronous case. These table figures come from `xp_bytes` immediately after initialization, before flight caches.
+The previous plugin implementation (051c2178) retained 5,864 bytes per low-orbit record; the bounded reader retains 0.
+Both builds served every entity in these measurements.
+
+| Synthetic records | Resident record store, bytes | Previous post-read Wasm memory, bytes | Bounded post-read Wasm memory, bytes |
+|---:|---:|---:|---:|
+| 33,000 | 8,976,000 | 207,618,048 | 23,068,672 |
+| 100,000 | 27,200,000 | 622,788,608 | 60,751,872 |
+
+Wasm memory includes ingestion and output staging high-water; it excludes host memory and artifact bytes. These
+initial-load cases have no previous resident catalog. Transactional reload also retains the previous catalog while
+preparing its replacement. Native epoch calls can retain direct caches independently of the plugin display readers.
+
 **20.1 Source and indices.** The row and record stores coexist. Plugin calls select rows after a successful
 `plugin_init_omm` (including count 0, which selects empty rows), or records after a successful `load_epochs` or
 `load_epochs_close`. `load_epochs_open` and parts stage the replacement while the previous source stays readable.

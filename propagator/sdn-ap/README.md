@@ -42,8 +42,10 @@ The output map and the terms above e 0.3 retain their definitions.
 
 AP objects without a covering frame cell have NaN positions and are hidden; unsupported AP objects remain hidden
 through the display calls. Single states use full-velocity cells and the existing frame approximation. SGP4 and SGP4XP
-records answer directly through their own theories, without AP caches. Catalog reload releases all frame cells, and
-refill on the owning thread can delay display updates. Direct orbit paths remain available and release their entity's
+records answer directly through their own theories, releasing direct slots after each entity. Repeated display reads
+pay initialization again. A successful catalog reload releases all frame cells; a refused load preserves the resident
+catalog and cells. Staging a replacement holds both catalogs. Refill on the owning thread can delay display updates, and
+direct orbit paths remain available and release their entity's
 temporary direct caches on completion.
 
 Load records with `load_epochs_open/part/close`, open full-velocity frames (`sdnap_frames_open` flags 0), and refill in
