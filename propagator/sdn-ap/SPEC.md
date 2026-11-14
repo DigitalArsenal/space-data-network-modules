@@ -6705,5 +6705,5 @@ integrated mean-state history can carry its effect beyond its immediate interval
 
 The field census returns -2 for retryable resource shortage and -1 for invalid elements.
 A wide census pins its grid once for the census traversal. A concurrent payload builder
-waits with scheduling yields and refuses retryably after 65,536 unsuccessful checks or
+waits with scheduling yields and refuses retryably after 16,777,216 unsuccessful checks or
 a dead-pool signal. Invalid degrees do not count as memory exhaustion.

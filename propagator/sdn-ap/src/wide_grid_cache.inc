@@ -103,7 +103,7 @@ inline bool grid_pin(WideGrid* g) {
     cache_lock(&c.word);
     if (g->building) {
       cache_unlock(&c.word);
-      if (++waits >= 65536 || sdnap::pool::wide_build_cancelled()) {
+      if (++waits >= 16777216 || sdnap::pool::wide_build_cancelled()) {
         sdnap::mem::note_failure(wide_grid_bytes_bound(g->degree)); return false;
       }
       sched_yield();
