@@ -171,6 +171,9 @@ try{
  assert.equal(cutWeather.fits+cutWeather.fallbacks+cutWeather.products+cutWeather.indexes,0,'partial weather never downgrades existing AP selections');assert.match(cutWeather.notice.reason,/weather scan incomplete/);
  delete cfg['catalog.max_records'];control.destroy();control=await createControl();assert.equal((await tick(now+2000)).fits,2,'complete weather resumes fitting');
  console.log('PASS incomplete weather defers fitting without replacing AP');
+ await reset();await tick(now);const decayCapacity=C.CAT.getSizePrefixedRootAsCAT(new fb.ByteBuffer(records('CAT.fbs','synthetic','identities')[0])).unpack();decayCapacity.DECAY_DATE=new Date(now).toISOString().slice(0,10);records('CAT.fbs','synthetic','identities')[0]=pack(decayCapacity,'CAT');
+ cfg['catalog.max_records']=5;control.destroy();control=await createControl();const limitedDecay=await tick(now+1000);assert.equal(limitedDecay.indexes,1,'capacity-dropped identities do not inflate the removal guard');assert.doesNotMatch(limitedDecay.notice.reason,/mass-removal guard/);delete cfg['catalog.max_records'];
+
  await reset();await tick(now);trapComposeObject=Math.min(...ids);store.set(key('CAT.fbs','synthetic','identities'),records('CAT.fbs','synthetic','identities').filter(b=>C.CAT.getSizePrefixedRootAsCAT(new fb.ByteBuffer(b)).NORAD_CAT_ID()!==trapComposeObject));
  const newerSelection=current().get(Math.max(...ids));newerSelection.PRODUCTS_AS_OF=new Date(now+1).toISOString();records('CAT.fbs','synthetic-node','catalog-index').push(pack(newerSelection,'CAT'));
  records('OMM.fbs','synthetic','primary').push(seed(Math.max(...ids),.31));await assert.rejects(()=>tick(now+1000),WebAssembly.RuntimeError);trapComposeObject=undefined;control.destroy();control=await createControl();
@@ -208,7 +211,7 @@ try{
  await reset();refusalCode='pool-dead';const temporary=await tick(now);assert.equal(temporary.indexes,2);assert.ok([...current().values()].every(c=>c.PRODUCTS[0].KIND===C.catalogProductKind.Sgp4Elements));
  control.destroy();control=await createControl();assert.equal((await tick(now+1000)).fits,0,'transient fallback retains backoff across replacement');
  refusalCode=undefined;assert.equal((await tick(now+1200001)).fits,2,'transient fallback eventually upgrades to AP');
- for(const kind of ['annotation','composer']){await reset();if(kind==='annotation')annotationRefusal='invalid-models';else composerRefusal='invalid-replacement';const failed=await tick(now);assert.equal(failed.indexes,0);control.destroy();control=await createControl();assert.equal((await tick(now+86400001)).fits,0,'deterministic '+kind+' refusal is final');annotationRefusal=composerRefusal=undefined;}
+ for(const kind of ['annotation','composer']){await reset();if(kind==='annotation')annotationRefusal='invalid-models';else composerRefusal='invalid-replacement';const failed=await tick(now);assert.equal(failed.indexes,0);const stateRows=records('NEV.fbs','synthetic-node','catalog-attempts');const staleState=N.NEV.getSizePrefixedRootAsNEV(new fb.ByteBuffer(stateRows[0])).unpack();for(const e of staleState.EVENTS)e.DETAIL=e.DETAIL.replace(/^final /,'in progress ').replace(/sequence=\d+;/,'sequence=0;');stateRows.push(pack(staleState,'NEV'));control.destroy();control=await createControl();assert.equal((await tick(now+86400001)).fits,0,'deterministic '+kind+' refusal is final');annotationRefusal=composerRefusal=undefined;}
  console.log('PASS deterministic downstream refusals and transient fallback recovery');
  await reset();records('CAT.fbs','synthetic-node','catalog-index').push(pack(new C.CATT(),'CAT'));
  for(let i=0;i<3;i++){control.destroy();control=await createControl();const observation=await tick(now+i*1000);assert.equal(observation.indexes,i===2?2:0);}
