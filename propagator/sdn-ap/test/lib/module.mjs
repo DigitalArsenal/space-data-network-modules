@@ -5,6 +5,7 @@ import { execFileSync } from "node:child_process";
 import fs from "node:fs";
 import { fileURLToPath } from "node:url";
 import { createStandaloneHarness } from "space-data-module-sdk/testing/isomorphic";
+import { ownHarness } from "./end.mjs";
 
 export const packageRoot = fileURLToPath(new URL("../../", import.meta.url));
 export const wasmPath = process.env.SDNAP_WASM ? process.env.SDNAP_WASM : fileURLToPath(new URL("../../dist/isomorphic/module.wasm", import.meta.url));
@@ -36,11 +37,11 @@ export function elementRows(sets) {
 
 export async function openModule({ threads = 0 } = {}) {
   ensureBuilt();
-  const harness = await createStandaloneHarness("browser", wasmPath, {
+  const harness = ownHarness(await createStandaloneHarness("browser", wasmPath, {
     surface: "direct",
     maxThreads: Math.max(1, threads),
     enableBrowserWasiThreads: threads > 0,
-  });
+  }));
   const x = harness.instance.exports;
   const running = threads > 0 ? x.sdnap_threads(threads) : 0;
   const mem = () => harness.memory.buffer;

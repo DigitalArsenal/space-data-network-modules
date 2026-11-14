@@ -1,5 +1,32 @@
 # Changelog
 
+## 0.6.60 — The frame path: a frame of every object from Chebyshev cells of AP's own states
+
+What gets worse: the module is 25,582 bytes larger (1,909,995 against 1,884,413) and an instance that never opens frames holds 576 bytes more static data. The 80 MiB store of
+`test/memory-limit.e2e.mjs` (part 4) answers 2,473 sets, as in 0.6.59. A cell is not served where AP's own position output steps: AP's position output steps by up to about 9 mm in strong-drag
+sets (perigee under about 500 km at BTERM 0.01, higher with larger BTERM), and a 3-minute window that holds a step above the builder's 3-D limit of 8 mm is not served (status 4); the host asks
+AP's own entries for those times. In the 100,000-object recipe of `test/frames-memory.e2e.mjs` 2 objects are in such a window at the fill's instant (steps of 9.02 and 8.90 mm), and none of the
+public catalog's 92,100 served objects. A first fill of 100,000 objects takes 133 s on one thread when their records are at the epoch, 162 s at 2 days, 217 s at 5 days and 315 s at 10 days
+(`node test/frames-cost.mjs --objects 100000 --rows 100 --skip-wide --skip-frame`; 20 rows a class give 197 to 218 s at the epoch), and a refill costs 166, 203, 270 and 395 core seconds an hour. A served state is
+within 1 cm and 1e-4 m/s (3-D) of AP's state for that record and time asked of a fresh instance, so two kinds of state exist for an object, AP's (`sdnap_epochs_at`) and the cell's
+(`sdnap_frames_at`), and they differ by up to that bound. Objects the entry does not serve (wide sets, series of several sets, records with a forecast or a hand-over, SGP4 and stock SGP4XP sets)
+answer "not served by this entry". The epoch store holds a generation counter (`Store::generation`, three lines) that its load bumps; no store export reads it.
+
+What it is: the exports `sdnap_frames_open`, `_refill`, `_at`, `_stats` and `_close` (SPEC 19; `src/frames.inc`). One cell for each served AP set, polynomials in position and velocity over a window
+of 48 minutes (halved to 3), built from the set's states at 64 Chebyshev points and checked at 96 points and the window's two ends (768 points for the sets whose output steps), within 5 mm
+and 5e-5 m/s on each axis and 8 mm and 8e-5 m/s in 3-D. `sdnap_frames_at` evaluates polynomials only. A frame of 100,000 objects costs 0.262 of SGP4's time a state in TEME (middle half of ten
+rounds 0.260 to 0.266) and 0.253 in Earth-fixed coordinates (0.251 to 0.255), load 3.9 to 5.7. The instance of 100,000 objects holds 269.7 MB with the stored load and 15 pool threads, 232.0 MB without a pool
+(263.0 and 225.2 MB for the public catalog's shares). Measured worst over 5.3 million served points: 6.4 mm and 4.5e-5 m/s, 163,911 of them against a fresh instance.
+
+What does not move, against 0.6.59's wasm (98e297f3): every state of every flight (`node test/kernel-cost.mjs --diff ... --bound 0,0`, the default list and `--tesseral 70 --slow`, 132 flights each, in time order, in reverse and
+shuffled), the 942 stored AP records flown after and before their epoch and across it (226,080 and 339,120 states a kind), and the replay of the 942 records through `propagate` with their covariance (226,736 states, 4,761,456 covariance elements)
+are equal to the bit; the conformance digests are the same (SGP4XP 72dcf600..., SGP4 control 9ecfafcd...). The frame path adds exports and changes no existing state.
+
+The module has no export that stops its pool threads: they wait for batches for the life of the instance, and a Node process that starts a pool ends when the host exits (SPEC 9; `test/pool-end.e2e.mjs`).
+
+A correction to 0.6.59's statement about fits: a fit with the default epoch placement gives the same record as 0.6.58's only where its first state lies on the 1e-8-day grid the fit rounds the epoch to (the fit takes the first
+state as the epoch and rounds the epoch's day fraction to 1e-8 day); where the rounded epoch falls after the first state, the fit flies its set across the epoch and its record differs as the other placements' records do.
+
 ## 0.6.59 — An AP set's state is a function of the set and the time
 
 What gets worse: every set holds 16 more bytes, the upper node's time in its drag-pass cache (768 to 784 bytes a set, 1.6 MB at 100,000 objects). The 80 MiB store of 6,000 SGP4XP sets without AP's terms

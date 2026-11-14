@@ -1,6 +1,6 @@
 # sdn-ap-propagator
 
-Version 0.6.59 (dist 5002d012).
+Version 0.6.60 (dist 4015f02d).
 
 General-perturbations propagation of whole catalogs in one isomorphic WASM module (browser and WasmEdge), with two
 theories and AP, an advanced propagator that builds on the entire history of astrodynamics ($PCF FORCES selects its drag
@@ -593,7 +593,7 @@ between them, and whether the covariance is asked leave its bits unchanged (`tes
 asked after another on the other side of the epoch, inside the first bracket on either side, differed from it by up to
 0.30 mm at 500 km, 1.8 mm at e 0.25 and 714 mm for a decaying set at perigee 200 km (this checkout with the two old keys put back).
 A fit that flies its set on both sides of its epoch (an arc under 24 hours on a block that is not eccentric, the hand-over fit) gives a different
-record than 0.6.58; a fit with the default epoch placement, the epoch at its first state, the catalog fit included, gives the same bytes (SPEC 9). A
+record than 0.6.58; a fit with the default epoch placement gives the same bytes when its first state lies on the 1e-8-day grid the fit rounds the epoch to (the epoch is then the first state; the catalog fit included), and a different record where the rounded epoch falls after the first state (SPEC 9). A
 store's AP set keeps its own caches and node runs from one pool, 256 MB (the module's default; no typed configuration
 carries a budget yet), read by sdnap_cache_stats. SPEC 9 states how room is shared, the caches by part and the one
 exception: a record that carries a covariance, through `propagate`, differs by 0.39 mm.
@@ -680,6 +680,24 @@ this cache rework does not touch.
 Above e 0.05 with tesseral 31 (perigee 600 km), a low orbit costs 18 to 20 times SGP4-XP, unchanged (stack #339).
 Without the tesseral terms it costs 0.3 to 0.4 times.
 
+## Frames (SPEC 19; `sdnap_frames_*`, `test/frames.e2e.mjs`)
+
+What gets worse: a served frame state is within 1 cm and 1e-4 m/s (3-D) of AP's state for that record and time asked of a fresh
+instance, in every class, strong drag and decay included; a window that cannot meet it is not served (AP's own position output steps by up to about 9 mm in strong-drag sets, and a window that holds such a step is not served: 2 of the 100,000 objects of the test recipe) and the host asks AP's own
+entries; a first fill takes about 1.2 ms an object on one thread, 120 s for 100,000 objects at the epoch (SPEC 19.5 has the figure and
+the eccentric sets above e 0.03, which cost 11 ms a row); wide sets (e above 0.05 in the zero-revolution class, above 0.3 in the resonance classes, with tesseral
+terms), series of several sets, sets with a forecast or a hand-over and SGP4 sets are answered by AP's entries (47 % of the
+stored synthetic set is served; 92.1 % of a public catalog's objects have eccentricity at or under 0.05); at 100,000 objects the
+cells take 84 MB and the instance about 270 MB in all, while no wide object is flown in it (a wide set holds about 10 MB); the
+host runs its own refill loop (SPEC 19.1) and calls the frames from one thread, never during a pool batch.
+
+A frame of every object at one instant from short Chebyshev cells of AP's own states: 0.26 times the cost of SGP4 through
+`sdnap_epochs_at` for position and velocity at 100,000 objects (0.259 in TEME, 0.249 Earth-fixed) (`test/frames-cost.mjs`). `sdnap_frames_open(budget_bytes,
+flags)` reads the loaded store; `sdnap_frames_refill(now, ahead, max_rows, priority, count, result)` builds the cells that `now` and
+`now + ahead` need, one row (one cold set, one cell or tombstone) at a time on the calling thread, and says what is still due;
+`sdnap_frames_at` evaluates polynomials only and states one status for each object (served, no cell, not served by this entry,
+AP refuses here, the builder fails here). A cell is checked against AP at 96 points of its window (768 for a set whose output steps: a perigee under a line of 500 km at BTERM 0.01 that rises with BTERM, SPEC 19.5) and at its two ends; the existing exports return the same bits with a frame open.
+Position-only frames write three planes and no velocity.
 
 ## SGP4XP status
 
@@ -780,6 +798,10 @@ built by `test/lib/spw-constant.mjs` (`FFM_SPW_FIXTURE` names another file of su
 - `test/kernel-patterns.mjs`: AP's cost against SGP4's by request pattern: many records stepped together and record by
   record, the first state of a fresh record at 0, 1 and 7 days, ascending, random and alternating-ends order, e 0 to
   0.3 in low orbit, and the public `propagate` in TEME and GCRF with and without a covariance.
+- `test/frames.e2e.mjs`, `test/frames-memory.e2e.mjs`, `test/frames-cost.mjs`: the frames (SPEC 19): the bound at every second of
+  a day at 0 and 5 days, the same bits from two fill orders, the epoch store's exports unchanged, every status, every counted
+  allocation of open and of a refill row failed in turn; the bytes at 100,000 objects for two catalogs (about 6 minutes, 3 GB
+  of the host's memory); the cost of a frame against SGP4 and the residue of wide sets.
 - `test/output-frames.mjs`: the cost of a `propagate` state in TEME, GCRF and EME2000 (grids and explicit EPOCHS, and
   one-state calls), and with `--diff BEFORE.wasm` the GCRF and EME2000 states of two builds compared (TEME bytes must
   not move) and each build against the per-state IAU 2006/2000A chain with GMST82 in exact arithmetic.
