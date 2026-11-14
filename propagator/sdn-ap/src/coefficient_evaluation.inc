@@ -414,6 +414,13 @@ if (md != nullptr) {
     s_afg_l1 += mc.c_pair1[m][1] * cm + mc.s_pair1[m][1] * sm;
     s_adfg += mc.c_pair2[m][0] * cm + mc.s_pair2[m][0] * sm;
     s_afdg_oe += mc.c_pair2[m][1] * cm + mc.s_pair2[m][1] * sm;
+#if SDNAP_COEFFICIENT_FORM != 0 && SDNAP_COEFFICIENT_FORM != 2
+    const double du = mc.a / a - mc.a / mc.a_bake;
+    s_afg_psi += du * (mc.dc_pair1[m][0] * cm + mc.ds_pair1[m][0] * sm);
+    s_afg_l1 += du * (mc.dc_pair1[m][1] * cm + mc.ds_pair1[m][1] * sm);
+    s_adfg += du * (mc.dc_pair2[m][0] * cm + mc.ds_pair2[m][0] * sm);
+    s_afdg_oe += du * (mc.dc_pair2[m][1] * cm + mc.ds_pair2[m][1] * sm);
+#endif
   }
   if (cm_f32_out != nullptr) {
     *cm_count_out = degree;
@@ -623,10 +630,39 @@ if (md != nullptr) {
       pu[12 + l] = static_cast<float>((pc[44 + l] + pc[52 + l] * da + pc[60 + l] * de_bake) * inv_psidot) + pe[4 + l] * dpe;
       pu[16 + l] = static_cast<float>(alpha_A * dc_b * inv_psidot - beta_L * j * uc_b * inv_psidot2) + pe[8 + l] * dpe;
       pu[20 + l] = static_cast<float>(alpha_A * ds_b * inv_psidot - beta_L * j * us_b * inv_psidot2) + pe[12 + l] * dpe;
+#if SDNAP_COEFFICIENT_FORM == 4
+      for (int k = 0; k < 8; ++k) sc.blk_a[bi * 32 + k * 4 + l] = 0.0f;
+#elif SDNAP_COEFFICIENT_FORM != 0
+      const double inv = 1.0 / (1.0 + da);
+      const double dpr = (wv * 3.5 * wdot + j * (1.5 * n + 3.5 * (mdot - n)) + mv * 3.5 * node_rate) * inv * inv_psidot;
+      const double duc = (-pc[8+l] - pc[16+l]*da + pc[32+l]*de_bake) * inv_psidot - pu[l]*dpr;
+      const double dus = (-pc[12+l] - pc[20+l]*da + pc[36+l]*de_bake) * inv_psidot - pu[4+l]*dpr;
+      const double ddc = (pc[8+l]+pc[16+l])*inv_psidot - dc_b*inv_psidot*dpr;
+      const double dds = (pc[12+l]+pc[20+l])*inv_psidot - ds_b*inv_psidot*dpr;
+      const double d[8] = {
+        pc[32+l]*inv_psidot-ec_ip*dpr, pc[36+l]*inv_psidot-es_ip*dpr, duc, dus,
+        pc[48+l]*inv_psidot-pu[8+l]*dpr, pc[52+l]*inv_psidot-pu[12+l]*dpr,
+        .5*alpha_A*inv*dc_b*inv_psidot+alpha_A*ddc-2*beta_L*inv*j*pu[l]*inv_psidot-beta_L*j*(duc-pu[l]*dpr)*inv_psidot,
+        .5*alpha_A*inv*ds_b*inv_psidot+alpha_A*dds-2*beta_L*inv*j*pu[4+l]*inv_psidot-beta_L*j*(dus-pu[4+l]*dpr)*inv_psidot};
+      const float back=static_cast<float>(a0/a-a0/sc.a_bake);
+      for(int k=0;k<8;++k){const int idx=bi*32+k*4+l;sc.blk_a[idx]=static_cast<float>(d[k]);sc.blk_hot[idx]-=sc.blk_a[idx]*back;}
+#endif
     }
   }
 #endif
 }
+
+#ifndef __wasm_simd128__
+inline float coefficient_hot(const SpEvalCache& sc, int bi, int component, int slot, float da) {
+  const int index = bi * 32 + component * 4 + slot;
+#if SDNAP_COEFFICIENT_FORM != 0
+  return sc.blk_hot[index] + sc.blk_a[index] * da;
+#else
+  (void)da;
+  return sc.blk_hot[index];
+#endif
+}
+#endif
 
 template <bool kNeedD2>
 [[gnu::noinline]] inline void sp_six_deriv_impl(const SpEvalCache& sc, float de_f32, double a, double e, double n,
@@ -821,10 +857,10 @@ template <bool kNeedD2>
       const float cs0 = cswq_c[wq_idx], cs1 = cswq_s[wq_idx];
       const float cp = cs0 * cmv - cs1 * smv;
       const float sp = cs1 * cmv + cs0 * smv;
-      const float ec = pec[0 + l], es = pec[4 + l];
-      const float uc = pu[0 + l] + ec * de_f32, us = pu[4 + l] + es * de_f32;
-      const float ic = pu[8 + l] + pe[0 + l] * de_f32, is = pu[12 + l] + pe[4 + l] * de_f32;
-      const float lc = pu[16 + l] + pe[8 + l] * de_f32, ls = pu[20 + l] + pe[12 + l] * de_f32;
+      const float ec = coefficient_hot(sc, bi, 0, l, da_f32), es = coefficient_hot(sc, bi, 1, l, da_f32);
+      const float uc = coefficient_hot(sc, bi, 2, l, da_f32) + ec * de_f32, us = coefficient_hot(sc, bi, 3, l, da_f32) + es * de_f32;
+      const float ic = coefficient_hot(sc, bi, 4, l, da_f32) + pe[0 + l] * de_f32, is = coefficient_hot(sc, bi, 5, l, da_f32) + pe[4 + l] * de_f32;
+      const float lc = coefficient_hot(sc, bi, 6, l, da_f32) + pe[8 + l] * de_f32, ls = coefficient_hot(sc, bi, 7, l, da_f32) + pe[12 + l] * de_f32;
       const double mv = sc.blk_mf[lane_off + l];
       const double wv = sc.blk_w[lane_off + l], qv = sc.blk_q[lane_off + l], jf = wv + qv;
       const double idS = uc * cp + us * sp, didS = jf * (us * cp - uc * sp);
@@ -1348,14 +1384,14 @@ res = pe || kra != sc.kr_a || krc != sc.kr_c || kre != sc.kr_e;
       const float cs0 = cswq_c[wq_idx], cs1 = cswq_s[wq_idx];
       const float cp = cs0 * cmv - cs1 * smv;
       const float sp = cs1 * cmv + cs0 * smv;
-      const float ec = pec[0 + l], es = pec[4 + l];
-      const float idS = (pu[0 + l] + ec * de_f32) * cp + (pu[4 + l] + es * de_f32) * sp;
+      const float ec = coefficient_hot(sc, bi, 0, l, da_f32), es = coefficient_hot(sc, bi, 1, l, da_f32);
+      const float idS = (coefficient_hot(sc, bi, 2, l, da_f32) + ec * de_f32) * cp + (coefficient_hot(sc, bi, 3, l, da_f32) + es * de_f32) * sp;
       sum_w += static_cast<double>(sc.blk_w[lane_off + l]) * idS;
       sum_q += static_cast<double>(sc.blk_q[lane_off + l]) * idS;
       midS += static_cast<double>(sc.blk_mf[lane_off + l]) * idS;
       sE += ec * sp - es * cp;
-      sI += (pu[8 + l] + pe[0 + l] * de_f32) * sp - (pu[12 + l] + pe[4 + l] * de_f32) * cp;
-      sL += (pu[16 + l] + pe[8 + l] * de_f32) * sp - (pu[20 + l] + pe[12 + l] * de_f32) * cp;
+      sI += (coefficient_hot(sc, bi, 4, l, da_f32) + pe[0 + l] * de_f32) * sp - (coefficient_hot(sc, bi, 5, l, da_f32) + pe[4 + l] * de_f32) * cp;
+      sL += (coefficient_hot(sc, bi, 6, l, da_f32) + pe[8 + l] * de_f32) * sp - (coefficient_hot(sc, bi, 7, l, da_f32) + pe[12 + l] * de_f32) * cp;
     }
   }
   sM = sum_w + sum_q;

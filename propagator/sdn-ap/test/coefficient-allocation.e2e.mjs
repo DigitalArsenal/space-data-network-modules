@@ -15,6 +15,7 @@ SDNAP_EXPORT("sdnap_test_u_transitions") int sdnap_test_u_transitions(){return s
 SDNAP_EXPORT("sdnap_test_retries") int sdnap_test_retries(){return sdnap::xpt::tess::g_test_retries;}
 `;
 const file=buildDiagnostic('coefficient-allocation',extra,s=>s.replace('    if (!s.pooled ||','    if (true || !s.pooled ||'),{
+ 'sdn_ap_module.cpp':s=>'namespace sdnap::pool { extern thread_local bool g_pool_thread; }\n'+s,
  'tesseral.inc':s=>s.replace('inline MdailyDerivatives* mdaily_derivatives() {',String.raw`
 inline int g_test_fail_derivatives=0,g_test_derivative_failures=0,g_test_u_transitions=0,g_test_retries=0;
 inline thread_local bool g_test_saw_u=false;
@@ -25,7 +26,7 @@ inline MdailyDerivatives* mdaily_derivatives() {
   sdnap::mem::note_failure(sizeof(MdailyDerivatives));return nullptr;
  }
 `).replaceAll('uint8_t form, Args&&... args) {','uint8_t form, Args&&... args) {\n  if(form==0 && sdnap::pool::g_pool_thread)g_test_saw_u=true;'),
- 'epoch_store.inc':s=>s.replace('    std::sort(deferred, deferred + n);','    std::sort(deferred, deferred + n);\n    xpt::tess::g_test_retries += n;')});
+ 'epoch_store.inc':s=>s.replace('    std::sort(deferred, deferred + n);','    std::sort(deferred, deferred + n);\n    sdnap::xpt::tess::g_test_retries += n;')});
 const fixtures=records(),N=128;
 const all=Array.from({length:N*2},(_,i)=>{const r=fixtures[i<N?7:4];return {...r,bytes:repackOcm(r.bytes,t=>{t.METADATA.NORAD_CAT_ID=95000+i;t.METADATA.OBJECT_DESIGNATOR=String(95000+i);t.METADATA.INTERNATIONAL_DESIGNATOR=null;t.METADATA.OBJECT_NAME=`SYNTHETIC-${i}`;t.MEAN_ELEMENTS.BTERM=0;t.COVARIANCE_DATA=[];t.COV_SIZE=0;})};});
 // First build all sets on the caller: thread initialization and set allocation

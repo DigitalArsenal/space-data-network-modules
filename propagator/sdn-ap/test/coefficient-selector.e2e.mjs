@@ -24,6 +24,6 @@ for(const ap of [0,1])for(const bad of [0,1,2,3]){
  console.log(JSON.stringify({ap,bad,status,calls,form,flight,stored}));
  if(bad===1||bad===2){assert.notEqual(status,0);assert.equal(calls,0);}
  else if(bad===0){assert.equal(status,0);assert.equal(calls,1);assert.equal(form,ap?3:0);assert.equal(flight,0);assert.equal(stored,form);}
- else {assert.notEqual(status,0);assert.equal(calls,1);assert.equal(form,ap?3:0);}
+ else {assert.equal(status,0);assert.equal(calls,1);assert.equal(form,ap?3:0);assert.equal(stored,form);assert.equal(flight,0);}
 }
 await h.close?.();process.exit(0);

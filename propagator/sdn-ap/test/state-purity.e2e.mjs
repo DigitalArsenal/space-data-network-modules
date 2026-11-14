@@ -78,7 +78,7 @@ const ORBITS = {
 const EXPECTED_FORMS = {"500 km":3,"500 km zero drag":1,"830 km":2,
  "half-day e 0.005":0,"half-day e 0.02":0,"8 h class":0,"16 h class":0,
  "GEO, tesseral 31":2,"GEO, no tesseral":2,"e 0.1":4,"e 0.25":1,
- "transfer orbit":0,"Molniya":0,"decaying set":3};
+ "transfer orbit":1,"Molniya":1,"decaying set":3};
 const recordOf = (o, k, opts) => seedOcm({ epoch: iso(opts?.epochMs ?? EPOCH), n: o.n, e: o.e, i: o.i, raan: (60 + 3.3 * k) % 360, argp: 90, ma: (10 + 7.1 * k) % 360,
   bterm: o.bterm, agom: 0.01, norad: opts?.norad ?? 80000 + k, name: `P${opts?.norad ?? 80000 + k}`, msis: o.jxx !== true, records: o.jxx !== true, rows: rowsThrough(ROWS), tesseral: o.tesseral, zonal: o.zonal ?? 20 });
 const prefixed = (u) => { const b = Buffer.alloc(4 + u.length); b.writeUInt32LE(u.length, 0); Buffer.from(u).copy(b, 4); return b; };
