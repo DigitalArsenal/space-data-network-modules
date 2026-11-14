@@ -6776,7 +6776,7 @@ Exact comparison before and after the pointer refactor preserves all 24,497 samp
 
 Released 0.6.59 has a shared leap-second table initialization race. The compiled initializer stores the entry count before the table pointer; a concurrent time conversion can read the positive count with a null pointer. In WASM, that read reaches zero-initialized memory and returns an incorrect first Delta-AT. A cached Sun/Moon node then holds the wrong time conversion. The synthetic four-thread sigma case measures a maximum position difference of 1.364243e-9 m and velocity difference of 8.881785e-13 m/s; these figures describe that case, not a global error bound. Synchronization at the actual compiled publication and read instructions reproduces the discrepancy in every one of five runs on both the original candidate and released-source control. An independent control on the committed 0.6.59 binary reproduces the exact corrupted node. Forced U and A retain the discrepancy; clearing the thread body caches removes it, and disabling set caches does not.
 
-AP thread preparation initializes ERFA's shared table alongside the existing shared atmospheric tables. Pool startup warms each new thread serially before parallel evaluation, and the calling thread warms before its first batch. No conversion or orbit formula changes, and no retained storage is added. The sigma regression asserts table readiness before the first batch and compares all 360 states exactly. It fails before the initialization fix and passes after it. The same forced-interleaving probe returns zero null-pointer reads and zero state differences in five fixed-build runs. Full state purity passes 10,192 states across 14 sets; the mixed-form pool passes 1,224 comparisons in three orders. All 24,497 sampled pre/post state and status records match exactly. The paired timing table above predates this one-time startup preparation; it is not a new timing measurement of initialization.
+Instance initialization prepares the shared time, drag, gravity, and half-conversion tables before exports run. AP thread preparation also prepares time and atmospheric flags. Pool startup warms each new thread serially; the calling thread prepares its caches before its first set or batch that needs them. No conversion or orbit formula changes, and no retained storage is added. The sigma regression asserts table readiness before the first batch and compares all 360 states exactly. It fails before the initialization fix and passes after it. The same forced-interleaving probe returns zero null-pointer reads and zero state differences in five fixed-build runs. Full state purity passes 10,192 states across 14 sets; the mixed-form pool passes 1,224 comparisons in three orders. All 24,497 sampled pre/post state and status records match exactly. The paired timing table above predates this one-time startup preparation; it is not a new timing measurement of initialization.
 
 ### Shared lookup initialization
 
@@ -6808,3 +6808,12 @@ bit-identical before and after preparation. A corrupted eight-hour body node sta
 cached through a five-day scan; a node 256 slots away replaces it, after which its
 re-evaluation agrees with the reference. The six-node interpolation window and
 integrated mean-state history can carry its effect beyond its immediate interval.
+
+### Coefficient forms during fitting
+
+A fit holds the form selected from its seed elements across all trial sets,
+finite-difference columns, and branch-settling passes. Covariance copies inherit
+their nominal's form. After the fit scope ends, initialization of the returned
+record selects its form from its final elements. A fit crossing a selector
+threshold can therefore return a record whose form differs from its fitting
+objective; the published threshold discontinuities also apply to that change.

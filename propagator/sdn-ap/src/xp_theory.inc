@@ -1880,7 +1880,9 @@ struct RateContext {
   XpSat* wide_anchor;                 ///< the nominal set whose grids this copy reads (GridShareScope); nullptr: its own
 };
 
+#if defined(__wasm32__)
 static_assert(sizeof(RateContext) == 344, "The coefficient form occupies existing context padding");
+#endif
 
 inline uint64_t hd_table_id(const RateContext& ctx) { return (ctx.shared_mask & 1) ? ctx.cov_anchor_id : ctx.ctx_id; }
 inline uint64_t sh_table_id(const RateContext& ctx) { return (ctx.shared_mask & 8) ? ctx.cov_anchor_id : ctx.ctx_id; }
@@ -5855,6 +5857,16 @@ inline uint8_t borrowable_mask(const XpSat& s) {
 /// SPEC 16.7: while a BranchScope lives on a thread, a set initialized there takes this branch instead of its own epoch
 /// elements' (a covariance's moved set still takes its nominal's): every trial set of a fit (fit::run) flies one branch's
 /// theory, so the fit's objective is smooth.
+/// A fit holds its seed's coefficient form for every trial and derivative column.
+inline thread_local int g_continuity_pin = -1;
+struct ContinuityScope {
+  int prev;
+  explicit ContinuityScope(uint8_t form) : prev(g_continuity_pin) { g_continuity_pin = form; }
+  ~ContinuityScope() { g_continuity_pin = prev; }
+  ContinuityScope(const ContinuityScope&) = delete;
+  ContinuityScope& operator=(const ContinuityScope&) = delete;
+};
+
 inline thread_local const Branch* g_branch_pin = nullptr;
 struct BranchScope {
   const Branch* prev;
@@ -6178,6 +6190,7 @@ inline int32_t xp_init(const Elements& e, XpSat& s) {
   s.ctx.selected_terms = tess::active();
   const XpSat* nominal = cov_bank_anchor();
   s.ctx.continuity_form = nominal != nullptr && nominal != &s ? nominal->ctx.continuity_form
+      : g_continuity_pin >= 0 ? static_cast<uint8_t>(g_continuity_pin)
       : tess::continuity_form(n0, e.eo, e.bterm, s.ctx.selected_terms.tesseral > 0 || s.ctx.selected_terms.zonal > 0);
   // SPEC 1.6 (stack #600): the thread's caches the set's theory reads (AP's terms selected: all nine; otherwise the step
   // cache), before its first table; a thread that cannot make them refuses the set (the failure counted: a method refuses as
@@ -6574,7 +6587,7 @@ inline thread_local XpSat* g_flown_set = nullptr;  ///< the set whose caches thi
 /// SetScope already owns and restores the held set; derivative access shares that identity.
 inline tess::MdailyDerivatives* tess::set_mdaily_derivatives() {
   const XpSat* s = g_flown_set;
-  if (s == nullptr || !continuity_derivatives(s->ctx.continuity_form)) return nullptr;
+  if (s == nullptr || s->caches == nullptr || !continuity_derivatives(s->ctx.continuity_form)) return nullptr;
   return &reinterpret_cast<SetCachesWithDerivatives*>(s->caches)->derivatives;
 }
 

@@ -2,7 +2,7 @@
 // Synthetic threshold neighborhoods, UTC fixture epochs, TEME meters, 300 s
 // samples to 120 h. The 0.063 m switch bound separates approximation changes
 // from the physical difference of the two element sets using state-exact
-// evaluation of each side. The prior measured maximum is 0.016281170 m.
+// evaluation of each side. The prior measured maximum is 0.016281421 m.
 import assert from 'node:assert/strict';
 import fs from 'node:fs';
 import {records,buildForms} from './lib/coefficient-forms.mjs';

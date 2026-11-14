@@ -210,14 +210,11 @@ inline void run_chunks() {
   }
 }
 
-/// A thread's once-per-thread caches: the tesseral cache with its storage, its blk_c storage, grouping scratch and term
-/// scratch, the half-day cache, the covariance's step cache, the Sun and Moon node store, the drift and GCRF node slots.
-/// Made before the thread computes any row of a batch (made lazily they were made in the batch, stack #487), and before
-/// its first state or set initialization (pool::thread_ready, stack #600: made lazily, one was first asked for part way
-/// through a flight, a day after the set's first state, and the module aborted when the memory was full by then). False
-/// when one cannot be had (the failure counted; those made are kept, and the next call makes the rest); once all are made,
-/// one flag test. With them, the guarded statics a pool thread first touches (NRLMSISE-00's flag table): made before any batch,
-/// so no thread, the calling thread least of all, waits in a static's guard inside one.
+/// Make this thread's AP evaluation caches before its first set or batch.
+/// Instance initialization prepares the shared lookup tables. Serialized pool
+/// startup also prepares the atmospheric flags and time table. The calling
+/// thread prepares its caches when its first set or batch needs them.
+/// A failed allocation leaves completed caches intact for a later retry.
 inline bool warm_thread() {
   if (g_warm) return true;
   (void)atm::msis_flags();

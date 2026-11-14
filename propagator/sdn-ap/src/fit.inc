@@ -630,6 +630,8 @@ inline bool on_eccentricity_switch_only(const Elements& e) {
 /// kBranchLimit, `row` the last set reached. `sigma_km` and `data_sigma` as run_free's.
 inline Result run(ElementRow& row, const double* t, const double* r, int count, const Options& o, double sigma_km = kUnitSigmaKm,
                   bool data_sigma = false) {
+  const Elements seed = elements_of(row);
+  const xpt::ContinuityScope form_pin(xpt::tess::continuity_form(seed.xno, seed.eo, seed.bterm, ap_selected()));
   Result out = run_free(row, t, r, count, o, sigma_km, data_sigma);
   const Elements e = elements_of(row);
   if (out.status < 0 || xpt::switch_near(e.xno, e.eo, ap_selected(), kOnSwitch, kOnSwitch) == nullptr) return out;
