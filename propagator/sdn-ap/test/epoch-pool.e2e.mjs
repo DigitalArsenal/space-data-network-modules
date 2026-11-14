@@ -353,7 +353,8 @@ console.log(JSON.stringify({ deferredStates }));
 for (const r of [...seamed.filter((q) => q.threads > 0), sliced.r, deferred.r]) {
   const s = r.seams;
   assert.equal(r.good, 3 * count, `${r.label}: ${r.good} of ${3 * count} states answered`);
-  assert.ok(s.widePrePass >= 3 * wide && s.replaced >= count - wide, `${r.label}: wide pre-pass ${s.widePrePass}, slots replaced ${s.replaced}`);
+  assert.equal(s.widePrePass, 0, `${r.label}: wide sets participate in the ordinary batch`);
+  assert.ok(s.replaced >= count - wide, `${r.label}: slots replaced ${s.replaced}`);
   assert.ok(s.msisLow > 0 && s.msisHigh > 0, `${r.label}: NRLMSISE-00 at or under 325 km ${s.msisLow}, over it ${s.msisHigh}`);
   assert.ok(s.sgp4 > 0 && s.xp > 0 && s.ap > 0, `${r.label}: states of each family: SGP4 ${s.sgp4}, SGP4XP ${s.xp}, AP ${s.ap}`);
   assert.ok(4 * s.poolRows >= 3 * (count - wide), `${r.label}: rows on pool threads ${s.poolRows} of ${3 * (count - wide)}`);

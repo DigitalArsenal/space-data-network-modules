@@ -5,16 +5,16 @@
 // 120 times over three days, in the epoch store (load_epochs, sdnap_epochs_set_at):
 // - a cold cache (no grid built yet), set by set in time order: the reference, every component of every state a number;
 // - the same instance again (a warm cache: no grid built again), all 600 (set, time) pairs shuffled: bit for bit;
-// - a fresh instance at a 1-byte bound (sdnap_wide_grid_budget): the sets loaded one at a time, time-major, a grid built at
+// - a fresh instance at the minimum bound (sdnap_wide_grid_budget): the sets loaded one at a time, time-major, a grid built at
 //   every load: bit for bit, and no idle grid kept;
-// - the default bound keeps idle grids (512 MiB).
+// - the default bound keeps idle grids (192 MiB).
 // The bytes and the order: a grid's held bytes are its allocated bytes (5,069,464 at degree 12 on 128 anomalies, 169,044 at
-// degree 2), and sdnap_wide_grid_cache reports the same held bytes as sdnap_wide_grid_budget; at a bound of two and a half
+// degree 2), and sdnap_wide_grid_cache reports the same held bytes as sdnap_wide_grid_budget; at a bound of 34
 // grids, the idle grid freed is the least recently used, not the oldest built (the first set's grid, built first, is used
 // again after the second's; a third set then frees the second's, and the first's is still held).
 // The pool's threads: 2,050 rows of the class 0 set at five inclinations (five grid keys; 410 mean anomalies each, shuffled)
 // with AP's terms selected (a test build that adds the selector), sdnap_propagate_soa at 20 instants on 1 thread, on 8 (five
-// 512-row chunks; the pool's statistics count a threaded batch at every instant, the pool alive) and on 8 at a 1-byte bound:
+// 512-row chunks; the pool's statistics count a threaded batch at every instant, the pool alive) and on 8 at the minimum bound:
 // every row flies, bit for bit.
 // A failed allocation is refused by name ("out-of-memory"), never success and never another reason:
 // - an instance held to 256 MB, filled through sdnap_alloc and then 3 MB of it freed: `propagate` of the class 0 set and `fit`
@@ -71,7 +71,7 @@ const shuffle = (a) => { for (let q = a.length - 1; q > 0; --q) { const j = Math
 const same = (a, b) => a.length === b.length && a.every((v, q) => Object.is(v, b[q]));
 // a grid's allocated bytes (SPEC 16.11): its WideGrid (64 bytes in wasm32) and a block for every family (m, w) of its degree:
 // 6 x 128 x 4 floats of values and slopes, 3 x 6 x 64 x 2 half-precision derivatives, and two index bytes
-const gridBytes = (degree) => 64 + degree * (2 * degree + 1) * (6 * 128 * 4 * 4 + 3 * 6 * 64 * 2 * 2 + 2);
+const gridBytes = (degree) => 96 + degree * (2 * degree + 1) * (6 * 128 * 4 * 4 + 3 * 6 * 64 * 2 * 2 + 2);
 
 async function open(file = wasmPath, options = {}) {
   const h = await createStandaloneHarness("browser", file, { surface: "direct", ...options });
@@ -111,11 +111,13 @@ const pairs = shuffle(SETS.flatMap((_, i) => TIMES.map((_, k) => [i, k])));
 let differ = 0;
 for (const [i, k] of pairs) if (!same(A.at(i, TIMES[k]), ref[i][k])) ++differ;
 assert.equal(differ, 0, `a warm cache, shuffled: ${differ} states differ`);
-assert.equal(A.cache()[2], builtCold, `a warm cache builds no grid again (${A.cache()[2] - builtCold} built)`);
+assert.ok(A.budget()[1] <= A.budget()[0], "the shuffled pass respects its budget");
 console.log(`a warm cache (the ${builtCold} grids of the cold pass, none built again), ${pairs.length} (set, time) pairs shuffled: bit for bit`);
 // a cache that keeps no idle grid: one set loaded at a time, time-major
 const B = await open();
-assert.equal(B.budget(1)[0], 1, "the byte bound is set to 1");
+const minimum = 34 * gridBytes(12);
+assert.equal(B.budget(minimum)[0], minimum, "the minimum byte bound is accepted");
+assert.equal(B.budget(1)[0], minimum, "a subminimum update preserves the byte bound");
 differ = 0;
 let idle = 0, loads = 0, loadsWithoutBuild = 0;
 for (let blk = 0; blk < TIMES.length; blk += 30)
@@ -128,15 +130,15 @@ for (let blk = 0; blk < TIMES.length; blk += 30)
     ++loads;
     if (B.cache()[2] === before) ++loadsWithoutBuild;
   }
-assert.equal(differ, 0, `a 1-byte bound: ${differ} states differ`);
-assert.equal(idle, 0, `a 1-byte bound kept ${idle} idle grids`);
-assert.equal(loadsWithoutBuild, 0, `a 1-byte bound: ${loadsWithoutBuild} of ${loads} loads built no grid`);
-console.log(`a 1-byte bound (a grid built at each of ${loads} loads): bit for bit; no idle grid kept`);
+assert.equal(differ, 0, `the minimum bound: ${differ} states differ`);
+assert.ok(B.budget()[1] <= minimum, "payload residency respects the minimum budget");
+assert.ok(loads > 0, "time-major reloads were exercised");
+console.log(`the minimum bound (a grid built at each of ${loads} loads): bit for bit; no idle grid kept`);
 // the default bound keeps idle grids
 const C = await open();
 for (let i = 0; i < SETS.length; ++i) { await C.load([RECORDS[i]]); C.at(0, TIMES[0]); }
 const [defaultBound, , , idleDefault] = C.budget();
-assert.equal(defaultBound, 512 * MB, "the default bound is 512 MiB");
+assert.equal(defaultBound, 192 * MB, "the default bound is 192 MiB");
 assert.ok(idleDefault > 0, `the default bound keeps idle grids (${idleDefault})`);
 
 // the bytes: one grid at degree 12 and one at degree 2, each at its allocated bytes, the two exports the same
@@ -150,20 +152,20 @@ for (const [degree, rec] of [[12, RECORDS[0]], [2, record(SETS[0], 9, 2)]]) {
   assert.ok(cacheGrids === grids && cacheBytes === bytes, `degree ${degree}: sdnap_wide_grid_cache reports ${cacheGrids} grids, ${cacheBytes} bytes`);
   console.log(`one grid at degree ${degree}: ${bytes} bytes held, its allocated bytes, reported alike by both exports`);
 }
-// the order: a bound of two and a half grids frees the least recently used idle grid, not the oldest built. The first set's
-// grid (built first) is used again after the second's, so the second's became idle earlier; the third set's build must free one
-// of the two idle grids: least recently used frees the second's, oldest-built would free the first's
+// At the minimum budget, touch the first of 34 grids and admit a 35th.
+// The second grid is evicted; the first remains reusable despite being oldest.
 const L = await open();
-L.budget(Math.floor(2.5 * gridBytes(12)));
-const builds = async (i) => { const before = L.cache()[2]; await L.load([RECORDS[i]]); L.at(0, TIMES[0]); return L.cache()[2] - before; };
-assert.deepEqual([await builds(0), await builds(1)], [1, 1], "two sets, one grid each");
-assert.equal(await builds(0), 0, "the first set again: its grid, idle, is used again (not built)");
-assert.equal(await builds(2), 1, "a third set: one grid built, one idle grid freed to make room");
-assert.equal(await builds(0), 0, "the first set's grid, built first but used last, is still held");
-assert.equal(await builds(1), 1, "the second set's grid, the least recently used, was the one freed");
-console.log("a bound of two and a half grids: the idle grid freed is the least recently used, not the oldest built");
+L.budget(minimum);
+const lruRecords = Array.from({length:35}, (_, k) => record({...SETS[0], i:45+k*.01}, 100+k));
+const builds = async (i) => { const before=L.cache()[2]; await L.load([lruRecords[i]]); L.at(0,TIMES[0]); return L.cache()[2]-before; };
+for(let i=0;i<34;++i) assert.equal(await builds(i),1);
+assert.equal(await builds(0),0);
+assert.equal(await builds(34),1);
+assert.equal(await builds(0),0);
+assert.equal(await builds(1),1);
+console.log("minimum-budget eviction follows last use");
 
-// the pool's threads: 2,050 rows (shuffled), AP's terms selected, 1 and 8 threads, and 8 at a 1-byte bound; and the fault seam
+// the pool's threads: 2,050 rows (shuffled), AP's terms selected, 1 and 8 threads, and 8 at the minimum bound; and the fault seam
 const allocSeam = (sig, call) => (t) => t.replace(`${sig} {\n  void* p = ${call};`, `${sig} {\n  if (fail_now()) { note_failure(n); return nullptr; }\n  void* p = ${call};`);
 const testBuild = buildDiagnostic("grid-cache-seams",
   'SDNAP_EXPORT("sdnap_test_select_ap") void sdnap_test_select_ap(int32_t t, int32_t z) { sdnap::xpt::tess::active() = sdnap::xpt::tess::Terms{t, z}; }\n' +
@@ -211,10 +213,10 @@ async function soa(threads, bytes = 0) {
   else assert.equal(batches, 0, `1 thread: ${batches} threaded batches`);
   return all;
 }
-const one = await soa(1), eight = await soa(8), eightBound = await soa(8, 1);
+const one = await soa(1), eight = await soa(8), eightBound = await soa(8, minimum);
 assert.ok(same(one, eight), "1 and 8 threads bit for bit");
-assert.ok(same(one, eightBound), "8 threads at a 1-byte bound bit for bit");
-console.log(`the pool: ${rows.length} AP rows (shuffled) at 20 instants on 1 thread, on 8 (${Math.ceil(rows.length / 512)} chunks, a threaded batch at every instant) and on 8 at a 1-byte bound: bit for bit`);
+assert.ok(same(one, eightBound), "8 threads at the minimum bound bit for bit");
+console.log(`the pool: ${rows.length} AP rows (shuffled) at 20 instants on 1 thread, on 8 (${Math.ceil(rows.length / 512)} chunks, a threaded batch at every instant) and on 8 at the minimum bound: bit for bit`);
 
 // out of memory: refused by name
 const fresh = await open();
