@@ -3066,8 +3066,8 @@ of one set holds one slot, and a series of more than one holds two (the second i
 and a load that cannot allocate it is refused `out-of-memory`); of those, the two sets last used hold a theory record
 at a time. Two series that carry equal weather share one copy of it: equal means every row, node and node value the
 same in every bit, so which of two series is kept never depends on their order. Loads build a separate snapshot and
-publish it only after validation and counted allocation checks succeed. Every refusal preserves the previous snapshot
-and its frame cells. A successful publication frees the previous snapshot and closes its frame allocation.
+publish it only after validation and counted allocation checks succeed. After a refused load, the resident store holds exactly what it held before the load;
+an empty resident stays empty, and a populated resident retains its states and frame cells. A successful publication frees the previous snapshot and closes its frame allocation.
 
 **14.1.1 Load in parts.** A host that cannot stage the whole catalog in the module's memory takes it in parts with three methods:
 `load_epochs_open` (the optional $PCF EPOCH_STORE, read once), `load_epochs_part` (the 'ocm' frames of one part, framed as for

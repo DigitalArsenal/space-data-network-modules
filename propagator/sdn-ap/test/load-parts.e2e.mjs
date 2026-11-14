@@ -1,16 +1,8 @@
 #!/usr/bin/env node
-// A load taken in parts (SPEC 14.1.1):load_epochs_open, load_epochs_part (any number of times), load_epochs_close.
-//   1. Partition equivalence: for every catalog of load-equivalence (shuffled, capped, theory-filtered, duplicates whichever part they fall in, SGP4, SGP4XP and
-//      AP sets, covariances, forecasts, shared and unused weather) the store built from one part, two, seven uneven parts (some of two frames) and one record
-//      a part equals the store load_epochs builds from the whole list: the counts and bytes, every series, every set's epoch and state, and the selected state
-//      and the covariance of every series, bit for bit.
-//   2. Refusals: a bad record in a middle part is refused with the code and message load_epochs gives on the whole list; the load is then closed and the store
-//      empty (a part or a close after it is refused load-not-open); series-forces-differ comes at the close, with the store empty.
-//   3. Misuse: a part or a close with no load open is refused load-not-open and leaves a loaded store as it was; a second open starts over; a close with no part
-//      is refused missing-ocm; the store is empty from the open to the close (a state asked of it is -1, no such series).
-//   4. Allocation failure: every counted allocation of every call of a three-part load is made to fail in turn (a test-only seam in the module's accounting);
-//      each is refused out-of-memory, the store is empty, and the load is closed.
-//   5. Memory: a catalog taken in parts of 100 grows the instance by a fraction of what the same catalog taken in one payload does.
+// Loads taken in parts equal whole loads for counts, epochs, states, covariance and memory accounting (SPEC 14.1.1).
+// Refusals discard pending records and preserve the resident snapshot; an empty resident stays empty.
+// Allocation failure at every counted site checks both empty and populated residents. Reused input buffers,
+// negative controls and bounded memory after repeated refusals exercise ownership of decoded records.
 import assert from 'node:assert/strict';
 import fs from 'node:fs';
 import * as fb from 'flatbuffers';
@@ -91,7 +83,7 @@ const fingerprint = (pr = q) => {
       out.push(['source', i32(st, 1)[0]]);
     }
   }
-  return JSON.stringify(out, (k, v) => (typeof v === 'number' && !Number.isFinite(v) ? String(v) : v));
+  return JSON.stringify(out, (k, v) => (Object.is(v, -0) ? '-0' : typeof v === 'number' && !Number.isFinite(v) ? String(v) : v));
 };
 const emptyStore = what => { q.x.sdnap_epochs_stats(q.p); const s = q.f64(q.p, 8); assert.deepEqual([q.x.sdnap_epochs_count(), s[0], s[1], s[7]], [0, 0, 0, 0], `${what}: the store holds series, records, kept, bytes ${q.x.sdnap_epochs_count()}, ${s[0]}, ${s[1]}, ${s[7]}`); };
 const refused = (r, code, what) => { assert.equal(r.statusCode, 3, `${what}: status ${r.statusCode}`); assert.equal(r.errorCode, code, `${what}: ${r.errorCode}: ${r.errorMessage}`); };
@@ -189,15 +181,20 @@ const bad = {
   'propagation invariant': ap(520053, t => { t.COV_PROPAGATION.NOISE_NON_GRAVITATIONAL_RAD_DAY2 = t.COV_PROPAGATION.NOISE_NON_GRAVITATIONAL_RAD_DAY2 * 2 + 1; }),
   'covariance size': ap(520054, t => { t.COV_SIZE = 5; }),
 };
+for (const populated of [false, true]) {
+q.x.plugin_destroy();
+if (populated) assert.equal((await whole(fresh, catalog.slice(0, 6))).statusCode, 0);
+const residentBefore = fingerprint();
+const unchangedStore = what => assert.equal(fingerprint(), residentBefore, `${what}: refusal changed the resident snapshot (populated ${populated})`);
 for (const [name, record] of Object.entries(bad)) {
   const records = [...good.slice(0, 14), record, ...good.slice(14)];
   const w = await whole(fresh, records);
   assert.equal(w.statusCode, 3, `${name}: load_epochs answered the list with the bad record`);
-  emptyStore(`${name}, whole`);
+  unchangedStore(`${name}, whole`);
   // the bad record falls in the middle part: parts of 10 records, the record is the 15th (the second part's fifth)
   const r = await inParts(fresh, records, [10, 10, 11]);
   assert.deepEqual([r.statusCode, r.errorCode, r.errorMessage], [w.statusCode, w.errorCode, w.errorMessage], `${name}: the refusal of a middle part`);
-  emptyStore(`${name}, in parts`);
+  unchangedStore(`${name}, in parts`);
   refused(await part(fresh, [good.slice(0, 2)]), 'load-not-open', `${name}: a part after the refusal`);
   refused(await close(fresh), 'load-not-open', `${name}: a close after the refusal`);
 }
@@ -206,7 +203,7 @@ for (const [name, record] of Object.entries(bad)) {
   const w = await whole(fresh, records);
   const r = await inParts(fresh, records, [4, 8, 8, 8, 8]);   // the garbage is the sixth record, before the second bad one
   assert.deepEqual([r.errorCode, r.errorMessage], [w.errorCode, w.errorMessage], 'several bad records: the first is reported');
-  emptyStore('several bad records');
+  unchangedStore('several bad records');
 }
 {
   const clash = ap(520010, t => { at(5, t); t.PERTURBATIONS.MAXIMUM_TESSERAL_DEGREE = 20; });
@@ -216,7 +213,7 @@ for (const [name, record] of Object.entries(bad)) {
   // the four sets of series 520010 (records 25 to 28) are in the second part, the clashing record of that series alone in the third
   const r = await inParts(fresh, records, [24, 6, 1]);
   assert.deepEqual([r.statusCode, r.errorCode, r.errorMessage], [w.statusCode, w.errorCode, w.errorMessage], 'series-forces-differ arrives at the close');
-  emptyStore('series-forces-differ');
+  unchangedStore('series-forces-differ');
   refused(await close(fresh), 'load-not-open', 'a close after series-forces-differ');
 }
 {
@@ -227,90 +224,95 @@ for (const [name, record] of Object.entries(bad)) {
   const w = await call(fresh, 'load_epochs', [{portId: 'ocm', typeRef: T('OCM'), payload: omm}]);
   assert.deepEqual([r.statusCode, r.errorCode, r.errorMessage], [w.statusCode, w.errorCode, w.errorMessage]);
   assert.equal(r.errorCode, 'omm-not-flown');
-  emptyStore('a part of another type');
+  unchangedStore('a part of another type');
   refused(await close(fresh), 'load-not-open', 'after a part of another type');
 }
 
-// ---- 3. misuse
+}
+
+// ---- 3. misuse and visibility during an open load
 {
   assert.equal((await whole(fresh, catalog)).statusCode, 0);
-  fingerprint();   // flying the sets allocates their records, which the byte statistic counts: compare after that
   const loaded = fingerprint();
   refused(await part(fresh, [catalog.slice(0, 3)]), 'load-not-open', 'a part with no load open');
   refused(await close(fresh), 'load-not-open', 'a close with no load open');
   assert.equal(fingerprint(), loaded, 'a part or a close with no load open changed the store');
-  // an open empties the store, and the store stays empty until the close
+  const withoutPending = value => { const f = JSON.parse(value); f[0][7] = 0; return JSON.stringify(f); };
   assert.equal((await opened(fresh)).statusCode, 0);
-  emptyStore('after an open');
+  assert.equal(fingerprint(), loaded, 'opening a replacement changed the resident snapshot');
   assert.equal((await part(fresh, [catalog.slice(0, 10)])).statusCode, 0);
-  // the store holds no series and keeps no set; what the open load holds is in the byte statistic, growing with its parts and gone when it is closed
+  assert.equal(withoutPending(fingerprint()), withoutPending(loaded), 'an open load changed resident states');
   q.x.sdnap_epochs_stats(q.p);
   const afterOne = q.f64(q.p, 8).slice();
-  assert.deepEqual([q.x.sdnap_epochs_count(), afterOne[0], afterOne[1]], [0, 0, 0], 'the store holds series or counts during a load');
-  assert.ok(afterOne[7] > 2000, `an open load holding 10 records reports ${afterOne[7]} bytes`);
+  assert.ok(afterOne[7] > JSON.parse(loaded)[0][7], 'pending records are absent from memory accounting');
   assert.equal((await part(fresh, [catalog.slice(10, 20)])).statusCode, 0);
   q.x.sdnap_epochs_stats(q.p);
-  assert.ok(q.f64(q.p, 8)[7] > afterOne[7], 'the byte statistic does not grow with the parts of an open load');   // the records' strings and covariances; the blocks are allocated whole
+  assert.ok(q.f64(q.p, 8)[7] > afterOne[7], 'pending byte accounting does not grow with parts');
+  assert.equal(withoutPending(fingerprint()), withoutPending(loaded));
+  // A second open discards only the pending records.
+  assert.equal((await opened(fresh)).statusCode, 0);
+  assert.equal(fingerprint(), loaded, 'a second open changed the resident snapshot');
+  assert.equal((await part(fresh, [catalog.slice(10, 20)])).statusCode, 0);
+  assert.equal((await close(fresh)).statusCode, 0);
+  const second = fingerprint();
+  assert.equal((await whole(fresh, catalog.slice(10, 20))).statusCode, 0);
+  assert.equal(fingerprint(), second, 'a second open did not start a separate pending load');
+  assert.equal((await opened(fresh)).statusCode, 0);
+  refused(await close(fresh), 'missing-ocm', 'a close with no part');
+  assert.equal(fingerprint(), second, 'a close with no part changed the resident snapshot');
+  refused(await close(fresh), 'load-not-open', 'a second close');
+  assert.equal((await opened(fresh)).statusCode, 0);
+  refused(await call(fresh, 'load_epochs_part', []), 'missing-ocm', 'a part with no frame');
+  assert.equal(fingerprint(), second, 'a part with no frame changed the resident snapshot');
+  assert.equal((await opened(fresh)).statusCode, 0);
+  assert.equal((await part(fresh, [catalog.slice(0, 3)])).statusCode, 0);
+  assert.equal((await whole(fresh, catalog.slice(3, 8))).statusCode, 0);
+  refused(await close(fresh), 'load-not-open', 'a close after load_epochs');
+  const replacement = fingerprint(), badConfig = {CACHE_DAYS: -1};
+  assert.equal((await opened(fresh)).statusCode, 0);
+  assert.equal((await part(fresh, [catalog.slice(0, 3)])).statusCode, 0);
+  assert.equal((await opened(fresh, badConfig)).statusCode, 3);
+  assert.equal(fingerprint(), replacement, 'a refused open changed the resident snapshot');
+  refused(await part(fresh, [catalog.slice(3, 6)]), 'load-not-open', 'a part after a refused open');
+  refused(await close(fresh), 'load-not-open', 'a close after a refused open');
+  assert.equal((await opened(fresh, badConfig)).statusCode, 3);
+  assert.equal(fingerprint(), replacement, 'a refused open with no pending load changed the resident snapshot');
+  assert.equal((await opened(fresh)).statusCode, 0);
+  assert.equal((await part(fresh, [catalog.slice(0, 3)])).statusCode, 0);
+  refused(await call(fresh, 'load_epochs', []), 'missing-ocm', 'load_epochs with no frame while a load is open');
+  refused(await part(fresh, [catalog.slice(3, 6)]), 'load-not-open', 'a part after a refused load_epochs');
+  assert.equal(fingerprint(), replacement, 'a refused whole load changed the resident snapshot');
+  refused(await call(fresh, 'load_epochs', []), 'missing-ocm', 'load_epochs with no frame');
+  assert.equal(fingerprint(), replacement);
+  // With no resident snapshot, pending records supply no resident series or states.
+  q.x.plugin_destroy();
+  assert.equal((await opened(fresh)).statusCode, 0);
+  emptyStore('an open without resident records');
+  assert.equal((await part(fresh, [catalog.slice(0, 10)])).statusCode, 0);
+  q.x.sdnap_epochs_stats(q.p);
+  assert.deepEqual(Array.from(q.f64(q.p, 2)), [0, 0]);
+  assert.ok(q.f64(q.p, 8)[7] > 2000);
   const out = q.p + 40000;
   assert.equal(q.x.sdnap_epochs_series(0, q.p, 0, 0), -1);
   assert.equal(q.x.sdnap_epochs_select(0, 2460000.5, 0, out), -1);
   assert.equal(q.x.sdnap_epochs_at(2460000.5, 0, 0, 1, 0, out, 0, 0), -1);
   assert.equal(q.x.sdnap_epochs_set_at(0, 0, 2460000.5, 0, out), -1);
-  // every answer SPEC 14.1.1 lists for an open load: the count 0, the source and the states -1 for a request of one series, 0 for a request of none, the drag check -4
   assert.equal(q.x.sdnap_epochs_count(), 0);
   assert.equal(q.x.sdnap_epochs_source_at(2460000.5, 0, 0, 1, out), -1);
   assert.equal(q.x.sdnap_epochs_source_at(2460000.5, 0, 0, 0, out), 0);
   assert.equal(q.x.sdnap_epochs_at(2460000.5, 0, 0, 0, 0, out, 0, 0), 0);
   assert.equal(q.x.sdnap_drag_orbit_check(0, 0, 8, out), -4);
-  // a second open starts over: what the first took is dropped
-  assert.equal((await opened(fresh)).statusCode, 0);
-  assert.equal((await part(fresh, [catalog.slice(10, 20)])).statusCode, 0);
-  assert.equal((await close(fresh)).statusCode, 0);
-  const second = fingerprint();
-  assert.equal((await whole(fresh, catalog.slice(10, 20))).statusCode, 0);
-  assert.equal(second, fingerprint(), 'a second open did not start over');
-  // a close with no part, and the load is closed
-  assert.equal((await opened(fresh)).statusCode, 0);
-  refused(await close(fresh), 'missing-ocm', 'a close with no part');
-  emptyStore('a close with no part');
-  refused(await close(fresh), 'load-not-open', 'a second close');
-  // a part with no frame
-  assert.equal((await opened(fresh)).statusCode, 0);
-  refused(await call(fresh, 'load_epochs_part', []), 'missing-ocm', 'a part with no frame');
-  emptyStore('a part with no frame');
-  // load_epochs while a load is open starts its own (the open one is dropped)
-  assert.equal((await opened(fresh)).statusCode, 0);
-  assert.equal((await part(fresh, [catalog.slice(0, 3)])).statusCode, 0);
-  assert.equal((await whole(fresh, catalog.slice(3, 8))).statusCode, 0);
-  refused(await close(fresh), 'load-not-open', 'a close after load_epochs');
-  // any non-zero status of an open drops the load in progress and empties the store (the rule a host relies on), a bad configuration included
-  const badConfig = {CACHE_DAYS: -1};
-  assert.equal((await opened(fresh)).statusCode, 0);
-  assert.equal((await part(fresh, [catalog.slice(0, 3)])).statusCode, 0);
-  const badOpen = await opened(fresh, badConfig);
-  assert.equal(badOpen.statusCode, 3, 'an open with a bad configuration was accepted');
-  emptyStore('a refused open');
-  refused(await part(fresh, [catalog.slice(3, 6)]), 'load-not-open', 'a part after a refused open: the earlier load was dropped');
-  refused(await close(fresh), 'load-not-open', 'a close after a refused open');
-  assert.equal((await whole(fresh, catalog)).statusCode, 0);
   assert.equal((await opened(fresh, badConfig)).statusCode, 3);
-  emptyStore('a refused open of a loaded store');
-  // load_epochs refused while a load is open abandons it; refused with none open it leaves the store as it was (it always did)
-  assert.equal((await opened(fresh)).statusCode, 0);
-  assert.equal((await part(fresh, [catalog.slice(0, 3)])).statusCode, 0);
-  refused(await call(fresh, 'load_epochs', []), 'missing-ocm', 'load_epochs with no frame while a load is open');
-  refused(await part(fresh, [catalog.slice(3, 6)]), 'load-not-open', 'a part after a refused load_epochs');
-  emptyStore('load_epochs refused while a load is open');
-  assert.equal((await whole(fresh, catalog)).statusCode, 0);
-  fingerprint();
-  const kept = fingerprint();
-  refused(await call(fresh, 'load_epochs', []), 'missing-ocm', 'load_epochs with no frame');
-  assert.equal(fingerprint(), kept, 'a load_epochs refused before it began changed the store');
-  console.log('misuse: refused by name, the store untouched or empty as stated');
+  emptyStore('a refused open without resident records');
+  console.log('misuse: pending loads are discarded on refusal; resident snapshots are preserved');
 }
 
 // ---- 3b. a zero-length part, and a payload cut in the middle of a frame at a part boundary
-{
+for (const populated of [false, true]) {
+  q.x.plugin_destroy();
+  if (populated) assert.equal((await whole(fresh, catalog.slice(0, 6))).statusCode, 0);
+  const residentBefore = fingerprint();
+  const unchangedStore = what => assert.equal(fingerprint(), residentBefore, `${what}: resident snapshot changed`);
   const empty = {portId: 'ocm', typeRef: T('OCM'), payload: Buffer.alloc(0)};
   const w = await call(fresh, 'load_epochs', [empty]);
   assert.equal(w.statusCode, 3);
@@ -318,7 +320,7 @@ for (const [name, record] of Object.entries(bad)) {
   assert.equal((await part(fresh, [catalog.slice(0, 4)])).statusCode, 0);
   const z = await call(fresh, 'load_epochs_part', [empty]);
   assert.deepEqual([z.statusCode, z.errorCode, z.errorMessage], [w.statusCode, w.errorCode, w.errorMessage], 'a zero-length part is refused as load_epochs refuses it');
-  emptyStore('a zero-length part');
+  unchangedStore('a zero-length part');
   refused(await close(fresh), 'load-not-open', 'a close after a zero-length part');
   // the byte stream of five records cut in the middle of the third record: the first part ends inside a frame
   const stream = Buffer.concat(catalog.slice(0, 5).map(prefix)), cut = prefix(catalog[0]).length * 2 + 100;
@@ -327,9 +329,9 @@ for (const [name, record] of Object.entries(bad)) {
   const wholeCut = await call(fresh, 'load_epochs', [{portId: 'ocm', typeRef: T('OCM'), payload: stream.subarray(0, cut)}]);
   assert.deepEqual([head.statusCode, head.errorCode, head.errorMessage], [wholeCut.statusCode, wholeCut.errorCode, wholeCut.errorMessage], 'a part cut in a frame');
   assert.equal(head.errorCode, 'invalid-ocm');
-  emptyStore('a part cut in a frame');
+  unchangedStore('a part cut in a frame');
   refused(await part(fresh, [catalog.slice(2, 3)]), 'load-not-open', 'the rest of a cut frame');
-  console.log('zero-length part and a frame cut at a part boundary: refused as load_epochs refuses them, the load closed, the store empty');
+  console.log('zero-length part and a frame cut at a part boundary: refused as load_epochs refuses them, the load closed, the resident snapshot unchanged');
 }
 
 // ---- 4. allocation failure in any call of a load in parts
@@ -339,7 +341,7 @@ const MIXED_COUNTS = [0, 2, 15, 19, 8], FORECAST_COUNTS = [0, 9, 7, 0, 5];
 const seamedWasm = buildDiagnostic('load-parts-seam', probe, s => s, seam);
 {
   const seamed = seamedWasm;
-  const h = await open(seamed), x = h.instance.exports, p = x.sdnap_alloc(64);
+  const h = await open(seamed), x = h.instance.exports, p = x.sdnap_alloc(64), residentProbe = probeOf(h);
   const stats = () => { x.sdnap_epochs_stats(p); return Array.from(new Float64Array(h.memory.buffer, p, 8)); };
   const inject = async (label, records, sizes, expected) => {
   // the calls of the load, as thunks: open, three parts, close
@@ -368,15 +370,21 @@ const seamedWasm = buildDiagnostic('load-parts-seam', probe, s => s, seam);
   // an equality, the open's count included: a count that drops is a counted site the seam no longer fails (the seam's replaces must all match, and these are measured)
   assert.deepEqual(counts, expected, `${label}: counted allocations per call (open, parts, close)`);
   let failed = 0;
-  for (let c = 0; c < ok.length; ++c) {   // the open, the parts and the close, each failed one counted allocation at a time
+  for (const populated of [false, true]) {
+  for (let c = 0; c < ok.length; ++c) {   // each counted allocation of each call
     for (let n = 1; n <= counts[c]; ++n) {
+      x.sdnap_test_fail_at(0);
+      x.plugin_destroy();
+      if (populated) assert.equal((await whole(h, records.slice(0, 1))).statusCode, 0);
+      const before = fingerprint(residentProbe);
       const {r} = await run(c, n);
       refused(r, 'out-of-memory', `allocation ${n} of ${counts[c]} of call ${c}`);
-      const s = stats();
-      assert.deepEqual([x.sdnap_epochs_count(), s[0], s[1], s[7]], [0, 0, 0, 0], `allocation ${n} of call ${c}: the store is not empty`);
+      x.sdnap_test_fail_at(0);
+      assert.equal(fingerprint(residentProbe), before, `allocation ${n} of call ${c}, populated ${populated}: the resident snapshot changed`);
       refused(await part(h, [records.slice(0, 2)]), 'load-not-open', `allocation ${n} of call ${c}: the load is not closed`);
       failed += 1;
     }
+  }
   }
   // a load after the refusals is the new snapshot alone
   x.sdnap_test_fail_at(0);
@@ -384,7 +392,7 @@ const seamedWasm = buildDiagnostic('load-parts-seam', probe, s => s, seam);
   assert.equal((await part(h, [records.slice(0, 6)])).statusCode, 0);
   assert.equal((await close(h)).statusCode, 0);
   assert.ok(x.sdnap_epochs_count() > 0);
-  console.log(`allocation failure, ${label}: ${failed} counted allocations of the parts and the close (${counts.join(', ')} per call) failed in turn, each refused out-of-memory with the store empty and the load closed`);
+  console.log(`allocation failure, ${label}: ${failed} counted allocations of the parts and the close (${counts.join(', ')} per call) failed in turn, each refused out-of-memory with the resident snapshot unchanged and the load closed`);
   return failed;
   };
   const mixed = [...catalog.slice(0, 6), ...catalog.slice(14, 24), ...catalog.slice(30, 34), ...catalog.slice(34, 36)];
