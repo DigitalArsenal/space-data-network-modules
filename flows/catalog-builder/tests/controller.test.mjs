@@ -77,7 +77,7 @@ async function tick(time,kill=false){
    if(C.CAT.getSizePrefixedRootAsCAT(new fb.ByteBuffer(out.catalog.payload)).NORAD_CAT_ID()===trapComposeObject)trap();
    const r=await composer.invoke({methodId:'replace_products',inputs:[out.recipe,out.catalog,{...out.selection,portId:'decision'},...(out.selected?[{...out.selected,portId:'ocm_products'}]:[])]});assert.equal(r.statusCode,0,r.errorMessage);input=r.outputs.map(f=>({...f,portId:f.portId==='decision'?'compose_status':'replacement'}));if(composerRefusal)input=[frame('compose_status','QRP',pack(Object.assign(new Q.QRPT(),{KIND:Q.qrpKind.Error,STATUS:Q.qrpStatus.Invalid,ERROR_CODE:composerRefusal}),'QRP',false))];
   }else throw Error('No progress: '+Object.keys(out));
-  response=await control.invoke({methodId:'advance',inputs:input});
+  try{response=await control.invoke({methodId:'advance',inputs:input});}catch(e){console.error('controller trap after',Object.keys(out), 'inputs',input.map(x=>x.portId), 'counters',counters);throw e;}
  }
  throw Error('Bounded controller did not complete');
 }
