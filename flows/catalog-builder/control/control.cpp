@@ -420,7 +420,7 @@ bool attempt_deferred(){const auto id=work[at];
 bool admit_dispatch(){
  const auto id=work[at];const bool built=index.count(id);
  if(built&&unbuilt_work&&at<initial_work_size&&built_dispatches>=(cfg.batch+1)/2){work.push_back(id);return false;}
- if(!built&&built_dispatches&&new_dispatches>=cfg.batch/2)return false;
+ if(!built&&work.size()>initial_work_size&&new_dispatches>=cfg.batch/2)return false;
  ++dispatches;if(built)++built_dispatches;else ++new_dispatches;return true;
 }
 int next_object() {
