@@ -97,9 +97,11 @@ The output map and the terms above e 0.3 retain their definitions.
   Each construction thread also retains two 3,686,400-byte buffers and uses at most 8,216,562 bytes
   for exact arithmetic reuse. Epoch tables, ordinary caches, stacks and allocator reserve are additional.
   `propagate_epochs` preserves per-object OEM outputs after a propagation refusal, including allocation
-  refusal. Its block COMMENT begins with status=ok, status=partial or status=refused, a refusal count,
-  and zero-based request indices with numeric codes. The method returns 3 if any object has a refusal;
-  later objects are attempted. Other methods retain the no-output allocation-refusal contract.
+  refusal. Successful output retains its COMMENT grammar and decay-crossing behavior. A refused
+  object has an empty block with a status=refused note, total refusal count and at most eight
+  request indices, codes and named reasons. The method retains the first failing object's named
+  error and status 3, and attempts later objects. State-only epoch exports report retryable
+  resource shortage as row status 91. Other methods retain the no-output allocation-refusal contract.
 - Covariance (SPEC 12; `test/covariance.e2e.mjs`): `fit` writes, for its SGP4XP sets, the fit's covariance at its epoch
   as COVARIANCE (TEME, 21 values) with USER_DEFINED_SDNAP_COV_x rows (the BTERM and AGOM parameters' covariances, the
   theory floor, the process noise); `sdnap_covariance_at(omm, length, minutes, count, out)` gives, per time, the TEME
