@@ -1445,7 +1445,7 @@ inline void write_series(Store& st, double jd_whole, double jd_frac, uint32_t fi
       for (int q = 0; q < 36; ++q) cov[36 * k + q] = e == sdnap::kPropOk && have_p ? P[q] : std::numeric_limits<double>::quiet_NaN();
 }
 
-/// A series containing a wide set stays serial for its entire flight: output-time node changes acquire grids too.
+/// Whether any entry in a series selects the wide tesseral branch.
 inline bool wide_series(const Store& st, const Series& s) {
   for (uint32_t k = 0; k < s.count; ++k)
     if (((st.entries[s.first + k].branch >> 16) & 0xffu) != 0) return true;  // the packed branch's wide_tess byte (load)

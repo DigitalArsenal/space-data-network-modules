@@ -5707,20 +5707,33 @@ inline int wide_families(int degree, int cls, double n, double e, double inc, in
   double (*D)[2][NE] = reinterpret_cast<double (*)[2][NE]>(ws + 5 * 2 * NE);  // their transforms and H[H[g]]
   double (*X)[NE] = reinterpret_cast<double (*)[NE]>(ws + 10 * 2 * NE);
 
-  if(degree<2||degree>kSpCap){std::free(ws);sdnap::mem::note_failure(1);return -1;}
-  const size_t powerN=(degree+2)*NE,rotationN=(2*degree+1)*NE*2,amplitudeN=degree+1;
-  const size_t width=2*(degree+64)+1,phaseN=(2*degree+1)*width*NE*2,jmN=width*NE*2;
-  const size_t flags=(2*degree+1)*width+width;
-  struct ReuseBlock{void* p;~ReuseBlock(){std::free(p);}} reuse{sdnap::mem::malloc((powerN+rotationN+amplitudeN+phaseN+jmN)*sizeof(double)+flags)};
-  if(!reuse.p){std::free(ws);return -1;}
-  double* powers=static_cast<double*>(reuse.p),*rotation=powers+powerN,*amplitude=rotation+rotationN;
- 
-  for(int l=0;l<=degree+1;++l)for(int q=0;q<NE;++q)powers[l*NE+q]=std::pow(ar[q],l);
-  for(int l=2;l<=degree;++l)amplitude[l]=kMu*std::pow(1.0/a,l+1);
-  for(int w=-degree;w<=degree;++w)for(int q=0;q<NE;++q){const double ang=w*fwang[q];const int k=((w+degree)*NE+q)*2;rotation[k]=std::cos(ang);rotation[k+1]=std::sin(ang);}
-  const int jcap=degree+64,jwidth=2*jcap+1;
-  double* phase=amplitude+amplitudeN,*jm=phase+phaseN;
-  auto* phaseReady=reinterpret_cast<unsigned char*>(jm+jmN);auto* jmReady=phaseReady+(2*degree+1)*jwidth;std::memset(phaseReady,0,flags);
+  if (degree < 2 || degree > kSpCap) { std::free(ws); sdnap::mem::note_failure(1); return -1; }
+  const size_t powerN = (degree + 2) * NE, rotationN = (2 * degree + 1) * NE * 2, amplitudeN = degree + 1;
+  const int jcap = degree + 64, jwidth = 2 * jcap + 1;
+  const size_t phaseN = (2 * degree + 1) * jwidth * NE * 2, jmN = jwidth * NE * 2;
+  const size_t flags = (2 * degree + 1) * jwidth + jwidth;
+  // The checked degree bounds every product above. Reuse changes no evaluation
+  // or accumulation order; a stored scalar replaces only the identical call.
+  struct ReuseBlock { void* p; ~ReuseBlock() { std::free(p); } };
+  ReuseBlock reuse{sdnap::mem::malloc((powerN + rotationN + amplitudeN + phaseN + jmN) * sizeof(double) + flags)};
+  if (!reuse.p) { std::free(ws); return -1; }
+  double* powers = static_cast<double*>(reuse.p);
+  double* rotation = powers + powerN;
+  double* amplitude = rotation + rotationN;
+  double* phase = amplitude + amplitudeN;
+  double* jm = phase + phaseN;
+  auto* phaseReady = reinterpret_cast<unsigned char*>(jm + jmN);
+  auto* jmReady = phaseReady + (2 * degree + 1) * jwidth;
+  std::memset(phaseReady, 0, flags);
+  for (int l = 0; l <= degree + 1; ++l)
+    for (int q = 0; q < NE; ++q) powers[l * NE + q] = std::pow(ar[q], l);
+  for (int l = 2; l <= degree; ++l) amplitude[l] = kMu * std::pow(1.0 / a, l + 1);
+  for (int w = -degree; w <= degree; ++w)
+    for (int q = 0; q < NE; ++q) {
+      const double ang = w * fwang[q];
+      const int k = ((w + degree) * NE + q) * 2;
+      rotation[k] = std::cos(ang); rotation[k + 1] = std::sin(ang);
+    }
   int count = 0;
   for (int m = 1; m <= degree; ++m)
     for (int w = -degree; w <= degree; ++w) {
@@ -5868,8 +5881,8 @@ inline int wide_families(int degree, int cls, double n, double e, double inc, in
 }
 
 /// The grid of an object above kWideE at its mean elements (n, e, i), with its derivative grids; false out of memory.
-/// The build's two double-precision family sets, kept for the module's life and lent to one build at a time (no repeated large
-/// allocations, so held grids do not fragment the heap).
+/// Each computation thread retains two double-precision family buffers for grid
+/// construction. A payload is built privately and published under the cache lock.
 struct BuildScratch {
   int32_t word;
   size_t size;
