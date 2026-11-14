@@ -57,6 +57,7 @@ std::map<uint32_t,Bytes> identities,index;
 std::map<std::string,Bytes> weather;
 std::set<std::string> products;
 std::vector<uint32_t> work;
+size_t dispatches=0,built_dispatches=0,new_dispatches=0,initial_work_size=0;bool unbuilt_work=false;
 std::set<uint32_t> dropped;
 Bytes pending,chosen,object_weather;
 // Selection construction and generation persistence have separate lifetimes.
@@ -235,7 +236,9 @@ int build_work(){
  if(!complete_scan)++diagnostics.deferred;if(capacity_limited){diagnostics.add("scan partial: read="+std::to_string(seen)+" retained-bytes="+std::to_string(retained)+" catalog.max_records="+std::to_string(cfg.max_records)+" catalog.max_bytes="+std::to_string(cfg.max_bytes)+"; raise the binding setting or partition the catalog; removals disabled","bounds");}
  std::stable_sort(work.begin(),work.end(),[](uint32_t a,uint32_t b){
   auto age=[](uint32_t id){const auto p=index.find(id);return p==index.end()?int64_t(0):instant(text(GetSizePrefixedCAT(p->second.data())->PRODUCTS_AS_OF()));};
+  if(index.count(a)!=index.count(b))return index.count(a)>index.count(b);
   return age(a)<age(b);});
+ initial_work_size=work.size();unbuilt_work=std::any_of(work.begin(),work.end(),[](uint32_t id){return !index.count(id);});
  at=0;return next_object();
 }
 int page(const plugin_input_frame_t* f) {
@@ -413,15 +416,22 @@ bool attempt_deferred(){const auto id=work[at];
    if(a.final||(attempt_detail(a).rfind("ready ",0)!=0&&now<after)){++diagnostics.deferred;diagnostics.add(a.final?"unchanged final failure":"in-progress attempt deferred after instance interruption");return true;}}
  return false;
 }
+// Reserve dispatches for both groups. Deferred indexed candidates retain age order.
+bool admit_dispatch(){
+ const auto id=work[at];const bool built=index.count(id);
+ if(built&&unbuilt_work&&at<initial_work_size&&built_dispatches>=(cfg.batch+1)/2){work.push_back(id);return false;}
+ if(!built&&built_dispatches&&new_dispatches>=cfg.batch/2)return false;
+ ++dispatches;if(built)++built_dispatches;else ++new_dispatches;return true;
+}
 int next_object() {
- for(;at<work.size()&&staged.size()<cfg.batch;++at){
+ for(;at<work.size()&&dispatches<cfg.batch;++at){
   if(!budget_left()){++diagnostics.deferred;diagnostics.add("object elapsed budget reserve exhausted","bounds");return finish();}object_start=Clock::now();
   const auto id=work[at];if(id%cfg.partitions!=cfg.partition)continue;compose_only=false;metadata_only=false;retry_fallback=false;chosen_stored=false;recovery_batch=attempts.count(id)?attempts.at(id).product_batch:std::string();chosen.clear();signature.clear();reason.clear();object_weather.clear();const auto s=seeds.find(id);const auto identity=identities.find(id);const auto old=index.find(id);
   if(dropped.count(id)||(!index_complete&&old==index.end())||(capacity_limited&&(old==index.end()||s==seeds.end()||identity==identities.end()))){++diagnostics.deferred;continue;}
   const bool removed=identity==identities.end()||s==seeds.end()||decayed(identity->second);
   const auto* previous=old==index.end()?nullptr:GetSizePrefixedCAT(old->second.data());
   if(previous&&instant(text(previous->PRODUCTS_AS_OF()))>now){++diagnostics.deferred;if(!clock_reported){diagnostics.add("clock precedes a stored selection; affected objects deferred before dispatch","clock");clock_reported=true;}continue;}
-  if(removed){const bool decay=identity!=identities.end()&&decayed(identity->second);if(removal_guard||(!decay&&(!complete_scan||!seed_complete||!identity_complete))||(!decay&&(!index_complete||index_defects)))continue;if(!previous||!previous->PRODUCTS()||!previous->PRODUCTS()->size())continue;reason="object removed from the configured current sources";signature=digest(old->second)+"/removed/"+(identity==identities.end()?"absent":digest(identity->second));if(attempt_deferred())continue;compose_only=true;++diagnostics.removed;diagnostics.add("object="+std::to_string(id)+" removal: "+reason,"removal");return save_attempt();}
+  if(removed){const bool decay=identity!=identities.end()&&decayed(identity->second);if(removal_guard||(!decay&&(!complete_scan||!seed_complete||!identity_complete))||(!decay&&(!index_complete||index_defects)))continue;if(!previous||!previous->PRODUCTS()||!previous->PRODUCTS()->size())continue;reason="object removed from the configured current sources";signature=digest(old->second)+"/removed/"+(identity==identities.end()?"absent":digest(identity->second));if(attempt_deferred())continue;compose_only=true;++diagnostics.removed;diagnostics.add("object="+std::to_string(id)+" removal: "+reason,"removal");if(!admit_dispatch())continue;return save_attempt();}
   const auto* omm=GetSizePrefixedOMM(s->second.data.data());
   const double n=omm->MEAN_MOTION()*6.2831853071795864769/1440;
   const bool resonant=n>.0035003818&&n<=.015751718;
@@ -438,12 +448,12 @@ int next_object() {
   if(previous&&previous->PRODUCTS()&&previous->PRODUCTS()->size()==1){const auto* p=previous->PRODUCTS()->Get(0);const auto selection=text(p->SELECTION_REASON());
    if(!text(p->RECORD_CID()).empty()&&selection.find("catalog-input="+signature+";")!=std::string::npos&&selection.find("retry-fit;")==std::string::npos&&(!expired||p->KIND()!=catalogProductKind::ApElements)){
     if(selection.find("catalog-identity="+digest(identity->second)+";")!=std::string::npos)continue;
-    if(attempt_deferred())continue;metadata_only=true;return save_attempt();
+    if(attempt_deferred())continue;metadata_only=true;if(!admit_dispatch())continue;return save_attempt();
    }
   }
   reason=expired?"old-span fallback":future?"future-seed fallback":!eligible?"outside configured AP class":"accepted exact-W fit";run_fit=!expired&&!future&&eligible;
   if(attempt_deferred())continue;
-  return save_attempt();
+  if(!admit_dispatch())continue;return save_attempt();
  }
  return finish();
 }
@@ -495,7 +505,7 @@ int storage_failure(const std::string& message){if(++storage_failures>=3)return 
 int advance() {
  if(input("tick")){
   if(!configure())return stop("Invalid catalog ModuleConfig.");const auto* f=input("tick");flatbuffers::Verifier v(f->payload,f->payload_length);if(!R::VerifyTimerTickBuffer(v))return stop("Invalid timer tick.");now=R::GetTimerTick(f->payload)->FIRED_MS();if(now<=0)return stop("Timer requires a positive UTC time.");
-  staged.clear();product_batches.clear();generation_index.clear();staged_bytes=product_batch_at=pending_count=0;checked_batches.clear();lookup_cursor.clear();fallback_annotation.clear();diagnostics=Diagnostics{};state_complete=true;scan_exhausted=false;state_rows=state_appends=0;state_history_oversized=false;state_sequence=0;state_evicted=false;interruption_suspect=0;storage_failures=0;clock_reported=false;tick_start=Clock::now();allowance=cfg.allowance_ms;complete_scan=true;capacity_limited=false;seed_complete=identity_complete=index_complete=weather_complete=true;removal_guard=false;index_defects=false;poisons.clear();poison_seen.clear();poison_updates.clear();dropped.clear();seeds.clear();identities.clear();index.clear();weather.clear();products.clear();attempts.clear();dirty_attempts.clear();scans={{"NEV",cfg.provider,state_source()},{"CAT",cfg.provider,"catalog-index"}};scans.insert(scans.end(),cfg.seeds.begin(),cfg.seeds.end());scans.push_back({"CAT",cfg.identity_provider,cfg.identity_source});scans.push_back({"SPW",cfg.weather_provider,cfg.weather_source});scan_at=pages=seen=retained=done=at=0;cursor.clear();return query();
+  dispatches=built_dispatches=new_dispatches=initial_work_size=0;unbuilt_work=false;staged.clear();product_batches.clear();generation_index.clear();staged_bytes=product_batch_at=pending_count=0;checked_batches.clear();lookup_cursor.clear();fallback_annotation.clear();diagnostics=Diagnostics{};state_complete=true;scan_exhausted=false;state_rows=state_appends=0;state_history_oversized=false;state_sequence=0;state_evicted=false;interruption_suspect=0;storage_failures=0;clock_reported=false;tick_start=Clock::now();allowance=cfg.allowance_ms;complete_scan=true;capacity_limited=false;seed_complete=identity_complete=index_complete=weather_complete=true;removal_guard=false;index_defects=false;poisons.clear();poison_seen.clear();poison_updates.clear();dropped.clear();seeds.clear();identities.clear();index.clear();weather.clear();products.clear();attempts.clear();dirty_attempts.clear();scans={{"NEV",cfg.provider,state_source()},{"CAT",cfg.provider,"catalog-index"}};scans.insert(scans.end(),cfg.seeds.begin(),cfg.seeds.end());scans.push_back({"CAT",cfg.identity_provider,cfg.identity_source});scans.push_back({"SPW",cfg.weather_provider,cfg.weather_source});scan_at=pages=seen=retained=done=at=0;cursor.clear();return query();
  }
  if(const auto* f=input("query_status")){flatbuffers::Verifier v(f->payload,f->payload_length);if(!VerifyQRPBuffer(v)||GetQRP(f->payload)->KIND()==qrpKind::Error){if(phase==Phase::Lookup)return storage_failure("Product lookup host failure.");return stop("Complete read failed; no partial sweep is committed.");}}
  if(const auto* f=input("page")){
