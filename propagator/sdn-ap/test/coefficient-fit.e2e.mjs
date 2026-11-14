@@ -22,13 +22,20 @@ SDNAP_EXPORT("sdnap_test_fit_form") int sdnap_test_fit_form(int c,double* out){
  const uint8_t form=tess::continuity_form(se.xno,se.eo,se.bterm,true);
  ElementRow target=seed;target.eccentricity+=vary_e?1e-6:0;
  target.mean_motion_rev_day=motion(hp+(vary_e||c==6?0:.01),target.eccentricity);
- if(c==6)target.bterm=.0001;
+ if(c==6)target.bterm=.00001;
+ if(c!=6){
+  const Elements te=elements_of(target);
+  if(tess::continuity_form(te.xno,te.eo,te.bterm,true)==form){
+   target.eccentricity=ecc-(vary_e?1e-6:0);
+   target.mean_motion_rev_day=motion(hp-(vary_e?0:.01),target.eccentricity);
+  }
+ }
  auto* sat=new XpSat{};
  {ContinuityScope pin(form);if(xp_init(elements_of(target),*sat)!=0){delete sat;return 1;}}
  constexpr int N=13;double times[N],positions[N*3];
  for(int k=0;k<N;k++){times[k]=k*20.0;double v[3];if(xp_propagate(*sat,times[k],positions+3*k,v)!=0){xp_release(*sat);delete sat;return 2;}}
  xp_release(*sat);delete sat;
- fit::Options options{};options.max_iterations=30;options.fit_drag=c==6;
+ fit::Options options{};options.max_iterations=100;options.fit_drag=c==6;
  test_form_mask=0;test_free_mask=0;test_form_count=0;test_fit_trace=true;
  const fit::Result result=fit::run(seed,times,positions,N,options);
  test_fit_trace=false;
@@ -58,5 +65,5 @@ for(const {threshold,row:r} of results){
  assert.equal(r[2],1<<r[1],`fit ${threshold} changed coefficient form`);
  assert.equal(r[6],-1,'fit scope leaked');assert.equal(r[7],0);assert.equal(r[8],r[9],'final record must select its own form');
 }
-assert(results.some(({row:r})=>r[3]!==r[2]),'trials must cross a selector threshold');
+assert(results.every(({row:r})=>r[3]!==r[2]),'every threshold must be crossed by the unpinned trial selector');
 process.exit(0);
