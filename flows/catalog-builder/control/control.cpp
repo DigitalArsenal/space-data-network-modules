@@ -349,13 +349,12 @@ int complete_reads(){
  if(!state_complete)return stop("Operational state incomplete; retry the bounded source read.");
  bool pruned=false;
  // The latest unprepared in-progress marker is the suspect, even if its work finished.
- uint64_t latest=0;for(const auto& item:attempts)latest=std::max(latest,item.second.sequence);
+ uint64_t latest=0,suspect_sequence=0;for(const auto& item:attempts){latest=std::max(latest,item.second.sequence);if(item.second.sequence>=suspect_sequence&&attempt_detail(item.second).find("instance-interrupted;")!=std::string::npos){suspect_sequence=item.second.sequence;interruption_suspect=item.first;}}
  for(auto& item:attempts){auto& a=item.second;const auto detail=attempt_detail(a);
   if(detail.rfind("in progress ",0)==0){const bool suspect=a.sequence==latest&&detail.find("prepared-generation;")==std::string::npos;if(suspect)interruption_suspect=item.first;ready_or_suspect(a,suspect);pruned=true;}
  }
- for(auto i=attempts.begin();i!=attempts.end();){const auto c=index.find(i->first);bool committed=false,selected=false;
-  if(c!=index.end()){const auto* row=GetSizePrefixedCAT(c->second.data());if(row->PRODUCTS())for(const auto* product:*row->PRODUCTS())if(text(product->SELECTION_REASON()).find("catalog-input="+i->second.signature+";")!=std::string::npos){selected=true;if(text(product->SELECTION_REASON()).find("retry-fit;")==std::string::npos)committed=true;}}
-  if(selected&&!committed&&!i->second.product_batch.empty()){mark_product_batch(i->first,"");pruned=true;}
+ for(auto i=attempts.begin();i!=attempts.end();){const auto c=index.find(i->first);bool committed=false;
+  if(c!=index.end()){const auto* row=GetSizePrefixedCAT(c->second.data());if(row->PRODUCTS())for(const auto* product:*row->PRODUCTS())if(text(product->SELECTION_REASON()).find("catalog-input="+i->second.signature+";")!=std::string::npos&&text(product->SELECTION_REASON()).find("retry-fit;")==std::string::npos)committed=true;}
   const bool orphan=complete_scan&&identity_complete&&index_complete&&!identities.count(i->first)&&!index.count(i->first)&&!protected_attempt(i->first,state_sequence);
   if(committed||orphan){retained-=i->second.read_bytes;i=attempts.erase(i);pruned=true;}else ++i;
  }
