@@ -64,8 +64,9 @@ export const exactCoefficients=s=>{
  return s;
 };
 export function buildForms() {
+ const production=process.env.SDNAP_WASM??buildDiagnostic('coefficient-forms-production','');
  const probe=buildDiagnostic('coefficient-forms-probe',probeExports,probeTheory,{'tesseral.inc':probeTesseral});
  const full=buildDiagnostic('coefficient-forms-full','',s=>s,{'tesseral.inc':s=>'#define SDNAP_CONTINUITY_RULE 0\n'+s});
  const exact=buildDiagnostic('coefficient-forms-exact','',s=>s,{'tesseral.inc':s=>'#define SDNAP_CONTINUITY_RULE 0\n'+s,'coefficient_evaluation.inc':exactCoefficients});
- return {probe,full,exact};
+ return {production,probe,full,exact};
 }

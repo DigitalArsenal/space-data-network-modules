@@ -12,6 +12,7 @@ import {T} from './lib/ocm.mjs';
 import {cases,records,buildForms} from './lib/coefficient-forms.mjs';
 import {wasmPath} from './lib/module.mjs';
 const builds=process.env.COEFFICIENT_BUILDS?JSON.parse(fs.readFileSync(process.env.COEFFICIENT_BUILDS)):buildForms();
+const candidateFile=process.env.SDNAP_WASM??builds.production??wasmPath;
 const control=process.env.COEFFICIENT_CONTROL??new URL('../dist/isomorphic/module.wasm',import.meta.url).pathname;
 const DAY=86400000, span=432000;
 const distance=(a,b)=>Math.hypot(...a.slice(0,3).map((v,k)=>v-b[k]));
@@ -32,7 +33,7 @@ const fitAt = (ts, ys, t0) => {  // cubic least squares, evaluated at t0
 const summaries=[];
 for(const [i,r] of records().entries()){
  const [name,form,exactBound,jumpBound,moveBound]=cases[i];
- const [candidate,probe,unchanged,full,exact]=await Promise.all([wasmPath,builds.probe,control,builds.full,builds.exact].map(f=>open(f,r)));
+ const [candidate,probe,unchanged,full,exact]=await Promise.all([candidateFile,builds.probe,control,builds.full,builds.exact].map(f=>open(f,r)));
  const summary={name,form,states:0,unchanged:0,maxExactM:0,maxMoveM:0,maxJumpM:0,boundaries:0};
  for(let t=0;t<=span;t+=300){
   const s=[candidate,probe,unchanged,full,exact].map(m=>m.st(t));
