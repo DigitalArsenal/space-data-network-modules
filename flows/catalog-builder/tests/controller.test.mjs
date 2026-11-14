@@ -15,7 +15,7 @@ const obj=OMM.getRootAsOMM(new fb.ByteBuffer(ommBytes)).unpack();
 const seed=(id,change=0)=>{const x=OMM.getRootAsOMM(new fb.ByteBuffer(ommBytes)).unpack();x.NORAD_CAT_ID=id;x.MEAN_ANOMALY+=change;return pack(x,'OMM');};
 const ids=[999999,999998];let now=Date.parse(obj.EPOCH+'Z')+86400000;
 const cfg={'catalog.provider':'synthetic-node','catalog.identity_provider':'synthetic','catalog.identity_source':'identities','catalog.weather_provider':'synthetic','catalog.weather_source':'weather','catalog.seed_sources':['primary','secondary'],'catalog.seed_providers':['synthetic','synthetic'],'catalog.page_size':1,'catalog.batch_size':2,'catalog.max_removal_fraction':0.5};
-const store=new Map();const key=(schema,provider,source)=>[schema,provider,source].join('/');const records=(schema,provider,source)=>{const k=key(schema,provider,source);if(!store.has(k))store.set(k,[]);return store.get(k);};
+const batches=new Map();const store=new Map();const key=(schema,provider,source)=>[schema,provider,source].join('/');const records=(schema,provider,source)=>{const k=key(schema,provider,source);if(!store.has(k))store.set(k,[]);return store.get(k);};
 records('OMM.fbs','synthetic','primary').push(...ids.map(id=>seed(id)));
 records('OMM.fbs','synthetic','secondary').push(seed(ids[0],1));
 records('CAT.fbs','synthetic','identities').push(...ids.map(id=>pack(Object.assign(new C.CATT(),{NORAD_CAT_ID:id,OBJECT_NAME:'SYNTHETIC'}),'CAT')));
@@ -32,13 +32,13 @@ let annotationRefusal,composerRefusal,refusalCode,trapObject,trapComposeObject,l
 const trap=new WebAssembly.Instance(new WebAssembly.Module(Uint8Array.from([0,97,115,109,1,0,0,0,1,4,1,96,0,0,3,2,1,0,7,8,1,4,116,114,97,112,0,0,10,5,1,3,0,0,11]))).exports.trap;
 async function tick(time,kill=false){
  let response=await control.invoke({methodId:'advance',inputs:[frame('tick','TimerTick',encodeTimerTick({triggerId:'refresh',firedMs:time}))]});
- const counters={fits:0,fallbacks:0,products:0,indexes:0,pages:0,duplicateProducts:0};
+ const counters={fits:0,fallbacks:0,products:0,indexes:0,productBatches:0,indexBatches:0,pages:0,duplicateProducts:0};
  for(let count=0;count<10000;count++){
   assert.equal(response.statusCode,0,response.errorMessage);const out=Object.fromEntries(response.outputs.map(f=>[f.portId,f]));let input=[];
   if(out.notice){counters.notice=decodeFlowNotice(out.notice.payload);evidence.stages.push(counters);return counters;}
   if(out.query){
    if(pageDelay)await new Promise(resolve=>setTimeout(resolve,pageDelay));
-   ++counters.pages;const q=Q.QRP.getRootAsQRP(new fb.ByteBuffer(out.query.payload)).unpack();if(q.SCHEMA_NAME==='OCM.fbs')assert.match(q.BATCH_ID,/^catalog-[0-9a-f]{64}$/,'only deterministic product lookup reads OCM');const data=records(q.SCHEMA_NAME,q.PROVIDER_ID,q.SOURCE_NAME).filter(b=>!q.BATCH_ID||q.BATCH_ID==='catalog-'+hash(b));const [offset,head]=q.CURSOR?q.CURSOR.split(':').map(Number):[0,data.length];const page=data.slice(offset,Math.min(head,offset+q.LIMIT));const end=offset+page.length;
+   ++counters.pages;const q=Q.QRP.getRootAsQRP(new fb.ByteBuffer(out.query.payload)).unpack();if(q.SCHEMA_NAME==='OCM.fbs')assert.match(q.BATCH_ID,/^catalog-[0-9a-f]{64}$/,'only deterministic product lookup reads OCM');const data=q.BATCH_ID?(batches.get(q.BATCH_ID)??[]):records(q.SCHEMA_NAME,q.PROVIDER_ID,q.SOURCE_NAME);const [offset,head]=q.CURSOR?q.CURSOR.split(':').map(Number):[0,data.length];const page=data.slice(offset,Math.min(head,offset+q.LIMIT));const end=offset+page.length;
    const header=Object.assign(new Q.QRPT(),{KIND:Q.qrpKind.Page,STATUS:Q.qrpStatus.Ok,SCHEMA_NAME:q.SCHEMA_NAME,PROVIDER_ID:q.PROVIDER_ID,SOURCE_NAME:q.SOURCE_NAME,BATCH_ID:q.BATCH_ID,RECORD_COUNT:page.length,TOTAL_COUNT:BigInt(head),NEXT_CURSOR:end<head?end+':'+head:null});
    input=lookupFailure&&q.SCHEMA_NAME==='OCM.fbs'?[frame('query_status','QRP',pack(Object.assign(new Q.QRPT(),{KIND:Q.qrpKind.Error,STATUS:Q.qrpStatus.Error,ERROR_CODE:'host-failed'}),'QRP',false))]:[frame('page','QRP',Buffer.concat([pack(header,'QRP'),...page])),frame('query_status','QRP',out.query.payload)];
   }else if(out.seed||out.fallback_seed){
@@ -52,8 +52,8 @@ async function tick(time,kill=false){
   }else if(out.annotate_orbit){
    const r=await gp.invoke({methodId:'annotate_population_flow',inputs:[frame('ocm','OCM',out.annotate_orbit.payload),frame('elements','OMM',out.annotate_seed.payload)]});assert.equal(r.statusCode,0,r.errorMessage);input=r.outputs.map(f=>({...f,portId:f.portId==='decision'?'annotation_status':'annotated'}));if(annotationRefusal)input=[frame('annotation_status','QRP',pack(Object.assign(new Q.QRPT(),{KIND:Q.qrpKind.Error,STATUS:Q.qrpStatus.Error,ERROR_CODE:annotationRefusal}),'QRP',false))];
   }else if(out.meta){
-   const m=decodeIngestRequest(out.meta.payload);assert.match(m.tags.batchId,out.state_records?/^catalog-attempt-[0-9a-f]{64}$/:out.index_records?/^catalog-[0-9a-f]{64}:complete$/:/^catalog-[0-9a-f]{64}$/);const b=Buffer.from((out.product_records??out.index_records??out.state_records).payload);const destination=records(m.schema,m.tags.providerId,m.tags.sourceName);const exists=destination.some(x=>hash(x)===hash(b));if(out.state_records){assert.equal(m.reconcile,"current");destination.splice(0,destination.length,...split(b));}else if(!exists&&!(storageFailure&&out.product_records))destination.push(...split(b));
-   if(out.product_records){
+   const m=decodeIngestRequest(out.meta.payload);assert.match(m.tags.batchId,out.state_records?/^catalog-attempt-[0-9a-f]{64}$/:out.index_records?/^catalog-[0-9a-f]{64}:complete$/:/^catalog-[0-9a-f]{64}$/);const b=Buffer.from((out.product_records??out.index_records??out.state_records).payload);const destination=records(m.schema,m.tags.providerId,m.tags.sourceName);const exists=batches.has(m.tags.batchId);if(out.state_records){assert.equal(m.reconcile,"current");destination.splice(0,destination.length,...split(b));}else if(!exists&&!(storageFailure&&out.product_records)){batches.set(m.tags.batchId,split(b));for(const row of split(b))if(!destination.some(x=>hash(x)===hash(row)))destination.push(row);}
+   if(out.product_records){++counters.productBatches;for(const b of split(Buffer.from(out.product_records.payload))){
     const product=O.OCM.getSizePrefixedRootAsOCM(new fb.ByteBuffer(b)).unpack();const id=product.METADATA.NORAD_CAT_ID;
     if(product.MEAN_ELEMENTS.MEAN_ELEMENT_THEORY===O.meanElementSource.AP&&!verified.has(id)){
       const original=fitOriginals.get(id);assert.ok(original);assert.ok(b.indexOf(original)>=0,'stored product embeds the entire fit output unchanged');
@@ -70,9 +70,9 @@ async function tick(time,kill=false){
      assert.deepEqual(stored.HEADER.COMMENT.slice(0,raw.HEADER.COMMENT.length),raw.HEADER.COMMENT);assert.equal(stored.HEADER.COMMENT.length,raw.HEADER.COMMENT.length+1);stored.HEADER.COMMENT=raw.HEADER.COMMENT;
      assert.deepEqual(stored,raw,'fallback repack preserves every original field');assert.deepEqual(await fly(b.subarray(4)),await fly(original),'stored fallback preserves SGP4 states and formal covariance');fallbackVerified.add(id);
     }
-    ++counters.products;if(exists)++counters.duplicateProducts;if(kill){control.destroy();control=await createControl();evidence.stages.push({...counters,killedAfterProduct:true});return counters;}}
-   else if(out.index_records){++counters.indexes;const cat=C.CAT.getSizePrefixedRootAsCAT(new fb.ByteBuffer(b)).unpack();if(cat.PRODUCTS.length){assert.ok(records('OCM.fbs','synthetic-node','catalog-products').length>0,'product exists before index');}}
-   input=[frame('stored','IngestResult',encodeIngestResult({schema:m.schema,...m.tags,inserted:exists?0:1,reconciledDuplicates:0,refused:storageFailure&&out.product_records?'synthetic disk refusal':undefined}))];
+    ++counters.products;if(exists)++counters.duplicateProducts;}if(kill){control.destroy();control=await createControl();evidence.stages.push({...counters,killedAfterProduct:true});return counters;}}
+   else if(out.index_records){++counters.indexBatches;for(const b of split(Buffer.from(out.index_records.payload))){++counters.indexes;const cat=C.CAT.getSizePrefixedRootAsCAT(new fb.ByteBuffer(b)).unpack();if(cat.PRODUCTS.length){assert.ok(records('OCM.fbs','synthetic-node','catalog-products').length>0,'product exists before index');}}}
+   input=[frame('stored','IngestResult',encodeIngestResult({schema:m.schema,...m.tags,inserted:exists?0:split(b).length,reconciledDuplicates:0,refused:storageFailure&&out.product_records?'synthetic disk refusal':undefined}))];
   }else if(out.recipe){
    if(C.CAT.getSizePrefixedRootAsCAT(new fb.ByteBuffer(out.catalog.payload)).NORAD_CAT_ID()===trapComposeObject)trap();
    const r=await composer.invoke({methodId:'replace_products',inputs:[out.recipe,out.catalog,{...out.selection,portId:'decision'},...(out.selected?[{...out.selected,portId:'ocm_products'}]:[])]});assert.equal(r.statusCode,0,r.errorMessage);input=r.outputs.map(f=>({...f,portId:f.portId==='decision'?'compose_status':'replacement'}));if(composerRefusal)input=[frame('compose_status','QRP',pack(Object.assign(new Q.QRPT(),{KIND:Q.qrpKind.Error,STATUS:Q.qrpStatus.Error,ERROR_CODE:composerRefusal}),'QRP',false))];
@@ -83,7 +83,7 @@ async function tick(time,kill=false){
 }
 const current=()=>{const map=new Map();for(const b of records('CAT.fbs','synthetic-node','catalog-index')){const c=C.CAT.getSizePrefixedRootAsCAT(new fb.ByteBuffer(b)).unpack();if(!map.has(c.NORAD_CAT_ID)||map.get(c.NORAD_CAT_ID).PRODUCTS_AS_OF<=c.PRODUCTS_AS_OF)map.set(c.NORAD_CAT_ID,c);}return map;};
 try{
- const first=await tick(now);assert.equal(first.fits,2);assert.equal(first.indexes,2);assert.ok([...current().values()].every(c=>c.PRODUCTS[0].KIND===C.catalogProductKind.ApElements));
+ const first=await tick(now);assert.equal(first.fits,2);assert.equal(first.indexes,2);assert.equal(first.products,2);assert.equal(first.productBatches,1);assert.equal(first.indexBatches,1);assert.ok([...current().values()].every(c=>c.PRODUCTS[0].KIND===C.catalogProductKind.ApElements));
  assert.equal(records('NEV.fbs','synthetic-node','catalog-attempts').length,1);assert.equal(N.NEV.getSizePrefixedRootAsNEV(new fb.ByteBuffer(records('NEV.fbs','synthetic-node','catalog-attempts')[0])).eventsLength(),0,'successful selections leave no attempt events');
  const unchanged=await tick(now+1000);assert.equal(unchanged.fits+unchanged.products+unchanged.indexes,0);
  const metadata=OMM.getSizePrefixedRootAsOMM(new fb.ByteBuffer(seed(ids[0]))).unpack();metadata.OBJECT_NAME='SYNTHETIC METADATA';records('OMM.fbs','synthetic','primary').push(pack(metadata,'OMM'));
@@ -98,7 +98,7 @@ try{
  records('CAT.fbs','synthetic','identities').pop();await tick(now+1300);
 
  records('OMM.fbs','synthetic','primary').push(seed(ids[0],.1));const corrected=await tick(now+2000);assert.equal(corrected.fits,1);assert.equal(corrected.indexes,1);
- records('OMM.fbs','synthetic','primary').push(seed(ids[0],.2));await tick(now+3000,true);const deferred=await tick(now+4000);assert.equal(deferred.products+deferred.indexes,0);now+=1200000;const resumed=await tick(now+4000);assert.equal(resumed.fits,1);assert.equal(resumed.products,0);assert.equal(resumed.duplicateProducts,0);assert.equal(resumed.indexes,1);
+ records('OMM.fbs','synthetic','primary').push(...ids.map(id=>seed(id,.2)));const beforeKill=current();const killed=await tick(now+3000,true);assert.equal(killed.products,2);assert.equal(killed.productBatches,1);assert.deepEqual(current(),beforeKill,'multi-object product batch cannot expose a partial selection');const deferred=await tick(now+4000);assert.equal(deferred.products+deferred.indexes,0);now+=1200000;const resumed=await tick(now+4000);assert.equal(resumed.fits,2);assert.equal(resumed.products,0);assert.equal(resumed.duplicateProducts,0);assert.equal(resumed.indexes,2);assert.equal(resumed.productBatches,0);assert.equal(resumed.indexBatches,1);
  cfg['catalog.weather_source']='missing-weather';control.destroy();control=await createControl();const refused=await tick(now+5000);assert.equal(refused.fits,2);assert.ok([...current().values()].every(c=>c.PRODUCTS[0].KIND===C.catalogProductKind.Sgp4Elements&&/weather/.test(c.PRODUCTS[0].SELECTION_REASON)));
  const noRetry=await tick(now+6000);assert.equal(noRetry.fits+noRetry.products,0);
  cfg['catalog.weather_source']='weather';control.destroy();control=await createControl();const restored=await tick(now+7000);assert.equal(restored.fits,2);
@@ -138,7 +138,7 @@ try{
  const failing=OMM.getRootAsOMM(new fb.ByteBuffer(ommBytes)).unpack();failing.NORAD_CAT_ID=three[1];failing.MEAN_MOTION=-1;
  store.set(key('OMM.fbs','synthetic','primary'),[seed(three[0],.5),pack(failing,'OMM'),seed(three[2],.5)]);
  cfg['catalog.batch_size']=4;control.destroy();control=await createControl();
- const isolated=await tick(now+6*86400000+4000);assert.ok(isolated.indexes>=2);assert.match(isolated.notice.reason,/failed=1/);assert.match(isolated.notice.reason,/durable failure/);assert.ok(current().get(three[2]).PRODUCTS.length);
+ const isolated=await tick(now+6*86400000+4000);assert.ok(isolated.indexes>=2);assert.equal(isolated.productBatches,1);assert.equal(isolated.indexBatches,1);assert.match(isolated.notice.reason,/failed=1/);assert.match(isolated.notice.reason,/durable failure/);assert.ok(current().get(three[2]).PRODUCTS.length);
  control.destroy();control=await createControl();const backoff=await tick(now+6*86400000+5000);assert.equal(backoff.fallbacks,0);assert.match(backoff.notice.reason,/deferred=[1-9]/);
  // A backward clock causes a typed composer refusal, then a healthy update.
  store.set(key('CAT.fbs','synthetic','identities'),ids.map(id=>pack(Object.assign(new C.CATT(),{NORAD_CAT_ID:id,OBJECT_NAME:'SYNTHETIC'}),'CAT')));
@@ -147,7 +147,7 @@ try{
  control.destroy();control=await createControl();const backwards=await tick(now+6*86400000+6000);
  assert.match(backwards.notice.reason,/clock precedes/);assert.equal(backwards.products,1,'clock rollback does not create an orphan');assert.ok(backwards.indexes>=1);
  // Future seeds become eligible without a content change.
- store.clear();records('CAT.fbs','synthetic','identities').push(...ids.map(id=>pack(Object.assign(new C.CATT(),{NORAD_CAT_ID:id,OBJECT_NAME:'SYNTHETIC'}),'CAT')));
+ store.clear();batches.clear();records('CAT.fbs','synthetic','identities').push(...ids.map(id=>pack(Object.assign(new C.CATT(),{NORAD_CAT_ID:id,OBJECT_NAME:'SYNTHETIC'}),'CAT')));
  records('OMM.fbs','synthetic','primary').push(...ids.map(id=>seed(id)));
  records('SPW.fbs','synthetic','weather').push(...split(Buffer.from(weather)));
  control.destroy();control=await createControl();const future=await tick(Date.parse(obj.EPOCH+'Z')-1000);assert.equal(future.fits,0);assert.equal(future.fallbacks,2);
@@ -163,7 +163,7 @@ try{
  const guarded=await tick(now+1000);assert.equal(guarded.indexes,0);assert.match(guarded.notice.reason,/mass-removal guard/);
  cfg['catalog.invocation_budget_ms']=1000;control.destroy();control=await createControl();const budget=await tick(now+2000);assert.equal(budget.fits+budget.fallbacks,0);assert.equal(budget.notice.kind,'missing');
  delete cfg['catalog.invocation_budget_ms'];
- const reset=async (objectIds=ids)=>{store.clear();cfg['catalog.max_removal_fraction']=1;cfg['catalog.batch_size']=4;cfg['catalog.partition_count']=1;cfg['catalog.partition_index']=0;
+ const reset=async (objectIds=ids)=>{store.clear();batches.clear();cfg['catalog.max_removal_fraction']=1;cfg['catalog.batch_size']=4;cfg['catalog.partition_count']=1;cfg['catalog.partition_index']=0;
   records('CAT.fbs','synthetic','identities').push(...objectIds.map(id=>pack(Object.assign(new C.CATT(),{NORAD_CAT_ID:id,OBJECT_NAME:'SYNTHETIC'}),'CAT')));
   records('OMM.fbs','synthetic','primary').push(...objectIds.map(id=>seed(id)));records('SPW.fbs','synthetic','weather').push(...split(Buffer.from(weather)));control.destroy();control=await createControl();};
  await reset();await tick(now);records('OMM.fbs','synthetic','primary').push(...ids.map(id=>seed(id,.2)));
@@ -195,9 +195,9 @@ try{
  await reset([999994,999995,999996,999997]);lookupFailure=true;await assert.rejects(()=>tick(now),/Storage circuit breaker/);lookupFailure=false;
  assert.equal(records('OCM.fbs','synthetic-node','catalog-products').length,0);
  const failureLog=records('NEV.fbs','synthetic-node','catalog-attempts').map(b=>N.NEV.getSizePrefixedRootAsNEV(new fb.ByteBuffer(b)).unpack().EVENTS).flat();assert.equal(failureLog.length,3,'host-wide lookup failure attempts only three objects');
- await reset([999994,999995,999996,999997]);storageFailure=true;await assert.rejects(()=>tick(now),/Storage circuit breaker/);storageFailure=false;
+ await reset([999994,999995,999996,999997]);storageFailure=true;await assert.rejects(()=>tick(now),/complete generation batch/);storageFailure=false;assert.equal(current().size,0,'a refused product batch cannot commit any index row');
  assert.equal(records('OCM.fbs','synthetic-node','catalog-products').length,0);
- console.log('PASS lookup isolation and three-refusal storage circuit breaker');
+ console.log('PASS lookup circuit breaker and refused-generation isolation');
  await reset();cfg['catalog.invocation_budget_ms']=3000;pageDelay=1150;control.destroy();control=await createControl();const scanBudget=await tick(now);assert.equal(scanBudget.pages,1,'elapsed scan time consumes budget; a frozen clock fails this assertion');assert.equal(scanBudget.fits+scanBudget.fallbacks,0);assert.equal(scanBudget.notice.kind,'missing');assert.match(scanBudget.notice.reason,/scan elapsed budget exhausted/);pageDelay=0;delete cfg['catalog.invocation_budget_ms'];
  console.log('PASS elapsed monotonic scan budget');
  await reset();const subms=OMM.getRootAsOMM(new fb.ByteBuffer(ommBytes)).unpack();subms.EPOCH=subms.EPOCH.replace('.000','.000499');
@@ -220,6 +220,20 @@ try{
  assert.equal(records('NEV.fbs','synthetic-node','catalog-attempts').length,1,'state compaction removes its malformed historical row');
  console.log('PASS index and operational-source quarantine');
 
+
+ await reset(Array.from({length:256},(_,i)=>1000000+i));cfg['catalog.batch_size']=256;
+ control.destroy();control=await createControl();const bulk=await tick(now+6*86400000);
+ assert.equal(bulk.products,256);assert.equal(bulk.indexes,256);assert.equal(bulk.productBatches,1);assert.equal(bulk.indexBatches,1);
+ assert.equal(current().size,256);assert.equal(N.NEV.getSizePrefixedRootAsNEV(new fb.ByteBuffer(records('NEV.fbs','synthetic-node','catalog-attempts')[0])).eventsLength(),0);
+ console.log('PASS 256 selections use one product batch and one complete index batch');
+ await reset(Array.from({length:16},(_,i)=>1000000+i));cfg['catalog.batch_size']=256;cfg['catalog.partition_count']=4;
+ for(let partition=0;partition<4;partition++){
+  cfg['catalog.partition_index']=partition;control.destroy();control=await createControl();const part=await tick(now+6*86400000);
+  assert.equal(part.products,4);assert.equal(part.indexes,4);assert.equal(part.productBatches,1);assert.equal(part.indexBatches,1);
+  assert.ok(records('NEV.fbs','synthetic-node',`catalog-attempts-${partition}-of-4`).length===1);
+ }
+ assert.equal(current().size,16,'four services produce disjoint complete coverage');
+ console.log('PASS production batch size and four-partition settings');
 
  cfg['catalog.partition_count']=2;
  cfg['catalog.partition_index']=2;control.destroy();control=await createControl();
