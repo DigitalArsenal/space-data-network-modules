@@ -25,7 +25,7 @@ export async function verifyStateRetention(mode){
  const now=Date.parse(seed.EPOCH+'Z')+86400000;
  const cfg={'catalog.provider':'synthetic-node','catalog.identity_provider':'synthetic','catalog.identity_source':'identities','catalog.weather_provider':'synthetic','catalog.weather_source':'weather','catalog.seed_sources':['primary'],'catalog.seed_providers':['synthetic'],'catalog.page_size':512,'catalog.batch_size':2};
  const seeds=[],identities=[];
- for(let i=0;i<(mode==='final'?4096:1);i++){const id=3000000+i;seeds.push(pack(Object.assign(new O.OMMT(),seed,{NORAD_CAT_ID:id}),'OMM'));identities.push(pack(Object.assign(new C.CATT(),{NORAD_CAT_ID:id,OBJECT_NAME:'SYNTHETIC'}),'CAT'));}
+ for(let i=0;i<(mode==='final'?4096:mode==='prepared'?2:1);i++){const id=3000000+i;seeds.push(pack(Object.assign(new O.OMMT(),seed,{NORAD_CAT_ID:id}),'OMM'));identities.push(pack(Object.assign(new C.CATT(),{NORAD_CAT_ID:id,OBJECT_NAME:'SYNTHETIC'}),'CAT'));}
  const chain=await createStandaloneHarness('browser',repo+'/flows/catalog-builder/dist/isomorphic/module.wasm',{surface:'direct',enableBrowserWasiThreads:false});
  let fallback;
  try{const r=await chain.invoke({methodId:'ingest_seed',inputs:[frame('omm','OMM',ommBytes)]});assert.equal(r.statusCode,0,r.errorMessage);fallback=OCM.getRootAsOCM(new fb.ByteBuffer(r.outputs.find(f=>f.portId==='fallback').payload)).unpack();}finally{chain.destroy();}
@@ -72,8 +72,14 @@ export async function verifyStateRetention(mode){
    all.forEach((e,i)=>e.DETAIL=e.DETAIL.replace(/sequence=\d+;/,'sequence='+(4096-i)+';'));snapshot(all);
    seeds.unshift(pack(Object.assign(new O.OMMT(),seed,{NORAD_CAT_ID:newcomer}),'OMM'));identities.unshift(pack(Object.assign(new C.CATT(),{NORAD_CAT_ID:newcomer,OBJECT_NAME:'SYNTHETIC'}),'CAT'));
   }else if(mode==='prepared'){
-   await tick(now,true);prepared=events();prepared[0].DETAIL=prepared[0].DETAIL.replace(/^in progress /,'ready ');assert.equal(prepared.length,1);assert.match(prepared[0].DETAIL,/product-batch=catalog-[a-f0-9]{64}; prepared-generation;/);
-   const entries=poisonEntries(4095);oldest=entries[0].SUBJECT;snapshot([...prepared,...entries]);
+   cfg['catalog.batch_size']=3;control.destroy();control=await create();snapshot(poisonEntries(4096));
+   await tick(now,true);const interrupted=events();assert.equal(interrupted.length,4096,'interruption occurs at cache capacity');
+   prepared=interrupted.filter(e=>e.SUBJECT.startsWith('catalog-object/'));assert.equal(prepared.length,2);
+   for(const e of prepared){assert.match(e.DETAIL,/product-batch=catalog-[a-f0-9]{64}; prepared-generation;/);e.DETAIL=e.DETAIL.replace(/^in progress /,'ready ');}
+   const entries=interrupted.filter(e=>e.SUBJECT.startsWith('catalog-invalid/'));oldest=entries.reduce((a,b)=>Number(a.DETAIL.match(/sequence=(\d+);/)[1])<Number(b.DETAIL.match(/sequence=(\d+);/)[1])?a:b).SUBJECT;
+   // Make the recovery references older than other entries to exercise their protection.
+   prepared.forEach((e,i)=>e.DETAIL=e.DETAIL.replace(/sequence=\d+;/,'sequence='+(i+1)+';'));
+   snapshot([...prepared,...entries]);
    seeds.unshift(pack(Object.assign(new O.OMMT(),seed,{NORAD_CAT_ID:newcomer}),'OMM'));identities.unshift(pack(Object.assign(new C.CATT(),{NORAD_CAT_ID:newcomer,OBJECT_NAME:'SYNTHETIC'}),'CAT'));
   }else{
    const all=poisonEntries(4096);oldest=all[0].SUBJECT;
@@ -99,10 +105,10 @@ export async function verifyStateRetention(mode){
    }else {
     assert.ok(!events().some(e=>e.SUBJECT===oldest),'oldest unprotected event is evicted');
     if(mode==='prepared'){
-     assert.equal(runs[0].indexes,2,'recovery generation completes with every object');
+     assert.equal(runs[0].indexes,3,'recovery generation completes with both recovered objects and the new object');
      const firstSnapshot=history.map(row=>N.NEV.getSizePrefixedRootAsNEV(new fb.ByteBuffer(row)).unpack().EVENTS).find(all=>all.some(e=>e.SUBJECT==='catalog-object/'+newcomer));assert.ok(firstSnapshot);
-     assert.ok(firstSnapshot.some(e=>e.SUBJECT===prepared[0].SUBJECT&&e.DETAIL.includes(prepared[0].DETAIL.match(/product-batch=[^;]+;/)[0])),'old prepared recovery reference survives eviction');
-     assert.equal(events().filter(e=>e.SUBJECT.startsWith('catalog-invalid/')).length,4094,'only one older poison was evicted');
+     for(const entry of prepared)assert.ok(firstSnapshot.some(e=>e.SUBJECT===entry.SUBJECT&&e.DETAIL.includes(entry.DETAIL.match(/product-batch=[^;]+;/)[0])),'old prepared recovery reference survives eviction');
+     assert.equal(events().filter(e=>e.SUBJECT.startsWith('catalog-invalid/')).length,4093,'restart evicts only one additional older poison');
     }else {
      assert.equal(events().length,4095,'one old poison is evicted for one new object');
      assert.ok(events().some(e=>e.SUBJECT===poisonEntries(2)[1].SUBJECT),'late stale events cannot displace newer entries');
