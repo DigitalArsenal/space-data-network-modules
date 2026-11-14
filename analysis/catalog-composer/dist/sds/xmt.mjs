@@ -1,7 +1,7 @@
-// node_modules/spacedatastandards.org/lib/ts/XMT/Band.ts
+// ../../../../../../../../private/tmp/claude-501/-Users-tj-software-spacedatanetwork-stack/46a20935-200d-48d4-95a7-fd711bf5224a/scratchpad/workers/codex-catalog-flow/node_modules/spacedatastandards.org/lib/ts/XMT/Band.ts
 import * as flatbuffers2 from "flatbuffers";
 
-// node_modules/spacedatastandards.org/lib/ts/XMT/FrequencyRange.ts
+// ../../../../../../../../private/tmp/claude-501/-Users-tj-software-spacedatanetwork-stack/46a20935-200d-48d4-95a7-fd711bf5224a/scratchpad/workers/codex-catalog-flow/node_modules/spacedatastandards.org/lib/ts/XMT/FrequencyRange.ts
 import * as flatbuffers from "flatbuffers";
 var FrequencyRange = class _FrequencyRange {
   bb = null;
@@ -76,7 +76,7 @@ var FrequencyRangeT = class {
   }
 };
 
-// node_modules/spacedatastandards.org/lib/ts/XMT/Band.ts
+// ../../../../../../../../private/tmp/claude-501/-Users-tj-software-spacedatanetwork-stack/46a20935-200d-48d4-95a7-fd711bf5224a/scratchpad/workers/codex-catalog-flow/node_modules/spacedatastandards.org/lib/ts/XMT/Band.ts
 var Band = class _Band {
   bb = null;
   bb_pos = 0;
@@ -142,13 +142,13 @@ var BandT = class {
   }
 };
 
-// node_modules/spacedatastandards.org/lib/ts/XMT/CAT.ts
+// ../../../../../../../../private/tmp/claude-501/-Users-tj-software-spacedatanetwork-stack/46a20935-200d-48d4-95a7-fd711bf5224a/scratchpad/workers/codex-catalog-flow/node_modules/spacedatastandards.org/lib/ts/XMT/CAT.ts
 import * as flatbuffers7 from "flatbuffers";
 
-// node_modules/spacedatastandards.org/lib/ts/XMT/CATProduct.ts
+// ../../../../../../../../private/tmp/claude-501/-Users-tj-software-spacedatanetwork-stack/46a20935-200d-48d4-95a7-fd711bf5224a/scratchpad/workers/codex-catalog-flow/node_modules/spacedatastandards.org/lib/ts/XMT/CATProduct.ts
 import * as flatbuffers3 from "flatbuffers";
 
-// node_modules/spacedatastandards.org/lib/ts/XMT/catalogProductKind.ts
+// ../../../../../../../../private/tmp/claude-501/-Users-tj-software-spacedatanetwork-stack/46a20935-200d-48d4-95a7-fd711bf5224a/scratchpad/workers/codex-catalog-flow/node_modules/spacedatastandards.org/lib/ts/XMT/catalogProductKind.ts
 var catalogProductKind = /* @__PURE__ */ ((catalogProductKind2) => {
   catalogProductKind2[catalogProductKind2["Unspecified"] = 0] = "Unspecified";
   catalogProductKind2[catalogProductKind2["Sgp4Elements"] = 1] = "Sgp4Elements";
@@ -158,7 +158,7 @@ var catalogProductKind = /* @__PURE__ */ ((catalogProductKind2) => {
   return catalogProductKind2;
 })(catalogProductKind || {});
 
-// node_modules/spacedatastandards.org/lib/ts/XMT/CATProduct.ts
+// ../../../../../../../../private/tmp/claude-501/-Users-tj-software-spacedatanetwork-stack/46a20935-200d-48d4-95a7-fd711bf5224a/scratchpad/workers/codex-catalog-flow/node_modules/spacedatastandards.org/lib/ts/XMT/CATProduct.ts
 var CATProduct = class _CATProduct {
   bb = null;
   bb_pos = 0;
@@ -285,13 +285,13 @@ var CATProductT = class {
   }
 };
 
-// node_modules/spacedatastandards.org/lib/ts/XMT/PLD.ts
+// ../../../../../../../../private/tmp/claude-501/-Users-tj-software-spacedatanetwork-stack/46a20935-200d-48d4-95a7-fd711bf5224a/scratchpad/workers/codex-catalog-flow/node_modules/spacedatastandards.org/lib/ts/XMT/PLD.ts
 import * as flatbuffers6 from "flatbuffers";
 
-// node_modules/spacedatastandards.org/lib/ts/XMT/IDM.ts
+// ../../../../../../../../private/tmp/claude-501/-Users-tj-software-spacedatanetwork-stack/46a20935-200d-48d4-95a7-fd711bf5224a/scratchpad/workers/codex-catalog-flow/node_modules/spacedatastandards.org/lib/ts/XMT/IDM.ts
 import * as flatbuffers5 from "flatbuffers";
 
-// node_modules/spacedatastandards.org/lib/ts/XMT/DataMode.ts
+// ../../../../../../../../private/tmp/claude-501/-Users-tj-software-spacedatanetwork-stack/46a20935-200d-48d4-95a7-fd711bf5224a/scratchpad/workers/codex-catalog-flow/node_modules/spacedatastandards.org/lib/ts/XMT/DataMode.ts
 var DataMode = /* @__PURE__ */ ((DataMode2) => {
   DataMode2[DataMode2["EXERCISE"] = 0] = "EXERCISE";
   DataMode2[DataMode2["REAL"] = 1] = "REAL";
@@ -300,7 +300,7 @@ var DataMode = /* @__PURE__ */ ((DataMode2) => {
   return DataMode2;
 })(DataMode || {});
 
-// node_modules/spacedatastandards.org/lib/ts/XMT/DeviceType.ts
+// ../../../../../../../../private/tmp/claude-501/-Users-tj-software-spacedatanetwork-stack/46a20935-200d-48d4-95a7-fd711bf5224a/scratchpad/workers/codex-catalog-flow/node_modules/spacedatastandards.org/lib/ts/XMT/DeviceType.ts
 var DeviceType = /* @__PURE__ */ ((DeviceType2) => {
   DeviceType2[DeviceType2["UNKNOWN"] = 0] = "UNKNOWN";
   DeviceType2[DeviceType2["OPTICAL"] = 1] = "OPTICAL";
@@ -351,7 +351,7 @@ var DeviceType = /* @__PURE__ */ ((DeviceType2) => {
   return DeviceType2;
 })(DeviceType || {});
 
-// node_modules/spacedatastandards.org/lib/ts/XMT/PolarizationType.ts
+// ../../../../../../../../private/tmp/claude-501/-Users-tj-software-spacedatanetwork-stack/46a20935-200d-48d4-95a7-fd711bf5224a/scratchpad/workers/codex-catalog-flow/node_modules/spacedatastandards.org/lib/ts/XMT/PolarizationType.ts
 var PolarizationType = /* @__PURE__ */ ((PolarizationType2) => {
   PolarizationType2[PolarizationType2["linear"] = 0] = "linear";
   PolarizationType2[PolarizationType2["circular"] = 1] = "circular";
@@ -360,7 +360,7 @@ var PolarizationType = /* @__PURE__ */ ((PolarizationType2) => {
   return PolarizationType2;
 })(PolarizationType || {});
 
-// node_modules/spacedatastandards.org/lib/ts/XMT/SimplePolarization.ts
+// ../../../../../../../../private/tmp/claude-501/-Users-tj-software-spacedatanetwork-stack/46a20935-200d-48d4-95a7-fd711bf5224a/scratchpad/workers/codex-catalog-flow/node_modules/spacedatastandards.org/lib/ts/XMT/SimplePolarization.ts
 var SimplePolarization = /* @__PURE__ */ ((SimplePolarization2) => {
   SimplePolarization2[SimplePolarization2["vertical"] = 0] = "vertical";
   SimplePolarization2[SimplePolarization2["horizontal"] = 1] = "horizontal";
@@ -369,7 +369,7 @@ var SimplePolarization = /* @__PURE__ */ ((SimplePolarization2) => {
   return SimplePolarization2;
 })(SimplePolarization || {});
 
-// node_modules/spacedatastandards.org/lib/ts/XMT/StokesParameters.ts
+// ../../../../../../../../private/tmp/claude-501/-Users-tj-software-spacedatanetwork-stack/46a20935-200d-48d4-95a7-fd711bf5224a/scratchpad/workers/codex-catalog-flow/node_modules/spacedatastandards.org/lib/ts/XMT/StokesParameters.ts
 import * as flatbuffers4 from "flatbuffers";
 var StokesParameters = class _StokesParameters {
   bb = null;
@@ -474,7 +474,7 @@ var StokesParametersT = class {
   }
 };
 
-// node_modules/spacedatastandards.org/lib/ts/XMT/IDM.ts
+// ../../../../../../../../private/tmp/claude-501/-Users-tj-software-spacedatanetwork-stack/46a20935-200d-48d4-95a7-fd711bf5224a/scratchpad/workers/codex-catalog-flow/node_modules/spacedatastandards.org/lib/ts/XMT/IDM.ts
 var IDM = class _IDM {
   bb = null;
   bb_pos = 0;
@@ -937,7 +937,7 @@ var IDMT = class {
   }
 };
 
-// node_modules/spacedatastandards.org/lib/ts/XMT/PLD.ts
+// ../../../../../../../../private/tmp/claude-501/-Users-tj-software-spacedatanetwork-stack/46a20935-200d-48d4-95a7-fd711bf5224a/scratchpad/workers/codex-catalog-flow/node_modules/spacedatastandards.org/lib/ts/XMT/PLD.ts
 var PLD = class _PLD {
   bb = null;
   bb_pos = 0;
@@ -1093,7 +1093,7 @@ var PLDT = class {
   }
 };
 
-// node_modules/spacedatastandards.org/lib/ts/XMT/dataAvailability.ts
+// ../../../../../../../../private/tmp/claude-501/-Users-tj-software-spacedatanetwork-stack/46a20935-200d-48d4-95a7-fd711bf5224a/scratchpad/workers/codex-catalog-flow/node_modules/spacedatastandards.org/lib/ts/XMT/dataAvailability.ts
 var dataAvailability = /* @__PURE__ */ ((dataAvailability2) => {
   dataAvailability2[dataAvailability2["NO_CURRENT_ELEMENTS"] = 0] = "NO_CURRENT_ELEMENTS";
   dataAvailability2[dataAvailability2["NO_INITIAL_ELEMENTS"] = 1] = "NO_INITIAL_ELEMENTS";
@@ -1102,7 +1102,7 @@ var dataAvailability = /* @__PURE__ */ ((dataAvailability2) => {
   return dataAvailability2;
 })(dataAvailability || {});
 
-// node_modules/spacedatastandards.org/lib/ts/XMT/legacyCountryCode.ts
+// ../../../../../../../../private/tmp/claude-501/-Users-tj-software-spacedatanetwork-stack/46a20935-200d-48d4-95a7-fd711bf5224a/scratchpad/workers/codex-catalog-flow/node_modules/spacedatastandards.org/lib/ts/XMT/legacyCountryCode.ts
 var legacyCountryCode = /* @__PURE__ */ ((legacyCountryCode2) => {
   legacyCountryCode2[legacyCountryCode2["AB"] = 0] = "AB";
   legacyCountryCode2[legacyCountryCode2["ABS"] = 1] = "ABS";
@@ -1248,14 +1248,14 @@ var legacyCountryCode = /* @__PURE__ */ ((legacyCountryCode2) => {
   return legacyCountryCode2;
 })(legacyCountryCode || {});
 
-// node_modules/spacedatastandards.org/lib/ts/XMT/massCategory.ts
+// ../../../../../../../../private/tmp/claude-501/-Users-tj-software-spacedatanetwork-stack/46a20935-200d-48d4-95a7-fd711bf5224a/scratchpad/workers/codex-catalog-flow/node_modules/spacedatastandards.org/lib/ts/XMT/massCategory.ts
 var massCategory = /* @__PURE__ */ ((massCategory2) => {
   massCategory2[massCategory2["DRY"] = 0] = "DRY";
   massCategory2[massCategory2["WET"] = 1] = "WET";
   return massCategory2;
 })(massCategory || {});
 
-// node_modules/spacedatastandards.org/lib/ts/XMT/operationalState.ts
+// ../../../../../../../../private/tmp/claude-501/-Users-tj-software-spacedatanetwork-stack/46a20935-200d-48d4-95a7-fd711bf5224a/scratchpad/workers/codex-catalog-flow/node_modules/spacedatastandards.org/lib/ts/XMT/operationalState.ts
 var operationalState = /* @__PURE__ */ ((operationalState2) => {
   operationalState2[operationalState2["OPERATIONAL"] = 0] = "OPERATIONAL";
   operationalState2[operationalState2["NONOPERATIONAL"] = 1] = "NONOPERATIONAL";
@@ -1268,7 +1268,7 @@ var operationalState = /* @__PURE__ */ ((operationalState2) => {
   return operationalState2;
 })(operationalState || {});
 
-// node_modules/spacedatastandards.org/lib/ts/XMT/orbitRegime.ts
+// ../../../../../../../../private/tmp/claude-501/-Users-tj-software-spacedatanetwork-stack/46a20935-200d-48d4-95a7-fd711bf5224a/scratchpad/workers/codex-catalog-flow/node_modules/spacedatastandards.org/lib/ts/XMT/orbitRegime.ts
 var orbitRegime = /* @__PURE__ */ ((orbitRegime2) => {
   orbitRegime2[orbitRegime2["ORBIT"] = 0] = "ORBIT";
   orbitRegime2[orbitRegime2["LANDING"] = 1] = "LANDING";
@@ -1278,7 +1278,7 @@ var orbitRegime = /* @__PURE__ */ ((orbitRegime2) => {
   return orbitRegime2;
 })(orbitRegime || {});
 
-// node_modules/spacedatastandards.org/lib/ts/XMT/spaceObjectClass.ts
+// ../../../../../../../../private/tmp/claude-501/-Users-tj-software-spacedatanetwork-stack/46a20935-200d-48d4-95a7-fd711bf5224a/scratchpad/workers/codex-catalog-flow/node_modules/spacedatastandards.org/lib/ts/XMT/spaceObjectClass.ts
 var spaceObjectClass = /* @__PURE__ */ ((spaceObjectClass2) => {
   spaceObjectClass2[spaceObjectClass2["PAYLOAD"] = 0] = "PAYLOAD";
   spaceObjectClass2[spaceObjectClass2["ROCKET_BODY"] = 1] = "ROCKET_BODY";
@@ -1287,7 +1287,7 @@ var spaceObjectClass = /* @__PURE__ */ ((spaceObjectClass2) => {
   return spaceObjectClass2;
 })(spaceObjectClass || {});
 
-// node_modules/spacedatastandards.org/lib/ts/XMT/CAT.ts
+// ../../../../../../../../private/tmp/claude-501/-Users-tj-software-spacedatanetwork-stack/46a20935-200d-48d4-95a7-fd711bf5224a/scratchpad/workers/codex-catalog-flow/node_modules/spacedatastandards.org/lib/ts/XMT/CAT.ts
 var CAT = class _CAT {
   bb = null;
   bb_pos = 0;
@@ -1771,7 +1771,7 @@ var CATT = class {
   }
 };
 
-// node_modules/spacedatastandards.org/lib/ts/XMT/CelestialFrame.ts
+// ../../../../../../../../private/tmp/claude-501/-Users-tj-software-spacedatanetwork-stack/46a20935-200d-48d4-95a7-fd711bf5224a/scratchpad/workers/codex-catalog-flow/node_modules/spacedatastandards.org/lib/ts/XMT/CelestialFrame.ts
 var CelestialFrame = /* @__PURE__ */ ((CelestialFrame2) => {
   CelestialFrame2[CelestialFrame2["GCRF"] = 0] = "GCRF";
   CelestialFrame2[CelestialFrame2["ICRF"] = 1] = "ICRF";
@@ -1804,7 +1804,7 @@ var CelestialFrame = /* @__PURE__ */ ((CelestialFrame2) => {
   return CelestialFrame2;
 })(CelestialFrame || {});
 
-// node_modules/spacedatastandards.org/lib/ts/XMT/CelestialFrameWrapper.ts
+// ../../../../../../../../private/tmp/claude-501/-Users-tj-software-spacedatanetwork-stack/46a20935-200d-48d4-95a7-fd711bf5224a/scratchpad/workers/codex-catalog-flow/node_modules/spacedatastandards.org/lib/ts/XMT/CelestialFrameWrapper.ts
 import * as flatbuffers8 from "flatbuffers";
 var CelestialFrameWrapper = class _CelestialFrameWrapper {
   bb = null;
@@ -1861,7 +1861,7 @@ var CelestialFrameWrapperT = class {
   }
 };
 
-// node_modules/spacedatastandards.org/lib/ts/XMT/covarianceCalibration.ts
+// ../../../../../../../../private/tmp/claude-501/-Users-tj-software-spacedatanetwork-stack/46a20935-200d-48d4-95a7-fd711bf5224a/scratchpad/workers/codex-catalog-flow/node_modules/spacedatastandards.org/lib/ts/XMT/covarianceCalibration.ts
 var covarianceCalibration = /* @__PURE__ */ ((covarianceCalibration2) => {
   covarianceCalibration2[covarianceCalibration2["Unspecified"] = 0] = "Unspecified";
   covarianceCalibration2[covarianceCalibration2["Uncalibrated"] = 1] = "Uncalibrated";
@@ -1869,7 +1869,7 @@ var covarianceCalibration = /* @__PURE__ */ ((covarianceCalibration2) => {
   return covarianceCalibration2;
 })(covarianceCalibration || {});
 
-// node_modules/spacedatastandards.org/lib/ts/XMT/covarianceRule.ts
+// ../../../../../../../../private/tmp/claude-501/-Users-tj-software-spacedatanetwork-stack/46a20935-200d-48d4-95a7-fd711bf5224a/scratchpad/workers/codex-catalog-flow/node_modules/spacedatastandards.org/lib/ts/XMT/covarianceRule.ts
 var covarianceRule = /* @__PURE__ */ ((covarianceRule2) => {
   covarianceRule2[covarianceRule2["Unspecified"] = 0] = "Unspecified";
   covarianceRule2[covarianceRule2["Operator"] = 1] = "Operator";
@@ -1880,7 +1880,7 @@ var covarianceRule = /* @__PURE__ */ ((covarianceRule2) => {
   return covarianceRule2;
 })(covarianceRule || {});
 
-// node_modules/spacedatastandards.org/lib/ts/XMT/CustomFrame.ts
+// ../../../../../../../../private/tmp/claude-501/-Users-tj-software-spacedatanetwork-stack/46a20935-200d-48d4-95a7-fd711bf5224a/scratchpad/workers/codex-catalog-flow/node_modules/spacedatastandards.org/lib/ts/XMT/CustomFrame.ts
 var CustomFrame = /* @__PURE__ */ ((CustomFrame2) => {
   CustomFrame2[CustomFrame2["ECEF"] = 0] = "ECEF";
   CustomFrame2[CustomFrame2["TEME"] = 1] = "TEME";
@@ -1903,7 +1903,7 @@ var CustomFrame = /* @__PURE__ */ ((CustomFrame2) => {
   return CustomFrame2;
 })(CustomFrame || {});
 
-// node_modules/spacedatastandards.org/lib/ts/XMT/CustomFrameWrapper.ts
+// ../../../../../../../../private/tmp/claude-501/-Users-tj-software-spacedatanetwork-stack/46a20935-200d-48d4-95a7-fd711bf5224a/scratchpad/workers/codex-catalog-flow/node_modules/spacedatastandards.org/lib/ts/XMT/CustomFrameWrapper.ts
 import * as flatbuffers9 from "flatbuffers";
 var CustomFrameWrapper = class _CustomFrameWrapper {
   bb = null;
@@ -1960,7 +1960,7 @@ var CustomFrameWrapperT = class {
   }
 };
 
-// node_modules/spacedatastandards.org/lib/ts/XMT/CVR.ts
+// ../../../../../../../../private/tmp/claude-501/-Users-tj-software-spacedatanetwork-stack/46a20935-200d-48d4-95a7-fd711bf5224a/scratchpad/workers/codex-catalog-flow/node_modules/spacedatastandards.org/lib/ts/XMT/CVR.ts
 import * as flatbuffers10 from "flatbuffers";
 var CVR = class _CVR {
   bb = null;
@@ -2391,20 +2391,20 @@ var CVRT = class {
   }
 };
 
-// node_modules/spacedatastandards.org/lib/ts/XMT/DataType.ts
+// ../../../../../../../../private/tmp/claude-501/-Users-tj-software-spacedatanetwork-stack/46a20935-200d-48d4-95a7-fd711bf5224a/scratchpad/workers/codex-catalog-flow/node_modules/spacedatastandards.org/lib/ts/XMT/DataType.ts
 var DataType = /* @__PURE__ */ ((DataType2) => {
   DataType2[DataType2["OBSERVED"] = 0] = "OBSERVED";
   DataType2[DataType2["PREDICTED"] = 1] = "PREDICTED";
   return DataType2;
 })(DataType || {});
 
-// node_modules/spacedatastandards.org/lib/ts/XMT/EOP.ts
+// ../../../../../../../../private/tmp/claude-501/-Users-tj-software-spacedatanetwork-stack/46a20935-200d-48d4-95a7-fd711bf5224a/scratchpad/workers/codex-catalog-flow/node_modules/spacedatastandards.org/lib/ts/XMT/EOP.ts
 import * as flatbuffers12 from "flatbuffers";
 
-// node_modules/spacedatastandards.org/lib/ts/XMT/PVN.ts
+// ../../../../../../../../private/tmp/claude-501/-Users-tj-software-spacedatanetwork-stack/46a20935-200d-48d4-95a7-fd711bf5224a/scratchpad/workers/codex-catalog-flow/node_modules/spacedatastandards.org/lib/ts/XMT/PVN.ts
 import * as flatbuffers11 from "flatbuffers";
 
-// node_modules/spacedatastandards.org/lib/ts/XMT/pvnLicenseClass.ts
+// ../../../../../../../../private/tmp/claude-501/-Users-tj-software-spacedatanetwork-stack/46a20935-200d-48d4-95a7-fd711bf5224a/scratchpad/workers/codex-catalog-flow/node_modules/spacedatastandards.org/lib/ts/XMT/pvnLicenseClass.ts
 var pvnLicenseClass = /* @__PURE__ */ ((pvnLicenseClass2) => {
   pvnLicenseClass2[pvnLicenseClass2["Unspecified"] = 0] = "Unspecified";
   pvnLicenseClass2[pvnLicenseClass2["Reproducible"] = 1] = "Reproducible";
@@ -2414,7 +2414,7 @@ var pvnLicenseClass = /* @__PURE__ */ ((pvnLicenseClass2) => {
   return pvnLicenseClass2;
 })(pvnLicenseClass || {});
 
-// node_modules/spacedatastandards.org/lib/ts/XMT/pvnSourceKind.ts
+// ../../../../../../../../private/tmp/claude-501/-Users-tj-software-spacedatanetwork-stack/46a20935-200d-48d4-95a7-fd711bf5224a/scratchpad/workers/codex-catalog-flow/node_modules/spacedatastandards.org/lib/ts/XMT/pvnSourceKind.ts
 var pvnSourceKind = /* @__PURE__ */ ((pvnSourceKind2) => {
   pvnSourceKind2[pvnSourceKind2["Unspecified"] = 0] = "Unspecified";
   pvnSourceKind2[pvnSourceKind2["ElementSet"] = 1] = "ElementSet";
@@ -2424,7 +2424,7 @@ var pvnSourceKind = /* @__PURE__ */ ((pvnSourceKind2) => {
   return pvnSourceKind2;
 })(pvnSourceKind || {});
 
-// node_modules/spacedatastandards.org/lib/ts/XMT/PVN.ts
+// ../../../../../../../../private/tmp/claude-501/-Users-tj-software-spacedatanetwork-stack/46a20935-200d-48d4-95a7-fd711bf5224a/scratchpad/workers/codex-catalog-flow/node_modules/spacedatastandards.org/lib/ts/XMT/PVN.ts
 var PVN = class _PVN {
   bb = null;
   bb_pos = 0;
@@ -2666,7 +2666,7 @@ var PVNT = class {
   }
 };
 
-// node_modules/spacedatastandards.org/lib/ts/XMT/eopSeries.ts
+// ../../../../../../../../private/tmp/claude-501/-Users-tj-software-spacedatanetwork-stack/46a20935-200d-48d4-95a7-fd711bf5224a/scratchpad/workers/codex-catalog-flow/node_modules/spacedatastandards.org/lib/ts/XMT/eopSeries.ts
 var eopSeries = /* @__PURE__ */ ((eopSeries2) => {
   eopSeries2[eopSeries2["UNSPECIFIED"] = 0] = "UNSPECIFIED";
   eopSeries2[eopSeries2["IERS_C04_14"] = 1] = "IERS_C04_14";
@@ -2678,7 +2678,7 @@ var eopSeries = /* @__PURE__ */ ((eopSeries2) => {
   return eopSeries2;
 })(eopSeries || {});
 
-// node_modules/spacedatastandards.org/lib/ts/XMT/iauPrecessionNutationModel.ts
+// ../../../../../../../../private/tmp/claude-501/-Users-tj-software-spacedatanetwork-stack/46a20935-200d-48d4-95a7-fd711bf5224a/scratchpad/workers/codex-catalog-flow/node_modules/spacedatastandards.org/lib/ts/XMT/iauPrecessionNutationModel.ts
 var iauPrecessionNutationModel = /* @__PURE__ */ ((iauPrecessionNutationModel2) => {
   iauPrecessionNutationModel2[iauPrecessionNutationModel2["UNSPECIFIED"] = 0] = "UNSPECIFIED";
   iauPrecessionNutationModel2[iauPrecessionNutationModel2["IAU_2000A"] = 1] = "IAU_2000A";
@@ -2687,7 +2687,7 @@ var iauPrecessionNutationModel = /* @__PURE__ */ ((iauPrecessionNutationModel2) 
   return iauPrecessionNutationModel2;
 })(iauPrecessionNutationModel || {});
 
-// node_modules/spacedatastandards.org/lib/ts/XMT/EOP.ts
+// ../../../../../../../../private/tmp/claude-501/-Users-tj-software-spacedatanetwork-stack/46a20935-200d-48d4-95a7-fd711bf5224a/scratchpad/workers/codex-catalog-flow/node_modules/spacedatastandards.org/lib/ts/XMT/EOP.ts
 var EOP = class _EOP {
   bb = null;
   bb_pos = 0;
@@ -3178,13 +3178,13 @@ var EOPT = class {
   }
 };
 
-// node_modules/spacedatastandards.org/lib/ts/XMT/EVL.ts
+// ../../../../../../../../private/tmp/claude-501/-Users-tj-software-spacedatanetwork-stack/46a20935-200d-48d4-95a7-fd711bf5224a/scratchpad/workers/codex-catalog-flow/node_modules/spacedatastandards.org/lib/ts/XMT/EVL.ts
 import * as flatbuffers34 from "flatbuffers";
 
-// node_modules/spacedatastandards.org/lib/ts/XMT/EVLEventLocationRequest.ts
+// ../../../../../../../../private/tmp/claude-501/-Users-tj-software-spacedatanetwork-stack/46a20935-200d-48d4-95a7-fd711bf5224a/scratchpad/workers/codex-catalog-flow/node_modules/spacedatastandards.org/lib/ts/XMT/EVLEventLocationRequest.ts
 import * as flatbuffers28 from "flatbuffers";
 
-// node_modules/spacedatastandards.org/lib/ts/XMT/EVLApsidesConfiguration.ts
+// ../../../../../../../../private/tmp/claude-501/-Users-tj-software-spacedatanetwork-stack/46a20935-200d-48d4-95a7-fd711bf5224a/scratchpad/workers/codex-catalog-flow/node_modules/spacedatastandards.org/lib/ts/XMT/EVLApsidesConfiguration.ts
 import * as flatbuffers13 from "flatbuffers";
 var EVLApsidesConfiguration = class _EVLApsidesConfiguration {
   bb = null;
@@ -3271,13 +3271,13 @@ var EVLApsidesConfigurationT = class {
   }
 };
 
-// node_modules/spacedatastandards.org/lib/ts/XMT/EVLContactConfiguration.ts
+// ../../../../../../../../private/tmp/claude-501/-Users-tj-software-spacedatanetwork-stack/46a20935-200d-48d4-95a7-fd711bf5224a/scratchpad/workers/codex-catalog-flow/node_modules/spacedatastandards.org/lib/ts/XMT/EVLContactConfiguration.ts
 import * as flatbuffers15 from "flatbuffers";
 
-// node_modules/spacedatastandards.org/lib/ts/XMT/RFMOrigin.ts
+// ../../../../../../../../private/tmp/claude-501/-Users-tj-software-spacedatanetwork-stack/46a20935-200d-48d4-95a7-fd711bf5224a/scratchpad/workers/codex-catalog-flow/node_modules/spacedatastandards.org/lib/ts/XMT/RFMOrigin.ts
 import * as flatbuffers14 from "flatbuffers";
 
-// node_modules/spacedatastandards.org/lib/ts/XMT/rfmLibrationPoint.ts
+// ../../../../../../../../private/tmp/claude-501/-Users-tj-software-spacedatanetwork-stack/46a20935-200d-48d4-95a7-fd711bf5224a/scratchpad/workers/codex-catalog-flow/node_modules/spacedatastandards.org/lib/ts/XMT/rfmLibrationPoint.ts
 var rfmLibrationPoint = /* @__PURE__ */ ((rfmLibrationPoint2) => {
   rfmLibrationPoint2[rfmLibrationPoint2["UNSPECIFIED"] = 0] = "UNSPECIFIED";
   rfmLibrationPoint2[rfmLibrationPoint2["L1"] = 1] = "L1";
@@ -3288,7 +3288,7 @@ var rfmLibrationPoint = /* @__PURE__ */ ((rfmLibrationPoint2) => {
   return rfmLibrationPoint2;
 })(rfmLibrationPoint || {});
 
-// node_modules/spacedatastandards.org/lib/ts/XMT/rfmOriginKind.ts
+// ../../../../../../../../private/tmp/claude-501/-Users-tj-software-spacedatanetwork-stack/46a20935-200d-48d4-95a7-fd711bf5224a/scratchpad/workers/codex-catalog-flow/node_modules/spacedatastandards.org/lib/ts/XMT/rfmOriginKind.ts
 var rfmOriginKind = /* @__PURE__ */ ((rfmOriginKind2) => {
   rfmOriginKind2[rfmOriginKind2["UNSPECIFIED"] = 0] = "UNSPECIFIED";
   rfmOriginKind2[rfmOriginKind2["CELESTIAL_BODY"] = 1] = "CELESTIAL_BODY";
@@ -3300,7 +3300,7 @@ var rfmOriginKind = /* @__PURE__ */ ((rfmOriginKind2) => {
   return rfmOriginKind2;
 })(rfmOriginKind || {});
 
-// node_modules/spacedatastandards.org/lib/ts/XMT/RFMOrigin.ts
+// ../../../../../../../../private/tmp/claude-501/-Users-tj-software-spacedatanetwork-stack/46a20935-200d-48d4-95a7-fd711bf5224a/scratchpad/workers/codex-catalog-flow/node_modules/spacedatastandards.org/lib/ts/XMT/RFMOrigin.ts
 var RFMOrigin = class _RFMOrigin {
   bb = null;
   bb_pos = 0;
@@ -3530,7 +3530,7 @@ var RFMOriginT = class {
   }
 };
 
-// node_modules/spacedatastandards.org/lib/ts/XMT/evlAberrationCorrection.ts
+// ../../../../../../../../private/tmp/claude-501/-Users-tj-software-spacedatanetwork-stack/46a20935-200d-48d4-95a7-fd711bf5224a/scratchpad/workers/codex-catalog-flow/node_modules/spacedatastandards.org/lib/ts/XMT/evlAberrationCorrection.ts
 var evlAberrationCorrection = /* @__PURE__ */ ((evlAberrationCorrection2) => {
   evlAberrationCorrection2[evlAberrationCorrection2["UNSPECIFIED"] = 0] = "UNSPECIFIED";
   evlAberrationCorrection2[evlAberrationCorrection2["NO_CORRECTION"] = 1] = "NO_CORRECTION";
@@ -3539,7 +3539,7 @@ var evlAberrationCorrection = /* @__PURE__ */ ((evlAberrationCorrection2) => {
   return evlAberrationCorrection2;
 })(evlAberrationCorrection || {});
 
-// node_modules/spacedatastandards.org/lib/ts/XMT/EVLContactConfiguration.ts
+// ../../../../../../../../private/tmp/claude-501/-Users-tj-software-spacedatanetwork-stack/46a20935-200d-48d4-95a7-fd711bf5224a/scratchpad/workers/codex-catalog-flow/node_modules/spacedatastandards.org/lib/ts/XMT/EVLContactConfiguration.ts
 var EVLContactConfiguration = class _EVLContactConfiguration {
   bb = null;
   bb_pos = 0;
@@ -3724,10 +3724,10 @@ var EVLContactConfigurationT = class {
   }
 };
 
-// node_modules/spacedatastandards.org/lib/ts/XMT/EVLEclipseConfiguration.ts
+// ../../../../../../../../private/tmp/claude-501/-Users-tj-software-spacedatanetwork-stack/46a20935-200d-48d4-95a7-fd711bf5224a/scratchpad/workers/codex-catalog-flow/node_modules/spacedatastandards.org/lib/ts/XMT/EVLEclipseConfiguration.ts
 import * as flatbuffers16 from "flatbuffers";
 
-// node_modules/spacedatastandards.org/lib/ts/XMT/evlShadowModel.ts
+// ../../../../../../../../private/tmp/claude-501/-Users-tj-software-spacedatanetwork-stack/46a20935-200d-48d4-95a7-fd711bf5224a/scratchpad/workers/codex-catalog-flow/node_modules/spacedatastandards.org/lib/ts/XMT/evlShadowModel.ts
 var evlShadowModel = /* @__PURE__ */ ((evlShadowModel2) => {
   evlShadowModel2[evlShadowModel2["UNSPECIFIED"] = 0] = "UNSPECIFIED";
   evlShadowModel2[evlShadowModel2["CYLINDRICAL"] = 1] = "CYLINDRICAL";
@@ -3736,7 +3736,7 @@ var evlShadowModel = /* @__PURE__ */ ((evlShadowModel2) => {
   return evlShadowModel2;
 })(evlShadowModel || {});
 
-// node_modules/spacedatastandards.org/lib/ts/XMT/EVLEclipseConfiguration.ts
+// ../../../../../../../../private/tmp/claude-501/-Users-tj-software-spacedatanetwork-stack/46a20935-200d-48d4-95a7-fd711bf5224a/scratchpad/workers/codex-catalog-flow/node_modules/spacedatastandards.org/lib/ts/XMT/EVLEclipseConfiguration.ts
 var EVLEclipseConfiguration = class _EVLEclipseConfiguration {
   bb = null;
   bb_pos = 0;
@@ -3912,10 +3912,10 @@ var EVLEclipseConfigurationT = class {
   }
 };
 
-// node_modules/spacedatastandards.org/lib/ts/XMT/EVLIntrusionConfiguration.ts
+// ../../../../../../../../private/tmp/claude-501/-Users-tj-software-spacedatanetwork-stack/46a20935-200d-48d4-95a7-fd711bf5224a/scratchpad/workers/codex-catalog-flow/node_modules/spacedatastandards.org/lib/ts/XMT/EVLIntrusionConfiguration.ts
 import * as flatbuffers18 from "flatbuffers";
 
-// node_modules/spacedatastandards.org/lib/ts/XMT/FRMVector3.ts
+// ../../../../../../../../private/tmp/claude-501/-Users-tj-software-spacedatanetwork-stack/46a20935-200d-48d4-95a7-fd711bf5224a/scratchpad/workers/codex-catalog-flow/node_modules/spacedatastandards.org/lib/ts/XMT/FRMVector3.ts
 import * as flatbuffers17 from "flatbuffers";
 var FRMVector3 = class _FRMVector3 {
   bb = null;
@@ -3996,7 +3996,7 @@ var FRMVector3T = class {
   }
 };
 
-// node_modules/spacedatastandards.org/lib/ts/XMT/evlFieldOfViewShape.ts
+// ../../../../../../../../private/tmp/claude-501/-Users-tj-software-spacedatanetwork-stack/46a20935-200d-48d4-95a7-fd711bf5224a/scratchpad/workers/codex-catalog-flow/node_modules/spacedatastandards.org/lib/ts/XMT/evlFieldOfViewShape.ts
 var evlFieldOfViewShape = /* @__PURE__ */ ((evlFieldOfViewShape2) => {
   evlFieldOfViewShape2[evlFieldOfViewShape2["UNSPECIFIED"] = 0] = "UNSPECIFIED";
   evlFieldOfViewShape2[evlFieldOfViewShape2["CONIC"] = 1] = "CONIC";
@@ -4005,7 +4005,7 @@ var evlFieldOfViewShape = /* @__PURE__ */ ((evlFieldOfViewShape2) => {
   return evlFieldOfViewShape2;
 })(evlFieldOfViewShape || {});
 
-// node_modules/spacedatastandards.org/lib/ts/XMT/EVLIntrusionConfiguration.ts
+// ../../../../../../../../private/tmp/claude-501/-Users-tj-software-spacedatanetwork-stack/46a20935-200d-48d4-95a7-fd711bf5224a/scratchpad/workers/codex-catalog-flow/node_modules/spacedatastandards.org/lib/ts/XMT/EVLIntrusionConfiguration.ts
 var EVLIntrusionConfiguration = class _EVLIntrusionConfiguration {
   bb = null;
   bb_pos = 0;
@@ -4253,7 +4253,7 @@ var EVLIntrusionConfigurationT = class {
   }
 };
 
-// node_modules/spacedatastandards.org/lib/ts/XMT/EVLLatitudeExtremumConfiguration.ts
+// ../../../../../../../../private/tmp/claude-501/-Users-tj-software-spacedatanetwork-stack/46a20935-200d-48d4-95a7-fd711bf5224a/scratchpad/workers/codex-catalog-flow/node_modules/spacedatastandards.org/lib/ts/XMT/EVLLatitudeExtremumConfiguration.ts
 import * as flatbuffers19 from "flatbuffers";
 var EVLLatitudeExtremumConfiguration = class _EVLLatitudeExtremumConfiguration {
   bb = null;
@@ -4338,7 +4338,7 @@ var EVLLatitudeExtremumConfigurationT = class {
   }
 };
 
-// node_modules/spacedatastandards.org/lib/ts/XMT/EVLNodeCrossingConfiguration.ts
+// ../../../../../../../../private/tmp/claude-501/-Users-tj-software-spacedatanetwork-stack/46a20935-200d-48d4-95a7-fd711bf5224a/scratchpad/workers/codex-catalog-flow/node_modules/spacedatastandards.org/lib/ts/XMT/EVLNodeCrossingConfiguration.ts
 import * as flatbuffers20 from "flatbuffers";
 var EVLNodeCrossingConfiguration = class _EVLNodeCrossingConfiguration {
   bb = null;
@@ -4430,16 +4430,16 @@ var EVLNodeCrossingConfigurationT = class {
   }
 };
 
-// node_modules/spacedatastandards.org/lib/ts/XMT/EVLParameterConditionConfiguration.ts
+// ../../../../../../../../private/tmp/claude-501/-Users-tj-software-spacedatanetwork-stack/46a20935-200d-48d4-95a7-fd711bf5224a/scratchpad/workers/codex-catalog-flow/node_modules/spacedatastandards.org/lib/ts/XMT/EVLParameterConditionConfiguration.ts
 import * as flatbuffers23 from "flatbuffers";
 
-// node_modules/spacedatastandards.org/lib/ts/XMT/PCEParameterCondition.ts
+// ../../../../../../../../private/tmp/claude-501/-Users-tj-software-spacedatanetwork-stack/46a20935-200d-48d4-95a7-fd711bf5224a/scratchpad/workers/codex-catalog-flow/node_modules/spacedatastandards.org/lib/ts/XMT/PCEParameterCondition.ts
 import * as flatbuffers22 from "flatbuffers";
 
-// node_modules/spacedatastandards.org/lib/ts/XMT/PCEParameterRef.ts
+// ../../../../../../../../private/tmp/claude-501/-Users-tj-software-spacedatanetwork-stack/46a20935-200d-48d4-95a7-fd711bf5224a/scratchpad/workers/codex-catalog-flow/node_modules/spacedatastandards.org/lib/ts/XMT/PCEParameterRef.ts
 import * as flatbuffers21 from "flatbuffers";
 
-// node_modules/spacedatastandards.org/lib/ts/XMT/pceParameter.ts
+// ../../../../../../../../private/tmp/claude-501/-Users-tj-software-spacedatanetwork-stack/46a20935-200d-48d4-95a7-fd711bf5224a/scratchpad/workers/codex-catalog-flow/node_modules/spacedatastandards.org/lib/ts/XMT/pceParameter.ts
 var pceParameter = /* @__PURE__ */ ((pceParameter2) => {
   pceParameter2[pceParameter2["UNSPECIFIED"] = 0] = "UNSPECIFIED";
   pceParameter2[pceParameter2["POSITION_X"] = 1] = "POSITION_X";
@@ -4668,7 +4668,7 @@ var pceParameter = /* @__PURE__ */ ((pceParameter2) => {
   return pceParameter2;
 })(pceParameter || {});
 
-// node_modules/spacedatastandards.org/lib/ts/XMT/PCEParameterRef.ts
+// ../../../../../../../../private/tmp/claude-501/-Users-tj-software-spacedatanetwork-stack/46a20935-200d-48d4-95a7-fd711bf5224a/scratchpad/workers/codex-catalog-flow/node_modules/spacedatastandards.org/lib/ts/XMT/PCEParameterRef.ts
 var PCEParameterRef = class _PCEParameterRef {
   bb = null;
   bb_pos = 0;
@@ -4850,7 +4850,7 @@ var PCEParameterRefT = class {
   }
 };
 
-// node_modules/spacedatastandards.org/lib/ts/XMT/pceConditionDirection.ts
+// ../../../../../../../../private/tmp/claude-501/-Users-tj-software-spacedatanetwork-stack/46a20935-200d-48d4-95a7-fd711bf5224a/scratchpad/workers/codex-catalog-flow/node_modules/spacedatastandards.org/lib/ts/XMT/pceConditionDirection.ts
 var pceConditionDirection = /* @__PURE__ */ ((pceConditionDirection2) => {
   pceConditionDirection2[pceConditionDirection2["UNSPECIFIED"] = 0] = "UNSPECIFIED";
   pceConditionDirection2[pceConditionDirection2["ANY_CROSSING"] = 1] = "ANY_CROSSING";
@@ -4859,7 +4859,7 @@ var pceConditionDirection = /* @__PURE__ */ ((pceConditionDirection2) => {
   return pceConditionDirection2;
 })(pceConditionDirection || {});
 
-// node_modules/spacedatastandards.org/lib/ts/XMT/PCEParameterCondition.ts
+// ../../../../../../../../private/tmp/claude-501/-Users-tj-software-spacedatanetwork-stack/46a20935-200d-48d4-95a7-fd711bf5224a/scratchpad/workers/codex-catalog-flow/node_modules/spacedatastandards.org/lib/ts/XMT/PCEParameterCondition.ts
 var PCEParameterCondition = class _PCEParameterCondition {
   bb = null;
   bb_pos = 0;
@@ -4976,7 +4976,7 @@ var PCEParameterConditionT = class {
   }
 };
 
-// node_modules/spacedatastandards.org/lib/ts/XMT/EVLParameterConditionConfiguration.ts
+// ../../../../../../../../private/tmp/claude-501/-Users-tj-software-spacedatanetwork-stack/46a20935-200d-48d4-95a7-fd711bf5224a/scratchpad/workers/codex-catalog-flow/node_modules/spacedatastandards.org/lib/ts/XMT/EVLParameterConditionConfiguration.ts
 var EVLParameterConditionConfiguration = class _EVLParameterConditionConfiguration {
   bb = null;
   bb_pos = 0;
@@ -5080,13 +5080,13 @@ var EVLParameterConditionConfigurationT = class {
   }
 };
 
-// node_modules/spacedatastandards.org/lib/ts/XMT/PCEEvaluationContext.ts
+// ../../../../../../../../private/tmp/claude-501/-Users-tj-software-spacedatanetwork-stack/46a20935-200d-48d4-95a7-fd711bf5224a/scratchpad/workers/codex-catalog-flow/node_modules/spacedatastandards.org/lib/ts/XMT/PCEEvaluationContext.ts
 import * as flatbuffers27 from "flatbuffers";
 
-// node_modules/spacedatastandards.org/lib/ts/XMT/RFMCoordinateSystem.ts
+// ../../../../../../../../private/tmp/claude-501/-Users-tj-software-spacedatanetwork-stack/46a20935-200d-48d4-95a7-fd711bf5224a/scratchpad/workers/codex-catalog-flow/node_modules/spacedatastandards.org/lib/ts/XMT/RFMCoordinateSystem.ts
 import * as flatbuffers26 from "flatbuffers";
 
-// node_modules/spacedatastandards.org/lib/ts/XMT/RFMLocalAlignedConstrainedAxes.ts
+// ../../../../../../../../private/tmp/claude-501/-Users-tj-software-spacedatanetwork-stack/46a20935-200d-48d4-95a7-fd711bf5224a/scratchpad/workers/codex-catalog-flow/node_modules/spacedatastandards.org/lib/ts/XMT/RFMLocalAlignedConstrainedAxes.ts
 import * as flatbuffers24 from "flatbuffers";
 var RFMLocalAlignedConstrainedAxes = class _RFMLocalAlignedConstrainedAxes {
   bb = null;
@@ -5281,10 +5281,10 @@ var RFMLocalAlignedConstrainedAxesT = class {
   }
 };
 
-// node_modules/spacedatastandards.org/lib/ts/XMT/RFMObjectReferencedAxes.ts
+// ../../../../../../../../private/tmp/claude-501/-Users-tj-software-spacedatanetwork-stack/46a20935-200d-48d4-95a7-fd711bf5224a/scratchpad/workers/codex-catalog-flow/node_modules/spacedatastandards.org/lib/ts/XMT/RFMObjectReferencedAxes.ts
 import * as flatbuffers25 from "flatbuffers";
 
-// node_modules/spacedatastandards.org/lib/ts/XMT/rfmVectorSpecification.ts
+// ../../../../../../../../private/tmp/claude-501/-Users-tj-software-spacedatanetwork-stack/46a20935-200d-48d4-95a7-fd711bf5224a/scratchpad/workers/codex-catalog-flow/node_modules/spacedatastandards.org/lib/ts/XMT/rfmVectorSpecification.ts
 var rfmVectorSpecification = /* @__PURE__ */ ((rfmVectorSpecification2) => {
   rfmVectorSpecification2[rfmVectorSpecification2["UNSPECIFIED"] = 0] = "UNSPECIFIED";
   rfmVectorSpecification2[rfmVectorSpecification2["RADIAL"] = 1] = "RADIAL";
@@ -5296,7 +5296,7 @@ var rfmVectorSpecification = /* @__PURE__ */ ((rfmVectorSpecification2) => {
   return rfmVectorSpecification2;
 })(rfmVectorSpecification || {});
 
-// node_modules/spacedatastandards.org/lib/ts/XMT/RFMObjectReferencedAxes.ts
+// ../../../../../../../../private/tmp/claude-501/-Users-tj-software-spacedatanetwork-stack/46a20935-200d-48d4-95a7-fd711bf5224a/scratchpad/workers/codex-catalog-flow/node_modules/spacedatastandards.org/lib/ts/XMT/RFMObjectReferencedAxes.ts
 var RFMObjectReferencedAxes = class _RFMObjectReferencedAxes {
   bb = null;
   bb_pos = 0;
@@ -5402,7 +5402,7 @@ var RFMObjectReferencedAxesT = class {
   }
 };
 
-// node_modules/spacedatastandards.org/lib/ts/XMT/rfmAxisType.ts
+// ../../../../../../../../private/tmp/claude-501/-Users-tj-software-spacedatanetwork-stack/46a20935-200d-48d4-95a7-fd711bf5224a/scratchpad/workers/codex-catalog-flow/node_modules/spacedatastandards.org/lib/ts/XMT/rfmAxisType.ts
 var rfmAxisType = /* @__PURE__ */ ((rfmAxisType2) => {
   rfmAxisType2[rfmAxisType2["UNSPECIFIED"] = 0] = "UNSPECIFIED";
   rfmAxisType2[rfmAxisType2["MEAN_EQUATOR_EQUINOX_J2000"] = 1] = "MEAN_EQUATOR_EQUINOX_J2000";
@@ -5441,7 +5441,7 @@ var rfmAxisType = /* @__PURE__ */ ((rfmAxisType2) => {
   return rfmAxisType2;
 })(rfmAxisType || {});
 
-// node_modules/spacedatastandards.org/lib/ts/XMT/RFMCoordinateSystem.ts
+// ../../../../../../../../private/tmp/claude-501/-Users-tj-software-spacedatanetwork-stack/46a20935-200d-48d4-95a7-fd711bf5224a/scratchpad/workers/codex-catalog-flow/node_modules/spacedatastandards.org/lib/ts/XMT/RFMCoordinateSystem.ts
 var RFMCoordinateSystem = class _RFMCoordinateSystem {
   bb = null;
   bb_pos = 0;
@@ -5749,7 +5749,7 @@ var RFMCoordinateSystemT = class {
   }
 };
 
-// node_modules/spacedatastandards.org/lib/ts/XMT/pceOwnerClass.ts
+// ../../../../../../../../private/tmp/claude-501/-Users-tj-software-spacedatanetwork-stack/46a20935-200d-48d4-95a7-fd711bf5224a/scratchpad/workers/codex-catalog-flow/node_modules/spacedatastandards.org/lib/ts/XMT/pceOwnerClass.ts
 var pceOwnerClass = /* @__PURE__ */ ((pceOwnerClass2) => {
   pceOwnerClass2[pceOwnerClass2["UNSPECIFIED"] = 0] = "UNSPECIFIED";
   pceOwnerClass2[pceOwnerClass2["SPACE_OBJECT"] = 1] = "SPACE_OBJECT";
@@ -5766,7 +5766,7 @@ var pceOwnerClass = /* @__PURE__ */ ((pceOwnerClass2) => {
   return pceOwnerClass2;
 })(pceOwnerClass || {});
 
-// node_modules/spacedatastandards.org/lib/ts/XMT/PCEEvaluationContext.ts
+// ../../../../../../../../private/tmp/claude-501/-Users-tj-software-spacedatanetwork-stack/46a20935-200d-48d4-95a7-fd711bf5224a/scratchpad/workers/codex-catalog-flow/node_modules/spacedatastandards.org/lib/ts/XMT/PCEEvaluationContext.ts
 var PCEEvaluationContext = class _PCEEvaluationContext {
   bb = null;
   bb_pos = 0;
@@ -6004,7 +6004,7 @@ var PCEEvaluationContextT = class {
   }
 };
 
-// node_modules/spacedatastandards.org/lib/ts/XMT/evlLocatorClass.ts
+// ../../../../../../../../private/tmp/claude-501/-Users-tj-software-spacedatanetwork-stack/46a20935-200d-48d4-95a7-fd711bf5224a/scratchpad/workers/codex-catalog-flow/node_modules/spacedatastandards.org/lib/ts/XMT/evlLocatorClass.ts
 var evlLocatorClass = /* @__PURE__ */ ((evlLocatorClass2) => {
   evlLocatorClass2[evlLocatorClass2["UNSPECIFIED"] = 0] = "UNSPECIFIED";
   evlLocatorClass2[evlLocatorClass2["ECLIPSE"] = 1] = "ECLIPSE";
@@ -6017,7 +6017,7 @@ var evlLocatorClass = /* @__PURE__ */ ((evlLocatorClass2) => {
   return evlLocatorClass2;
 })(evlLocatorClass || {});
 
-// node_modules/spacedatastandards.org/lib/ts/XMT/EVLEventLocationRequest.ts
+// ../../../../../../../../private/tmp/claude-501/-Users-tj-software-spacedatanetwork-stack/46a20935-200d-48d4-95a7-fd711bf5224a/scratchpad/workers/codex-catalog-flow/node_modules/spacedatastandards.org/lib/ts/XMT/EVLEventLocationRequest.ts
 var EVLEventLocationRequest = class _EVLEventLocationRequest {
   bb = null;
   bb_pos = 0;
@@ -6306,22 +6306,22 @@ var EVLEventLocationRequestT = class {
   }
 };
 
-// node_modules/spacedatastandards.org/lib/ts/XMT/EVLEventReport.ts
+// ../../../../../../../../private/tmp/claude-501/-Users-tj-software-spacedatanetwork-stack/46a20935-200d-48d4-95a7-fd711bf5224a/scratchpad/workers/codex-catalog-flow/node_modules/spacedatastandards.org/lib/ts/XMT/EVLEventReport.ts
 import * as flatbuffers33 from "flatbuffers";
 
-// node_modules/spacedatastandards.org/lib/ts/XMT/EVLEvent.ts
+// ../../../../../../../../private/tmp/claude-501/-Users-tj-software-spacedatanetwork-stack/46a20935-200d-48d4-95a7-fd711bf5224a/scratchpad/workers/codex-catalog-flow/node_modules/spacedatastandards.org/lib/ts/XMT/EVLEvent.ts
 import * as flatbuffers32 from "flatbuffers";
 
-// node_modules/spacedatastandards.org/lib/ts/XMT/EVLEventSample.ts
+// ../../../../../../../../private/tmp/claude-501/-Users-tj-software-spacedatanetwork-stack/46a20935-200d-48d4-95a7-fd711bf5224a/scratchpad/workers/codex-catalog-flow/node_modules/spacedatastandards.org/lib/ts/XMT/EVLEventSample.ts
 import * as flatbuffers31 from "flatbuffers";
 
-// node_modules/spacedatastandards.org/lib/ts/XMT/PCEParameterSample.ts
+// ../../../../../../../../private/tmp/claude-501/-Users-tj-software-spacedatanetwork-stack/46a20935-200d-48d4-95a7-fd711bf5224a/scratchpad/workers/codex-catalog-flow/node_modules/spacedatastandards.org/lib/ts/XMT/PCEParameterSample.ts
 import * as flatbuffers30 from "flatbuffers";
 
-// node_modules/spacedatastandards.org/lib/ts/XMT/PCEParameterValue.ts
+// ../../../../../../../../private/tmp/claude-501/-Users-tj-software-spacedatanetwork-stack/46a20935-200d-48d4-95a7-fd711bf5224a/scratchpad/workers/codex-catalog-flow/node_modules/spacedatastandards.org/lib/ts/XMT/PCEParameterValue.ts
 import * as flatbuffers29 from "flatbuffers";
 
-// node_modules/spacedatastandards.org/lib/ts/XMT/pceResultStatus.ts
+// ../../../../../../../../private/tmp/claude-501/-Users-tj-software-spacedatanetwork-stack/46a20935-200d-48d4-95a7-fd711bf5224a/scratchpad/workers/codex-catalog-flow/node_modules/spacedatastandards.org/lib/ts/XMT/pceResultStatus.ts
 var pceResultStatus = /* @__PURE__ */ ((pceResultStatus2) => {
   pceResultStatus2[pceResultStatus2["UNSPECIFIED"] = 0] = "UNSPECIFIED";
   pceResultStatus2[pceResultStatus2["OK"] = 1] = "OK";
@@ -6339,7 +6339,7 @@ var pceResultStatus = /* @__PURE__ */ ((pceResultStatus2) => {
   return pceResultStatus2;
 })(pceResultStatus || {});
 
-// node_modules/spacedatastandards.org/lib/ts/XMT/pceUnit.ts
+// ../../../../../../../../private/tmp/claude-501/-Users-tj-software-spacedatanetwork-stack/46a20935-200d-48d4-95a7-fd711bf5224a/scratchpad/workers/codex-catalog-flow/node_modules/spacedatastandards.org/lib/ts/XMT/pceUnit.ts
 var pceUnit = /* @__PURE__ */ ((pceUnit2) => {
   pceUnit2[pceUnit2["UNSPECIFIED"] = 0] = "UNSPECIFIED";
   pceUnit2[pceUnit2["DIMENSIONLESS"] = 1] = "DIMENSIONLESS";
@@ -6368,7 +6368,7 @@ var pceUnit = /* @__PURE__ */ ((pceUnit2) => {
   return pceUnit2;
 })(pceUnit || {});
 
-// node_modules/spacedatastandards.org/lib/ts/XMT/PCEParameterValue.ts
+// ../../../../../../../../private/tmp/claude-501/-Users-tj-software-spacedatanetwork-stack/46a20935-200d-48d4-95a7-fd711bf5224a/scratchpad/workers/codex-catalog-flow/node_modules/spacedatastandards.org/lib/ts/XMT/PCEParameterValue.ts
 var PCEParameterValue = class _PCEParameterValue {
   bb = null;
   bb_pos = 0;
@@ -6568,7 +6568,7 @@ var PCEParameterValueT = class {
   }
 };
 
-// node_modules/spacedatastandards.org/lib/ts/XMT/PCEParameterSample.ts
+// ../../../../../../../../private/tmp/claude-501/-Users-tj-software-spacedatanetwork-stack/46a20935-200d-48d4-95a7-fd711bf5224a/scratchpad/workers/codex-catalog-flow/node_modules/spacedatastandards.org/lib/ts/XMT/PCEParameterSample.ts
 var PCEParameterSample = class _PCEParameterSample {
   bb = null;
   bb_pos = 0;
@@ -6665,7 +6665,7 @@ var PCEParameterSampleT = class {
   }
 };
 
-// node_modules/spacedatastandards.org/lib/ts/XMT/evlSamplePoint.ts
+// ../../../../../../../../private/tmp/claude-501/-Users-tj-software-spacedatanetwork-stack/46a20935-200d-48d4-95a7-fd711bf5224a/scratchpad/workers/codex-catalog-flow/node_modules/spacedatastandards.org/lib/ts/XMT/evlSamplePoint.ts
 var evlSamplePoint = /* @__PURE__ */ ((evlSamplePoint2) => {
   evlSamplePoint2[evlSamplePoint2["UNSPECIFIED"] = 0] = "UNSPECIFIED";
   evlSamplePoint2[evlSamplePoint2["EVENT_START"] = 1] = "EVENT_START";
@@ -6675,7 +6675,7 @@ var evlSamplePoint = /* @__PURE__ */ ((evlSamplePoint2) => {
   return evlSamplePoint2;
 })(evlSamplePoint || {});
 
-// node_modules/spacedatastandards.org/lib/ts/XMT/EVLEventSample.ts
+// ../../../../../../../../private/tmp/claude-501/-Users-tj-software-spacedatanetwork-stack/46a20935-200d-48d4-95a7-fd711bf5224a/scratchpad/workers/codex-catalog-flow/node_modules/spacedatastandards.org/lib/ts/XMT/EVLEventSample.ts
 var EVLEventSample = class _EVLEventSample {
   bb = null;
   bb_pos = 0;
@@ -6737,7 +6737,7 @@ var EVLEventSampleT = class {
   }
 };
 
-// node_modules/spacedatastandards.org/lib/ts/XMT/evlEventType.ts
+// ../../../../../../../../private/tmp/claude-501/-Users-tj-software-spacedatanetwork-stack/46a20935-200d-48d4-95a7-fd711bf5224a/scratchpad/workers/codex-catalog-flow/node_modules/spacedatastandards.org/lib/ts/XMT/evlEventType.ts
 var evlEventType = /* @__PURE__ */ ((evlEventType2) => {
   evlEventType2[evlEventType2["UNSPECIFIED"] = 0] = "UNSPECIFIED";
   evlEventType2[evlEventType2["UMBRA"] = 1] = "UMBRA";
@@ -6757,7 +6757,7 @@ var evlEventType = /* @__PURE__ */ ((evlEventType2) => {
   return evlEventType2;
 })(evlEventType || {});
 
-// node_modules/spacedatastandards.org/lib/ts/XMT/EVLEvent.ts
+// ../../../../../../../../private/tmp/claude-501/-Users-tj-software-spacedatanetwork-stack/46a20935-200d-48d4-95a7-fd711bf5224a/scratchpad/workers/codex-catalog-flow/node_modules/spacedatastandards.org/lib/ts/XMT/EVLEvent.ts
 var EVLEvent = class _EVLEvent {
   bb = null;
   bb_pos = 0;
@@ -7011,7 +7011,7 @@ var EVLEventT = class {
   }
 };
 
-// node_modules/spacedatastandards.org/lib/ts/XMT/evlResultStatus.ts
+// ../../../../../../../../private/tmp/claude-501/-Users-tj-software-spacedatanetwork-stack/46a20935-200d-48d4-95a7-fd711bf5224a/scratchpad/workers/codex-catalog-flow/node_modules/spacedatastandards.org/lib/ts/XMT/evlResultStatus.ts
 var evlResultStatus = /* @__PURE__ */ ((evlResultStatus2) => {
   evlResultStatus2[evlResultStatus2["UNSPECIFIED"] = 0] = "UNSPECIFIED";
   evlResultStatus2[evlResultStatus2["OK"] = 1] = "OK";
@@ -7026,7 +7026,7 @@ var evlResultStatus = /* @__PURE__ */ ((evlResultStatus2) => {
   return evlResultStatus2;
 })(evlResultStatus || {});
 
-// node_modules/spacedatastandards.org/lib/ts/XMT/EVLEventReport.ts
+// ../../../../../../../../private/tmp/claude-501/-Users-tj-software-spacedatanetwork-stack/46a20935-200d-48d4-95a7-fd711bf5224a/scratchpad/workers/codex-catalog-flow/node_modules/spacedatastandards.org/lib/ts/XMT/EVLEventReport.ts
 var EVLEventReport = class _EVLEventReport {
   bb = null;
   bb_pos = 0;
@@ -7231,7 +7231,7 @@ var EVLEventReportT = class {
   }
 };
 
-// node_modules/spacedatastandards.org/lib/ts/XMT/EVL.ts
+// ../../../../../../../../private/tmp/claude-501/-Users-tj-software-spacedatanetwork-stack/46a20935-200d-48d4-95a7-fd711bf5224a/scratchpad/workers/codex-catalog-flow/node_modules/spacedatastandards.org/lib/ts/XMT/EVL.ts
 var EVL = class _EVL {
   bb = null;
   bb_pos = 0;
@@ -7303,7 +7303,7 @@ var EVLT = class {
   }
 };
 
-// node_modules/spacedatastandards.org/lib/ts/XMT/F107DataType.ts
+// ../../../../../../../../private/tmp/claude-501/-Users-tj-software-spacedatanetwork-stack/46a20935-200d-48d4-95a7-fd711bf5224a/scratchpad/workers/codex-catalog-flow/node_modules/spacedatastandards.org/lib/ts/XMT/F107DataType.ts
 var F107DataType = /* @__PURE__ */ ((F107DataType2) => {
   F107DataType2[F107DataType2["OBS"] = 0] = "OBS";
   F107DataType2[F107DataType2["INT"] = 1] = "INT";
@@ -7312,7 +7312,7 @@ var F107DataType = /* @__PURE__ */ ((F107DataType2) => {
   return F107DataType2;
 })(F107DataType || {});
 
-// node_modules/spacedatastandards.org/lib/ts/XMT/FluxQualifier.ts
+// ../../../../../../../../private/tmp/claude-501/-Users-tj-software-spacedatanetwork-stack/46a20935-200d-48d4-95a7-fd711bf5224a/scratchpad/workers/codex-catalog-flow/node_modules/spacedatastandards.org/lib/ts/XMT/FluxQualifier.ts
 var FluxQualifier = /* @__PURE__ */ ((FluxQualifier2) => {
   FluxQualifier2[FluxQualifier2["OBSERVED"] = 0] = "OBSERVED";
   FluxQualifier2[FluxQualifier2["BURST_ADJUSTED"] = 1] = "BURST_ADJUSTED";
@@ -7322,13 +7322,13 @@ var FluxQualifier = /* @__PURE__ */ ((FluxQualifier2) => {
   return FluxQualifier2;
 })(FluxQualifier || {});
 
-// node_modules/spacedatastandards.org/lib/ts/XMT/FRM.ts
+// ../../../../../../../../private/tmp/claude-501/-Users-tj-software-spacedatanetwork-stack/46a20935-200d-48d4-95a7-fd711bf5224a/scratchpad/workers/codex-catalog-flow/node_modules/spacedatastandards.org/lib/ts/XMT/FRM.ts
 import * as flatbuffers39 from "flatbuffers";
 
-// node_modules/spacedatastandards.org/lib/ts/XMT/FRMFrameTransformRequest.ts
+// ../../../../../../../../private/tmp/claude-501/-Users-tj-software-spacedatanetwork-stack/46a20935-200d-48d4-95a7-fd711bf5224a/scratchpad/workers/codex-catalog-flow/node_modules/spacedatastandards.org/lib/ts/XMT/FRMFrameTransformRequest.ts
 import * as flatbuffers37 from "flatbuffers";
 
-// node_modules/spacedatastandards.org/lib/ts/XMT/FRMMatrix3.ts
+// ../../../../../../../../private/tmp/claude-501/-Users-tj-software-spacedatanetwork-stack/46a20935-200d-48d4-95a7-fd711bf5224a/scratchpad/workers/codex-catalog-flow/node_modules/spacedatastandards.org/lib/ts/XMT/FRMMatrix3.ts
 import * as flatbuffers35 from "flatbuffers";
 var FRMMatrix3 = class _FRMMatrix3 {
   bb = null;
@@ -7481,10 +7481,10 @@ var FRMMatrix3T = class {
   }
 };
 
-// node_modules/spacedatastandards.org/lib/ts/XMT/FRMStateVector.ts
+// ../../../../../../../../private/tmp/claude-501/-Users-tj-software-spacedatanetwork-stack/46a20935-200d-48d4-95a7-fd711bf5224a/scratchpad/workers/codex-catalog-flow/node_modules/spacedatastandards.org/lib/ts/XMT/FRMStateVector.ts
 import * as flatbuffers36 from "flatbuffers";
 
-// node_modules/spacedatastandards.org/lib/ts/XMT/frmStateRepresentation.ts
+// ../../../../../../../../private/tmp/claude-501/-Users-tj-software-spacedatanetwork-stack/46a20935-200d-48d4-95a7-fd711bf5224a/scratchpad/workers/codex-catalog-flow/node_modules/spacedatastandards.org/lib/ts/XMT/frmStateRepresentation.ts
 var frmStateRepresentation = /* @__PURE__ */ ((frmStateRepresentation2) => {
   frmStateRepresentation2[frmStateRepresentation2["UNSPECIFIED"] = 0] = "UNSPECIFIED";
   frmStateRepresentation2[frmStateRepresentation2["CARTESIAN"] = 1] = "CARTESIAN";
@@ -7504,7 +7504,7 @@ var frmStateRepresentation = /* @__PURE__ */ ((frmStateRepresentation2) => {
   return frmStateRepresentation2;
 })(frmStateRepresentation || {});
 
-// node_modules/spacedatastandards.org/lib/ts/XMT/FRMStateVector.ts
+// ../../../../../../../../private/tmp/claude-501/-Users-tj-software-spacedatanetwork-stack/46a20935-200d-48d4-95a7-fd711bf5224a/scratchpad/workers/codex-catalog-flow/node_modules/spacedatastandards.org/lib/ts/XMT/FRMStateVector.ts
 var FRMStateVector = class _FRMStateVector {
   bb = null;
   bb_pos = 0;
@@ -7668,7 +7668,7 @@ var FRMStateVectorT = class {
   }
 };
 
-// node_modules/spacedatastandards.org/lib/ts/XMT/frmOperationCode.ts
+// ../../../../../../../../private/tmp/claude-501/-Users-tj-software-spacedatanetwork-stack/46a20935-200d-48d4-95a7-fd711bf5224a/scratchpad/workers/codex-catalog-flow/node_modules/spacedatastandards.org/lib/ts/XMT/frmOperationCode.ts
 var frmOperationCode = /* @__PURE__ */ ((frmOperationCode2) => {
   frmOperationCode2[frmOperationCode2["UNKNOWN"] = 0] = "UNKNOWN";
   frmOperationCode2[frmOperationCode2["PCI_TO_PCPF"] = 1] = "PCI_TO_PCPF";
@@ -7681,7 +7681,7 @@ var frmOperationCode = /* @__PURE__ */ ((frmOperationCode2) => {
   return frmOperationCode2;
 })(frmOperationCode || {});
 
-// node_modules/spacedatastandards.org/lib/ts/XMT/FRMFrameTransformRequest.ts
+// ../../../../../../../../private/tmp/claude-501/-Users-tj-software-spacedatanetwork-stack/46a20935-200d-48d4-95a7-fd711bf5224a/scratchpad/workers/codex-catalog-flow/node_modules/spacedatastandards.org/lib/ts/XMT/FRMFrameTransformRequest.ts
 var FRMFrameTransformRequest = class _FRMFrameTransformRequest {
   bb = null;
   bb_pos = 0;
@@ -7885,10 +7885,10 @@ var FRMFrameTransformRequestT = class {
   }
 };
 
-// node_modules/spacedatastandards.org/lib/ts/XMT/FRMFrameTransformResult.ts
+// ../../../../../../../../private/tmp/claude-501/-Users-tj-software-spacedatanetwork-stack/46a20935-200d-48d4-95a7-fd711bf5224a/scratchpad/workers/codex-catalog-flow/node_modules/spacedatastandards.org/lib/ts/XMT/FRMFrameTransformResult.ts
 import * as flatbuffers38 from "flatbuffers";
 
-// node_modules/spacedatastandards.org/lib/ts/XMT/frmResultStatus.ts
+// ../../../../../../../../private/tmp/claude-501/-Users-tj-software-spacedatanetwork-stack/46a20935-200d-48d4-95a7-fd711bf5224a/scratchpad/workers/codex-catalog-flow/node_modules/spacedatastandards.org/lib/ts/XMT/frmResultStatus.ts
 var frmResultStatus = /* @__PURE__ */ ((frmResultStatus2) => {
   frmResultStatus2[frmResultStatus2["OK"] = 0] = "OK";
   frmResultStatus2[frmResultStatus2["INVALID_INPUT"] = 1] = "INVALID_INPUT";
@@ -7900,7 +7900,7 @@ var frmResultStatus = /* @__PURE__ */ ((frmResultStatus2) => {
   return frmResultStatus2;
 })(frmResultStatus || {});
 
-// node_modules/spacedatastandards.org/lib/ts/XMT/FRMFrameTransformResult.ts
+// ../../../../../../../../private/tmp/claude-501/-Users-tj-software-spacedatanetwork-stack/46a20935-200d-48d4-95a7-fd711bf5224a/scratchpad/workers/codex-catalog-flow/node_modules/spacedatastandards.org/lib/ts/XMT/FRMFrameTransformResult.ts
 var FRMFrameTransformResult = class _FRMFrameTransformResult {
   bb = null;
   bb_pos = 0;
@@ -8073,7 +8073,7 @@ var FRMFrameTransformResultT = class {
   }
 };
 
-// node_modules/spacedatastandards.org/lib/ts/XMT/FRM.ts
+// ../../../../../../../../private/tmp/claude-501/-Users-tj-software-spacedatanetwork-stack/46a20935-200d-48d4-95a7-fd711bf5224a/scratchpad/workers/codex-catalog-flow/node_modules/spacedatastandards.org/lib/ts/XMT/FRM.ts
 var FRM = class _FRM {
   bb = null;
   bb_pos = 0;
@@ -8145,7 +8145,7 @@ var FRMT = class {
   }
 };
 
-// node_modules/spacedatastandards.org/lib/ts/XMT/LCC.ts
+// ../../../../../../../../private/tmp/claude-501/-Users-tj-software-spacedatanetwork-stack/46a20935-200d-48d4-95a7-fd711bf5224a/scratchpad/workers/codex-catalog-flow/node_modules/spacedatastandards.org/lib/ts/XMT/LCC.ts
 import * as flatbuffers40 from "flatbuffers";
 var LCC = class _LCC {
   bb = null;
@@ -8278,7 +8278,7 @@ var LCCT = class {
   }
 };
 
-// node_modules/spacedatastandards.org/lib/ts/XMT/maneuverCharacterization.ts
+// ../../../../../../../../private/tmp/claude-501/-Users-tj-software-spacedatanetwork-stack/46a20935-200d-48d4-95a7-fd711bf5224a/scratchpad/workers/codex-catalog-flow/node_modules/spacedatastandards.org/lib/ts/XMT/maneuverCharacterization.ts
 var maneuverCharacterization = /* @__PURE__ */ ((maneuverCharacterization2) => {
   maneuverCharacterization2[maneuverCharacterization2["IN_PLANE"] = 0] = "IN_PLANE";
   maneuverCharacterization2[maneuverCharacterization2["OUT_OF_PLANE"] = 1] = "OUT_OF_PLANE";
@@ -8293,7 +8293,7 @@ var maneuverCharacterization = /* @__PURE__ */ ((maneuverCharacterization2) => {
   return maneuverCharacterization2;
 })(maneuverCharacterization || {});
 
-// node_modules/spacedatastandards.org/lib/ts/XMT/maneuverStatus.ts
+// ../../../../../../../../private/tmp/claude-501/-Users-tj-software-spacedatanetwork-stack/46a20935-200d-48d4-95a7-fd711bf5224a/scratchpad/workers/codex-catalog-flow/node_modules/spacedatastandards.org/lib/ts/XMT/maneuverStatus.ts
 var maneuverStatus = /* @__PURE__ */ ((maneuverStatus2) => {
   maneuverStatus2[maneuverStatus2["DETECTED"] = 0] = "DETECTED";
   maneuverStatus2[maneuverStatus2["CONFIRMED"] = 1] = "CONFIRMED";
@@ -8305,10 +8305,10 @@ var maneuverStatus = /* @__PURE__ */ ((maneuverStatus2) => {
   return maneuverStatus2;
 })(maneuverStatus || {});
 
-// node_modules/spacedatastandards.org/lib/ts/XMT/MNV.ts
+// ../../../../../../../../private/tmp/claude-501/-Users-tj-software-spacedatanetwork-stack/46a20935-200d-48d4-95a7-fd711bf5224a/scratchpad/workers/codex-catalog-flow/node_modules/spacedatastandards.org/lib/ts/XMT/MNV.ts
 import * as flatbuffers42 from "flatbuffers";
 
-// node_modules/spacedatastandards.org/lib/ts/XMT/mnvOrbitalState.ts
+// ../../../../../../../../private/tmp/claude-501/-Users-tj-software-spacedatanetwork-stack/46a20935-200d-48d4-95a7-fd711bf5224a/scratchpad/workers/codex-catalog-flow/node_modules/spacedatastandards.org/lib/ts/XMT/mnvOrbitalState.ts
 import * as flatbuffers41 from "flatbuffers";
 var mnvOrbitalState = class _mnvOrbitalState {
   bb = null;
@@ -8705,7 +8705,7 @@ var mnvOrbitalStateT = class {
   }
 };
 
-// node_modules/spacedatastandards.org/lib/ts/XMT/MNV.ts
+// ../../../../../../../../private/tmp/claude-501/-Users-tj-software-spacedatanetwork-stack/46a20935-200d-48d4-95a7-fd711bf5224a/scratchpad/workers/codex-catalog-flow/node_modules/spacedatastandards.org/lib/ts/XMT/MNV.ts
 var MNV = class _MNV {
   bb = null;
   bb_pos = 0;
@@ -9462,10 +9462,10 @@ var MNVT = class {
   }
 };
 
-// node_modules/spacedatastandards.org/lib/ts/XMT/NCD.ts
+// ../../../../../../../../private/tmp/claude-501/-Users-tj-software-spacedatanetwork-stack/46a20935-200d-48d4-95a7-fd711bf5224a/scratchpad/workers/codex-catalog-flow/node_modules/spacedatastandards.org/lib/ts/XMT/NCD.ts
 import * as flatbuffers47 from "flatbuffers";
 
-// node_modules/spacedatastandards.org/lib/ts/XMT/NCDCode500Header.ts
+// ../../../../../../../../private/tmp/claude-501/-Users-tj-software-spacedatanetwork-stack/46a20935-200d-48d4-95a7-fd711bf5224a/scratchpad/workers/codex-catalog-flow/node_modules/spacedatastandards.org/lib/ts/XMT/NCDCode500Header.ts
 import * as flatbuffers43 from "flatbuffers";
 var NCDCode500Header = class _NCDCode500Header {
   bb = null;
@@ -9641,7 +9641,7 @@ var NCDCode500HeaderT = class {
   }
 };
 
-// node_modules/spacedatastandards.org/lib/ts/XMT/NCDSP3Header.ts
+// ../../../../../../../../private/tmp/claude-501/-Users-tj-software-spacedatanetwork-stack/46a20935-200d-48d4-95a7-fd711bf5224a/scratchpad/workers/codex-catalog-flow/node_modules/spacedatastandards.org/lib/ts/XMT/NCDSP3Header.ts
 import * as flatbuffers44 from "flatbuffers";
 var NCDSP3Header = class _NCDSP3Header {
   bb = null;
@@ -9987,7 +9987,7 @@ var NCDSP3HeaderT = class {
   }
 };
 
-// node_modules/spacedatastandards.org/lib/ts/XMT/NCDScenarioEpochContainer.ts
+// ../../../../../../../../private/tmp/claude-501/-Users-tj-software-spacedatanetwork-stack/46a20935-200d-48d4-95a7-fd711bf5224a/scratchpad/workers/codex-catalog-flow/node_modules/spacedatastandards.org/lib/ts/XMT/NCDScenarioEpochContainer.ts
 import * as flatbuffers45 from "flatbuffers";
 var NCDScenarioEpochContainer = class _NCDScenarioEpochContainer {
   bb = null;
@@ -10189,7 +10189,7 @@ var NCDScenarioEpochContainerT = class {
   }
 };
 
-// node_modules/spacedatastandards.org/lib/ts/XMT/NCDSegmentDescriptor.ts
+// ../../../../../../../../private/tmp/claude-501/-Users-tj-software-spacedatanetwork-stack/46a20935-200d-48d4-95a7-fd711bf5224a/scratchpad/workers/codex-catalog-flow/node_modules/spacedatastandards.org/lib/ts/XMT/NCDSegmentDescriptor.ts
 import * as flatbuffers46 from "flatbuffers";
 var NCDSegmentDescriptor = class _NCDSegmentDescriptor {
   bb = null;
@@ -10426,7 +10426,7 @@ var NCDSegmentDescriptorT = class {
   }
 };
 
-// node_modules/spacedatastandards.org/lib/ts/XMT/ncdContainerFormat.ts
+// ../../../../../../../../private/tmp/claude-501/-Users-tj-software-spacedatanetwork-stack/46a20935-200d-48d4-95a7-fd711bf5224a/scratchpad/workers/codex-catalog-flow/node_modules/spacedatastandards.org/lib/ts/XMT/ncdContainerFormat.ts
 var ncdContainerFormat = /* @__PURE__ */ ((ncdContainerFormat2) => {
   ncdContainerFormat2[ncdContainerFormat2["UNSPECIFIED"] = 0] = "UNSPECIFIED";
   ncdContainerFormat2[ncdContainerFormat2["SPK_DAF"] = 1] = "SPK_DAF";
@@ -10465,7 +10465,7 @@ var ncdContainerFormat = /* @__PURE__ */ ((ncdContainerFormat2) => {
   return ncdContainerFormat2;
 })(ncdContainerFormat || {});
 
-// node_modules/spacedatastandards.org/lib/ts/XMT/NCD.ts
+// ../../../../../../../../private/tmp/claude-501/-Users-tj-software-spacedatanetwork-stack/46a20935-200d-48d4-95a7-fd711bf5224a/scratchpad/workers/codex-catalog-flow/node_modules/spacedatastandards.org/lib/ts/XMT/NCD.ts
 var NCD = class _NCD {
   bb = null;
   bb_pos = 0;
@@ -10906,13 +10906,13 @@ var NCDT = class {
   }
 };
 
-// node_modules/spacedatastandards.org/lib/ts/XMT/OIL.ts
+// ../../../../../../../../private/tmp/claude-501/-Users-tj-software-spacedatanetwork-stack/46a20935-200d-48d4-95a7-fd711bf5224a/scratchpad/workers/codex-catalog-flow/node_modules/spacedatastandards.org/lib/ts/XMT/OIL.ts
 import * as flatbuffers52 from "flatbuffers";
 
-// node_modules/spacedatastandards.org/lib/ts/XMT/OILConflict.ts
+// ../../../../../../../../private/tmp/claude-501/-Users-tj-software-spacedatanetwork-stack/46a20935-200d-48d4-95a7-fd711bf5224a/scratchpad/workers/codex-catalog-flow/node_modules/spacedatastandards.org/lib/ts/XMT/OILConflict.ts
 import * as flatbuffers48 from "flatbuffers";
 
-// node_modules/spacedatastandards.org/lib/ts/XMT/oilConflictShape.ts
+// ../../../../../../../../private/tmp/claude-501/-Users-tj-software-spacedatanetwork-stack/46a20935-200d-48d4-95a7-fd711bf5224a/scratchpad/workers/codex-catalog-flow/node_modules/spacedatastandards.org/lib/ts/XMT/oilConflictShape.ts
 var oilConflictShape = /* @__PURE__ */ ((oilConflictShape2) => {
   oilConflictShape2[oilConflictShape2["Unspecified"] = 0] = "Unspecified";
   oilConflictShape2[oilConflictShape2["OneLeftManyRight"] = 1] = "OneLeftManyRight";
@@ -10921,7 +10921,7 @@ var oilConflictShape = /* @__PURE__ */ ((oilConflictShape2) => {
   return oilConflictShape2;
 })(oilConflictShape || {});
 
-// node_modules/spacedatastandards.org/lib/ts/XMT/OILConflict.ts
+// ../../../../../../../../private/tmp/claude-501/-Users-tj-software-spacedatanetwork-stack/46a20935-200d-48d4-95a7-fd711bf5224a/scratchpad/workers/codex-catalog-flow/node_modules/spacedatastandards.org/lib/ts/XMT/OILConflict.ts
 var OILConflict = class _OILConflict {
   bb = null;
   bb_pos = 0;
@@ -11044,10 +11044,10 @@ var OILConflictT = class {
   }
 };
 
-// node_modules/spacedatastandards.org/lib/ts/XMT/OILLink.ts
+// ../../../../../../../../private/tmp/claude-501/-Users-tj-software-spacedatanetwork-stack/46a20935-200d-48d4-95a7-fd711bf5224a/scratchpad/workers/codex-catalog-flow/node_modules/spacedatastandards.org/lib/ts/XMT/OILLink.ts
 import * as flatbuffers51 from "flatbuffers";
 
-// node_modules/spacedatastandards.org/lib/ts/XMT/OILEvidence.ts
+// ../../../../../../../../private/tmp/claude-501/-Users-tj-software-spacedatanetwork-stack/46a20935-200d-48d4-95a7-fd711bf5224a/scratchpad/workers/codex-catalog-flow/node_modules/spacedatastandards.org/lib/ts/XMT/OILEvidence.ts
 import * as flatbuffers49 from "flatbuffers";
 var OILEvidence = class _OILEvidence {
   bb = null;
@@ -11176,7 +11176,7 @@ var OILEvidenceT = class {
   }
 };
 
-// node_modules/spacedatastandards.org/lib/ts/XMT/OILIdentifier.ts
+// ../../../../../../../../private/tmp/claude-501/-Users-tj-software-spacedatanetwork-stack/46a20935-200d-48d4-95a7-fd711bf5224a/scratchpad/workers/codex-catalog-flow/node_modules/spacedatastandards.org/lib/ts/XMT/OILIdentifier.ts
 import * as flatbuffers50 from "flatbuffers";
 var OILIdentifier = class _OILIdentifier {
   bb = null;
@@ -11328,7 +11328,7 @@ var OILIdentifierT = class {
   }
 };
 
-// node_modules/spacedatastandards.org/lib/ts/XMT/oilLinkStatus.ts
+// ../../../../../../../../private/tmp/claude-501/-Users-tj-software-spacedatanetwork-stack/46a20935-200d-48d4-95a7-fd711bf5224a/scratchpad/workers/codex-catalog-flow/node_modules/spacedatastandards.org/lib/ts/XMT/oilLinkStatus.ts
 var oilLinkStatus = /* @__PURE__ */ ((oilLinkStatus2) => {
   oilLinkStatus2[oilLinkStatus2["Unspecified"] = 0] = "Unspecified";
   oilLinkStatus2[oilLinkStatus2["Candidate"] = 1] = "Candidate";
@@ -11341,7 +11341,7 @@ var oilLinkStatus = /* @__PURE__ */ ((oilLinkStatus2) => {
   return oilLinkStatus2;
 })(oilLinkStatus || {});
 
-// node_modules/spacedatastandards.org/lib/ts/XMT/OILLink.ts
+// ../../../../../../../../private/tmp/claude-501/-Users-tj-software-spacedatanetwork-stack/46a20935-200d-48d4-95a7-fd711bf5224a/scratchpad/workers/codex-catalog-flow/node_modules/spacedatastandards.org/lib/ts/XMT/OILLink.ts
 var OILLink = class _OILLink {
   bb = null;
   bb_pos = 0;
@@ -11474,7 +11474,7 @@ var OILLinkT = class {
   }
 };
 
-// node_modules/spacedatastandards.org/lib/ts/XMT/OIL.ts
+// ../../../../../../../../private/tmp/claude-501/-Users-tj-software-spacedatanetwork-stack/46a20935-200d-48d4-95a7-fd711bf5224a/scratchpad/workers/codex-catalog-flow/node_modules/spacedatastandards.org/lib/ts/XMT/OIL.ts
 var OIL = class _OIL {
   bb = null;
   bb_pos = 0;
@@ -11824,7 +11824,7 @@ var OILT = class {
   }
 };
 
-// node_modules/spacedatastandards.org/lib/ts/XMT/OrbitFrame.ts
+// ../../../../../../../../private/tmp/claude-501/-Users-tj-software-spacedatanetwork-stack/46a20935-200d-48d4-95a7-fd711bf5224a/scratchpad/workers/codex-catalog-flow/node_modules/spacedatastandards.org/lib/ts/XMT/OrbitFrame.ts
 var OrbitFrame = /* @__PURE__ */ ((OrbitFrame2) => {
   OrbitFrame2[OrbitFrame2["EQW_INERTIAL"] = 0] = "EQW_INERTIAL";
   OrbitFrame2[OrbitFrame2["LVLH_INERTIAL"] = 1] = "LVLH_INERTIAL";
@@ -11845,7 +11845,7 @@ var OrbitFrame = /* @__PURE__ */ ((OrbitFrame2) => {
   return OrbitFrame2;
 })(OrbitFrame || {});
 
-// node_modules/spacedatastandards.org/lib/ts/XMT/OrbitFrameWrapper.ts
+// ../../../../../../../../private/tmp/claude-501/-Users-tj-software-spacedatanetwork-stack/46a20935-200d-48d4-95a7-fd711bf5224a/scratchpad/workers/codex-catalog-flow/node_modules/spacedatastandards.org/lib/ts/XMT/OrbitFrameWrapper.ts
 import * as flatbuffers53 from "flatbuffers";
 var OrbitFrameWrapper = class _OrbitFrameWrapper {
   bb = null;
@@ -11902,10 +11902,10 @@ var OrbitFrameWrapperT = class {
   }
 };
 
-// node_modules/spacedatastandards.org/lib/ts/XMT/PCE.ts
+// ../../../../../../../../private/tmp/claude-501/-Users-tj-software-spacedatanetwork-stack/46a20935-200d-48d4-95a7-fd711bf5224a/scratchpad/workers/codex-catalog-flow/node_modules/spacedatastandards.org/lib/ts/XMT/PCE.ts
 import * as flatbuffers60 from "flatbuffers";
 
-// node_modules/spacedatastandards.org/lib/ts/XMT/PCEEvaluationRequest.ts
+// ../../../../../../../../private/tmp/claude-501/-Users-tj-software-spacedatanetwork-stack/46a20935-200d-48d4-95a7-fd711bf5224a/scratchpad/workers/codex-catalog-flow/node_modules/spacedatastandards.org/lib/ts/XMT/PCEEvaluationRequest.ts
 import * as flatbuffers54 from "flatbuffers";
 var PCEEvaluationRequest = class _PCEEvaluationRequest {
   bb = null;
@@ -12034,7 +12034,7 @@ var PCEEvaluationRequestT = class {
   }
 };
 
-// node_modules/spacedatastandards.org/lib/ts/XMT/PCEEvaluationResult.ts
+// ../../../../../../../../private/tmp/claude-501/-Users-tj-software-spacedatanetwork-stack/46a20935-200d-48d4-95a7-fd711bf5224a/scratchpad/workers/codex-catalog-flow/node_modules/spacedatastandards.org/lib/ts/XMT/PCEEvaluationResult.ts
 import * as flatbuffers55 from "flatbuffers";
 var PCEEvaluationResult = class _PCEEvaluationResult {
   bb = null;
@@ -12160,13 +12160,13 @@ var PCEEvaluationResultT = class {
   }
 };
 
-// node_modules/spacedatastandards.org/lib/ts/XMT/PCEParameterCatalog.ts
+// ../../../../../../../../private/tmp/claude-501/-Users-tj-software-spacedatanetwork-stack/46a20935-200d-48d4-95a7-fd711bf5224a/scratchpad/workers/codex-catalog-flow/node_modules/spacedatastandards.org/lib/ts/XMT/PCEParameterCatalog.ts
 import * as flatbuffers57 from "flatbuffers";
 
-// node_modules/spacedatastandards.org/lib/ts/XMT/PCEParameterDescriptor.ts
+// ../../../../../../../../private/tmp/claude-501/-Users-tj-software-spacedatanetwork-stack/46a20935-200d-48d4-95a7-fd711bf5224a/scratchpad/workers/codex-catalog-flow/node_modules/spacedatastandards.org/lib/ts/XMT/PCEParameterDescriptor.ts
 import * as flatbuffers56 from "flatbuffers";
 
-// node_modules/spacedatastandards.org/lib/ts/XMT/pceAvailability.ts
+// ../../../../../../../../private/tmp/claude-501/-Users-tj-software-spacedatanetwork-stack/46a20935-200d-48d4-95a7-fd711bf5224a/scratchpad/workers/codex-catalog-flow/node_modules/spacedatastandards.org/lib/ts/XMT/pceAvailability.ts
 var pceAvailability = /* @__PURE__ */ ((pceAvailability2) => {
   pceAvailability2[pceAvailability2["UNSPECIFIED"] = 0] = "UNSPECIFIED";
   pceAvailability2[pceAvailability2["IMPLEMENTED"] = 1] = "IMPLEMENTED";
@@ -12175,7 +12175,7 @@ var pceAvailability = /* @__PURE__ */ ((pceAvailability2) => {
   return pceAvailability2;
 })(pceAvailability || {});
 
-// node_modules/spacedatastandards.org/lib/ts/XMT/pceDataType.ts
+// ../../../../../../../../private/tmp/claude-501/-Users-tj-software-spacedatanetwork-stack/46a20935-200d-48d4-95a7-fd711bf5224a/scratchpad/workers/codex-catalog-flow/node_modules/spacedatastandards.org/lib/ts/XMT/pceDataType.ts
 var pceDataType = /* @__PURE__ */ ((pceDataType2) => {
   pceDataType2[pceDataType2["UNSPECIFIED"] = 0] = "UNSPECIFIED";
   pceDataType2[pceDataType2["REAL_SCALAR"] = 1] = "REAL_SCALAR";
@@ -12188,7 +12188,7 @@ var pceDataType = /* @__PURE__ */ ((pceDataType2) => {
   return pceDataType2;
 })(pceDataType || {});
 
-// node_modules/spacedatastandards.org/lib/ts/XMT/pceFrameDependency.ts
+// ../../../../../../../../private/tmp/claude-501/-Users-tj-software-spacedatanetwork-stack/46a20935-200d-48d4-95a7-fd711bf5224a/scratchpad/workers/codex-catalog-flow/node_modules/spacedatastandards.org/lib/ts/XMT/pceFrameDependency.ts
 var pceFrameDependency = /* @__PURE__ */ ((pceFrameDependency2) => {
   pceFrameDependency2[pceFrameDependency2["UNSPECIFIED"] = 0] = "UNSPECIFIED";
   pceFrameDependency2[pceFrameDependency2["FRAME_INDEPENDENT"] = 1] = "FRAME_INDEPENDENT";
@@ -12199,7 +12199,7 @@ var pceFrameDependency = /* @__PURE__ */ ((pceFrameDependency2) => {
   return pceFrameDependency2;
 })(pceFrameDependency || {});
 
-// node_modules/spacedatastandards.org/lib/ts/XMT/PCEParameterDescriptor.ts
+// ../../../../../../../../private/tmp/claude-501/-Users-tj-software-spacedatanetwork-stack/46a20935-200d-48d4-95a7-fd711bf5224a/scratchpad/workers/codex-catalog-flow/node_modules/spacedatastandards.org/lib/ts/XMT/PCEParameterDescriptor.ts
 var PCEParameterDescriptor = class _PCEParameterDescriptor {
   bb = null;
   bb_pos = 0;
@@ -12566,7 +12566,7 @@ var PCEParameterDescriptorT = class {
   }
 };
 
-// node_modules/spacedatastandards.org/lib/ts/XMT/PCEParameterCatalog.ts
+// ../../../../../../../../private/tmp/claude-501/-Users-tj-software-spacedatanetwork-stack/46a20935-200d-48d4-95a7-fd711bf5224a/scratchpad/workers/codex-catalog-flow/node_modules/spacedatastandards.org/lib/ts/XMT/PCEParameterCatalog.ts
 var PCEParameterCatalog = class _PCEParameterCatalog {
   bb = null;
   bb_pos = 0;
@@ -12676,7 +12676,7 @@ var PCEParameterCatalogT = class {
   }
 };
 
-// node_modules/spacedatastandards.org/lib/ts/XMT/PCEStopReport.ts
+// ../../../../../../../../private/tmp/claude-501/-Users-tj-software-spacedatanetwork-stack/46a20935-200d-48d4-95a7-fd711bf5224a/scratchpad/workers/codex-catalog-flow/node_modules/spacedatastandards.org/lib/ts/XMT/PCEStopReport.ts
 import * as flatbuffers58 from "flatbuffers";
 var PCEStopReport = class _PCEStopReport {
   bb = null;
@@ -12921,10 +12921,10 @@ var PCEStopReportT = class {
   }
 };
 
-// node_modules/spacedatastandards.org/lib/ts/XMT/PCEStopRequest.ts
+// ../../../../../../../../private/tmp/claude-501/-Users-tj-software-spacedatanetwork-stack/46a20935-200d-48d4-95a7-fd711bf5224a/scratchpad/workers/codex-catalog-flow/node_modules/spacedatastandards.org/lib/ts/XMT/PCEStopRequest.ts
 import * as flatbuffers59 from "flatbuffers";
 
-// node_modules/spacedatastandards.org/lib/ts/XMT/pcePropagationDirection.ts
+// ../../../../../../../../private/tmp/claude-501/-Users-tj-software-spacedatanetwork-stack/46a20935-200d-48d4-95a7-fd711bf5224a/scratchpad/workers/codex-catalog-flow/node_modules/spacedatastandards.org/lib/ts/XMT/pcePropagationDirection.ts
 var pcePropagationDirection = /* @__PURE__ */ ((pcePropagationDirection2) => {
   pcePropagationDirection2[pcePropagationDirection2["UNSPECIFIED"] = 0] = "UNSPECIFIED";
   pcePropagationDirection2[pcePropagationDirection2["FORWARD"] = 1] = "FORWARD";
@@ -12932,7 +12932,7 @@ var pcePropagationDirection = /* @__PURE__ */ ((pcePropagationDirection2) => {
   return pcePropagationDirection2;
 })(pcePropagationDirection || {});
 
-// node_modules/spacedatastandards.org/lib/ts/XMT/PCEStopRequest.ts
+// ../../../../../../../../private/tmp/claude-501/-Users-tj-software-spacedatanetwork-stack/46a20935-200d-48d4-95a7-fd711bf5224a/scratchpad/workers/codex-catalog-flow/node_modules/spacedatastandards.org/lib/ts/XMT/PCEStopRequest.ts
 var PCEStopRequest = class _PCEStopRequest {
   bb = null;
   bb_pos = 0;
@@ -13136,7 +13136,7 @@ var PCEStopRequestT = class {
   }
 };
 
-// node_modules/spacedatastandards.org/lib/ts/XMT/PCE.ts
+// ../../../../../../../../private/tmp/claude-501/-Users-tj-software-spacedatanetwork-stack/46a20935-200d-48d4-95a7-fd711bf5224a/scratchpad/workers/codex-catalog-flow/node_modules/spacedatastandards.org/lib/ts/XMT/PCE.ts
 var PCE = class _PCE {
   bb = null;
   bb_pos = 0;
@@ -13244,27 +13244,27 @@ var PCET = class {
   }
 };
 
-// node_modules/spacedatastandards.org/lib/ts/XMT/PCF.ts
+// ../../../../../../../../private/tmp/claude-501/-Users-tj-software-spacedatanetwork-stack/46a20935-200d-48d4-95a7-fd711bf5224a/scratchpad/workers/codex-catalog-flow/node_modules/spacedatastandards.org/lib/ts/XMT/PCF.ts
 import * as flatbuffers74 from "flatbuffers";
 
-// node_modules/spacedatastandards.org/lib/ts/XMT/PCFEpochStore.ts
+// ../../../../../../../../private/tmp/claude-501/-Users-tj-software-spacedatanetwork-stack/46a20935-200d-48d4-95a7-fd711bf5224a/scratchpad/workers/codex-catalog-flow/node_modules/spacedatastandards.org/lib/ts/XMT/PCFEpochStore.ts
 import * as flatbuffers61 from "flatbuffers";
 
-// node_modules/spacedatastandards.org/lib/ts/XMT/pcfBlendShape.ts
+// ../../../../../../../../private/tmp/claude-501/-Users-tj-software-spacedatanetwork-stack/46a20935-200d-48d4-95a7-fd711bf5224a/scratchpad/workers/codex-catalog-flow/node_modules/spacedatastandards.org/lib/ts/XMT/pcfBlendShape.ts
 var pcfBlendShape = /* @__PURE__ */ ((pcfBlendShape2) => {
   pcfBlendShape2[pcfBlendShape2["SMOOTHSTEP"] = 0] = "SMOOTHSTEP";
   pcfBlendShape2[pcfBlendShape2["HERMITE"] = 1] = "HERMITE";
   return pcfBlendShape2;
 })(pcfBlendShape || {});
 
-// node_modules/spacedatastandards.org/lib/ts/XMT/pcfEpochSelection.ts
+// ../../../../../../../../private/tmp/claude-501/-Users-tj-software-spacedatanetwork-stack/46a20935-200d-48d4-95a7-fd711bf5224a/scratchpad/workers/codex-catalog-flow/node_modules/spacedatastandards.org/lib/ts/XMT/pcfEpochSelection.ts
 var pcfEpochSelection = /* @__PURE__ */ ((pcfEpochSelection2) => {
   pcfEpochSelection2[pcfEpochSelection2["NEAREST"] = 0] = "NEAREST";
   pcfEpochSelection2[pcfEpochSelection2["LATEST_BEFORE"] = 1] = "LATEST_BEFORE";
   return pcfEpochSelection2;
 })(pcfEpochSelection || {});
 
-// node_modules/spacedatastandards.org/lib/ts/XMT/PCFEpochStore.ts
+// ../../../../../../../../private/tmp/claude-501/-Users-tj-software-spacedatanetwork-stack/46a20935-200d-48d4-95a7-fd711bf5224a/scratchpad/workers/codex-catalog-flow/node_modules/spacedatastandards.org/lib/ts/XMT/PCFEpochStore.ts
 var PCFEpochStore = class _PCFEpochStore {
   bb = null;
   bb_pos = 0;
@@ -13419,16 +13419,16 @@ var PCFEpochStoreT = class {
   }
 };
 
-// node_modules/spacedatastandards.org/lib/ts/XMT/PCFEventDefinition.ts
+// ../../../../../../../../private/tmp/claude-501/-Users-tj-software-spacedatanetwork-stack/46a20935-200d-48d4-95a7-fd711bf5224a/scratchpad/workers/codex-catalog-flow/node_modules/spacedatastandards.org/lib/ts/XMT/PCFEventDefinition.ts
 import * as flatbuffers64 from "flatbuffers";
 
-// node_modules/spacedatastandards.org/lib/ts/XMT/PCFExpression.ts
+// ../../../../../../../../private/tmp/claude-501/-Users-tj-software-spacedatanetwork-stack/46a20935-200d-48d4-95a7-fd711bf5224a/scratchpad/workers/codex-catalog-flow/node_modules/spacedatastandards.org/lib/ts/XMT/PCFExpression.ts
 import * as flatbuffers63 from "flatbuffers";
 
-// node_modules/spacedatastandards.org/lib/ts/XMT/PCFExpressionTerm.ts
+// ../../../../../../../../private/tmp/claude-501/-Users-tj-software-spacedatanetwork-stack/46a20935-200d-48d4-95a7-fd711bf5224a/scratchpad/workers/codex-catalog-flow/node_modules/spacedatastandards.org/lib/ts/XMT/PCFExpressionTerm.ts
 import * as flatbuffers62 from "flatbuffers";
 
-// node_modules/spacedatastandards.org/lib/ts/XMT/pcfExpressionOperation.ts
+// ../../../../../../../../private/tmp/claude-501/-Users-tj-software-spacedatanetwork-stack/46a20935-200d-48d4-95a7-fd711bf5224a/scratchpad/workers/codex-catalog-flow/node_modules/spacedatastandards.org/lib/ts/XMT/pcfExpressionOperation.ts
 var pcfExpressionOperation = /* @__PURE__ */ ((pcfExpressionOperation2) => {
   pcfExpressionOperation2[pcfExpressionOperation2["UNSPECIFIED"] = 0] = "UNSPECIFIED";
   pcfExpressionOperation2[pcfExpressionOperation2["CONSTANT"] = 1] = "CONSTANT";
@@ -13447,7 +13447,7 @@ var pcfExpressionOperation = /* @__PURE__ */ ((pcfExpressionOperation2) => {
   return pcfExpressionOperation2;
 })(pcfExpressionOperation || {});
 
-// node_modules/spacedatastandards.org/lib/ts/XMT/PCFExpressionTerm.ts
+// ../../../../../../../../private/tmp/claude-501/-Users-tj-software-spacedatanetwork-stack/46a20935-200d-48d4-95a7-fd711bf5224a/scratchpad/workers/codex-catalog-flow/node_modules/spacedatastandards.org/lib/ts/XMT/PCFExpressionTerm.ts
 var PCFExpressionTerm = class _PCFExpressionTerm {
   bb = null;
   bb_pos = 0;
@@ -13536,7 +13536,7 @@ var PCFExpressionTermT = class {
   }
 };
 
-// node_modules/spacedatastandards.org/lib/ts/XMT/PCFExpression.ts
+// ../../../../../../../../private/tmp/claude-501/-Users-tj-software-spacedatanetwork-stack/46a20935-200d-48d4-95a7-fd711bf5224a/scratchpad/workers/codex-catalog-flow/node_modules/spacedatastandards.org/lib/ts/XMT/PCFExpression.ts
 var PCFExpression = class _PCFExpression {
   bb = null;
   bb_pos = 0;
@@ -13610,7 +13610,7 @@ var PCFExpressionT = class {
   }
 };
 
-// node_modules/spacedatastandards.org/lib/ts/XMT/pcfEventAction.ts
+// ../../../../../../../../private/tmp/claude-501/-Users-tj-software-spacedatanetwork-stack/46a20935-200d-48d4-95a7-fd711bf5224a/scratchpad/workers/codex-catalog-flow/node_modules/spacedatastandards.org/lib/ts/XMT/pcfEventAction.ts
 var pcfEventAction = /* @__PURE__ */ ((pcfEventAction2) => {
   pcfEventAction2[pcfEventAction2["CONTINUE"] = 0] = "CONTINUE";
   pcfEventAction2[pcfEventAction2["RECORD"] = 1] = "RECORD";
@@ -13618,7 +13618,7 @@ var pcfEventAction = /* @__PURE__ */ ((pcfEventAction2) => {
   return pcfEventAction2;
 })(pcfEventAction || {});
 
-// node_modules/spacedatastandards.org/lib/ts/XMT/pcfEventDirection.ts
+// ../../../../../../../../private/tmp/claude-501/-Users-tj-software-spacedatanetwork-stack/46a20935-200d-48d4-95a7-fd711bf5224a/scratchpad/workers/codex-catalog-flow/node_modules/spacedatastandards.org/lib/ts/XMT/pcfEventDirection.ts
 var pcfEventDirection = /* @__PURE__ */ ((pcfEventDirection2) => {
   pcfEventDirection2[pcfEventDirection2["ANY"] = 0] = "ANY";
   pcfEventDirection2[pcfEventDirection2["INCREASING"] = 1] = "INCREASING";
@@ -13626,7 +13626,7 @@ var pcfEventDirection = /* @__PURE__ */ ((pcfEventDirection2) => {
   return pcfEventDirection2;
 })(pcfEventDirection || {});
 
-// node_modules/spacedatastandards.org/lib/ts/XMT/pcfEventKind.ts
+// ../../../../../../../../private/tmp/claude-501/-Users-tj-software-spacedatanetwork-stack/46a20935-200d-48d4-95a7-fd711bf5224a/scratchpad/workers/codex-catalog-flow/node_modules/spacedatastandards.org/lib/ts/XMT/pcfEventKind.ts
 var pcfEventKind = /* @__PURE__ */ ((pcfEventKind2) => {
   pcfEventKind2[pcfEventKind2["UNSPECIFIED"] = 0] = "UNSPECIFIED";
   pcfEventKind2[pcfEventKind2["APSIS"] = 1] = "APSIS";
@@ -13641,7 +13641,7 @@ var pcfEventKind = /* @__PURE__ */ ((pcfEventKind2) => {
   return pcfEventKind2;
 })(pcfEventKind || {});
 
-// node_modules/spacedatastandards.org/lib/ts/XMT/PCFEventDefinition.ts
+// ../../../../../../../../private/tmp/claude-501/-Users-tj-software-spacedatanetwork-stack/46a20935-200d-48d4-95a7-fd711bf5224a/scratchpad/workers/codex-catalog-flow/node_modules/spacedatastandards.org/lib/ts/XMT/PCFEventDefinition.ts
 var PCFEventDefinition = class _PCFEventDefinition {
   bb = null;
   bb_pos = 0;
@@ -13807,10 +13807,10 @@ var PCFEventDefinitionT = class {
   }
 };
 
-// node_modules/spacedatastandards.org/lib/ts/XMT/PCFFitPolicy.ts
+// ../../../../../../../../private/tmp/claude-501/-Users-tj-software-spacedatanetwork-stack/46a20935-200d-48d4-95a7-fd711bf5224a/scratchpad/workers/codex-catalog-flow/node_modules/spacedatastandards.org/lib/ts/XMT/PCFFitPolicy.ts
 import * as flatbuffers66 from "flatbuffers";
 
-// node_modules/spacedatastandards.org/lib/ts/XMT/PCFGaussianPrior.ts
+// ../../../../../../../../private/tmp/claude-501/-Users-tj-software-spacedatanetwork-stack/46a20935-200d-48d4-95a7-fd711bf5224a/scratchpad/workers/codex-catalog-flow/node_modules/spacedatastandards.org/lib/ts/XMT/PCFGaussianPrior.ts
 import * as flatbuffers65 from "flatbuffers";
 var PCFGaussianPrior = class _PCFGaussianPrior {
   bb = null;
@@ -13900,14 +13900,14 @@ var PCFGaussianPriorT = class {
   }
 };
 
-// node_modules/spacedatastandards.org/lib/ts/XMT/pcfPriorForm.ts
+// ../../../../../../../../private/tmp/claude-501/-Users-tj-software-spacedatanetwork-stack/46a20935-200d-48d4-95a7-fd711bf5224a/scratchpad/workers/codex-catalog-flow/node_modules/spacedatastandards.org/lib/ts/XMT/pcfPriorForm.ts
 var pcfPriorForm = /* @__PURE__ */ ((pcfPriorForm2) => {
   pcfPriorForm2[pcfPriorForm2["GAUSSIAN_SIGNED"] = 0] = "GAUSSIAN_SIGNED";
   pcfPriorForm2[pcfPriorForm2["LOG_NORMAL"] = 1] = "LOG_NORMAL";
   return pcfPriorForm2;
 })(pcfPriorForm || {});
 
-// node_modules/spacedatastandards.org/lib/ts/XMT/PCFFitPolicy.ts
+// ../../../../../../../../private/tmp/claude-501/-Users-tj-software-spacedatanetwork-stack/46a20935-200d-48d4-95a7-fd711bf5224a/scratchpad/workers/codex-catalog-flow/node_modules/spacedatastandards.org/lib/ts/XMT/PCFFitPolicy.ts
 var PCFFitPolicy = class _PCFFitPolicy {
   bb = null;
   bb_pos = 0;
@@ -14240,10 +14240,10 @@ var PCFFitPolicyT = class {
   }
 };
 
-// node_modules/spacedatastandards.org/lib/ts/XMT/PCFForceModel.ts
+// ../../../../../../../../private/tmp/claude-501/-Users-tj-software-spacedatanetwork-stack/46a20935-200d-48d4-95a7-fd711bf5224a/scratchpad/workers/codex-catalog-flow/node_modules/spacedatastandards.org/lib/ts/XMT/PCFForceModel.ts
 import * as flatbuffers71 from "flatbuffers";
 
-// node_modules/spacedatastandards.org/lib/ts/XMT/PCFEcom2.ts
+// ../../../../../../../../private/tmp/claude-501/-Users-tj-software-spacedatanetwork-stack/46a20935-200d-48d4-95a7-fd711bf5224a/scratchpad/workers/codex-catalog-flow/node_modules/spacedatastandards.org/lib/ts/XMT/PCFEcom2.ts
 import * as flatbuffers67 from "flatbuffers";
 var PCFEcom2 = class _PCFEcom2 {
   bb = null;
@@ -14420,16 +14420,16 @@ var PCFEcom2T = class {
   }
 };
 
-// node_modules/spacedatastandards.org/lib/ts/XMT/PCFSpaceWeather.ts
+// ../../../../../../../../private/tmp/claude-501/-Users-tj-software-spacedatanetwork-stack/46a20935-200d-48d4-95a7-fd711bf5224a/scratchpad/workers/codex-catalog-flow/node_modules/spacedatastandards.org/lib/ts/XMT/PCFSpaceWeather.ts
 import * as flatbuffers70 from "flatbuffers";
 
-// node_modules/spacedatastandards.org/lib/ts/XMT/TIMInstant.ts
+// ../../../../../../../../private/tmp/claude-501/-Users-tj-software-spacedatanetwork-stack/46a20935-200d-48d4-95a7-fd711bf5224a/scratchpad/workers/codex-catalog-flow/node_modules/spacedatastandards.org/lib/ts/XMT/TIMInstant.ts
 import * as flatbuffers69 from "flatbuffers";
 
-// node_modules/spacedatastandards.org/lib/ts/XMT/TIMCcsdsTimeCode.ts
+// ../../../../../../../../private/tmp/claude-501/-Users-tj-software-spacedatanetwork-stack/46a20935-200d-48d4-95a7-fd711bf5224a/scratchpad/workers/codex-catalog-flow/node_modules/spacedatastandards.org/lib/ts/XMT/TIMCcsdsTimeCode.ts
 import * as flatbuffers68 from "flatbuffers";
 
-// node_modules/spacedatastandards.org/lib/ts/XMT/timCcsdsTimeCodeKind.ts
+// ../../../../../../../../private/tmp/claude-501/-Users-tj-software-spacedatanetwork-stack/46a20935-200d-48d4-95a7-fd711bf5224a/scratchpad/workers/codex-catalog-flow/node_modules/spacedatastandards.org/lib/ts/XMT/timCcsdsTimeCodeKind.ts
 var timCcsdsTimeCodeKind = /* @__PURE__ */ ((timCcsdsTimeCodeKind2) => {
   timCcsdsTimeCodeKind2[timCcsdsTimeCodeKind2["NONE"] = 0] = "NONE";
   timCcsdsTimeCodeKind2[timCcsdsTimeCodeKind2["UNSEGMENTED"] = 1] = "UNSEGMENTED";
@@ -14438,7 +14438,7 @@ var timCcsdsTimeCodeKind = /* @__PURE__ */ ((timCcsdsTimeCodeKind2) => {
   return timCcsdsTimeCodeKind2;
 })(timCcsdsTimeCodeKind || {});
 
-// node_modules/spacedatastandards.org/lib/ts/XMT/TIMCcsdsTimeCode.ts
+// ../../../../../../../../private/tmp/claude-501/-Users-tj-software-spacedatanetwork-stack/46a20935-200d-48d4-95a7-fd711bf5224a/scratchpad/workers/codex-catalog-flow/node_modules/spacedatastandards.org/lib/ts/XMT/TIMCcsdsTimeCode.ts
 var TIMCcsdsTimeCode = class _TIMCcsdsTimeCode {
   bb = null;
   bb_pos = 0;
@@ -14587,7 +14587,7 @@ var TIMCcsdsTimeCodeT = class {
   }
 };
 
-// node_modules/spacedatastandards.org/lib/ts/XMT/timEpochRepresentation.ts
+// ../../../../../../../../private/tmp/claude-501/-Users-tj-software-spacedatanetwork-stack/46a20935-200d-48d4-95a7-fd711bf5224a/scratchpad/workers/codex-catalog-flow/node_modules/spacedatastandards.org/lib/ts/XMT/timEpochRepresentation.ts
 var timEpochRepresentation = /* @__PURE__ */ ((timEpochRepresentation2) => {
   timEpochRepresentation2[timEpochRepresentation2["JULIAN_DATE"] = 0] = "JULIAN_DATE";
   timEpochRepresentation2[timEpochRepresentation2["MODIFIED_JULIAN_DATE"] = 1] = "MODIFIED_JULIAN_DATE";
@@ -14600,7 +14600,7 @@ var timEpochRepresentation = /* @__PURE__ */ ((timEpochRepresentation2) => {
   return timEpochRepresentation2;
 })(timEpochRepresentation || {});
 
-// node_modules/spacedatastandards.org/lib/ts/XMT/timingStandard.ts
+// ../../../../../../../../private/tmp/claude-501/-Users-tj-software-spacedatanetwork-stack/46a20935-200d-48d4-95a7-fd711bf5224a/scratchpad/workers/codex-catalog-flow/node_modules/spacedatastandards.org/lib/ts/XMT/timingStandard.ts
 var timingStandard = /* @__PURE__ */ ((timingStandard2) => {
   timingStandard2[timingStandard2["GMST"] = 0] = "GMST";
   timingStandard2[timingStandard2["GPS"] = 1] = "GPS";
@@ -14624,7 +14624,7 @@ var timingStandard = /* @__PURE__ */ ((timingStandard2) => {
   return timingStandard2;
 })(timingStandard || {});
 
-// node_modules/spacedatastandards.org/lib/ts/XMT/TIMInstant.ts
+// ../../../../../../../../private/tmp/claude-501/-Users-tj-software-spacedatanetwork-stack/46a20935-200d-48d4-95a7-fd711bf5224a/scratchpad/workers/codex-catalog-flow/node_modules/spacedatastandards.org/lib/ts/XMT/TIMInstant.ts
 var TIMInstant = class _TIMInstant {
   bb = null;
   bb_pos = 0;
@@ -14812,7 +14812,7 @@ var TIMInstantT = class {
   }
 };
 
-// node_modules/spacedatastandards.org/lib/ts/XMT/PCFSpaceWeather.ts
+// ../../../../../../../../private/tmp/claude-501/-Users-tj-software-spacedatanetwork-stack/46a20935-200d-48d4-95a7-fd711bf5224a/scratchpad/workers/codex-catalog-flow/node_modules/spacedatastandards.org/lib/ts/XMT/PCFSpaceWeather.ts
 var PCFSpaceWeather = class _PCFSpaceWeather {
   bb = null;
   bb_pos = 0;
@@ -14935,7 +14935,7 @@ var PCFSpaceWeatherT = class {
   }
 };
 
-// node_modules/spacedatastandards.org/lib/ts/XMT/pcfAtmosphereFamily.ts
+// ../../../../../../../../private/tmp/claude-501/-Users-tj-software-spacedatanetwork-stack/46a20935-200d-48d4-95a7-fd711bf5224a/scratchpad/workers/codex-catalog-flow/node_modules/spacedatastandards.org/lib/ts/XMT/pcfAtmosphereFamily.ts
 var pcfAtmosphereFamily = /* @__PURE__ */ ((pcfAtmosphereFamily2) => {
   pcfAtmosphereFamily2[pcfAtmosphereFamily2["UNSPECIFIED"] = 0] = "UNSPECIFIED";
   pcfAtmosphereFamily2[pcfAtmosphereFamily2["NRLMSISE00"] = 1] = "NRLMSISE00";
@@ -14949,21 +14949,21 @@ var pcfAtmosphereFamily = /* @__PURE__ */ ((pcfAtmosphereFamily2) => {
   return pcfAtmosphereFamily2;
 })(pcfAtmosphereFamily || {});
 
-// node_modules/spacedatastandards.org/lib/ts/XMT/pcfDensityCorrection.ts
+// ../../../../../../../../private/tmp/claude-501/-Users-tj-software-spacedatanetwork-stack/46a20935-200d-48d4-95a7-fd711bf5224a/scratchpad/workers/codex-catalog-flow/node_modules/spacedatastandards.org/lib/ts/XMT/pcfDensityCorrection.ts
 var pcfDensityCorrection = /* @__PURE__ */ ((pcfDensityCorrection2) => {
   pcfDensityCorrection2[pcfDensityCorrection2["NONE"] = 0] = "NONE";
   pcfDensityCorrection2[pcfDensityCorrection2["DCA_COMMON_MODE"] = 1] = "DCA_COMMON_MODE";
   return pcfDensityCorrection2;
 })(pcfDensityCorrection || {});
 
-// node_modules/spacedatastandards.org/lib/ts/XMT/pcfEarthRadiationModel.ts
+// ../../../../../../../../private/tmp/claude-501/-Users-tj-software-spacedatanetwork-stack/46a20935-200d-48d4-95a7-fd711bf5224a/scratchpad/workers/codex-catalog-flow/node_modules/spacedatastandards.org/lib/ts/XMT/pcfEarthRadiationModel.ts
 var pcfEarthRadiationModel = /* @__PURE__ */ ((pcfEarthRadiationModel2) => {
   pcfEarthRadiationModel2[pcfEarthRadiationModel2["NONE"] = 0] = "NONE";
   pcfEarthRadiationModel2[pcfEarthRadiationModel2["KNOCKE"] = 1] = "KNOCKE";
   return pcfEarthRadiationModel2;
 })(pcfEarthRadiationModel || {});
 
-// node_modules/spacedatastandards.org/lib/ts/XMT/pcfEphemerisKind.ts
+// ../../../../../../../../private/tmp/claude-501/-Users-tj-software-spacedatanetwork-stack/46a20935-200d-48d4-95a7-fd711bf5224a/scratchpad/workers/codex-catalog-flow/node_modules/spacedatastandards.org/lib/ts/XMT/pcfEphemerisKind.ts
 var pcfEphemerisKind = /* @__PURE__ */ ((pcfEphemerisKind2) => {
   pcfEphemerisKind2[pcfEphemerisKind2["UNSPECIFIED"] = 0] = "UNSPECIFIED";
   pcfEphemerisKind2[pcfEphemerisKind2["ANALYTIC_SERIES"] = 1] = "ANALYTIC_SERIES";
@@ -14971,7 +14971,7 @@ var pcfEphemerisKind = /* @__PURE__ */ ((pcfEphemerisKind2) => {
   return pcfEphemerisKind2;
 })(pcfEphemerisKind || {});
 
-// node_modules/spacedatastandards.org/lib/ts/XMT/pcfGnssSpacecraftBlock.ts
+// ../../../../../../../../private/tmp/claude-501/-Users-tj-software-spacedatanetwork-stack/46a20935-200d-48d4-95a7-fd711bf5224a/scratchpad/workers/codex-catalog-flow/node_modules/spacedatastandards.org/lib/ts/XMT/pcfGnssSpacecraftBlock.ts
 var pcfGnssSpacecraftBlock = /* @__PURE__ */ ((pcfGnssSpacecraftBlock2) => {
   pcfGnssSpacecraftBlock2[pcfGnssSpacecraftBlock2["UNSPECIFIED"] = 0] = "UNSPECIFIED";
   pcfGnssSpacecraftBlock2[pcfGnssSpacecraftBlock2["GPS_IIR"] = 1] = "GPS_IIR";
@@ -14980,7 +14980,7 @@ var pcfGnssSpacecraftBlock = /* @__PURE__ */ ((pcfGnssSpacecraftBlock2) => {
   return pcfGnssSpacecraftBlock2;
 })(pcfGnssSpacecraftBlock || {});
 
-// node_modules/spacedatastandards.org/lib/ts/XMT/pcfGravitySelection.ts
+// ../../../../../../../../private/tmp/claude-501/-Users-tj-software-spacedatanetwork-stack/46a20935-200d-48d4-95a7-fd711bf5224a/scratchpad/workers/codex-catalog-flow/node_modules/spacedatastandards.org/lib/ts/XMT/pcfGravitySelection.ts
 var pcfGravitySelection = /* @__PURE__ */ ((pcfGravitySelection2) => {
   pcfGravitySelection2[pcfGravitySelection2["INFER_FLAGS"] = 0] = "INFER_FLAGS";
   pcfGravitySelection2[pcfGravitySelection2["POINT_MASS"] = 1] = "POINT_MASS";
@@ -14994,21 +14994,21 @@ var pcfGravitySelection = /* @__PURE__ */ ((pcfGravitySelection2) => {
   return pcfGravitySelection2;
 })(pcfGravitySelection || {});
 
-// node_modules/spacedatastandards.org/lib/ts/XMT/pcfNeutralWind.ts
+// ../../../../../../../../private/tmp/claude-501/-Users-tj-software-spacedatanetwork-stack/46a20935-200d-48d4-95a7-fd711bf5224a/scratchpad/workers/codex-catalog-flow/node_modules/spacedatastandards.org/lib/ts/XMT/pcfNeutralWind.ts
 var pcfNeutralWind = /* @__PURE__ */ ((pcfNeutralWind2) => {
   pcfNeutralWind2[pcfNeutralWind2["NONE"] = 0] = "NONE";
   pcfNeutralWind2[pcfNeutralWind2["HWM14"] = 1] = "HWM14";
   return pcfNeutralWind2;
 })(pcfNeutralWind || {});
 
-// node_modules/spacedatastandards.org/lib/ts/XMT/pcfOceanTideModel.ts
+// ../../../../../../../../private/tmp/claude-501/-Users-tj-software-spacedatanetwork-stack/46a20935-200d-48d4-95a7-fd711bf5224a/scratchpad/workers/codex-catalog-flow/node_modules/spacedatastandards.org/lib/ts/XMT/pcfOceanTideModel.ts
 var pcfOceanTideModel = /* @__PURE__ */ ((pcfOceanTideModel2) => {
   pcfOceanTideModel2[pcfOceanTideModel2["NONE"] = 0] = "NONE";
   pcfOceanTideModel2[pcfOceanTideModel2["FES2004"] = 1] = "FES2004";
   return pcfOceanTideModel2;
 })(pcfOceanTideModel || {});
 
-// node_modules/spacedatastandards.org/lib/ts/XMT/pcfRadiationPressureFamily.ts
+// ../../../../../../../../private/tmp/claude-501/-Users-tj-software-spacedatanetwork-stack/46a20935-200d-48d4-95a7-fd711bf5224a/scratchpad/workers/codex-catalog-flow/node_modules/spacedatastandards.org/lib/ts/XMT/pcfRadiationPressureFamily.ts
 var pcfRadiationPressureFamily = /* @__PURE__ */ ((pcfRadiationPressureFamily2) => {
   pcfRadiationPressureFamily2[pcfRadiationPressureFamily2["CANNONBALL"] = 0] = "CANNONBALL";
   pcfRadiationPressureFamily2[pcfRadiationPressureFamily2["GNSS_BOX_WING"] = 1] = "GNSS_BOX_WING";
@@ -15016,7 +15016,7 @@ var pcfRadiationPressureFamily = /* @__PURE__ */ ((pcfRadiationPressureFamily2) 
   return pcfRadiationPressureFamily2;
 })(pcfRadiationPressureFamily || {});
 
-// node_modules/spacedatastandards.org/lib/ts/XMT/pcfRelativityTerms.ts
+// ../../../../../../../../private/tmp/claude-501/-Users-tj-software-spacedatanetwork-stack/46a20935-200d-48d4-95a7-fd711bf5224a/scratchpad/workers/codex-catalog-flow/node_modules/spacedatastandards.org/lib/ts/XMT/pcfRelativityTerms.ts
 var pcfRelativityTerms = /* @__PURE__ */ ((pcfRelativityTerms2) => {
   pcfRelativityTerms2[pcfRelativityTerms2["NONE"] = 0] = "NONE";
   pcfRelativityTerms2[pcfRelativityTerms2["SCHWARZSCHILD"] = 1] = "SCHWARZSCHILD";
@@ -15024,14 +15024,14 @@ var pcfRelativityTerms = /* @__PURE__ */ ((pcfRelativityTerms2) => {
   return pcfRelativityTerms2;
 })(pcfRelativityTerms || {});
 
-// node_modules/spacedatastandards.org/lib/ts/XMT/pcfSolidTideModel.ts
+// ../../../../../../../../private/tmp/claude-501/-Users-tj-software-spacedatanetwork-stack/46a20935-200d-48d4-95a7-fd711bf5224a/scratchpad/workers/codex-catalog-flow/node_modules/spacedatastandards.org/lib/ts/XMT/pcfSolidTideModel.ts
 var pcfSolidTideModel = /* @__PURE__ */ ((pcfSolidTideModel2) => {
   pcfSolidTideModel2[pcfSolidTideModel2["NONE"] = 0] = "NONE";
   pcfSolidTideModel2[pcfSolidTideModel2["IERS_2010"] = 1] = "IERS_2010";
   return pcfSolidTideModel2;
 })(pcfSolidTideModel || {});
 
-// node_modules/spacedatastandards.org/lib/ts/XMT/pcfWeatherExtension.ts
+// ../../../../../../../../private/tmp/claude-501/-Users-tj-software-spacedatanetwork-stack/46a20935-200d-48d4-95a7-fd711bf5224a/scratchpad/workers/codex-catalog-flow/node_modules/spacedatastandards.org/lib/ts/XMT/pcfWeatherExtension.ts
 var pcfWeatherExtension = /* @__PURE__ */ ((pcfWeatherExtension2) => {
   pcfWeatherExtension2[pcfWeatherExtension2["UNSPECIFIED"] = 0] = "UNSPECIFIED";
   pcfWeatherExtension2[pcfWeatherExtension2["REFUSE"] = 1] = "REFUSE";
@@ -15040,7 +15040,7 @@ var pcfWeatherExtension = /* @__PURE__ */ ((pcfWeatherExtension2) => {
   return pcfWeatherExtension2;
 })(pcfWeatherExtension || {});
 
-// node_modules/spacedatastandards.org/lib/ts/XMT/pcfWeatherSource.ts
+// ../../../../../../../../private/tmp/claude-501/-Users-tj-software-spacedatanetwork-stack/46a20935-200d-48d4-95a7-fd711bf5224a/scratchpad/workers/codex-catalog-flow/node_modules/spacedatastandards.org/lib/ts/XMT/pcfWeatherSource.ts
 var pcfWeatherSource = /* @__PURE__ */ ((pcfWeatherSource2) => {
   pcfWeatherSource2[pcfWeatherSource2["UNSPECIFIED"] = 0] = "UNSPECIFIED";
   pcfWeatherSource2[pcfWeatherSource2["CONSTANT"] = 1] = "CONSTANT";
@@ -15050,7 +15050,7 @@ var pcfWeatherSource = /* @__PURE__ */ ((pcfWeatherSource2) => {
   return pcfWeatherSource2;
 })(pcfWeatherSource || {});
 
-// node_modules/spacedatastandards.org/lib/ts/XMT/PCFForceModel.ts
+// ../../../../../../../../private/tmp/claude-501/-Users-tj-software-spacedatanetwork-stack/46a20935-200d-48d4-95a7-fd711bf5224a/scratchpad/workers/codex-catalog-flow/node_modules/spacedatastandards.org/lib/ts/XMT/PCFForceModel.ts
 var PCFForceModel = class _PCFForceModel {
   bb = null;
   bb_pos = 0;
@@ -15857,10 +15857,10 @@ var PCFForceModelT = class {
   }
 };
 
-// node_modules/spacedatastandards.org/lib/ts/XMT/PCFIntegratorSettings.ts
+// ../../../../../../../../private/tmp/claude-501/-Users-tj-software-spacedatanetwork-stack/46a20935-200d-48d4-95a7-fd711bf5224a/scratchpad/workers/codex-catalog-flow/node_modules/spacedatastandards.org/lib/ts/XMT/PCFIntegratorSettings.ts
 import * as flatbuffers72 from "flatbuffers";
 
-// node_modules/spacedatastandards.org/lib/ts/XMT/pcfIntegratorAlgorithm.ts
+// ../../../../../../../../private/tmp/claude-501/-Users-tj-software-spacedatanetwork-stack/46a20935-200d-48d4-95a7-fd711bf5224a/scratchpad/workers/codex-catalog-flow/node_modules/spacedatastandards.org/lib/ts/XMT/pcfIntegratorAlgorithm.ts
 var pcfIntegratorAlgorithm = /* @__PURE__ */ ((pcfIntegratorAlgorithm2) => {
   pcfIntegratorAlgorithm2[pcfIntegratorAlgorithm2["UNSPECIFIED"] = 0] = "UNSPECIFIED";
   pcfIntegratorAlgorithm2[pcfIntegratorAlgorithm2["RK4"] = 1] = "RK4";
@@ -15885,7 +15885,7 @@ var pcfIntegratorAlgorithm = /* @__PURE__ */ ((pcfIntegratorAlgorithm2) => {
   return pcfIntegratorAlgorithm2;
 })(pcfIntegratorAlgorithm || {});
 
-// node_modules/spacedatastandards.org/lib/ts/XMT/PCFIntegratorSettings.ts
+// ../../../../../../../../private/tmp/claude-501/-Users-tj-software-spacedatanetwork-stack/46a20935-200d-48d4-95a7-fd711bf5224a/scratchpad/workers/codex-catalog-flow/node_modules/spacedatastandards.org/lib/ts/XMT/PCFIntegratorSettings.ts
 var PCFIntegratorSettings = class _PCFIntegratorSettings {
   bb = null;
   bb_pos = 0;
@@ -16055,10 +16055,10 @@ var PCFIntegratorSettingsT = class {
   }
 };
 
-// node_modules/spacedatastandards.org/lib/ts/XMT/PCFOutput.ts
+// ../../../../../../../../private/tmp/claude-501/-Users-tj-software-spacedatanetwork-stack/46a20935-200d-48d4-95a7-fd711bf5224a/scratchpad/workers/codex-catalog-flow/node_modules/spacedatastandards.org/lib/ts/XMT/PCFOutput.ts
 import * as flatbuffers73 from "flatbuffers";
 
-// node_modules/spacedatastandards.org/lib/ts/XMT/pcfOutputFrame.ts
+// ../../../../../../../../private/tmp/claude-501/-Users-tj-software-spacedatanetwork-stack/46a20935-200d-48d4-95a7-fd711bf5224a/scratchpad/workers/codex-catalog-flow/node_modules/spacedatastandards.org/lib/ts/XMT/pcfOutputFrame.ts
 var pcfOutputFrame = /* @__PURE__ */ ((pcfOutputFrame2) => {
   pcfOutputFrame2[pcfOutputFrame2["UNSPECIFIED"] = 0] = "UNSPECIFIED";
   pcfOutputFrame2[pcfOutputFrame2["TEME"] = 1] = "TEME";
@@ -16068,7 +16068,7 @@ var pcfOutputFrame = /* @__PURE__ */ ((pcfOutputFrame2) => {
   return pcfOutputFrame2;
 })(pcfOutputFrame || {});
 
-// node_modules/spacedatastandards.org/lib/ts/XMT/PCFOutput.ts
+// ../../../../../../../../private/tmp/claude-501/-Users-tj-software-spacedatanetwork-stack/46a20935-200d-48d4-95a7-fd711bf5224a/scratchpad/workers/codex-catalog-flow/node_modules/spacedatastandards.org/lib/ts/XMT/PCFOutput.ts
 var PCFOutput = class _PCFOutput {
   bb = null;
   bb_pos = 0;
@@ -16212,7 +16212,7 @@ var PCFOutputT = class {
   }
 };
 
-// node_modules/spacedatastandards.org/lib/ts/XMT/pcfTheory.ts
+// ../../../../../../../../private/tmp/claude-501/-Users-tj-software-spacedatanetwork-stack/46a20935-200d-48d4-95a7-fd711bf5224a/scratchpad/workers/codex-catalog-flow/node_modules/spacedatastandards.org/lib/ts/XMT/pcfTheory.ts
 var pcfTheory = /* @__PURE__ */ ((pcfTheory2) => {
   pcfTheory2[pcfTheory2["UNSPECIFIED"] = 0] = "UNSPECIFIED";
   pcfTheory2[pcfTheory2["SGP4"] = 1] = "SGP4";
@@ -16223,7 +16223,7 @@ var pcfTheory = /* @__PURE__ */ ((pcfTheory2) => {
   return pcfTheory2;
 })(pcfTheory || {});
 
-// node_modules/spacedatastandards.org/lib/ts/XMT/PCF.ts
+// ../../../../../../../../private/tmp/claude-501/-Users-tj-software-spacedatanetwork-stack/46a20935-200d-48d4-95a7-fd711bf5224a/scratchpad/workers/codex-catalog-flow/node_modules/spacedatastandards.org/lib/ts/XMT/PCF.ts
 var PCF = class _PCF {
   bb = null;
   bb_pos = 0;
@@ -16413,7 +16413,7 @@ var PCFT = class {
   }
 };
 
-// node_modules/spacedatastandards.org/lib/ts/XMT/polynomialBasisType.ts
+// ../../../../../../../../private/tmp/claude-501/-Users-tj-software-spacedatanetwork-stack/46a20935-200d-48d4-95a7-fd711bf5224a/scratchpad/workers/codex-catalog-flow/node_modules/spacedatastandards.org/lib/ts/XMT/polynomialBasisType.ts
 var polynomialBasisType = /* @__PURE__ */ ((polynomialBasisType2) => {
   polynomialBasisType2[polynomialBasisType2["CHEBYSHEV"] = 0] = "CHEBYSHEV";
   polynomialBasisType2[polynomialBasisType2["LEGENDRE"] = 1] = "LEGENDRE";
@@ -16423,13 +16423,13 @@ var polynomialBasisType = /* @__PURE__ */ ((polynomialBasisType2) => {
   return polynomialBasisType2;
 })(polynomialBasisType || {});
 
-// node_modules/spacedatastandards.org/lib/ts/XMT/PPE.ts
+// ../../../../../../../../private/tmp/claude-501/-Users-tj-software-spacedatanetwork-stack/46a20935-200d-48d4-95a7-fd711bf5224a/scratchpad/workers/codex-catalog-flow/node_modules/spacedatastandards.org/lib/ts/XMT/PPE.ts
 import * as flatbuffers80 from "flatbuffers";
 
-// node_modules/spacedatastandards.org/lib/ts/XMT/PPEOrbitalElementRecord.ts
+// ../../../../../../../../private/tmp/claude-501/-Users-tj-software-spacedatanetwork-stack/46a20935-200d-48d4-95a7-fd711bf5224a/scratchpad/workers/codex-catalog-flow/node_modules/spacedatastandards.org/lib/ts/XMT/PPEOrbitalElementRecord.ts
 import * as flatbuffers75 from "flatbuffers";
 
-// node_modules/spacedatastandards.org/lib/ts/XMT/ppeAnomalyType.ts
+// ../../../../../../../../private/tmp/claude-501/-Users-tj-software-spacedatanetwork-stack/46a20935-200d-48d4-95a7-fd711bf5224a/scratchpad/workers/codex-catalog-flow/node_modules/spacedatastandards.org/lib/ts/XMT/ppeAnomalyType.ts
 var ppeAnomalyType = /* @__PURE__ */ ((ppeAnomalyType2) => {
   ppeAnomalyType2[ppeAnomalyType2["TRUE_ANOMALY"] = 0] = "TRUE_ANOMALY";
   ppeAnomalyType2[ppeAnomalyType2["MEAN_ANOMALY"] = 1] = "MEAN_ANOMALY";
@@ -16437,14 +16437,14 @@ var ppeAnomalyType = /* @__PURE__ */ ((ppeAnomalyType2) => {
   return ppeAnomalyType2;
 })(ppeAnomalyType || {});
 
-// node_modules/spacedatastandards.org/lib/ts/XMT/sizeShapeProfile.ts
+// ../../../../../../../../private/tmp/claude-501/-Users-tj-software-spacedatanetwork-stack/46a20935-200d-48d4-95a7-fd711bf5224a/scratchpad/workers/codex-catalog-flow/node_modules/spacedatastandards.org/lib/ts/XMT/sizeShapeProfile.ts
 var sizeShapeProfile = /* @__PURE__ */ ((sizeShapeProfile2) => {
   sizeShapeProfile2[sizeShapeProfile2["SMA"] = 0] = "SMA";
   sizeShapeProfile2[sizeShapeProfile2["R_PERIAPSIS"] = 1] = "R_PERIAPSIS";
   return sizeShapeProfile2;
 })(sizeShapeProfile || {});
 
-// node_modules/spacedatastandards.org/lib/ts/XMT/PPEOrbitalElementRecord.ts
+// ../../../../../../../../private/tmp/claude-501/-Users-tj-software-spacedatanetwork-stack/46a20935-200d-48d4-95a7-fd711bf5224a/scratchpad/workers/codex-catalog-flow/node_modules/spacedatastandards.org/lib/ts/XMT/PPEOrbitalElementRecord.ts
 var PPEOrbitalElementRecord = class _PPEOrbitalElementRecord {
   bb = null;
   bb_pos = 0;
@@ -16824,7 +16824,7 @@ var PPEOrbitalElementRecordT = class {
   }
 };
 
-// node_modules/spacedatastandards.org/lib/ts/XMT/PPEPositionRecord.ts
+// ../../../../../../../../private/tmp/claude-501/-Users-tj-software-spacedatanetwork-stack/46a20935-200d-48d4-95a7-fd711bf5224a/scratchpad/workers/codex-catalog-flow/node_modules/spacedatastandards.org/lib/ts/XMT/PPEPositionRecord.ts
 import * as flatbuffers76 from "flatbuffers";
 var PPEPositionRecord = class _PPEPositionRecord {
   bb = null;
@@ -17188,10 +17188,10 @@ var PPEPositionRecordT = class {
   }
 };
 
-// node_modules/spacedatastandards.org/lib/ts/XMT/RFM.ts
+// ../../../../../../../../private/tmp/claude-501/-Users-tj-software-spacedatanetwork-stack/46a20935-200d-48d4-95a7-fd711bf5224a/scratchpad/workers/codex-catalog-flow/node_modules/spacedatastandards.org/lib/ts/XMT/RFM.ts
 import * as flatbuffers79 from "flatbuffers";
 
-// node_modules/spacedatastandards.org/lib/ts/XMT/RFMCoordinateSystemWrapper.ts
+// ../../../../../../../../private/tmp/claude-501/-Users-tj-software-spacedatanetwork-stack/46a20935-200d-48d4-95a7-fd711bf5224a/scratchpad/workers/codex-catalog-flow/node_modules/spacedatastandards.org/lib/ts/XMT/RFMCoordinateSystemWrapper.ts
 import * as flatbuffers77 from "flatbuffers";
 var RFMCoordinateSystemWrapper = class _RFMCoordinateSystemWrapper {
   bb = null;
@@ -17249,10 +17249,10 @@ var RFMCoordinateSystemWrapperT = class {
   }
 };
 
-// node_modules/spacedatastandards.org/lib/ts/XMT/SpacecraftFrameWrapper.ts
+// ../../../../../../../../private/tmp/claude-501/-Users-tj-software-spacedatanetwork-stack/46a20935-200d-48d4-95a7-fd711bf5224a/scratchpad/workers/codex-catalog-flow/node_modules/spacedatastandards.org/lib/ts/XMT/SpacecraftFrameWrapper.ts
 import * as flatbuffers78 from "flatbuffers";
 
-// node_modules/spacedatastandards.org/lib/ts/XMT/SpacecraftFrame.ts
+// ../../../../../../../../private/tmp/claude-501/-Users-tj-software-spacedatanetwork-stack/46a20935-200d-48d4-95a7-fd711bf5224a/scratchpad/workers/codex-catalog-flow/node_modules/spacedatastandards.org/lib/ts/XMT/SpacecraftFrame.ts
 var SpacecraftFrame = /* @__PURE__ */ ((SpacecraftFrame2) => {
   SpacecraftFrame2[SpacecraftFrame2["ACC_i"] = 0] = "ACC_i";
   SpacecraftFrame2[SpacecraftFrame2["ACTUATOR_i"] = 1] = "ACTUATOR_i";
@@ -17273,7 +17273,7 @@ var SpacecraftFrame = /* @__PURE__ */ ((SpacecraftFrame2) => {
   return SpacecraftFrame2;
 })(SpacecraftFrame || {});
 
-// node_modules/spacedatastandards.org/lib/ts/XMT/SpacecraftFrameWrapper.ts
+// ../../../../../../../../private/tmp/claude-501/-Users-tj-software-spacedatanetwork-stack/46a20935-200d-48d4-95a7-fd711bf5224a/scratchpad/workers/codex-catalog-flow/node_modules/spacedatastandards.org/lib/ts/XMT/SpacecraftFrameWrapper.ts
 var SpacecraftFrameWrapper = class _SpacecraftFrameWrapper {
   bb = null;
   bb_pos = 0;
@@ -17329,7 +17329,7 @@ var SpacecraftFrameWrapperT = class {
   }
 };
 
-// node_modules/spacedatastandards.org/lib/ts/XMT/RFMUnion.ts
+// ../../../../../../../../private/tmp/claude-501/-Users-tj-software-spacedatanetwork-stack/46a20935-200d-48d4-95a7-fd711bf5224a/scratchpad/workers/codex-catalog-flow/node_modules/spacedatastandards.org/lib/ts/XMT/RFMUnion.ts
 var RFMUnion = /* @__PURE__ */ ((RFMUnion2) => {
   RFMUnion2[RFMUnion2["NONE"] = 0] = "NONE";
   RFMUnion2[RFMUnion2["CelestialFrameWrapper"] = 1] = "CelestialFrameWrapper";
@@ -17376,7 +17376,7 @@ function unionListToRfmunion(type, accessor, index) {
   }
 }
 
-// node_modules/spacedatastandards.org/lib/ts/XMT/RFM.ts
+// ../../../../../../../../private/tmp/claude-501/-Users-tj-software-spacedatanetwork-stack/46a20935-200d-48d4-95a7-fd711bf5224a/scratchpad/workers/codex-catalog-flow/node_modules/spacedatastandards.org/lib/ts/XMT/RFM.ts
 var RFM = class _RFM {
   bb = null;
   bb_pos = 0;
@@ -17491,7 +17491,7 @@ var RFMT = class {
   }
 };
 
-// node_modules/spacedatastandards.org/lib/ts/XMT/PPE.ts
+// ../../../../../../../../private/tmp/claude-501/-Users-tj-software-spacedatanetwork-stack/46a20935-200d-48d4-95a7-fd711bf5224a/scratchpad/workers/codex-catalog-flow/node_modules/spacedatastandards.org/lib/ts/XMT/PPE.ts
 var PPE = class _PPE {
   bb = null;
   bb_pos = 0;
@@ -17777,7 +17777,7 @@ var PPET = class {
   }
 };
 
-// node_modules/spacedatastandards.org/lib/ts/XMT/propagatorErrorCode.ts
+// ../../../../../../../../private/tmp/claude-501/-Users-tj-software-spacedatanetwork-stack/46a20935-200d-48d4-95a7-fd711bf5224a/scratchpad/workers/codex-catalog-flow/node_modules/spacedatastandards.org/lib/ts/XMT/propagatorErrorCode.ts
 var propagatorErrorCode = /* @__PURE__ */ ((propagatorErrorCode2) => {
   propagatorErrorCode2[propagatorErrorCode2["OK"] = 0] = "OK";
   propagatorErrorCode2[propagatorErrorCode2["UNKNOWN"] = 1] = "UNKNOWN";
@@ -17788,7 +17788,7 @@ var propagatorErrorCode = /* @__PURE__ */ ((propagatorErrorCode2) => {
   return propagatorErrorCode2;
 })(propagatorErrorCode || {});
 
-// node_modules/spacedatastandards.org/lib/ts/XMT/propagatorStateFlags.ts
+// ../../../../../../../../private/tmp/claude-501/-Users-tj-software-spacedatanetwork-stack/46a20935-200d-48d4-95a7-fd711bf5224a/scratchpad/workers/codex-catalog-flow/node_modules/spacedatastandards.org/lib/ts/XMT/propagatorStateFlags.ts
 var propagatorStateFlags = /* @__PURE__ */ ((propagatorStateFlags2) => {
   propagatorStateFlags2[propagatorStateFlags2["VALID"] = 1] = "VALID";
   propagatorStateFlags2[propagatorStateFlags2["IN_ECLIPSE"] = 2] = "IN_ECLIPSE";
@@ -17801,10 +17801,10 @@ var propagatorStateFlags = /* @__PURE__ */ ((propagatorStateFlags2) => {
   return propagatorStateFlags2;
 })(propagatorStateFlags || {});
 
-// node_modules/spacedatastandards.org/lib/ts/XMT/PRW.ts
+// ../../../../../../../../private/tmp/claude-501/-Users-tj-software-spacedatanetwork-stack/46a20935-200d-48d4-95a7-fd711bf5224a/scratchpad/workers/codex-catalog-flow/node_modules/spacedatastandards.org/lib/ts/XMT/PRW.ts
 import * as flatbuffers123 from "flatbuffers";
 
-// node_modules/spacedatastandards.org/lib/ts/XMT/PRWAtmosphereRequest.ts
+// ../../../../../../../../private/tmp/claude-501/-Users-tj-software-spacedatanetwork-stack/46a20935-200d-48d4-95a7-fd711bf5224a/scratchpad/workers/codex-catalog-flow/node_modules/spacedatastandards.org/lib/ts/XMT/PRWAtmosphereRequest.ts
 import * as flatbuffers81 from "flatbuffers";
 var PRWAtmosphereRequest = class _PRWAtmosphereRequest {
   bb = null;
@@ -17973,13 +17973,13 @@ var PRWAtmosphereRequestT = class {
   }
 };
 
-// node_modules/spacedatastandards.org/lib/ts/XMT/PRWAtmosphereResult.ts
+// ../../../../../../../../private/tmp/claude-501/-Users-tj-software-spacedatanetwork-stack/46a20935-200d-48d4-95a7-fd711bf5224a/scratchpad/workers/codex-catalog-flow/node_modules/spacedatastandards.org/lib/ts/XMT/PRWAtmosphereResult.ts
 import * as flatbuffers83 from "flatbuffers";
 
-// node_modules/spacedatastandards.org/lib/ts/XMT/PRWSpeciesDensity.ts
+// ../../../../../../../../private/tmp/claude-501/-Users-tj-software-spacedatanetwork-stack/46a20935-200d-48d4-95a7-fd711bf5224a/scratchpad/workers/codex-catalog-flow/node_modules/spacedatastandards.org/lib/ts/XMT/PRWSpeciesDensity.ts
 import * as flatbuffers82 from "flatbuffers";
 
-// node_modules/spacedatastandards.org/lib/ts/XMT/prwDensitySpecies.ts
+// ../../../../../../../../private/tmp/claude-501/-Users-tj-software-spacedatanetwork-stack/46a20935-200d-48d4-95a7-fd711bf5224a/scratchpad/workers/codex-catalog-flow/node_modules/spacedatastandards.org/lib/ts/XMT/prwDensitySpecies.ts
 var prwDensitySpecies = /* @__PURE__ */ ((prwDensitySpecies2) => {
   prwDensitySpecies2[prwDensitySpecies2["UNSPECIFIED"] = 0] = "UNSPECIFIED";
   prwDensitySpecies2[prwDensitySpecies2["HELIUM"] = 1] = "HELIUM";
@@ -17993,7 +17993,7 @@ var prwDensitySpecies = /* @__PURE__ */ ((prwDensitySpecies2) => {
   return prwDensitySpecies2;
 })(prwDensitySpecies || {});
 
-// node_modules/spacedatastandards.org/lib/ts/XMT/PRWSpeciesDensity.ts
+// ../../../../../../../../private/tmp/claude-501/-Users-tj-software-spacedatanetwork-stack/46a20935-200d-48d4-95a7-fd711bf5224a/scratchpad/workers/codex-catalog-flow/node_modules/spacedatastandards.org/lib/ts/XMT/PRWSpeciesDensity.ts
 var PRWSpeciesDensity = class _PRWSpeciesDensity {
   bb = null;
   bb_pos = 0;
@@ -18061,7 +18061,7 @@ var PRWSpeciesDensityT = class {
   }
 };
 
-// node_modules/spacedatastandards.org/lib/ts/XMT/PRWAtmosphereResult.ts
+// ../../../../../../../../private/tmp/claude-501/-Users-tj-software-spacedatanetwork-stack/46a20935-200d-48d4-95a7-fd711bf5224a/scratchpad/workers/codex-catalog-flow/node_modules/spacedatastandards.org/lib/ts/XMT/PRWAtmosphereResult.ts
 var PRWAtmosphereResult = class _PRWAtmosphereResult {
   bb = null;
   bb_pos = 0;
@@ -18262,7 +18262,7 @@ var PRWAtmosphereResultT = class {
   }
 };
 
-// node_modules/spacedatastandards.org/lib/ts/XMT/PRWBatchRequest.ts
+// ../../../../../../../../private/tmp/claude-501/-Users-tj-software-spacedatanetwork-stack/46a20935-200d-48d4-95a7-fd711bf5224a/scratchpad/workers/codex-catalog-flow/node_modules/spacedatastandards.org/lib/ts/XMT/PRWBatchRequest.ts
 import * as flatbuffers84 from "flatbuffers";
 var PRWBatchRequest = class _PRWBatchRequest {
   bb = null;
@@ -18399,7 +18399,7 @@ var PRWBatchRequestT = class {
   }
 };
 
-// node_modules/spacedatastandards.org/lib/ts/XMT/PRWBatchResponse.ts
+// ../../../../../../../../private/tmp/claude-501/-Users-tj-software-spacedatanetwork-stack/46a20935-200d-48d4-95a7-fd711bf5224a/scratchpad/workers/codex-catalog-flow/node_modules/spacedatastandards.org/lib/ts/XMT/PRWBatchResponse.ts
 import * as flatbuffers85 from "flatbuffers";
 var PRWBatchResponse = class _PRWBatchResponse {
   bb = null;
@@ -18564,10 +18564,10 @@ var PRWBatchResponseT = class {
   }
 };
 
-// node_modules/spacedatastandards.org/lib/ts/XMT/PRWDescribeRequest.ts
+// ../../../../../../../../private/tmp/claude-501/-Users-tj-software-spacedatanetwork-stack/46a20935-200d-48d4-95a7-fd711bf5224a/scratchpad/workers/codex-catalog-flow/node_modules/spacedatastandards.org/lib/ts/XMT/PRWDescribeRequest.ts
 import * as flatbuffers87 from "flatbuffers";
 
-// node_modules/spacedatastandards.org/lib/ts/XMT/PRWInstance.ts
+// ../../../../../../../../private/tmp/claude-501/-Users-tj-software-spacedatanetwork-stack/46a20935-200d-48d4-95a7-fd711bf5224a/scratchpad/workers/codex-catalog-flow/node_modules/spacedatastandards.org/lib/ts/XMT/PRWInstance.ts
 import * as flatbuffers86 from "flatbuffers";
 var PRWInstance = class _PRWInstance {
   bb = null;
@@ -18655,7 +18655,7 @@ var PRWInstanceT = class {
   }
 };
 
-// node_modules/spacedatastandards.org/lib/ts/XMT/PRWDescribeRequest.ts
+// ../../../../../../../../private/tmp/claude-501/-Users-tj-software-spacedatanetwork-stack/46a20935-200d-48d4-95a7-fd711bf5224a/scratchpad/workers/codex-catalog-flow/node_modules/spacedatastandards.org/lib/ts/XMT/PRWDescribeRequest.ts
 var PRWDescribeRequest = class _PRWDescribeRequest {
   bb = null;
   bb_pos = 0;
@@ -18756,16 +18756,16 @@ var PRWDescribeRequestT = class {
   }
 };
 
-// node_modules/spacedatastandards.org/lib/ts/XMT/PRWDescribeResult.ts
+// ../../../../../../../../private/tmp/claude-501/-Users-tj-software-spacedatanetwork-stack/46a20935-200d-48d4-95a7-fd711bf5224a/scratchpad/workers/codex-catalog-flow/node_modules/spacedatastandards.org/lib/ts/XMT/PRWDescribeResult.ts
 import * as flatbuffers90 from "flatbuffers";
 
-// node_modules/spacedatastandards.org/lib/ts/XMT/PRWTrajectorySource.ts
+// ../../../../../../../../private/tmp/claude-501/-Users-tj-software-spacedatanetwork-stack/46a20935-200d-48d4-95a7-fd711bf5224a/scratchpad/workers/codex-catalog-flow/node_modules/spacedatastandards.org/lib/ts/XMT/PRWTrajectorySource.ts
 import * as flatbuffers89 from "flatbuffers";
 
-// node_modules/spacedatastandards.org/lib/ts/XMT/PRWFitQuality.ts
+// ../../../../../../../../private/tmp/claude-501/-Users-tj-software-spacedatanetwork-stack/46a20935-200d-48d4-95a7-fd711bf5224a/scratchpad/workers/codex-catalog-flow/node_modules/spacedatastandards.org/lib/ts/XMT/PRWFitQuality.ts
 import * as flatbuffers88 from "flatbuffers";
 
-// node_modules/spacedatastandards.org/lib/ts/XMT/prwQualityEvidence.ts
+// ../../../../../../../../private/tmp/claude-501/-Users-tj-software-spacedatanetwork-stack/46a20935-200d-48d4-95a7-fd711bf5224a/scratchpad/workers/codex-catalog-flow/node_modules/spacedatastandards.org/lib/ts/XMT/prwQualityEvidence.ts
 var prwQualityEvidence = /* @__PURE__ */ ((prwQualityEvidence2) => {
   prwQualityEvidence2[prwQualityEvidence2["UNMEASURED"] = 0] = "UNMEASURED";
   prwQualityEvidence2[prwQualityEvidence2["SAMPLED_RESIDUAL"] = 1] = "SAMPLED_RESIDUAL";
@@ -18773,7 +18773,7 @@ var prwQualityEvidence = /* @__PURE__ */ ((prwQualityEvidence2) => {
   return prwQualityEvidence2;
 })(prwQualityEvidence || {});
 
-// node_modules/spacedatastandards.org/lib/ts/XMT/PRWFitQuality.ts
+// ../../../../../../../../private/tmp/claude-501/-Users-tj-software-spacedatanetwork-stack/46a20935-200d-48d4-95a7-fd711bf5224a/scratchpad/workers/codex-catalog-flow/node_modules/spacedatastandards.org/lib/ts/XMT/PRWFitQuality.ts
 var PRWFitQuality = class _PRWFitQuality {
   bb = null;
   bb_pos = 0;
@@ -18912,7 +18912,7 @@ var PRWFitQualityT = class {
   }
 };
 
-// node_modules/spacedatastandards.org/lib/ts/XMT/PRWTrajectorySource.ts
+// ../../../../../../../../private/tmp/claude-501/-Users-tj-software-spacedatanetwork-stack/46a20935-200d-48d4-95a7-fd711bf5224a/scratchpad/workers/codex-catalog-flow/node_modules/spacedatastandards.org/lib/ts/XMT/PRWTrajectorySource.ts
 var PRWTrajectorySource = class _PRWTrajectorySource {
   bb = null;
   bb_pos = 0;
@@ -19016,7 +19016,7 @@ var PRWTrajectorySourceT = class {
   }
 };
 
-// node_modules/spacedatastandards.org/lib/ts/XMT/PRWDescribeResult.ts
+// ../../../../../../../../private/tmp/claude-501/-Users-tj-software-spacedatanetwork-stack/46a20935-200d-48d4-95a7-fd711bf5224a/scratchpad/workers/codex-catalog-flow/node_modules/spacedatastandards.org/lib/ts/XMT/PRWDescribeResult.ts
 var PRWDescribeResult = class _PRWDescribeResult {
   bb = null;
   bb_pos = 0;
@@ -19140,7 +19140,7 @@ var PRWDescribeResultT = class {
   }
 };
 
-// node_modules/spacedatastandards.org/lib/ts/XMT/PRWEarthOrientation.ts
+// ../../../../../../../../private/tmp/claude-501/-Users-tj-software-spacedatanetwork-stack/46a20935-200d-48d4-95a7-fd711bf5224a/scratchpad/workers/codex-catalog-flow/node_modules/spacedatastandards.org/lib/ts/XMT/PRWEarthOrientation.ts
 import * as flatbuffers91 from "flatbuffers";
 var PRWEarthOrientation = class _PRWEarthOrientation {
   bb = null;
@@ -19213,7 +19213,7 @@ var PRWEarthOrientationT = class {
   }
 };
 
-// node_modules/spacedatastandards.org/lib/ts/XMT/PRWEphemerisRequest.ts
+// ../../../../../../../../private/tmp/claude-501/-Users-tj-software-spacedatanetwork-stack/46a20935-200d-48d4-95a7-fd711bf5224a/scratchpad/workers/codex-catalog-flow/node_modules/spacedatastandards.org/lib/ts/XMT/PRWEphemerisRequest.ts
 import * as flatbuffers92 from "flatbuffers";
 var PRWEphemerisRequest = class _PRWEphemerisRequest {
   bb = null;
@@ -19296,16 +19296,16 @@ var PRWEphemerisRequestT = class {
   }
 };
 
-// node_modules/spacedatastandards.org/lib/ts/XMT/PRWEphemerisResult.ts
+// ../../../../../../../../private/tmp/claude-501/-Users-tj-software-spacedatanetwork-stack/46a20935-200d-48d4-95a7-fd711bf5224a/scratchpad/workers/codex-catalog-flow/node_modules/spacedatastandards.org/lib/ts/XMT/PRWEphemerisResult.ts
 import * as flatbuffers96 from "flatbuffers";
 
-// node_modules/spacedatastandards.org/lib/ts/XMT/PRWResidentState.ts
+// ../../../../../../../../private/tmp/claude-501/-Users-tj-software-spacedatanetwork-stack/46a20935-200d-48d4-95a7-fd711bf5224a/scratchpad/workers/codex-catalog-flow/node_modules/spacedatastandards.org/lib/ts/XMT/PRWResidentState.ts
 import * as flatbuffers95 from "flatbuffers";
 
-// node_modules/spacedatastandards.org/lib/ts/XMT/PRWProcessNoise.ts
+// ../../../../../../../../private/tmp/claude-501/-Users-tj-software-spacedatanetwork-stack/46a20935-200d-48d4-95a7-fd711bf5224a/scratchpad/workers/codex-catalog-flow/node_modules/spacedatastandards.org/lib/ts/XMT/PRWProcessNoise.ts
 import * as flatbuffers93 from "flatbuffers";
 
-// node_modules/spacedatastandards.org/lib/ts/XMT/prwProcessNoiseAxes.ts
+// ../../../../../../../../private/tmp/claude-501/-Users-tj-software-spacedatanetwork-stack/46a20935-200d-48d4-95a7-fd711bf5224a/scratchpad/workers/codex-catalog-flow/node_modules/spacedatastandards.org/lib/ts/XMT/prwProcessNoiseAxes.ts
 var prwProcessNoiseAxes = /* @__PURE__ */ ((prwProcessNoiseAxes2) => {
   prwProcessNoiseAxes2[prwProcessNoiseAxes2["UNSPECIFIED"] = 0] = "UNSPECIFIED";
   prwProcessNoiseAxes2[prwProcessNoiseAxes2["INERTIAL"] = 1] = "INERTIAL";
@@ -19313,7 +19313,7 @@ var prwProcessNoiseAxes = /* @__PURE__ */ ((prwProcessNoiseAxes2) => {
   return prwProcessNoiseAxes2;
 })(prwProcessNoiseAxes || {});
 
-// node_modules/spacedatastandards.org/lib/ts/XMT/prwProcessNoiseModel.ts
+// ../../../../../../../../private/tmp/claude-501/-Users-tj-software-spacedatanetwork-stack/46a20935-200d-48d4-95a7-fd711bf5224a/scratchpad/workers/codex-catalog-flow/node_modules/spacedatastandards.org/lib/ts/XMT/prwProcessNoiseModel.ts
 var prwProcessNoiseModel = /* @__PURE__ */ ((prwProcessNoiseModel2) => {
   prwProcessNoiseModel2[prwProcessNoiseModel2["UNSPECIFIED"] = 0] = "UNSPECIFIED";
   prwProcessNoiseModel2[prwProcessNoiseModel2["NONE"] = 1] = "NONE";
@@ -19321,7 +19321,7 @@ var prwProcessNoiseModel = /* @__PURE__ */ ((prwProcessNoiseModel2) => {
   return prwProcessNoiseModel2;
 })(prwProcessNoiseModel || {});
 
-// node_modules/spacedatastandards.org/lib/ts/XMT/PRWProcessNoise.ts
+// ../../../../../../../../private/tmp/claude-501/-Users-tj-software-spacedatanetwork-stack/46a20935-200d-48d4-95a7-fd711bf5224a/scratchpad/workers/codex-catalog-flow/node_modules/spacedatastandards.org/lib/ts/XMT/PRWProcessNoise.ts
 var PRWProcessNoise = class _PRWProcessNoise {
   bb = null;
   bb_pos = 0;
@@ -19438,7 +19438,7 @@ var PRWProcessNoiseT = class {
   }
 };
 
-// node_modules/spacedatastandards.org/lib/ts/XMT/PRWStateMatrix.ts
+// ../../../../../../../../private/tmp/claude-501/-Users-tj-software-spacedatanetwork-stack/46a20935-200d-48d4-95a7-fd711bf5224a/scratchpad/workers/codex-catalog-flow/node_modules/spacedatastandards.org/lib/ts/XMT/PRWStateMatrix.ts
 import * as flatbuffers94 from "flatbuffers";
 var PRWStateMatrix = class _PRWStateMatrix {
   bb = null;
@@ -19527,7 +19527,7 @@ var PRWStateMatrixT = class {
   }
 };
 
-// node_modules/spacedatastandards.org/lib/ts/XMT/PRWResidentState.ts
+// ../../../../../../../../private/tmp/claude-501/-Users-tj-software-spacedatanetwork-stack/46a20935-200d-48d4-95a7-fd711bf5224a/scratchpad/workers/codex-catalog-flow/node_modules/spacedatastandards.org/lib/ts/XMT/PRWResidentState.ts
 var PRWResidentState = class _PRWResidentState {
   bb = null;
   bb_pos = 0;
@@ -19816,7 +19816,7 @@ var PRWResidentStateT = class {
   }
 };
 
-// node_modules/spacedatastandards.org/lib/ts/XMT/PRWEphemerisResult.ts
+// ../../../../../../../../private/tmp/claude-501/-Users-tj-software-spacedatanetwork-stack/46a20935-200d-48d4-95a7-fd711bf5224a/scratchpad/workers/codex-catalog-flow/node_modules/spacedatastandards.org/lib/ts/XMT/PRWEphemerisResult.ts
 var PRWEphemerisResult = class _PRWEphemerisResult {
   bb = null;
   bb_pos = 0;
@@ -19906,13 +19906,13 @@ var PRWEphemerisResultT = class {
   }
 };
 
-// node_modules/spacedatastandards.org/lib/ts/XMT/PRWExecutionRequest.ts
+// ../../../../../../../../private/tmp/claude-501/-Users-tj-software-spacedatanetwork-stack/46a20935-200d-48d4-95a7-fd711bf5224a/scratchpad/workers/codex-catalog-flow/node_modules/spacedatastandards.org/lib/ts/XMT/PRWExecutionRequest.ts
 import * as flatbuffers101 from "flatbuffers";
 
-// node_modules/spacedatastandards.org/lib/ts/XMT/PRWFiniteBurn.ts
+// ../../../../../../../../private/tmp/claude-501/-Users-tj-software-spacedatanetwork-stack/46a20935-200d-48d4-95a7-fd711bf5224a/scratchpad/workers/codex-catalog-flow/node_modules/spacedatastandards.org/lib/ts/XMT/PRWFiniteBurn.ts
 import * as flatbuffers99 from "flatbuffers";
 
-// node_modules/spacedatastandards.org/lib/ts/XMT/PRWBurnBoundary.ts
+// ../../../../../../../../private/tmp/claude-501/-Users-tj-software-spacedatanetwork-stack/46a20935-200d-48d4-95a7-fd711bf5224a/scratchpad/workers/codex-catalog-flow/node_modules/spacedatastandards.org/lib/ts/XMT/PRWBurnBoundary.ts
 import * as flatbuffers97 from "flatbuffers";
 var PRWBurnBoundary = class _PRWBurnBoundary {
   bb = null;
@@ -19992,7 +19992,7 @@ var PRWBurnBoundaryT = class {
   }
 };
 
-// node_modules/spacedatastandards.org/lib/ts/XMT/PRWThrottlePoint.ts
+// ../../../../../../../../private/tmp/claude-501/-Users-tj-software-spacedatanetwork-stack/46a20935-200d-48d4-95a7-fd711bf5224a/scratchpad/workers/codex-catalog-flow/node_modules/spacedatastandards.org/lib/ts/XMT/PRWThrottlePoint.ts
 import * as flatbuffers98 from "flatbuffers";
 var PRWThrottlePoint = class _PRWThrottlePoint {
   bb = null;
@@ -20061,7 +20061,7 @@ var PRWThrottlePointT = class {
   }
 };
 
-// node_modules/spacedatastandards.org/lib/ts/XMT/prwSteeringBasis.ts
+// ../../../../../../../../private/tmp/claude-501/-Users-tj-software-spacedatanetwork-stack/46a20935-200d-48d4-95a7-fd711bf5224a/scratchpad/workers/codex-catalog-flow/node_modules/spacedatastandards.org/lib/ts/XMT/prwSteeringBasis.ts
 var prwSteeringBasis = /* @__PURE__ */ ((prwSteeringBasis2) => {
   prwSteeringBasis2[prwSteeringBasis2["UNSPECIFIED"] = 0] = "UNSPECIFIED";
   prwSteeringBasis2[prwSteeringBasis2["INTEGRATION_FRAME"] = 1] = "INTEGRATION_FRAME";
@@ -20072,7 +20072,7 @@ var prwSteeringBasis = /* @__PURE__ */ ((prwSteeringBasis2) => {
   return prwSteeringBasis2;
 })(prwSteeringBasis || {});
 
-// node_modules/spacedatastandards.org/lib/ts/XMT/prwThrustPrescription.ts
+// ../../../../../../../../private/tmp/claude-501/-Users-tj-software-spacedatanetwork-stack/46a20935-200d-48d4-95a7-fd711bf5224a/scratchpad/workers/codex-catalog-flow/node_modules/spacedatastandards.org/lib/ts/XMT/prwThrustPrescription.ts
 var prwThrustPrescription = /* @__PURE__ */ ((prwThrustPrescription2) => {
   prwThrustPrescription2[prwThrustPrescription2["UNSPECIFIED"] = 0] = "UNSPECIFIED";
   prwThrustPrescription2[prwThrustPrescription2["FORCE"] = 1] = "FORCE";
@@ -20080,7 +20080,7 @@ var prwThrustPrescription = /* @__PURE__ */ ((prwThrustPrescription2) => {
   return prwThrustPrescription2;
 })(prwThrustPrescription || {});
 
-// node_modules/spacedatastandards.org/lib/ts/XMT/PRWFiniteBurn.ts
+// ../../../../../../../../private/tmp/claude-501/-Users-tj-software-spacedatanetwork-stack/46a20935-200d-48d4-95a7-fd711bf5224a/scratchpad/workers/codex-catalog-flow/node_modules/spacedatastandards.org/lib/ts/XMT/PRWFiniteBurn.ts
 var PRWFiniteBurn = class _PRWFiniteBurn {
   bb = null;
   bb_pos = 0;
@@ -20284,7 +20284,7 @@ var PRWFiniteBurnT = class {
   }
 };
 
-// node_modules/spacedatastandards.org/lib/ts/XMT/PRWImpulse.ts
+// ../../../../../../../../private/tmp/claude-501/-Users-tj-software-spacedatanetwork-stack/46a20935-200d-48d4-95a7-fd711bf5224a/scratchpad/workers/codex-catalog-flow/node_modules/spacedatastandards.org/lib/ts/XMT/PRWImpulse.ts
 import * as flatbuffers100 from "flatbuffers";
 var PRWImpulse = class _PRWImpulse {
   bb = null;
@@ -20361,7 +20361,7 @@ var PRWImpulseT = class {
   }
 };
 
-// node_modules/spacedatastandards.org/lib/ts/XMT/prwDensityTreatment.ts
+// ../../../../../../../../private/tmp/claude-501/-Users-tj-software-spacedatanetwork-stack/46a20935-200d-48d4-95a7-fd711bf5224a/scratchpad/workers/codex-catalog-flow/node_modules/spacedatastandards.org/lib/ts/XMT/prwDensityTreatment.ts
 var prwDensityTreatment = /* @__PURE__ */ ((prwDensityTreatment2) => {
   prwDensityTreatment2[prwDensityTreatment2["UNSPECIFIED"] = 0] = "UNSPECIFIED";
   prwDensityTreatment2[prwDensityTreatment2["NEGLECTED"] = 1] = "NEGLECTED";
@@ -20369,7 +20369,7 @@ var prwDensityTreatment = /* @__PURE__ */ ((prwDensityTreatment2) => {
   return prwDensityTreatment2;
 })(prwDensityTreatment || {});
 
-// node_modules/spacedatastandards.org/lib/ts/XMT/prwDerivativeTechnique.ts
+// ../../../../../../../../private/tmp/claude-501/-Users-tj-software-spacedatanetwork-stack/46a20935-200d-48d4-95a7-fd711bf5224a/scratchpad/workers/codex-catalog-flow/node_modules/spacedatastandards.org/lib/ts/XMT/prwDerivativeTechnique.ts
 var prwDerivativeTechnique = /* @__PURE__ */ ((prwDerivativeTechnique2) => {
   prwDerivativeTechnique2[prwDerivativeTechnique2["UNSPECIFIED"] = 0] = "UNSPECIFIED";
   prwDerivativeTechnique2[prwDerivativeTechnique2["ANALYTIC"] = 1] = "ANALYTIC";
@@ -20377,7 +20377,7 @@ var prwDerivativeTechnique = /* @__PURE__ */ ((prwDerivativeTechnique2) => {
   return prwDerivativeTechnique2;
 })(prwDerivativeTechnique || {});
 
-// node_modules/spacedatastandards.org/lib/ts/XMT/PRWExecutionRequest.ts
+// ../../../../../../../../private/tmp/claude-501/-Users-tj-software-spacedatanetwork-stack/46a20935-200d-48d4-95a7-fd711bf5224a/scratchpad/workers/codex-catalog-flow/node_modules/spacedatastandards.org/lib/ts/XMT/PRWExecutionRequest.ts
 var PRWExecutionRequest = class _PRWExecutionRequest {
   bb = null;
   bb_pos = 0;
@@ -20700,10 +20700,10 @@ var PRWExecutionRequestT = class {
   }
 };
 
-// node_modules/spacedatastandards.org/lib/ts/XMT/PRWExecutionResult.ts
+// ../../../../../../../../private/tmp/claude-501/-Users-tj-software-spacedatanetwork-stack/46a20935-200d-48d4-95a7-fd711bf5224a/scratchpad/workers/codex-catalog-flow/node_modules/spacedatastandards.org/lib/ts/XMT/PRWExecutionResult.ts
 import * as flatbuffers105 from "flatbuffers";
 
-// node_modules/spacedatastandards.org/lib/ts/XMT/PRWEventRecord.ts
+// ../../../../../../../../private/tmp/claude-501/-Users-tj-software-spacedatanetwork-stack/46a20935-200d-48d4-95a7-fd711bf5224a/scratchpad/workers/codex-catalog-flow/node_modules/spacedatastandards.org/lib/ts/XMT/PRWEventRecord.ts
 import * as flatbuffers102 from "flatbuffers";
 var PRWEventRecord = class _PRWEventRecord {
   bb = null;
@@ -20859,10 +20859,10 @@ var PRWEventRecordT = class {
   }
 };
 
-// node_modules/spacedatastandards.org/lib/ts/XMT/PRWPropagationSample.ts
+// ../../../../../../../../private/tmp/claude-501/-Users-tj-software-spacedatanetwork-stack/46a20935-200d-48d4-95a7-fd711bf5224a/scratchpad/workers/codex-catalog-flow/node_modules/spacedatastandards.org/lib/ts/XMT/PRWPropagationSample.ts
 import * as flatbuffers104 from "flatbuffers";
 
-// node_modules/spacedatastandards.org/lib/ts/XMT/PRWBurnReport.ts
+// ../../../../../../../../private/tmp/claude-501/-Users-tj-software-spacedatanetwork-stack/46a20935-200d-48d4-95a7-fd711bf5224a/scratchpad/workers/codex-catalog-flow/node_modules/spacedatastandards.org/lib/ts/XMT/PRWBurnReport.ts
 import * as flatbuffers103 from "flatbuffers";
 var PRWBurnReport = class _PRWBurnReport {
   bb = null;
@@ -21056,7 +21056,7 @@ var PRWBurnReportT = class {
   }
 };
 
-// node_modules/spacedatastandards.org/lib/ts/XMT/PRWPropagationSample.ts
+// ../../../../../../../../private/tmp/claude-501/-Users-tj-software-spacedatanetwork-stack/46a20935-200d-48d4-95a7-fd711bf5224a/scratchpad/workers/codex-catalog-flow/node_modules/spacedatastandards.org/lib/ts/XMT/PRWPropagationSample.ts
 var PRWPropagationSample = class _PRWPropagationSample {
   bb = null;
   bb_pos = 0;
@@ -21222,7 +21222,7 @@ var PRWPropagationSampleT = class {
   }
 };
 
-// node_modules/spacedatastandards.org/lib/ts/XMT/PRWExecutionResult.ts
+// ../../../../../../../../private/tmp/claude-501/-Users-tj-software-spacedatanetwork-stack/46a20935-200d-48d4-95a7-fd711bf5224a/scratchpad/workers/codex-catalog-flow/node_modules/spacedatastandards.org/lib/ts/XMT/PRWExecutionResult.ts
 var PRWExecutionResult = class _PRWExecutionResult {
   bb = null;
   bb_pos = 0;
@@ -21470,13 +21470,13 @@ var PRWExecutionResultT = class {
   }
 };
 
-// node_modules/spacedatastandards.org/lib/ts/XMT/PRWInit.ts
+// ../../../../../../../../private/tmp/claude-501/-Users-tj-software-spacedatanetwork-stack/46a20935-200d-48d4-95a7-fd711bf5224a/scratchpad/workers/codex-catalog-flow/node_modules/spacedatastandards.org/lib/ts/XMT/PRWInit.ts
 import * as flatbuffers109 from "flatbuffers";
 
-// node_modules/spacedatastandards.org/lib/ts/XMT/PRWInitSource.ts
+// ../../../../../../../../private/tmp/claude-501/-Users-tj-software-spacedatanetwork-stack/46a20935-200d-48d4-95a7-fd711bf5224a/scratchpad/workers/codex-catalog-flow/node_modules/spacedatastandards.org/lib/ts/XMT/PRWInitSource.ts
 import * as flatbuffers108 from "flatbuffers";
 
-// node_modules/spacedatastandards.org/lib/ts/XMT/PRWKeplerianElements.ts
+// ../../../../../../../../private/tmp/claude-501/-Users-tj-software-spacedatanetwork-stack/46a20935-200d-48d4-95a7-fd711bf5224a/scratchpad/workers/codex-catalog-flow/node_modules/spacedatastandards.org/lib/ts/XMT/PRWKeplerianElements.ts
 import * as flatbuffers106 from "flatbuffers";
 var PRWKeplerianElements = class _PRWKeplerianElements {
   bb = null;
@@ -21641,7 +21641,7 @@ var PRWKeplerianElementsT = class {
   }
 };
 
-// node_modules/spacedatastandards.org/lib/ts/XMT/PRWTleLines.ts
+// ../../../../../../../../private/tmp/claude-501/-Users-tj-software-spacedatanetwork-stack/46a20935-200d-48d4-95a7-fd711bf5224a/scratchpad/workers/codex-catalog-flow/node_modules/spacedatastandards.org/lib/ts/XMT/PRWTleLines.ts
 import * as flatbuffers107 from "flatbuffers";
 var PRWTleLines = class _PRWTleLines {
   bb = null;
@@ -21740,7 +21740,7 @@ var PRWTleLinesT = class {
   }
 };
 
-// node_modules/spacedatastandards.org/lib/ts/XMT/prwSourceKind.ts
+// ../../../../../../../../private/tmp/claude-501/-Users-tj-software-spacedatanetwork-stack/46a20935-200d-48d4-95a7-fd711bf5224a/scratchpad/workers/codex-catalog-flow/node_modules/spacedatastandards.org/lib/ts/XMT/prwSourceKind.ts
 var prwSourceKind = /* @__PURE__ */ ((prwSourceKind2) => {
   prwSourceKind2[prwSourceKind2["OMM"] = 0] = "OMM";
   prwSourceKind2[prwSourceKind2["TLE"] = 1] = "TLE";
@@ -21751,7 +21751,7 @@ var prwSourceKind = /* @__PURE__ */ ((prwSourceKind2) => {
   return prwSourceKind2;
 })(prwSourceKind || {});
 
-// node_modules/spacedatastandards.org/lib/ts/XMT/PRWInitSource.ts
+// ../../../../../../../../private/tmp/claude-501/-Users-tj-software-spacedatanetwork-stack/46a20935-200d-48d4-95a7-fd711bf5224a/scratchpad/workers/codex-catalog-flow/node_modules/spacedatastandards.org/lib/ts/XMT/PRWInitSource.ts
 var PRWInitSource = class _PRWInitSource {
   bb = null;
   bb_pos = 0;
@@ -21879,7 +21879,7 @@ var PRWInitSourceT = class {
   }
 };
 
-// node_modules/spacedatastandards.org/lib/ts/XMT/PRWInit.ts
+// ../../../../../../../../private/tmp/claude-501/-Users-tj-software-spacedatanetwork-stack/46a20935-200d-48d4-95a7-fd711bf5224a/scratchpad/workers/codex-catalog-flow/node_modules/spacedatastandards.org/lib/ts/XMT/PRWInit.ts
 var PRWInit = class _PRWInit {
   bb = null;
   bb_pos = 0;
@@ -21987,10 +21987,10 @@ var PRWInitT = class {
   }
 };
 
-// node_modules/spacedatastandards.org/lib/ts/XMT/PRWJB2008IndicesTable.ts
+// ../../../../../../../../private/tmp/claude-501/-Users-tj-software-spacedatanetwork-stack/46a20935-200d-48d4-95a7-fd711bf5224a/scratchpad/workers/codex-catalog-flow/node_modules/spacedatastandards.org/lib/ts/XMT/PRWJB2008IndicesTable.ts
 import * as flatbuffers111 from "flatbuffers";
 
-// node_modules/spacedatastandards.org/lib/ts/XMT/PRWJB2008Indices.ts
+// ../../../../../../../../private/tmp/claude-501/-Users-tj-software-spacedatanetwork-stack/46a20935-200d-48d4-95a7-fd711bf5224a/scratchpad/workers/codex-catalog-flow/node_modules/spacedatastandards.org/lib/ts/XMT/PRWJB2008Indices.ts
 import * as flatbuffers110 from "flatbuffers";
 var PRWJB2008Indices = class _PRWJB2008Indices {
   bb = null;
@@ -22192,7 +22192,7 @@ var PRWJB2008IndicesT = class {
   }
 };
 
-// node_modules/spacedatastandards.org/lib/ts/XMT/PRWJB2008IndicesTable.ts
+// ../../../../../../../../private/tmp/claude-501/-Users-tj-software-spacedatanetwork-stack/46a20935-200d-48d4-95a7-fd711bf5224a/scratchpad/workers/codex-catalog-flow/node_modules/spacedatastandards.org/lib/ts/XMT/PRWJB2008IndicesTable.ts
 var PRWJB2008IndicesTable = class _PRWJB2008IndicesTable {
   bb = null;
   bb_pos = 0;
@@ -22264,7 +22264,7 @@ var PRWJB2008IndicesTableT = class {
   }
 };
 
-// node_modules/spacedatastandards.org/lib/ts/XMT/PRWNativeInput.ts
+// ../../../../../../../../private/tmp/claude-501/-Users-tj-software-spacedatanetwork-stack/46a20935-200d-48d4-95a7-fd711bf5224a/scratchpad/workers/codex-catalog-flow/node_modules/spacedatastandards.org/lib/ts/XMT/PRWNativeInput.ts
 import * as flatbuffers112 from "flatbuffers";
 var PRWNativeInput = class _PRWNativeInput {
   bb = null;
@@ -22358,7 +22358,7 @@ var PRWNativeInputT = class {
   }
 };
 
-// node_modules/spacedatastandards.org/lib/ts/XMT/PRWPrepareRequest.ts
+// ../../../../../../../../private/tmp/claude-501/-Users-tj-software-spacedatanetwork-stack/46a20935-200d-48d4-95a7-fd711bf5224a/scratchpad/workers/codex-catalog-flow/node_modules/spacedatastandards.org/lib/ts/XMT/PRWPrepareRequest.ts
 import * as flatbuffers113 from "flatbuffers";
 var PRWPrepareRequest = class _PRWPrepareRequest {
   bb = null;
@@ -22488,7 +22488,7 @@ var PRWPrepareRequestT = class {
   }
 };
 
-// node_modules/spacedatastandards.org/lib/ts/XMT/PRWPrepareResult.ts
+// ../../../../../../../../private/tmp/claude-501/-Users-tj-software-spacedatanetwork-stack/46a20935-200d-48d4-95a7-fd711bf5224a/scratchpad/workers/codex-catalog-flow/node_modules/spacedatastandards.org/lib/ts/XMT/PRWPrepareResult.ts
 import * as flatbuffers114 from "flatbuffers";
 var PRWPrepareResult = class _PRWPrepareResult {
   bb = null;
@@ -22576,7 +22576,7 @@ var PRWPrepareResultT = class {
   }
 };
 
-// node_modules/spacedatastandards.org/lib/ts/XMT/PRWResidentRequest.ts
+// ../../../../../../../../private/tmp/claude-501/-Users-tj-software-spacedatanetwork-stack/46a20935-200d-48d4-95a7-fd711bf5224a/scratchpad/workers/codex-catalog-flow/node_modules/spacedatastandards.org/lib/ts/XMT/PRWResidentRequest.ts
 import * as flatbuffers115 from "flatbuffers";
 var PRWResidentRequest = class _PRWResidentRequest {
   bb = null;
@@ -22696,10 +22696,10 @@ var PRWResidentRequestT = class {
   }
 };
 
-// node_modules/spacedatastandards.org/lib/ts/XMT/PRWSpaceWeatherTable.ts
+// ../../../../../../../../private/tmp/claude-501/-Users-tj-software-spacedatanetwork-stack/46a20935-200d-48d4-95a7-fd711bf5224a/scratchpad/workers/codex-catalog-flow/node_modules/spacedatastandards.org/lib/ts/XMT/PRWSpaceWeatherTable.ts
 import * as flatbuffers117 from "flatbuffers";
 
-// node_modules/spacedatastandards.org/lib/ts/XMT/SPW.ts
+// ../../../../../../../../private/tmp/claude-501/-Users-tj-software-spacedatanetwork-stack/46a20935-200d-48d4-95a7-fd711bf5224a/scratchpad/workers/codex-catalog-flow/node_modules/spacedatastandards.org/lib/ts/XMT/SPW.ts
 import * as flatbuffers116 from "flatbuffers";
 var SPW = class _SPW {
   bb = null;
@@ -23195,7 +23195,7 @@ var SPWT = class {
   }
 };
 
-// node_modules/spacedatastandards.org/lib/ts/XMT/PRWSpaceWeatherTable.ts
+// ../../../../../../../../private/tmp/claude-501/-Users-tj-software-spacedatanetwork-stack/46a20935-200d-48d4-95a7-fd711bf5224a/scratchpad/workers/codex-catalog-flow/node_modules/spacedatastandards.org/lib/ts/XMT/PRWSpaceWeatherTable.ts
 var PRWSpaceWeatherTable = class _PRWSpaceWeatherTable {
   bb = null;
   bb_pos = 0;
@@ -23267,7 +23267,7 @@ var PRWSpaceWeatherTableT = class {
   }
 };
 
-// node_modules/spacedatastandards.org/lib/ts/XMT/PRWVersionResult.ts
+// ../../../../../../../../private/tmp/claude-501/-Users-tj-software-spacedatanetwork-stack/46a20935-200d-48d4-95a7-fd711bf5224a/scratchpad/workers/codex-catalog-flow/node_modules/spacedatastandards.org/lib/ts/XMT/PRWVersionResult.ts
 import * as flatbuffers118 from "flatbuffers";
 var PRWVersionResult = class _PRWVersionResult {
   bb = null;
@@ -23340,10 +23340,10 @@ var PRWVersionResultT = class {
   }
 };
 
-// node_modules/spacedatastandards.org/lib/ts/XMT/PRWWindowReport.ts
+// ../../../../../../../../private/tmp/claude-501/-Users-tj-software-spacedatanetwork-stack/46a20935-200d-48d4-95a7-fd711bf5224a/scratchpad/workers/codex-catalog-flow/node_modules/spacedatastandards.org/lib/ts/XMT/PRWWindowReport.ts
 import * as flatbuffers120 from "flatbuffers";
 
-// node_modules/spacedatastandards.org/lib/ts/XMT/PRWWindowRefusal.ts
+// ../../../../../../../../private/tmp/claude-501/-Users-tj-software-spacedatanetwork-stack/46a20935-200d-48d4-95a7-fd711bf5224a/scratchpad/workers/codex-catalog-flow/node_modules/spacedatastandards.org/lib/ts/XMT/PRWWindowRefusal.ts
 import * as flatbuffers119 from "flatbuffers";
 var PRWWindowRefusal = class _PRWWindowRefusal {
   bb = null;
@@ -23431,7 +23431,7 @@ var PRWWindowRefusalT = class {
   }
 };
 
-// node_modules/spacedatastandards.org/lib/ts/XMT/PRWWindowReport.ts
+// ../../../../../../../../private/tmp/claude-501/-Users-tj-software-spacedatanetwork-stack/46a20935-200d-48d4-95a7-fd711bf5224a/scratchpad/workers/codex-catalog-flow/node_modules/spacedatastandards.org/lib/ts/XMT/PRWWindowReport.ts
 var PRWWindowReport = class _PRWWindowReport {
   bb = null;
   bb_pos = 0;
@@ -23569,10 +23569,10 @@ var PRWWindowReportT = class {
   }
 };
 
-// node_modules/spacedatastandards.org/lib/ts/XMT/PRWWindowRequest.ts
+// ../../../../../../../../private/tmp/claude-501/-Users-tj-software-spacedatanetwork-stack/46a20935-200d-48d4-95a7-fd711bf5224a/scratchpad/workers/codex-catalog-flow/node_modules/spacedatastandards.org/lib/ts/XMT/PRWWindowRequest.ts
 import * as flatbuffers122 from "flatbuffers";
 
-// node_modules/spacedatastandards.org/lib/ts/XMT/PRWWindowQuery.ts
+// ../../../../../../../../private/tmp/claude-501/-Users-tj-software-spacedatanetwork-stack/46a20935-200d-48d4-95a7-fd711bf5224a/scratchpad/workers/codex-catalog-flow/node_modules/spacedatastandards.org/lib/ts/XMT/PRWWindowQuery.ts
 import * as flatbuffers121 from "flatbuffers";
 var PRWWindowQuery = class _PRWWindowQuery {
   bb = null;
@@ -23754,7 +23754,7 @@ var PRWWindowQueryT = class {
   }
 };
 
-// node_modules/spacedatastandards.org/lib/ts/XMT/PRWWindowRequest.ts
+// ../../../../../../../../private/tmp/claude-501/-Users-tj-software-spacedatanetwork-stack/46a20935-200d-48d4-95a7-fd711bf5224a/scratchpad/workers/codex-catalog-flow/node_modules/spacedatastandards.org/lib/ts/XMT/PRWWindowRequest.ts
 var PRWWindowRequest = class _PRWWindowRequest {
   bb = null;
   bb_pos = 0;
@@ -23880,7 +23880,7 @@ var PRWWindowRequestT = class {
   }
 };
 
-// node_modules/spacedatastandards.org/lib/ts/XMT/PRW.ts
+// ../../../../../../../../private/tmp/claude-501/-Users-tj-software-spacedatanetwork-stack/46a20935-200d-48d4-95a7-fd711bf5224a/scratchpad/workers/codex-catalog-flow/node_modules/spacedatastandards.org/lib/ts/XMT/PRW.ts
 var PRW = class _PRW {
   bb = null;
   bb_pos = 0;
@@ -24209,7 +24209,7 @@ var PRWT = class {
   }
 };
 
-// node_modules/spacedatastandards.org/lib/ts/XMT/prwDynamicParameter.ts
+// ../../../../../../../../private/tmp/claude-501/-Users-tj-software-spacedatanetwork-stack/46a20935-200d-48d4-95a7-fd711bf5224a/scratchpad/workers/codex-catalog-flow/node_modules/spacedatastandards.org/lib/ts/XMT/prwDynamicParameter.ts
 var prwDynamicParameter = /* @__PURE__ */ ((prwDynamicParameter2) => {
   prwDynamicParameter2[prwDynamicParameter2["UNSPECIFIED"] = 0] = "UNSPECIFIED";
   prwDynamicParameter2[prwDynamicParameter2["DRAG_AREA_OVER_MASS"] = 1] = "DRAG_AREA_OVER_MASS";
@@ -24231,7 +24231,7 @@ var prwDynamicParameter = /* @__PURE__ */ ((prwDynamicParameter2) => {
   return prwDynamicParameter2;
 })(prwDynamicParameter || {});
 
-// node_modules/spacedatastandards.org/lib/ts/XMT/SPWCOLLECTION.ts
+// ../../../../../../../../private/tmp/claude-501/-Users-tj-software-spacedatanetwork-stack/46a20935-200d-48d4-95a7-fd711bf5224a/scratchpad/workers/codex-catalog-flow/node_modules/spacedatastandards.org/lib/ts/XMT/SPWCOLLECTION.ts
 import * as flatbuffers124 from "flatbuffers";
 var SPWCOLLECTION = class _SPWCOLLECTION {
   bb = null;
@@ -24303,10 +24303,10 @@ var SPWCOLLECTIONT = class {
   }
 };
 
-// node_modules/spacedatastandards.org/lib/ts/XMT/TIM.ts
+// ../../../../../../../../private/tmp/claude-501/-Users-tj-software-spacedatanetwork-stack/46a20935-200d-48d4-95a7-fd711bf5224a/scratchpad/workers/codex-catalog-flow/node_modules/spacedatastandards.org/lib/ts/XMT/TIM.ts
 import * as flatbuffers127 from "flatbuffers";
 
-// node_modules/spacedatastandards.org/lib/ts/XMT/TIMConversionRequest.ts
+// ../../../../../../../../private/tmp/claude-501/-Users-tj-software-spacedatanetwork-stack/46a20935-200d-48d4-95a7-fd711bf5224a/scratchpad/workers/codex-catalog-flow/node_modules/spacedatastandards.org/lib/ts/XMT/TIMConversionRequest.ts
 import * as flatbuffers125 from "flatbuffers";
 var TIMConversionRequest = class _TIMConversionRequest {
   bb = null;
@@ -24470,10 +24470,10 @@ var TIMConversionRequestT = class {
   }
 };
 
-// node_modules/spacedatastandards.org/lib/ts/XMT/TIMConversionResult.ts
+// ../../../../../../../../private/tmp/claude-501/-Users-tj-software-spacedatanetwork-stack/46a20935-200d-48d4-95a7-fd711bf5224a/scratchpad/workers/codex-catalog-flow/node_modules/spacedatastandards.org/lib/ts/XMT/TIMConversionResult.ts
 import * as flatbuffers126 from "flatbuffers";
 
-// node_modules/spacedatastandards.org/lib/ts/XMT/timConversionStatus.ts
+// ../../../../../../../../private/tmp/claude-501/-Users-tj-software-spacedatanetwork-stack/46a20935-200d-48d4-95a7-fd711bf5224a/scratchpad/workers/codex-catalog-flow/node_modules/spacedatastandards.org/lib/ts/XMT/timConversionStatus.ts
 var timConversionStatus = /* @__PURE__ */ ((timConversionStatus2) => {
   timConversionStatus2[timConversionStatus2["OK"] = 0] = "OK";
   timConversionStatus2[timConversionStatus2["INVALID_INPUT"] = 1] = "INVALID_INPUT";
@@ -24484,7 +24484,7 @@ var timConversionStatus = /* @__PURE__ */ ((timConversionStatus2) => {
   return timConversionStatus2;
 })(timConversionStatus || {});
 
-// node_modules/spacedatastandards.org/lib/ts/XMT/TIMConversionResult.ts
+// ../../../../../../../../private/tmp/claude-501/-Users-tj-software-spacedatanetwork-stack/46a20935-200d-48d4-95a7-fd711bf5224a/scratchpad/workers/codex-catalog-flow/node_modules/spacedatastandards.org/lib/ts/XMT/TIMConversionResult.ts
 var TIMConversionResult = class _TIMConversionResult {
   bb = null;
   bb_pos = 0;
@@ -24605,7 +24605,7 @@ var TIMConversionResultT = class {
   }
 };
 
-// node_modules/spacedatastandards.org/lib/ts/XMT/TIM.ts
+// ../../../../../../../../private/tmp/claude-501/-Users-tj-software-spacedatanetwork-stack/46a20935-200d-48d4-95a7-fd711bf5224a/scratchpad/workers/codex-catalog-flow/node_modules/spacedatastandards.org/lib/ts/XMT/TIM.ts
 var TIM = class _TIM {
   bb = null;
   bb_pos = 0;
@@ -24712,13 +24712,13 @@ var TIMT = class {
   }
 };
 
-// node_modules/spacedatastandards.org/lib/ts/XMT/XMT.ts
+// ../../../../../../../../private/tmp/claude-501/-Users-tj-software-spacedatanetwork-stack/46a20935-200d-48d4-95a7-fd711bf5224a/scratchpad/workers/codex-catalog-flow/node_modules/spacedatastandards.org/lib/ts/XMT/XMT.ts
 import * as flatbuffers158 from "flatbuffers";
 
-// node_modules/spacedatastandards.org/lib/ts/XMT/XMTComposeRecipe.ts
+// ../../../../../../../../private/tmp/claude-501/-Users-tj-software-spacedatanetwork-stack/46a20935-200d-48d4-95a7-fd711bf5224a/scratchpad/workers/codex-catalog-flow/node_modules/spacedatastandards.org/lib/ts/XMT/XMTComposeRecipe.ts
 import * as flatbuffers132 from "flatbuffers";
 
-// node_modules/spacedatastandards.org/lib/ts/XMT/XMTLayer.ts
+// ../../../../../../../../private/tmp/claude-501/-Users-tj-software-spacedatanetwork-stack/46a20935-200d-48d4-95a7-fd711bf5224a/scratchpad/workers/codex-catalog-flow/node_modules/spacedatastandards.org/lib/ts/XMT/XMTLayer.ts
 import * as flatbuffers128 from "flatbuffers";
 var XMTLayer = class _XMTLayer {
   bb = null;
@@ -24855,7 +24855,7 @@ var XMTLayerT = class {
   }
 };
 
-// node_modules/spacedatastandards.org/lib/ts/XMT/XMTObjectOverride.ts
+// ../../../../../../../../private/tmp/claude-501/-Users-tj-software-spacedatanetwork-stack/46a20935-200d-48d4-95a7-fd711bf5224a/scratchpad/workers/codex-catalog-flow/node_modules/spacedatastandards.org/lib/ts/XMT/XMTObjectOverride.ts
 import * as flatbuffers129 from "flatbuffers";
 var XMTObjectOverride = class _XMTObjectOverride {
   bb = null;
@@ -24968,7 +24968,7 @@ var XMTObjectOverrideT = class {
   }
 };
 
-// node_modules/spacedatastandards.org/lib/ts/XMT/XMTSourceCoverage.ts
+// ../../../../../../../../private/tmp/claude-501/-Users-tj-software-spacedatanetwork-stack/46a20935-200d-48d4-95a7-fd711bf5224a/scratchpad/workers/codex-catalog-flow/node_modules/spacedatastandards.org/lib/ts/XMT/XMTSourceCoverage.ts
 import * as flatbuffers130 from "flatbuffers";
 var XMTSourceCoverage = class _XMTSourceCoverage {
   bb = null;
@@ -25066,7 +25066,7 @@ var XMTSourceCoverageT = class {
   }
 };
 
-// node_modules/spacedatastandards.org/lib/ts/XMT/XMTStateCandidate.ts
+// ../../../../../../../../private/tmp/claude-501/-Users-tj-software-spacedatanetwork-stack/46a20935-200d-48d4-95a7-fd711bf5224a/scratchpad/workers/codex-catalog-flow/node_modules/spacedatastandards.org/lib/ts/XMT/XMTStateCandidate.ts
 import * as flatbuffers131 from "flatbuffers";
 var XMTStateCandidate = class _XMTStateCandidate {
   bb = null;
@@ -25165,14 +25165,14 @@ var XMTStateCandidateT = class {
   }
 };
 
-// node_modules/spacedatastandards.org/lib/ts/XMT/xmtIdentityRule.ts
+// ../../../../../../../../private/tmp/claude-501/-Users-tj-software-spacedatanetwork-stack/46a20935-200d-48d4-95a7-fd711bf5224a/scratchpad/workers/codex-catalog-flow/node_modules/spacedatastandards.org/lib/ts/XMT/xmtIdentityRule.ts
 var xmtIdentityRule = /* @__PURE__ */ ((xmtIdentityRule2) => {
   xmtIdentityRule2[xmtIdentityRule2["NoradFirst"] = 0] = "NoradFirst";
   xmtIdentityRule2[xmtIdentityRule2["InternationalDesignator"] = 1] = "InternationalDesignator";
   return xmtIdentityRule2;
 })(xmtIdentityRule || {});
 
-// node_modules/spacedatastandards.org/lib/ts/XMT/XMTComposeRecipe.ts
+// ../../../../../../../../private/tmp/claude-501/-Users-tj-software-spacedatanetwork-stack/46a20935-200d-48d4-95a7-fd711bf5224a/scratchpad/workers/codex-catalog-flow/node_modules/spacedatastandards.org/lib/ts/XMT/XMTComposeRecipe.ts
 var XMTComposeRecipe = class _XMTComposeRecipe {
   bb = null;
   bb_pos = 0;
@@ -25396,13 +25396,13 @@ var XMTComposeRecipeT = class {
   }
 };
 
-// node_modules/spacedatastandards.org/lib/ts/XMT/XMTComposeReport.ts
+// ../../../../../../../../private/tmp/claude-501/-Users-tj-software-spacedatanetwork-stack/46a20935-200d-48d4-95a7-fd711bf5224a/scratchpad/workers/codex-catalog-flow/node_modules/spacedatastandards.org/lib/ts/XMT/XMTComposeReport.ts
 import * as flatbuffers136 from "flatbuffers";
 
-// node_modules/spacedatastandards.org/lib/ts/XMT/XMTComposedObject.ts
+// ../../../../../../../../private/tmp/claude-501/-Users-tj-software-spacedatanetwork-stack/46a20935-200d-48d4-95a7-fd711bf5224a/scratchpad/workers/codex-catalog-flow/node_modules/spacedatastandards.org/lib/ts/XMT/XMTComposedObject.ts
 import * as flatbuffers135 from "flatbuffers";
 
-// node_modules/spacedatastandards.org/lib/ts/XMT/XMTLayerRecord.ts
+// ../../../../../../../../private/tmp/claude-501/-Users-tj-software-spacedatanetwork-stack/46a20935-200d-48d4-95a7-fd711bf5224a/scratchpad/workers/codex-catalog-flow/node_modules/spacedatastandards.org/lib/ts/XMT/XMTLayerRecord.ts
 import * as flatbuffers133 from "flatbuffers";
 var XMTLayerRecord = class _XMTLayerRecord {
   bb = null;
@@ -25514,10 +25514,10 @@ var XMTLayerRecordT = class {
   }
 };
 
-// node_modules/spacedatastandards.org/lib/ts/XMT/XMTStateSelection.ts
+// ../../../../../../../../private/tmp/claude-501/-Users-tj-software-spacedatanetwork-stack/46a20935-200d-48d4-95a7-fd711bf5224a/scratchpad/workers/codex-catalog-flow/node_modules/spacedatastandards.org/lib/ts/XMT/XMTStateSelection.ts
 import * as flatbuffers134 from "flatbuffers";
 
-// node_modules/spacedatastandards.org/lib/ts/XMT/xmtStateChoice.ts
+// ../../../../../../../../private/tmp/claude-501/-Users-tj-software-spacedatanetwork-stack/46a20935-200d-48d4-95a7-fd711bf5224a/scratchpad/workers/codex-catalog-flow/node_modules/spacedatastandards.org/lib/ts/XMT/xmtStateChoice.ts
 var xmtStateChoice = /* @__PURE__ */ ((xmtStateChoice2) => {
   xmtStateChoice2[xmtStateChoice2["Unspecified"] = 0] = "Unspecified";
   xmtStateChoice2[xmtStateChoice2["Selected"] = 1] = "Selected";
@@ -25530,7 +25530,7 @@ var xmtStateChoice = /* @__PURE__ */ ((xmtStateChoice2) => {
   return xmtStateChoice2;
 })(xmtStateChoice || {});
 
-// node_modules/spacedatastandards.org/lib/ts/XMT/XMTStateSelection.ts
+// ../../../../../../../../private/tmp/claude-501/-Users-tj-software-spacedatanetwork-stack/46a20935-200d-48d4-95a7-fd711bf5224a/scratchpad/workers/codex-catalog-flow/node_modules/spacedatastandards.org/lib/ts/XMT/XMTStateSelection.ts
 var XMTStateSelection = class _XMTStateSelection {
   bb = null;
   bb_pos = 0;
@@ -25654,7 +25654,7 @@ var XMTStateSelectionT = class {
   }
 };
 
-// node_modules/spacedatastandards.org/lib/ts/XMT/xmtRecordChoice.ts
+// ../../../../../../../../private/tmp/claude-501/-Users-tj-software-spacedatanetwork-stack/46a20935-200d-48d4-95a7-fd711bf5224a/scratchpad/workers/codex-catalog-flow/node_modules/spacedatastandards.org/lib/ts/XMT/xmtRecordChoice.ts
 var xmtRecordChoice = /* @__PURE__ */ ((xmtRecordChoice2) => {
   xmtRecordChoice2[xmtRecordChoice2["Unspecified"] = 0] = "Unspecified";
   xmtRecordChoice2[xmtRecordChoice2["Selected"] = 1] = "Selected";
@@ -25663,7 +25663,7 @@ var xmtRecordChoice = /* @__PURE__ */ ((xmtRecordChoice2) => {
   return xmtRecordChoice2;
 })(xmtRecordChoice || {});
 
-// node_modules/spacedatastandards.org/lib/ts/XMT/XMTComposedObject.ts
+// ../../../../../../../../private/tmp/claude-501/-Users-tj-software-spacedatanetwork-stack/46a20935-200d-48d4-95a7-fd711bf5224a/scratchpad/workers/codex-catalog-flow/node_modules/spacedatastandards.org/lib/ts/XMT/XMTComposedObject.ts
 var XMTComposedObject = class _XMTComposedObject {
   bb = null;
   bb_pos = 0;
@@ -25802,7 +25802,7 @@ var XMTComposedObjectT = class {
   }
 };
 
-// node_modules/spacedatastandards.org/lib/ts/XMT/XMTComposeReport.ts
+// ../../../../../../../../private/tmp/claude-501/-Users-tj-software-spacedatanetwork-stack/46a20935-200d-48d4-95a7-fd711bf5224a/scratchpad/workers/codex-catalog-flow/node_modules/spacedatastandards.org/lib/ts/XMT/XMTComposeReport.ts
 var XMTComposeReport = class _XMTComposeReport {
   bb = null;
   bb_pos = 0;
@@ -25918,7 +25918,7 @@ var XMTComposeReportT = class {
   }
 };
 
-// node_modules/spacedatastandards.org/lib/ts/XMT/XMTEpochFitPolicy.ts
+// ../../../../../../../../private/tmp/claude-501/-Users-tj-software-spacedatanetwork-stack/46a20935-200d-48d4-95a7-fd711bf5224a/scratchpad/workers/codex-catalog-flow/node_modules/spacedatastandards.org/lib/ts/XMT/XMTEpochFitPolicy.ts
 import * as flatbuffers137 from "flatbuffers";
 var XMTEpochFitPolicy = class _XMTEpochFitPolicy {
   bb = null;
@@ -26148,10 +26148,10 @@ var XMTEpochFitPolicyT = class {
   }
 };
 
-// node_modules/spacedatastandards.org/lib/ts/XMT/XMTEpochFitReport.ts
+// ../../../../../../../../private/tmp/claude-501/-Users-tj-software-spacedatanetwork-stack/46a20935-200d-48d4-95a7-fd711bf5224a/scratchpad/workers/codex-catalog-flow/node_modules/spacedatastandards.org/lib/ts/XMT/XMTEpochFitReport.ts
 import * as flatbuffers138 from "flatbuffers";
 
-// node_modules/spacedatastandards.org/lib/ts/XMT/xmtFitVerdict.ts
+// ../../../../../../../../private/tmp/claude-501/-Users-tj-software-spacedatanetwork-stack/46a20935-200d-48d4-95a7-fd711bf5224a/scratchpad/workers/codex-catalog-flow/node_modules/spacedatastandards.org/lib/ts/XMT/xmtFitVerdict.ts
 var xmtFitVerdict = /* @__PURE__ */ ((xmtFitVerdict2) => {
   xmtFitVerdict2[xmtFitVerdict2["Unspecified"] = 0] = "Unspecified";
   xmtFitVerdict2[xmtFitVerdict2["Validated"] = 1] = "Validated";
@@ -26161,7 +26161,7 @@ var xmtFitVerdict = /* @__PURE__ */ ((xmtFitVerdict2) => {
   return xmtFitVerdict2;
 })(xmtFitVerdict || {});
 
-// node_modules/spacedatastandards.org/lib/ts/XMT/XMTEpochFitReport.ts
+// ../../../../../../../../private/tmp/claude-501/-Users-tj-software-spacedatanetwork-stack/46a20935-200d-48d4-95a7-fd711bf5224a/scratchpad/workers/codex-catalog-flow/node_modules/spacedatastandards.org/lib/ts/XMT/XMTEpochFitReport.ts
 var XMTEpochFitReport = class _XMTEpochFitReport {
   bb = null;
   bb_pos = 0;
@@ -26466,10 +26466,10 @@ var XMTEpochFitReportT = class {
   }
 };
 
-// node_modules/spacedatastandards.org/lib/ts/XMT/XMTIntegrateRecipe.ts
+// ../../../../../../../../private/tmp/claude-501/-Users-tj-software-spacedatanetwork-stack/46a20935-200d-48d4-95a7-fd711bf5224a/scratchpad/workers/codex-catalog-flow/node_modules/spacedatastandards.org/lib/ts/XMT/XMTIntegrateRecipe.ts
 import * as flatbuffers145 from "flatbuffers";
 
-// node_modules/spacedatastandards.org/lib/ts/XMT/XMTManeuverPolicy.ts
+// ../../../../../../../../private/tmp/claude-501/-Users-tj-software-spacedatanetwork-stack/46a20935-200d-48d4-95a7-fd711bf5224a/scratchpad/workers/codex-catalog-flow/node_modules/spacedatastandards.org/lib/ts/XMT/XMTManeuverPolicy.ts
 import * as flatbuffers139 from "flatbuffers";
 var XMTManeuverPolicy = class _XMTManeuverPolicy {
   bb = null;
@@ -26627,10 +26627,10 @@ var XMTManeuverPolicyT = class {
   }
 };
 
-// node_modules/spacedatastandards.org/lib/ts/XMT/XMTMatchRequest.ts
+// ../../../../../../../../private/tmp/claude-501/-Users-tj-software-spacedatanetwork-stack/46a20935-200d-48d4-95a7-fd711bf5224a/scratchpad/workers/codex-catalog-flow/node_modules/spacedatastandards.org/lib/ts/XMT/XMTMatchRequest.ts
 import * as flatbuffers142 from "flatbuffers";
 
-// node_modules/spacedatastandards.org/lib/ts/XMT/XMTMatchPolicy.ts
+// ../../../../../../../../private/tmp/claude-501/-Users-tj-software-spacedatanetwork-stack/46a20935-200d-48d4-95a7-fd711bf5224a/scratchpad/workers/codex-catalog-flow/node_modules/spacedatastandards.org/lib/ts/XMT/XMTMatchPolicy.ts
 import * as flatbuffers140 from "flatbuffers";
 var XMTMatchPolicy = class _XMTMatchPolicy {
   bb = null;
@@ -26736,7 +26736,7 @@ var XMTMatchPolicyT = class {
   }
 };
 
-// node_modules/spacedatastandards.org/lib/ts/XMT/XMTTrajectory.ts
+// ../../../../../../../../private/tmp/claude-501/-Users-tj-software-spacedatanetwork-stack/46a20935-200d-48d4-95a7-fd711bf5224a/scratchpad/workers/codex-catalog-flow/node_modules/spacedatastandards.org/lib/ts/XMT/XMTTrajectory.ts
 import * as flatbuffers141 from "flatbuffers";
 var XMTTrajectory = class _XMTTrajectory {
   bb = null;
@@ -26833,7 +26833,7 @@ var XMTTrajectoryT = class {
   }
 };
 
-// node_modules/spacedatastandards.org/lib/ts/XMT/XMTMatchRequest.ts
+// ../../../../../../../../private/tmp/claude-501/-Users-tj-software-spacedatanetwork-stack/46a20935-200d-48d4-95a7-fd711bf5224a/scratchpad/workers/codex-catalog-flow/node_modules/spacedatastandards.org/lib/ts/XMT/XMTMatchRequest.ts
 var XMTMatchRequest = class _XMTMatchRequest {
   bb = null;
   bb_pos = 0;
@@ -26953,10 +26953,10 @@ var XMTMatchRequestT = class {
   }
 };
 
-// node_modules/spacedatastandards.org/lib/ts/XMT/XMTSelectionPolicy.ts
+// ../../../../../../../../private/tmp/claude-501/-Users-tj-software-spacedatanetwork-stack/46a20935-200d-48d4-95a7-fd711bf5224a/scratchpad/workers/codex-catalog-flow/node_modules/spacedatastandards.org/lib/ts/XMT/XMTSelectionPolicy.ts
 import * as flatbuffers144 from "flatbuffers";
 
-// node_modules/spacedatastandards.org/lib/ts/XMT/XMTMeasuredError.ts
+// ../../../../../../../../private/tmp/claude-501/-Users-tj-software-spacedatanetwork-stack/46a20935-200d-48d4-95a7-fd711bf5224a/scratchpad/workers/codex-catalog-flow/node_modules/spacedatastandards.org/lib/ts/XMT/XMTMeasuredError.ts
 import * as flatbuffers143 from "flatbuffers";
 var XMTMeasuredError = class _XMTMeasuredError {
   bb = null;
@@ -27085,7 +27085,7 @@ var XMTMeasuredErrorT = class {
   }
 };
 
-// node_modules/spacedatastandards.org/lib/ts/XMT/XMTSelectionPolicy.ts
+// ../../../../../../../../private/tmp/claude-501/-Users-tj-software-spacedatanetwork-stack/46a20935-200d-48d4-95a7-fd711bf5224a/scratchpad/workers/codex-catalog-flow/node_modules/spacedatastandards.org/lib/ts/XMT/XMTSelectionPolicy.ts
 var XMTSelectionPolicy = class _XMTSelectionPolicy {
   bb = null;
   bb_pos = 0;
@@ -27246,7 +27246,7 @@ var XMTSelectionPolicyT = class {
   }
 };
 
-// node_modules/spacedatastandards.org/lib/ts/XMT/XMTIntegrateRecipe.ts
+// ../../../../../../../../private/tmp/claude-501/-Users-tj-software-spacedatanetwork-stack/46a20935-200d-48d4-95a7-fd711bf5224a/scratchpad/workers/codex-catalog-flow/node_modules/spacedatastandards.org/lib/ts/XMT/XMTIntegrateRecipe.ts
 var XMTIntegrateRecipe = class _XMTIntegrateRecipe {
   bb = null;
   bb_pos = 0;
@@ -27338,16 +27338,16 @@ var XMTIntegrateRecipeT = class {
   }
 };
 
-// node_modules/spacedatastandards.org/lib/ts/XMT/XMTIntegrateReport.ts
+// ../../../../../../../../private/tmp/claude-501/-Users-tj-software-spacedatanetwork-stack/46a20935-200d-48d4-95a7-fd711bf5224a/scratchpad/workers/codex-catalog-flow/node_modules/spacedatastandards.org/lib/ts/XMT/XMTIntegrateReport.ts
 import * as flatbuffers157 from "flatbuffers";
 
-// node_modules/spacedatastandards.org/lib/ts/XMT/XMTIntegratedObject.ts
+// ../../../../../../../../private/tmp/claude-501/-Users-tj-software-spacedatanetwork-stack/46a20935-200d-48d4-95a7-fd711bf5224a/scratchpad/workers/codex-catalog-flow/node_modules/spacedatastandards.org/lib/ts/XMT/XMTIntegratedObject.ts
 import * as flatbuffers152 from "flatbuffers";
 
-// node_modules/spacedatastandards.org/lib/ts/XMT/XMTManeuverEvent.ts
+// ../../../../../../../../private/tmp/claude-501/-Users-tj-software-spacedatanetwork-stack/46a20935-200d-48d4-95a7-fd711bf5224a/scratchpad/workers/codex-catalog-flow/node_modules/spacedatastandards.org/lib/ts/XMT/XMTManeuverEvent.ts
 import * as flatbuffers148 from "flatbuffers";
 
-// node_modules/spacedatastandards.org/lib/ts/XMT/XMTManeuverMember.ts
+// ../../../../../../../../private/tmp/claude-501/-Users-tj-software-spacedatanetwork-stack/46a20935-200d-48d4-95a7-fd711bf5224a/scratchpad/workers/codex-catalog-flow/node_modules/spacedatastandards.org/lib/ts/XMT/XMTManeuverMember.ts
 import * as flatbuffers146 from "flatbuffers";
 var XMTManeuverMember = class _XMTManeuverMember {
   bb = null;
@@ -27445,10 +27445,10 @@ var XMTManeuverMemberT = class {
   }
 };
 
-// node_modules/spacedatastandards.org/lib/ts/XMT/XMTRecordRef.ts
+// ../../../../../../../../private/tmp/claude-501/-Users-tj-software-spacedatanetwork-stack/46a20935-200d-48d4-95a7-fd711bf5224a/scratchpad/workers/codex-catalog-flow/node_modules/spacedatastandards.org/lib/ts/XMT/XMTRecordRef.ts
 import * as flatbuffers147 from "flatbuffers";
 
-// node_modules/spacedatastandards.org/lib/ts/XMT/xmtRecordKind.ts
+// ../../../../../../../../private/tmp/claude-501/-Users-tj-software-spacedatanetwork-stack/46a20935-200d-48d4-95a7-fd711bf5224a/scratchpad/workers/codex-catalog-flow/node_modules/spacedatastandards.org/lib/ts/XMT/xmtRecordKind.ts
 var xmtRecordKind = /* @__PURE__ */ ((xmtRecordKind2) => {
   xmtRecordKind2[xmtRecordKind2["Unspecified"] = 0] = "Unspecified";
   xmtRecordKind2[xmtRecordKind2["Cat"] = 1] = "Cat";
@@ -27459,7 +27459,7 @@ var xmtRecordKind = /* @__PURE__ */ ((xmtRecordKind2) => {
   return xmtRecordKind2;
 })(xmtRecordKind || {});
 
-// node_modules/spacedatastandards.org/lib/ts/XMT/XMTRecordRef.ts
+// ../../../../../../../../private/tmp/claude-501/-Users-tj-software-spacedatanetwork-stack/46a20935-200d-48d4-95a7-fd711bf5224a/scratchpad/workers/codex-catalog-flow/node_modules/spacedatastandards.org/lib/ts/XMT/XMTRecordRef.ts
 var XMTRecordRef = class _XMTRecordRef {
   bb = null;
   bb_pos = 0;
@@ -27541,7 +27541,7 @@ var XMTRecordRefT = class {
   }
 };
 
-// node_modules/spacedatastandards.org/lib/ts/XMT/XMTManeuverEvent.ts
+// ../../../../../../../../private/tmp/claude-501/-Users-tj-software-spacedatanetwork-stack/46a20935-200d-48d4-95a7-fd711bf5224a/scratchpad/workers/codex-catalog-flow/node_modules/spacedatastandards.org/lib/ts/XMT/XMTManeuverEvent.ts
 var XMTManeuverEvent = class _XMTManeuverEvent {
   bb = null;
   bb_pos = 0;
@@ -27663,13 +27663,13 @@ var XMTManeuverEventT = class {
   }
 };
 
-// node_modules/spacedatastandards.org/lib/ts/XMT/XMTProductChoice.ts
+// ../../../../../../../../private/tmp/claude-501/-Users-tj-software-spacedatanetwork-stack/46a20935-200d-48d4-95a7-fd711bf5224a/scratchpad/workers/codex-catalog-flow/node_modules/spacedatastandards.org/lib/ts/XMT/XMTProductChoice.ts
 import * as flatbuffers151 from "flatbuffers";
 
-// node_modules/spacedatastandards.org/lib/ts/XMT/XMTProductCandidate.ts
+// ../../../../../../../../private/tmp/claude-501/-Users-tj-software-spacedatanetwork-stack/46a20935-200d-48d4-95a7-fd711bf5224a/scratchpad/workers/codex-catalog-flow/node_modules/spacedatastandards.org/lib/ts/XMT/XMTProductCandidate.ts
 import * as flatbuffers149 from "flatbuffers";
 
-// node_modules/spacedatastandards.org/lib/ts/XMT/xmtCandidateStanding.ts
+// ../../../../../../../../private/tmp/claude-501/-Users-tj-software-spacedatanetwork-stack/46a20935-200d-48d4-95a7-fd711bf5224a/scratchpad/workers/codex-catalog-flow/node_modules/spacedatastandards.org/lib/ts/XMT/xmtCandidateStanding.ts
 var xmtCandidateStanding = /* @__PURE__ */ ((xmtCandidateStanding2) => {
   xmtCandidateStanding2[xmtCandidateStanding2["Unspecified"] = 0] = "Unspecified";
   xmtCandidateStanding2[xmtCandidateStanding2["Selected"] = 1] = "Selected";
@@ -27680,7 +27680,7 @@ var xmtCandidateStanding = /* @__PURE__ */ ((xmtCandidateStanding2) => {
   return xmtCandidateStanding2;
 })(xmtCandidateStanding || {});
 
-// node_modules/spacedatastandards.org/lib/ts/XMT/XMTProductCandidate.ts
+// ../../../../../../../../private/tmp/claude-501/-Users-tj-software-spacedatanetwork-stack/46a20935-200d-48d4-95a7-fd711bf5224a/scratchpad/workers/codex-catalog-flow/node_modules/spacedatastandards.org/lib/ts/XMT/XMTProductCandidate.ts
 var XMTProductCandidate = class _XMTProductCandidate {
   bb = null;
   bb_pos = 0;
@@ -27839,10 +27839,10 @@ var XMTProductCandidateT = class {
   }
 };
 
-// node_modules/spacedatastandards.org/lib/ts/XMT/XMTProductSelection.ts
+// ../../../../../../../../private/tmp/claude-501/-Users-tj-software-spacedatanetwork-stack/46a20935-200d-48d4-95a7-fd711bf5224a/scratchpad/workers/codex-catalog-flow/node_modules/spacedatastandards.org/lib/ts/XMT/XMTProductSelection.ts
 import * as flatbuffers150 from "flatbuffers";
 
-// node_modules/spacedatastandards.org/lib/ts/XMT/xmtCovarianceOrigin.ts
+// ../../../../../../../../private/tmp/claude-501/-Users-tj-software-spacedatanetwork-stack/46a20935-200d-48d4-95a7-fd711bf5224a/scratchpad/workers/codex-catalog-flow/node_modules/spacedatastandards.org/lib/ts/XMT/xmtCovarianceOrigin.ts
 var xmtCovarianceOrigin = /* @__PURE__ */ ((xmtCovarianceOrigin2) => {
   xmtCovarianceOrigin2[xmtCovarianceOrigin2["Absent"] = 0] = "Absent";
   xmtCovarianceOrigin2[xmtCovarianceOrigin2["FromOcm"] = 1] = "FromOcm";
@@ -27850,7 +27850,7 @@ var xmtCovarianceOrigin = /* @__PURE__ */ ((xmtCovarianceOrigin2) => {
   return xmtCovarianceOrigin2;
 })(xmtCovarianceOrigin || {});
 
-// node_modules/spacedatastandards.org/lib/ts/XMT/xmtSelectionReason.ts
+// ../../../../../../../../private/tmp/claude-501/-Users-tj-software-spacedatanetwork-stack/46a20935-200d-48d4-95a7-fd711bf5224a/scratchpad/workers/codex-catalog-flow/node_modules/spacedatastandards.org/lib/ts/XMT/xmtSelectionReason.ts
 var xmtSelectionReason = /* @__PURE__ */ ((xmtSelectionReason2) => {
   xmtSelectionReason2[xmtSelectionReason2["Unspecified"] = 0] = "Unspecified";
   xmtSelectionReason2[xmtSelectionReason2["OnlyCandidate"] = 1] = "OnlyCandidate";
@@ -27859,7 +27859,7 @@ var xmtSelectionReason = /* @__PURE__ */ ((xmtSelectionReason2) => {
   return xmtSelectionReason2;
 })(xmtSelectionReason || {});
 
-// node_modules/spacedatastandards.org/lib/ts/XMT/XMTProductSelection.ts
+// ../../../../../../../../private/tmp/claude-501/-Users-tj-software-spacedatanetwork-stack/46a20935-200d-48d4-95a7-fd711bf5224a/scratchpad/workers/codex-catalog-flow/node_modules/spacedatastandards.org/lib/ts/XMT/XMTProductSelection.ts
 var XMTProductSelection = class _XMTProductSelection {
   bb = null;
   bb_pos = 0;
@@ -28017,7 +28017,7 @@ var XMTProductSelectionT = class {
   }
 };
 
-// node_modules/spacedatastandards.org/lib/ts/XMT/XMTProductChoice.ts
+// ../../../../../../../../private/tmp/claude-501/-Users-tj-software-spacedatanetwork-stack/46a20935-200d-48d4-95a7-fd711bf5224a/scratchpad/workers/codex-catalog-flow/node_modules/spacedatastandards.org/lib/ts/XMT/XMTProductChoice.ts
 var XMTProductChoice = class _XMTProductChoice {
   bb = null;
   bb_pos = 0;
@@ -28109,7 +28109,7 @@ var XMTProductChoiceT = class {
   }
 };
 
-// node_modules/spacedatastandards.org/lib/ts/XMT/xmtObjectOutcome.ts
+// ../../../../../../../../private/tmp/claude-501/-Users-tj-software-spacedatanetwork-stack/46a20935-200d-48d4-95a7-fd711bf5224a/scratchpad/workers/codex-catalog-flow/node_modules/spacedatastandards.org/lib/ts/XMT/xmtObjectOutcome.ts
 var xmtObjectOutcome = /* @__PURE__ */ ((xmtObjectOutcome2) => {
   xmtObjectOutcome2[xmtObjectOutcome2["Unspecified"] = 0] = "Unspecified";
   xmtObjectOutcome2[xmtObjectOutcome2["Selected"] = 1] = "Selected";
@@ -28118,7 +28118,7 @@ var xmtObjectOutcome = /* @__PURE__ */ ((xmtObjectOutcome2) => {
   return xmtObjectOutcome2;
 })(xmtObjectOutcome || {});
 
-// node_modules/spacedatastandards.org/lib/ts/XMT/XMTIntegratedObject.ts
+// ../../../../../../../../private/tmp/claude-501/-Users-tj-software-spacedatanetwork-stack/46a20935-200d-48d4-95a7-fd711bf5224a/scratchpad/workers/codex-catalog-flow/node_modules/spacedatastandards.org/lib/ts/XMT/XMTIntegratedObject.ts
 var XMTIntegratedObject = class _XMTIntegratedObject {
   bb = null;
   bb_pos = 0;
@@ -28325,13 +28325,13 @@ var XMTIntegratedObjectT = class {
   }
 };
 
-// node_modules/spacedatastandards.org/lib/ts/XMT/XMTMatchReport.ts
+// ../../../../../../../../private/tmp/claude-501/-Users-tj-software-spacedatanetwork-stack/46a20935-200d-48d4-95a7-fd711bf5224a/scratchpad/workers/codex-catalog-flow/node_modules/spacedatastandards.org/lib/ts/XMT/XMTMatchReport.ts
 import * as flatbuffers154 from "flatbuffers";
 
-// node_modules/spacedatastandards.org/lib/ts/XMT/XMTPairResult.ts
+// ../../../../../../../../private/tmp/claude-501/-Users-tj-software-spacedatanetwork-stack/46a20935-200d-48d4-95a7-fd711bf5224a/scratchpad/workers/codex-catalog-flow/node_modules/spacedatastandards.org/lib/ts/XMT/XMTPairResult.ts
 import * as flatbuffers153 from "flatbuffers";
 
-// node_modules/spacedatastandards.org/lib/ts/XMT/xmtPairVerdict.ts
+// ../../../../../../../../private/tmp/claude-501/-Users-tj-software-spacedatanetwork-stack/46a20935-200d-48d4-95a7-fd711bf5224a/scratchpad/workers/codex-catalog-flow/node_modules/spacedatastandards.org/lib/ts/XMT/xmtPairVerdict.ts
 var xmtPairVerdict = /* @__PURE__ */ ((xmtPairVerdict2) => {
   xmtPairVerdict2[xmtPairVerdict2["Unspecified"] = 0] = "Unspecified";
   xmtPairVerdict2[xmtPairVerdict2["Compatible"] = 1] = "Compatible";
@@ -28341,7 +28341,7 @@ var xmtPairVerdict = /* @__PURE__ */ ((xmtPairVerdict2) => {
   return xmtPairVerdict2;
 })(xmtPairVerdict || {});
 
-// node_modules/spacedatastandards.org/lib/ts/XMT/XMTPairResult.ts
+// ../../../../../../../../private/tmp/claude-501/-Users-tj-software-spacedatanetwork-stack/46a20935-200d-48d4-95a7-fd711bf5224a/scratchpad/workers/codex-catalog-flow/node_modules/spacedatastandards.org/lib/ts/XMT/XMTPairResult.ts
 var XMTPairResult = class _XMTPairResult {
   bb = null;
   bb_pos = 0;
@@ -28545,7 +28545,7 @@ var XMTPairResultT = class {
   }
 };
 
-// node_modules/spacedatastandards.org/lib/ts/XMT/XMTMatchReport.ts
+// ../../../../../../../../private/tmp/claude-501/-Users-tj-software-spacedatanetwork-stack/46a20935-200d-48d4-95a7-fd711bf5224a/scratchpad/workers/codex-catalog-flow/node_modules/spacedatastandards.org/lib/ts/XMT/XMTMatchReport.ts
 var XMTMatchReport = class _XMTMatchReport {
   bb = null;
   bb_pos = 0;
@@ -28656,7 +28656,7 @@ var XMTMatchReportT = class {
   }
 };
 
-// node_modules/spacedatastandards.org/lib/ts/XMT/XMTReasonCount.ts
+// ../../../../../../../../private/tmp/claude-501/-Users-tj-software-spacedatanetwork-stack/46a20935-200d-48d4-95a7-fd711bf5224a/scratchpad/workers/codex-catalog-flow/node_modules/spacedatastandards.org/lib/ts/XMT/XMTReasonCount.ts
 import * as flatbuffers155 from "flatbuffers";
 var XMTReasonCount = class _XMTReasonCount {
   bb = null;
@@ -28726,7 +28726,7 @@ var XMTReasonCountT = class {
   }
 };
 
-// node_modules/spacedatastandards.org/lib/ts/XMT/XMTUnplacedRecord.ts
+// ../../../../../../../../private/tmp/claude-501/-Users-tj-software-spacedatanetwork-stack/46a20935-200d-48d4-95a7-fd711bf5224a/scratchpad/workers/codex-catalog-flow/node_modules/spacedatastandards.org/lib/ts/XMT/XMTUnplacedRecord.ts
 import * as flatbuffers156 from "flatbuffers";
 var XMTUnplacedRecord = class _XMTUnplacedRecord {
   bb = null;
@@ -28865,7 +28865,7 @@ var XMTUnplacedRecordT = class {
   }
 };
 
-// node_modules/spacedatastandards.org/lib/ts/XMT/XMTIntegrateReport.ts
+// ../../../../../../../../private/tmp/claude-501/-Users-tj-software-spacedatanetwork-stack/46a20935-200d-48d4-95a7-fd711bf5224a/scratchpad/workers/codex-catalog-flow/node_modules/spacedatastandards.org/lib/ts/XMT/XMTIntegrateReport.ts
 var XMTIntegrateReport = class _XMTIntegrateReport {
   bb = null;
   bb_pos = 0;
@@ -29235,7 +29235,7 @@ var XMTIntegrateReportT = class {
   }
 };
 
-// node_modules/spacedatastandards.org/lib/ts/XMT/XMT.ts
+// ../../../../../../../../private/tmp/claude-501/-Users-tj-software-spacedatanetwork-stack/46a20935-200d-48d4-95a7-fd711bf5224a/scratchpad/workers/codex-catalog-flow/node_modules/spacedatastandards.org/lib/ts/XMT/XMT.ts
 var XMT = class _XMT {
   bb = null;
   bb_pos = 0;
