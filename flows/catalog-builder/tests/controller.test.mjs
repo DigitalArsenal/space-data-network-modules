@@ -32,11 +32,11 @@ const composer=await createBrowserModuleHarness({wasmSource:fs.readFileSync(repo
 const evidence={synthetic:true,stages:[]};const fitOriginals=new Map(),fallbackOriginals=new Map(),verified=new Set(),fallbackVerified=new Set(),sizes=[];
 const ap=await createStandaloneHarness('browser',process.env.SDNAP_WASM||repo+'/propagator/sdn-ap/dist/isomorphic/module.wasm',{surface:'direct',enableBrowserWasiThreads:false});
 const fly=async payload=>{const r=await ap.invoke({methodId:'propagate',inputs:[frame('ocm','OCM',payload),frame('configuration','PCF',checkPcf)]});assert.equal(r.statusCode,0,r.errorMessage);return Buffer.from(r.outputs.find(f=>f.portId==='ephemeris').payload);};
-let annotationRefusal,composerRefusal,refusalCode,trapObject,trapComposeObject,lookupFailure=false,storageFailure=false,pageDelay=0;
+let annotationRefusal,composerRefusal,refusalCode,trapObject,trapComposeObject,lookupFailure=false,storageFailure=false,stateRefusal=false,crashAfterStateSnapshot=false,pageDelay=0;
 const trap=new WebAssembly.Instance(new WebAssembly.Module(Uint8Array.from([0,97,115,109,1,0,0,0,1,4,1,96,0,0,3,2,1,0,7,8,1,4,116,114,97,112,0,0,10,5,1,3,0,0,11]))).exports.trap;
 async function tick(time,kill=false){
  let response=await control.invoke({methodId:'advance',inputs:[frame('tick','TimerTick',encodeTimerTick({triggerId:'refresh',firedMs:time}))]});
- const counters={fits:0,fallbacks:0,products:0,indexes:0,productBatches:0,indexBatches:0,pages:0,duplicateProducts:0,stateBytes:0,stateWrites:0,productBytes:0};
+ const counters={fits:0,fallbacks:0,products:0,indexes:0,productBatches:0,indexBatches:0,pages:0,duplicateProducts:0,stateBytes:0,stateWrites:0,productBytes:0,markerWrites:0,markerMaxBytes:0};
  for(let count=0;count<10000;count++){
   assert.equal(response.statusCode,0,response.errorMessage);const out=Object.fromEntries(response.outputs.map(f=>[f.portId,f]));let input=[];
   if(out.notice){counters.notice=decodeFlowNotice(out.notice.payload);evidence.stages.push(counters);return counters;}
@@ -56,7 +56,7 @@ async function tick(time,kill=false){
   }else if(out.annotate_orbit){
    const r=await gp.invoke({methodId:'annotate_population_flow',inputs:[frame('ocm','OCM',out.annotate_orbit.payload),frame('elements','OMM',out.annotate_seed.payload)]});assert.equal(r.statusCode,0,r.errorMessage);input=r.outputs.map(f=>({...f,portId:f.portId==='decision'?'annotation_status':'annotated'}));if(annotationRefusal)input=[frame('annotation_status','QRP',pack(Object.assign(new Q.QRPT(),{KIND:Q.qrpKind.Error,STATUS:Q.qrpStatus.Error,ERROR_CODE:annotationRefusal}),'QRP',false))];
   }else if(out.meta){
-   const m=decodeIngestRequest(out.meta.payload);assert.match(m.tags.batchId,out.state_records?/^catalog-attempt-[0-9a-f]{64}$/:out.index_records?/^catalog-[0-9a-f]{64}:complete$/:/^catalog-[0-9a-f]{64}$/);const b=Buffer.from((out.product_records??out.index_records??out.state_records).payload);const destination=records(m.schema,m.tags.providerId,m.tags.sourceName);const exists=batches.has(m.tags.batchId);if(out.state_records){counters.stateBytes+=b.length;++counters.stateWrites;assert.equal(m.reconcile,"current");destination.splice(0,destination.length,...split(b));}else if(!exists&&!(storageFailure&&out.product_records)){batches.set(m.tags.batchId,split(b));for(const row of split(b))if(!destination.some(x=>hash(x)===hash(row)))destination.push(row);}
+   const m=decodeIngestRequest(out.meta.payload);assert.match(m.tags.batchId,out.state_records?/^catalog-attempt-[0-9a-f]{64}$/:out.index_records?/^catalog-[0-9a-f]{64}:complete$/:/^catalog-[0-9a-f]{64}$/);const b=Buffer.from((out.product_records??out.index_records??out.state_records).payload);const destination=records(m.schema,m.tags.providerId,m.tags.sourceName);const exists=batches.has(m.tags.batchId);if(out.state_records){counters.stateBytes+=b.length;++counters.stateWrites;if(m.reconcile==='current'){if(!stateRefusal){if(crashAfterStateSnapshot)destination.push(...split(b));else destination.splice(0,destination.length,...split(b));}}else{assert.equal(m.reconcile,'none');assert.equal(N.NEV.getSizePrefixedRootAsNEV(new fb.ByteBuffer(b)).eventsLength(),1,'dispatch/failure writes contain exactly one marker');++counters.markerWrites;counters.markerMaxBytes=Math.max(counters.markerMaxBytes,b.length);if(!stateRefusal)destination.push(...split(b));}}else if(!exists&&!(storageFailure&&out.product_records)){batches.set(m.tags.batchId,split(b));for(const row of split(b))if(!destination.some(x=>hash(x)===hash(row)))destination.push(row);}
    if(out.product_records){counters.productBytes+=b.length;if(!storageFailure)for(const row of split(b))journal.set(cid(row),row);++counters.productBatches;for(const b of split(Buffer.from(out.product_records.payload))){
     const product=O.OCM.getSizePrefixedRootAsOCM(new fb.ByteBuffer(b)).unpack();const id=product.METADATA.NORAD_CAT_ID;
     if(product.MEAN_ELEMENTS.MEAN_ELEMENT_THEORY===O.meanElementSource.AP&&!verified.has(id)){
@@ -76,7 +76,8 @@ async function tick(time,kill=false){
     }
     ++counters.products;if(exists)++counters.duplicateProducts;}if(kill){reclaimOrphans();control.destroy();control=await createControl();evidence.stages.push({...counters,killedAfterProduct:true});return counters;}}
    else if(out.index_records){const rows=split(b).map(row=>C.CAT.getSizePrefixedRootAsCAT(new fb.ByteBuffer(row)).unpack());for(const row of rows)for(const product of row.PRODUCTS)assert.ok(journal.has(product.RECORD_CID),'catalog snapshot has an unresolved product reference');generations.push(rows);++counters.indexBatches;for(const b of split(Buffer.from(out.index_records.payload))){++counters.indexes;const cat=C.CAT.getSizePrefixedRootAsCAT(new fb.ByteBuffer(b)).unpack();if(cat.PRODUCTS.length){assert.ok(records('OCM.fbs','synthetic-node','catalog-products').length>0,'product exists before index');}}}
-   input=[frame('stored','IngestResult',encodeIngestResult({schema:m.schema,...m.tags,inserted:exists?0:split(b).length,reconciledDuplicates:0,refused:storageFailure&&out.product_records?'synthetic disk refusal':undefined}))];
+   if(out.state_records&&m.reconcile==='current'&&crashAfterStateSnapshot){crashAfterStateSnapshot=false;control.destroy();control=await createControl();return counters;}
+   input=[frame('stored','IngestResult',encodeIngestResult({schema:m.schema,...m.tags,inserted:exists?0:split(b).length,reconciledDuplicates:0,refused:stateRefusal&&out.state_records?'synthetic state refusal':storageFailure&&out.product_records?'synthetic disk refusal':undefined}))];
   }else if(out.recipe){
    if(C.CAT.getSizePrefixedRootAsCAT(new fb.ByteBuffer(out.catalog.payload)).NORAD_CAT_ID()===trapComposeObject)trap();
    const r=await composer.invoke({methodId:'replace_products',inputs:[out.recipe,out.catalog,{...out.selection,portId:'decision'},...(out.selected?[{...out.selected,portId:'ocm_products'}]:[])]});assert.equal(r.statusCode,0,r.errorMessage);input=r.outputs.map(f=>({...f,portId:f.portId==='decision'?'compose_status':'replacement'}));if(composerRefusal)input=[frame('compose_status','QRP',pack(Object.assign(new Q.QRPT(),{KIND:Q.qrpKind.Error,STATUS:Q.qrpStatus.Error,ERROR_CODE:composerRefusal}),'QRP',false))];
@@ -191,6 +192,7 @@ try{
  await reset([999994,999995,999996]);trapObject=999996;
  await assert.rejects(()=>tick(now),WebAssembly.RuntimeError);assert.equal(current().size,0);
  control.destroy();control=await createControl();
+ crashAfterStateSnapshot=true;await tick(now+599999);assert.equal(current().size,0,'recovery snapshot ingestion can precede reconciliation and acknowledgment');
  const stagedRecovery=await tick(now+600000);assert.equal(stagedRecovery.products,2);assert.equal(stagedRecovery.indexes,2);assert.equal(stagedRecovery.indexBatches,1);assert.equal(current().size,2);assert.match(stagedRecovery.notice.reason,/in-progress attempt deferred/);
  records('OMM.fbs','synthetic','primary').push(seed(999992),seed(999993));records('CAT.fbs','synthetic','identities').push(...[999992,999993].map(id=>pack(Object.assign(new C.CATT(),{NORAD_CAT_ID:id,OBJECT_NAME:'SYNTHETIC'}),'CAT')));
  control.destroy();control=await createControl();
@@ -198,7 +200,7 @@ try{
  assert.equal(generations.at(-1).length,2);
  await assert.rejects(()=>tick(now+1200002),WebAssembly.RuntimeError);control.destroy();control=await createControl();
  const suspectBackoff=await tick(now+1800000);assert.equal(suspectBackoff.indexes,0);assert.match(suspectBackoff.notice.reason,/in-progress attempt deferred/);assert.equal(current().size,4);trapObject=undefined;
- console.log('PASS staged selections recover independently and flush before a repeated trap');
+ console.log('PASS staged selections recover across overlapping state snapshots and flush before a repeated trap');
  await reset();await tick(now);
 
  // A weather defect does not prevent a known decay removal or make a source absence unknown.
@@ -211,10 +213,14 @@ try{
  console.log('PASS per-source poison quarantine and independent decay removal');
  await reset([999994,999995,999996,999997]);lookupFailure=true;await assert.rejects(()=>tick(now),/Storage circuit breaker/);lookupFailure=false;
  assert.equal(records('OCM.fbs','synthetic-node','catalog-products').length,0);
- const failureLog=records('NEV.fbs','synthetic-node','catalog-attempts').map(b=>N.NEV.getSizePrefixedRootAsNEV(new fb.ByteBuffer(b)).unpack().EVENTS).flat();assert.equal(failureLog.length,3,'host-wide lookup failure attempts only three objects');
+ const failureLog=records('NEV.fbs','synthetic-node','catalog-attempts').map(b=>N.NEV.getSizePrefixedRootAsNEV(new fb.ByteBuffer(b)).unpack().EVENTS).flat();assert.equal(new Set(failureLog.map(e=>e.SUBJECT)).size,3,'host-wide lookup failure attempts only three objects');
  await reset([999994,999995,999996,999997]);storageFailure=true;await assert.rejects(()=>tick(now),/complete generation batch/);storageFailure=false;assert.equal(current().size,0,'a refused product batch cannot commit any index row');
  assert.equal(records('OCM.fbs','synthetic-node','catalog-products').length,0);
  console.log('PASS lookup circuit breaker and refused-generation isolation');
+ await reset();stateRefusal=true;await assert.rejects(()=>tick(now),/Attempt storage refused/);stateRefusal=false;
+ assert.equal(current().size,0);assert.equal(records('OCM.fbs','synthetic-node','catalog-products').length,0);assert.equal(records('NEV.fbs','synthetic-node','catalog-attempts').length,0);
+ control.destroy();control=await createControl();assert.equal((await tick(now+1000)).indexes,2);
+ console.log('PASS refused durable marker prevents dispatch and a fresh instance recovers');
  await reset();cfg['catalog.invocation_budget_ms']=3000;pageDelay=1150;control.destroy();control=await createControl();const scanBudget=await tick(now);assert.equal(scanBudget.pages,1,'elapsed scan time consumes budget; a frozen clock fails this assertion');assert.equal(scanBudget.fits+scanBudget.fallbacks,0);assert.equal(scanBudget.notice.kind,'missing');assert.match(scanBudget.notice.reason,/scan elapsed budget exhausted/);pageDelay=0;delete cfg['catalog.invocation_budget_ms'];
  console.log('PASS elapsed monotonic scan budget');
  await reset();const subms=OMM.getRootAsOMM(new fb.ByteBuffer(ommBytes)).unpack();subms.EPOCH=subms.EPOCH.replace('.000','.000499');
@@ -251,7 +257,7 @@ try{
  control.destroy();control=await createControl();const bulk=await tick(now+6*86400000);
  assert.equal(bulk.products,256);assert.equal(bulk.indexes,256);assert.equal(bulk.productBatches,1);assert.equal(bulk.indexBatches,1);
  assert.equal(current().size,256);assert.equal(N.NEV.getSizePrefixedRootAsNEV(new fb.ByteBuffer(records('NEV.fbs','synthetic-node','catalog-attempts')[0])).eventsLength(),0);
- console.log('PASS 256 selections use one product batch and one complete index batch');console.log('STATE_MEASUREMENT '+JSON.stringify({objects:256,stateBytes:bulk.stateBytes,stateWrites:bulk.stateWrites,productBytes:bulk.productBytes,dailyBytesFourPartitions:bulk.stateBytes*4*144}));
+ console.log('PASS 256 selections use one product batch and one complete index batch');assert.equal(bulk.markerWrites,256);assert.ok(bulk.markerMaxBytes<1024,'marker size is independent of the staged selection count');assert.ok(bulk.stateBytes<512*1024,'256-object state payload stays below 512 KiB');console.log('STATE_MEASUREMENT '+JSON.stringify({objects:256,stateBytes:bulk.stateBytes,stateWrites:bulk.stateWrites,markerWrites:bulk.markerWrites,markerMaxBytes:bulk.markerMaxBytes,productBytes:bulk.productBytes,dailyBytesFourPartitions:bulk.stateBytes*4*144}));
  await reset(Array.from({length:16},(_,i)=>1000000+i));cfg['catalog.batch_size']=256;cfg['catalog.partition_count']=4;
  for(let partition=0;partition<4;partition++){
   cfg['catalog.partition_index']=partition;control.destroy();control=await createControl();const part=await tick(now+6*86400000);
