@@ -5,7 +5,7 @@ import {buildDiagnostic} from './lib/ap-diagnostic.mjs';
 import {releaseReference} from './lib/release-reference.mjs';
 import {records,open,repackOcm} from './lib/wide-catalog.mjs';
 const file=buildDiagnostic('wide-grid-concurrency',`
-bool sdnap_test_is_pool(){return sdnap::pool::g_pool_thread;}
+bool sdnap::xpt::tess::sdnap_test_is_pool(){return sdnap::pool::g_pool_thread;}
 SDNAP_EXPORT("sdnap_test_grid_ownership") void sdnap_test_grid_ownership(double* out){
  using namespace sdnap::xpt::tess;auto& c=grid_cache();cache_lock(&c.word);
  out[0]=out[1]=0;for(auto* head:c.bucket)for(auto* g=head;g;g=g->link){out[0]+=g->pins;out[1]+=g->building;}

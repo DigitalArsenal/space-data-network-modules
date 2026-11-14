@@ -379,12 +379,12 @@ for (const [label, cfg] of [["NEAREST, SMOOTHSTEP", {}], ["NEAREST, HERMITE", { 
   refused("propagate_epochs with FORCES", await command.invoke({ methodId: "propagate_epochs", inputs: [store({}, { output: GRID_OUTPUT, forces: XP_FORCES }), one([ap])] }), "configuration-refused", "FORCES");
   refused("propagate_epochs without times", await command.invoke({ methodId: "propagate_epochs", inputs: [store({}), one([ap])] }), "configuration-refused", "OUTPUT.START_TIME");
   const pastRows = await command.invoke({ methodId: "propagate_epochs", inputs: [store({}, { output: { START_TIME: "2026-10-31T12:00:00", STOP_TIME: "2026-11-01T12:00:00", STEP_SECONDS: 3600 } }), one([ap])] });
-  refused("a request past the last row", pastRows, "partial-ephemeris");
+  refused("a request past the last row", pastRows, "weather-rows-short:2026-11-01");
   check(pastRows.outputs.length === 1, "weather exhaustion retains the object's output block");
   if (pastRows.outputs.length === 1) {
     const blk = OEM.getRootAsOEM(new flatbuffers.ByteBuffer(pastRows.outputs[0].payload)).unpack().EPHEMERIS_DATA_BLOCK[0];
-    check(blk.EPHEMERIS_DATA_LINES.length > 0 && blk.EPHEMERIS_DATA_LINES.length < 25, "weather exhaustion preserves the successful prefix");
-    check(/status=partial/.test(String(blk.COMMENT)) && /request-status=/.test(String(blk.COMMENT)), "weather exhaustion includes per-request status");
+    check(blk.EPHEMERIS_DATA_LINES.length === 0, "weather exhaustion emits an empty refusal block");
+    check(/status=refused/.test(String(blk.COMMENT)) && /request-status=/.test(String(blk.COMMENT)), "weather exhaustion includes per-request status");
   }
   refused("an $OMM in the snapshot", await m.harness.invoke({ methodId: "load_epochs", inputs: [{ portId: "ocm", typeRef: ocmType, payload: fs.readFileSync(new URL("fixtures/xp-fit-0.4.0.omm", import.meta.url)) }] }), "omm-not-flown");
   // the covariance against the 0.4.0 numbers

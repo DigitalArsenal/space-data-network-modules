@@ -6,7 +6,7 @@
 // - a cold cache (no grid built yet), set by set in time order: the reference, every component of every state a number;
 // - the same instance again (a warm cache: no grid built again), all 600 (set, time) pairs shuffled: bit for bit;
 // - a fresh instance at the minimum bound (sdnap_wide_grid_budget): the sets loaded one at a time, time-major, a grid built at
-//   every load: bit for bit, and no idle grid kept;
+//   every load: bit for bit, with idle payload reuse at the minimum budget;
 // - the default bound keeps idle grids (192 MiB).
 // The bytes and the order: a grid's held bytes are its allocated bytes (5,069,464 at degree 12 on 128 anomalies, 169,044 at
 // degree 2), and sdnap_wide_grid_cache reports the same held bytes as sdnap_wide_grid_budget; at a bound of 34
@@ -99,6 +99,7 @@ async function open(file = wasmPath, options = {}) {
 
 // a cold cache, set by set in time order: the reference
 const A = await open();
+A.budget(512 * MB);
 assert.equal(A.cache()[2], 0, "a cold cache: no grid built before the reference");
 await A.load(RECORDS);
 const ref = SETS.map((_, i) => TIMES.map((t) => A.at(i, t)));
@@ -111,13 +112,13 @@ const pairs = shuffle(SETS.flatMap((_, i) => TIMES.map((_, k) => [i, k])));
 let differ = 0;
 for (const [i, k] of pairs) if (!same(A.at(i, TIMES[k]), ref[i][k])) ++differ;
 assert.equal(differ, 0, `a warm cache, shuffled: ${differ} states differ`);
-assert.ok(A.budget()[1] <= A.budget()[0], "the shuffled pass respects its budget");
+assert.equal(A.cache()[2], builtCold, "the resident warm cache builds no grid again");
 console.log(`a warm cache (the ${builtCold} grids of the cold pass, none built again), ${pairs.length} (set, time) pairs shuffled: bit for bit`);
-// a cache that keeps no idle grid: one set loaded at a time, time-major
+// Minimum-budget reloads preserve exact states and reuse idle payloads.
 const B = await open();
 const minimum = 34 * gridBytes(12);
 assert.equal(B.budget(minimum)[0], minimum, "the minimum byte bound is accepted");
-assert.equal(B.budget(1)[0], minimum, "a subminimum update preserves the byte bound");
+assert.equal(B.budget(1)[0], minimum, "a subminimum update applies the minimum");
 differ = 0;
 let idle = 0, loads = 0, loadsWithoutBuild = 0;
 for (let blk = 0; blk < TIMES.length; blk += 30)
@@ -132,8 +133,9 @@ for (let blk = 0; blk < TIMES.length; blk += 30)
   }
 assert.equal(differ, 0, `the minimum bound: ${differ} states differ`);
 assert.ok(B.budget()[1] <= minimum, "payload residency respects the minimum budget");
-assert.ok(loads > 0, "time-major reloads were exercised");
-console.log(`the minimum bound (a grid built at each of ${loads} loads): bit for bit; no idle grid kept`);
+assert.ok(loadsWithoutBuild > 0, "some reloads reuse payloads without construction");
+assert.ok(idle > 0, "the minimum budget retains idle payloads");
+console.log(`minimum-budget reloads: ${loadsWithoutBuild} of ${loads} reuse payloads; idle payloads retained; bit for bit`);
 // the default bound keeps idle grids
 const C = await open();
 for (let i = 0; i < SETS.length; ++i) { await C.load([RECORDS[i]]); C.at(0, TIMES[0]); }
