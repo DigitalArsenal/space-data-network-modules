@@ -38,10 +38,10 @@ through the fit epoch plus 30 days, inclusive.
 
 Expired, future or excluded seeds use ingestion-only SGP4. Future seeds are
 reconsidered when their epoch arrives. Missing/invalid weather and physically
-refused fits wait for input changes; other fit refusals carry a ten-minute
-retry time. A failed object advances to the following object. Per-instance
+refused fits wait for input changes. Resource and delivery refusals advance
+without publishing a fallback or a selection. A failed object advances to the following object. Per-instance
 failure backoff grows from one to 128 minutes and resets with the instance;
-committed fallback retry times survive in the selection reason.
+Stored products and selections contain no attempt timestamp or counter.
 
 Malformed records are counted and skipped. Notices contain bounded source/hash
 examples and object-failure reasons/retry times. `FlowNotice.KIND` is `Info`
@@ -156,3 +156,32 @@ covariance. Covariance rotation also has an independent exact signed-axis case.
 The paged connector validates frame lengths/counts and byte/row limits; the
 host contract has `TestStorageIndexPageCompleteSnapshots` coverage. Signing,
 trust and signed-out reads are excluded.
+
+## Chain refusal classification
+
+`control.cpp::transient_refusal` is the classification boundary. Only
+`out-of-memory`, `pool-dead`, `output-failed`, and `host-failed` are transient:
+resource availability or delivery can change without a different seed. They
+publish no product or selection. All other codes are final for the input
+signature, including unknown codes; changing the recipe revision permits a
+retry after a software correction. No attempt time is included in an orbit.
+
+The chain sources (`src/chain.cpp`, `src/chain_inputs.cpp`) emit `invalid-input`,
+`missing-input`, `chain-output-bound`, `missing-sgp4`, `missing-flight`,
+`invalid-flight`, and `missing-fit`. These are deterministic contract failures.
+The ingestion, propagation and fit methods also return deterministic validation
+or physical refusals, grouped by their source:
+
+| Source in `propagator/sdn-ap/src` | Codes or code families | Why final for identical inputs |
+| --- | --- | --- |
+| `ingest_omm.inc` | `invalid-omm`, `missing-omm`, `unsupported-center`, `theory-not-ingestable:AP`, user-parameter refusals | Seed content or theory |
+| `fit_oem.inc` | `invalid-pvn`, `provenance-count`, `invalid-oem`, `missing-oem`, `unsupported-center`, `reference-frame-undeclared`, `reference-frame-conflict`, `unsupported-frame`, `unsupported-time-system`, `too-few-states`, `fit-failed`, `fit-implausible`, `decayed-in-arc:<date>`, covariance-layout refusals | Fixed arc, fit policy, frames and numerical solve |
+| Configuration helpers | `configuration-missing`, `invalid-configuration`, `configuration-refused` | The configured PCF does not change between attempts |
+| Weather helpers | `weather-rows-missing`, `weather-rows-invalid`, `weather-rows-short`, `weather-rows-unselected`, `weather-source-unspecified` | Weather content and interval |
+| Propagation and record helpers | `element-set-refused`, `propagation-failed`, `frame-failed`, `fit-at-branch-limit`, `cov-*`, `invalid-covariance`, `unsupported-*`, `carried-*`, `carry-*`, model/force/parameter refusals | Record, force policy, carried data or numerical limits |
+| Controller acceptance | `fit-statistics refusal fallback` | Fixed state count, interval and error limits |
+
+The final-by-default rule covers every returned code, including dynamic date
+and parameter suffixes. A resource refusal never becomes a stored physical
+refusal. A repeated deterministic fallback with the same signature emits no
+product or index write.

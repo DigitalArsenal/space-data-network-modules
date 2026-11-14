@@ -210,8 +210,7 @@ int next_object() {
   const bool expired=s->second.epoch+5LL*86400000<now+cfg.margin*1000;
   const bool future=s->second.epoch>now;
   if(previous&&previous->PRODUCTS()&&previous->PRODUCTS()->size()==1){const auto* p=previous->PRODUCTS()->Get(0);if(!text(p->RECORD_CID()).empty()&&text(p->SELECTION_REASON()).find("catalog-input="+signature+";")!=std::string::npos&&(!expired||p->KIND()!=catalogProductKind::ApElements)&&
-   !(text(p->SELECTION_REASON()).find("future-seed")!=std::string::npos&&!future)&&
-   !(text(p->SELECTION_REASON()).find("retry-at=")!=std::string::npos&&instant(text(p->SELECTION_REASON()).substr(text(p->SELECTION_REASON()).find("retry-at=")+9,24))<=now))continue;}
+   !(text(p->SELECTION_REASON()).find("future-seed")!=std::string::npos&&!future))continue;}
   reason=expired?"old-span fallback":future?"future-seed fallback":!eligible?"outside configured AP class":"accepted exact-W fit";run_fit=!expired&&!future&&eligible;
   if(!run_fit){phase=Phase::Chain;return push("fallback_seed","OMM",{s->second.data.begin()+4,s->second.data.end()});}
   PCFT flight;flight.THEORY=pcfTheory::SGP4;flight.OUTPUT=std::make_unique<PCFOutputT>();flight.OUTPUT->FRAME=pcfOutputFrame::GCRF;flight.OUTPUT->START_TIME=iso(s->second.epoch-216000000);flight.OUTPUT->STOP_TIME=iso(s->second.epoch+432000000);flight.OUTPUT->STEP_SECONDS=300;
@@ -222,6 +221,11 @@ int next_object() {
  }
  return finish();
 }
+// Only resource and delivery failures can change without a changed input.
+// Unknown codes fail closed as deterministic; recipe revision permits retry.
+bool transient_refusal(const std::string& code) {
+ return code=="out-of-memory"||code=="pool-dead"||code=="output-failed"||code=="host-failed";
+}
 int chain() {
  const auto* fallback=input("fallback"),*candidate=input("candidate"),*decision=input("chain_status");if(phase!=Phase::Chain||!decision)return stop("Unexpected chain outcome.");
  flatbuffers::Verifier qv(decision->payload,decision->payload_length);if(!VerifyQRPBuffer(qv))return fail_object("Invalid chain outcome.");const auto* q=GetQRP(decision->payload);if(!fallback)return fail_object("chain: "+text(q->ERROR_CODE())+" "+text(q->MESSAGE()));
@@ -229,8 +233,7 @@ int chain() {
  if(run_fit&&candidate&&q->STATUS()==qrpStatus::Ok){flatbuffers::Verifier v(candidate->payload,candidate->payload_length);if(!VerifyOCMBuffer(v))return fail_object("Invalid fit record.");const auto* o=GetOCM(candidate->payload);const auto* stats=o->ORBIT_DETERMINATION()?o->ORBIT_DETERMINATION()->FIT_STATISTICS():nullptr;
   if(stats&&stats->FIT_STATES()==2161&&std::isfinite(stats->FIT_RMS_KM())&&stats->FIT_RMS_KM()<=cfg.max_rms&&std::isfinite(stats->FIT_MAX_KM())&&stats->FIT_MAX_KM()<=cfg.max_error&&instant(text(stats->FIT_START()))==seed.epoch-216000000&&instant(text(stats->FIT_STOP()))==seed.epoch+432000000)use=candidate;else reason="fit-statistics refusal fallback";
  }else if(run_fit){const auto code=text(q->ERROR_CODE());reason="fit refusal fallback: "+code;
-  const bool permanent=code.rfind("weather-rows-",0)==0||code=="fit-implausible"||code=="invalid-omm"||code.rfind("unsupported-",0)==0;
-  if(!permanent)reason+="; retry-at="+iso(now+600000);
+  if(transient_refusal(code))return fail_object("transient chain refusal: "+code);
  }
  flatbuffers::Verifier ov(use->payload,use->payload_length);if(!VerifyOCMBuffer(ov))return fail_object("Invalid selected orbit.");
  Bytes framed;

@@ -27,6 +27,7 @@ const composer=await createBrowserModuleHarness({wasmSource:fs.readFileSync(repo
 const evidence={synthetic:true,stages:[]};const fitOriginals=new Map(),verified=new Set(),sizes=[];
 const ap=await createStandaloneHarness('browser',process.env.SDNAP_WASM||repo+'/propagator/sdn-ap/dist/isomorphic/module.wasm',{surface:'direct',enableBrowserWasiThreads:false});
 const fly=async payload=>{const r=await ap.invoke({methodId:'propagate',inputs:[frame('ocm','OCM',payload),frame('configuration','PCF',checkPcf)]});assert.equal(r.statusCode,0,r.errorMessage);return Buffer.from(r.outputs.find(f=>f.portId==='ephemeris').payload);};
+let refusalCode;
 async function tick(time,kill=false){
  let response=await control.invoke({methodId:'advance',inputs:[frame('tick','TimerTick',encodeTimerTick({triggerId:'refresh',firedMs:time}))]});
  const counters={fits:0,fallbacks:0,products:0,indexes:0,pages:0,duplicateProducts:0};
@@ -43,6 +44,7 @@ async function tick(time,kill=false){
    const r=await chain.invoke({methodId:fit?'run_chain':'ingest_seed',inputs});assert.equal(r.statusCode,0,r.errorMessage);
    const fitted=r.outputs.find(f=>f.portId==='elements');if(fitted)fitOriginals.set(O.OCM.getRootAsOCM(new fb.ByteBuffer(fitted.payload)).unpack().METADATA.NORAD_CAT_ID,Buffer.from(fitted.payload));
    input=r.outputs.map(f=>({...f,portId:{fallback:'fallback',elements:'candidate',decision:'chain_status'}[f.portId]}));
+   if(fit&&refusalCode){input=input.filter(f=>!['candidate','chain_status'].includes(f.portId));input.push(frame('chain_status','QRP',pack(Object.assign(new Q.QRPT(),{KIND:Q.qrpKind.Error,STATUS:Q.qrpStatus.Invalid,ERROR_CODE:refusalCode}),'QRP',false)));}
   }else if(out.annotate_orbit){
    const r=await gp.invoke({methodId:'annotate_population_flow',inputs:[frame('ocm','OCM',out.annotate_orbit.payload),frame('elements','OMM',out.annotate_seed.payload)]});assert.equal(r.statusCode,0,r.errorMessage);input=r.outputs.map(f=>({...f,portId:f.portId==='decision'?'annotation_status':'annotated'}));
   }else if(out.meta){
@@ -87,6 +89,12 @@ try{
  cfg['catalog.weather_source']='missing-weather';control.destroy();control=await createControl();const refused=await tick(now+5000);assert.equal(refused.fits,2);assert.ok([...current().values()].every(c=>c.PRODUCTS[0].KIND===C.catalogProductKind.Sgp4Elements&&/weather/.test(c.PRODUCTS[0].SELECTION_REASON)));
  const noRetry=await tick(now+6000);assert.equal(noRetry.fits+noRetry.products,0);
  cfg['catalog.weather_source']='weather';control.destroy();control=await createControl();const restored=await tick(now+7000);assert.equal(restored.fits,2);
+ for(const [i,code] of ['fit-failed','too-few-states','decayed-in-arc:2026-01-01'].entries()){
+  refusalCode=code;records('OMM.fbs','synthetic','primary').push(seed(ids[0],.21+i*.01));
+  assert.equal((await tick(now+10000+i*1000000)).indexes,1);
+  control.destroy();control=await createControl();const retry=await tick(now+610000+i*1000000);
+  assert.equal(retry.fits+retry.products+retry.indexes,0,'deterministic refusal survives instance replacement: '+code);
+ }refusalCode=undefined;
  const stale=await tick(now+6*86400000);assert.equal(stale.fits,0);assert.equal(stale.fallbacks,2);assert.ok([...current().values()].every(c=>c.PRODUCTS[0].KIND===C.catalogProductKind.Sgp4Elements));
  records('CAT.fbs','synthetic','identities').splice(0,1);const removed=await tick(now+6*86400000+1000);assert.equal(removed.indexes,1);assert.equal(current().get(ids[0]).PRODUCTS.length,0);
  const consumer=new Map();for(const b of records('CAT.fbs','synthetic-node','catalog-index')){const c=C.CAT.getSizePrefixedRootAsCAT(new fb.ByteBuffer(b)).unpack();const old=consumer.get(c.NORAD_CAT_ID);if(!old||old.PRODUCTS_AS_OF<=c.PRODUCTS_AS_OF)consumer.set(c.NORAD_CAT_ID,c);}assert.deepEqual(consumer,current());evidence.consumerMapEqual=true;
