@@ -37,7 +37,7 @@
     {
       "nodeId": "annotation",
       "pluginId": "com.digitalarsenal.analysis.gp-error-model",
-      "methodId": "annotate_population",
+      "methodId": "annotate_population_flow",
       "kind": "transform",
       "drainPolicy": "single-shot"
     },
@@ -304,6 +304,15 @@
       "fromPortId": "decision",
       "toNodeId": "control",
       "toPortId": "compose_status",
+      "backpressurePolicy": "queue",
+      "queueDepth": 2
+    },
+    {
+      "edgeId": "annotation-decision-control-annotation_status",
+      "fromNodeId": "annotation",
+      "fromPortId": "decision",
+      "toNodeId": "control",
+      "toPortId": "annotation_status",
       "backpressurePolicy": "queue",
       "queueDepth": 2
     }

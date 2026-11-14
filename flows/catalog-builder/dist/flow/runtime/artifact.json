@@ -5,7 +5,7 @@
   "compiler": "space-data-module flow compile (isomorphic, wasi-threads)",
   "threadModel": "wasi-threads",
   "nodes": 8,
-  "edges": 27,
+  "edges": 28,
   "triggers": 1,
   "capabilities": [
     "clock",
@@ -45,7 +45,7 @@
     {
       "nodeId": "annotation",
       "pluginId": "com.digitalarsenal.analysis.gp-error-model",
-      "methodId": "annotate_population",
+      "methodId": "annotate_population_flow",
       "dispatchModel": "linked-direct",
       "resolvedFromPluginFamily": null
     },
@@ -77,7 +77,7 @@
       "dependencyId": "com.digitalarsenal.flows.catalog-builder.control",
       "pluginId": "com.digitalarsenal.flows.catalog-builder.control",
       "version": "0.1.0",
-      "sha256": "4e226f8ad270bdb3c0d62a9d93603557468d37c92dee92d63d514af0d4c95913",
+      "sha256": "c3fbd054840fc9a4907e1067f2798c121318e2bf3b6dde406a0c305ba945b4dd",
       "dispatchModel": "linked-direct",
       "artifactPath": null,
       "publisher": null,
@@ -91,7 +91,7 @@
       "dependencyId": "com.digitalarsenal.hostcap.flatsql-query",
       "pluginId": "com.digitalarsenal.hostcap.flatsql-query",
       "version": "0.3.1",
-      "sha256": "7c166be6dae173211d403aacf459b3f91ff63bbe59f7fa222b0668780e80f76c",
+      "sha256": "4e2609404690899ee74a3002f50ab07ace702e0fe310ae710dacebf90c15a2ba",
       "dispatchModel": "linked-direct",
       "artifactPath": null,
       "publisher": null,
@@ -122,7 +122,7 @@
       "dependencyId": "com.digitalarsenal.analysis.gp-error-model",
       "pluginId": "com.digitalarsenal.analysis.gp-error-model",
       "version": "0.16.0",
-      "sha256": "1847b2a61423108f0ebd573469a9dcfeacf731ec50985c4638abb9b677868e87",
+      "sha256": "2af2edc7df171c07cfd0450c4e1d60eae67e035a1c2239f9a4944dc1146466e3",
       "dispatchModel": "linked-direct",
       "artifactPath": null,
       "publisher": null,
@@ -148,7 +148,8 @@
         "element_residuals": "sdm_guest_636f6d2e6469676974616c617273656e616c2e616e616c797369732e67702d6572726f722d6d6f64656c_element_residuals",
         "object_covariance": "sdm_guest_636f6d2e6469676974616c617273656e616c2e616e616c797369732e67702d6572726f722d6d6f64656c_object_covariance",
         "source_covariance": "sdm_guest_636f6d2e6469676974616c617273656e616c2e616e616c797369732e67702d6572726f722d6d6f64656c_source_covariance",
-        "annotate_population": "sdm_guest_636f6d2e6469676974616c617273656e616c2e616e616c797369732e67702d6572726f722d6d6f64656c_annotate_population"
+        "annotate_population": "sdm_guest_636f6d2e6469676974616c617273656e616c2e616e616c797369732e67702d6572726f722d6d6f64656c_annotate_population",
+        "annotate_population_flow": "sdm_guest_636f6d2e6469676974616c617273656e616c2e616e616c797369732e67702d6572726f722d6d6f64656c_annotate_population_flow"
       }
     },
     {

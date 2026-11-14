@@ -225,7 +225,7 @@
     {
       "nodeId": "annotation",
       "pluginId": "com.digitalarsenal.analysis.gp-error-model",
-      "methodId": "annotate_population",
+      "methodId": "annotate_population_flow",
       "kind": "transform",
       "dispatchModel": null,
       "uiX": 0,
@@ -942,6 +942,32 @@
       "fromPortId": "decision",
       "toNodeId": "control",
       "toPortId": "compose_status",
+      "contract": {
+        "canonicalType": {
+          "schemaName": "QRP.fbs",
+          "fileIdentifier": "$QRP",
+          "schemaVersion": null,
+          "schemaHash": [],
+          "acceptsAnyFlatbuffer": false,
+          "wireFormat": "flatbuffer",
+          "rootTypeName": "QRP",
+          "fixedStringLength": 0,
+          "byteLength": 0,
+          "requiredAlignment": 0
+        },
+        "alignedType": null,
+        "canonicalFallbackAvailable": true,
+        "alignedEligible": false,
+        "opaque": false,
+        "routePolicy": "canonical-only"
+      }
+    },
+    {
+      "edgeId": "annotation-decision-control-annotation_status",
+      "fromNodeId": "annotation",
+      "fromPortId": "decision",
+      "toNodeId": "control",
+      "toPortId": "annotation_status",
       "contract": {
         "canonicalType": {
           "schemaName": "QRP.fbs",

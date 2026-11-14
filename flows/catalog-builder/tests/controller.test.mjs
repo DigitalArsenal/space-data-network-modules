@@ -51,7 +51,7 @@ async function tick(time,kill=false){
     const product=O.OCM.getSizePrefixedRootAsOCM(new fb.ByteBuffer(b)).unpack();const id=product.METADATA.NORAD_CAT_ID;
     if(product.MEAN_ELEMENTS.MEAN_ELEMENT_THEORY===O.meanElementSource.AP&&!verified.has(id)){
       const original=fitOriginals.get(id);assert.ok(original);assert.ok(b.indexOf(original)>=0,'stored product embeds the entire fit output unchanged');
-      const originalFields=O.OCM.getRootAsOCM(new fb.ByteBuffer(original)).unpack(),storedFields=structuredClone(product);
+      const originalFields=O.OCM.getRootAsOCM(new fb.ByteBuffer(original)).unpack(),storedFields=product;
       for(const key of ['COV_REALISM','COVARIANCE_BLOCKS']){assert.deepEqual(storedFields[key].slice(0,originalFields[key].length),originalFields[key]);delete storedFields[key];delete originalFields[key];}
       assert.deepEqual(storedFields,originalFields,'every original fit field survives storage');
       assert.deepEqual(await fly(b.subarray(4)),await fly(original),'stored product states and formal covariance match the fit output bit for bit');
