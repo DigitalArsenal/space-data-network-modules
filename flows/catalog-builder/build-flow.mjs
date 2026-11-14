@@ -36,3 +36,10 @@ for(const [folder,file,inline] of [['hostcap/flatsql-query','flatsql_query_modul
 }
 const flow=JSON.parse(await read('flows/catalog-builder.flow.json'));
 await compileFlowProgram({flow,dependencies,outDir:path.join(out,'runtime'),standardsRoot});
+
+const partitions=Number(process.env.CATALOG_FLOW_PARTITIONS||1);
+if(!Number.isInteger(partitions)||partitions<1||partitions>8)throw Error('CATALOG_FLOW_PARTITIONS must be an integer from 1 through 8');
+if(partitions>1)for(let index=0;index<partitions;index++){
+ const partitionFlow={...flow,programId:flow.programId+'.partition-'+index,name:flow.name+' partition '+index};
+ await compileFlowProgram({flow:partitionFlow,dependencies,outDir:path.join(out,'partitions',String(index)),standardsRoot});
+}
