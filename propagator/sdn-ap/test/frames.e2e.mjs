@@ -349,6 +349,8 @@ const T_START = Date.now();
   }));
   assert.ok((await a.propagateEpochs(live.slice(0, 6).map((o) => ocmOfObject(o)), isoTimes)).equals(propBefore), "propagate_epochs changed after a refill");
   console.log(`purity: ${compared} served states from two fill orders identical; epochs_at (TEME, Earth-fixed), set_at and propagate_epochs unchanged, the instance with 4 pool threads that ran the batches of sdnap_epochs_at`);
+  await a.h.destroy();
+  await b.h.destroy();
   finish("purity", t0);
 }
 
@@ -398,6 +400,8 @@ const T_START = Date.now();
   });
   assert.ok(againstFirst >= 3 * 30, `${againstFirst} cells compared with the store's first asks`);
   console.log(`cells: ${compared} served states identical to a clean instance's; ${againstFirst} within 1 cm of the store's first asks`);
+  await a.h.destroy();
+  await c.h.destroy();
   finish("cells against AP history dependence", t0);
 }
 
@@ -471,17 +475,16 @@ const T_START = Date.now();
   let rebuilt = 0;
   for (let k = 0; k < 4; k++) { rebuilt += h.fill(t + (k % 2 ? 0 : 3 * DAY), 180).stored > 0 ? 1 : 0; }
   assert.ok(rebuilt >= 3, "two clocks a window apart rebuild at every alternation: frames serve one clock and its look-ahead to an instance");
-  // a load replaces the store: every cell is dropped, the table read again
+  // A catalog reload releases the frame allocation; the host opens a fresh budget for the new catalog.
   await f.load(POP);
   q = f.at(t);
-  assert.equal(q.rc, CODE.storeChanged);
-  assert.ok(q.status.every((s) => s === STATUS.noSegment));
-  assert.equal(f.stats()[STAT.current], 0);
+  assert.equal(q.rc, CODE.notOpen);
+  assert.equal(f.open(BUDGET), 0);
   assert.equal(f.fill(t, 180).due, 0);
   assert.equal(f.stats()[STAT.current], 1);
   assert.equal(f.at(t).status[0], STATUS.served);
-  await f.load(population([["leo500", 100]]));  // more series than open's table
-  assert.equal(f.refill(t).rc, CODE.reopen);
+  await f.load(population([["leo500", 100]]));  // A larger catalog also releases the frame allocation.
+  assert.equal(f.refill(t).rc, CODE.notOpen);
   // a slab with room for one largest cell only: rows are refused and counted, each skipped and reported, the later objects still visited; the objects stay "no segment"
   const small = await openFrames();
   await small.load(POP);

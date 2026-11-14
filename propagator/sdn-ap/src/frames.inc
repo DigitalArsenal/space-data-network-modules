@@ -229,6 +229,34 @@ inline void fill_table(State& s) {
 
 inline double minutes_from(const Obj& o, double whole, double frac) { return ((whole - o.ew) + (frac - o.ef)) * kMinutesPerDay; }
 
+/// The frame evaluator shared by the plane and plugin layouts; no construction or allocation.
+inline int32_t read_cell(const State& s, uint32_t index, double jd_whole, double jd_frac, bool stale, double r[3], double v[3]) {
+  const Obj& o = s.obj[index];
+    int32_t code = kNoSegment;
+    for (int a = 0; a < 3; ++a) r[a] = v[a] = __builtin_nan("");
+    if (!stale) {
+      if (o.kind != 0) code = o.kind;
+      else {
+        const double t = minutes_from(o, jd_whole, jd_frac);
+        const uint8_t* c = cell_at(s, o.cur);
+        if (c == nullptr || !covers_cell(c, t)) c = cell_at(s, o.nxt);
+        if (c != nullptr && covers_cell(c, t)) {
+          if (is_tombstone(c)) code = c[17];
+          else { eval_cell(c, t, r, v); code = kServed; }
+        }
+      }
+    }
+  return code;
+}
+inline void rotate_cell(double rc, double rs, bool pos_only, double r[3], double v[3]) {
+      const double x = (rc * r[0] + rs * r[1]) * 1000.0, y = (-rs * r[0] + rc * r[1]) * 1000.0, z = r[2] * 1000.0;
+      r[0] = x; r[1] = y; r[2] = z;
+      if (!pos_only) {
+        const double vx = (rc * v[0] + rs * v[1]) * 1000.0, vy = (-rs * v[0] + rc * v[1]) * 1000.0;
+        v[0] = vx + sdnap::kEarthRotationRate * y; v[1] = vy - sdnap::kEarthRotationRate * x; v[2] = v[2] * 1000.0;
+      }
+}
+
 // ---- the builder ----
 struct Built {
   double coef[6][kNodes];
@@ -526,30 +554,10 @@ int32_t sdnap_frames_at(double jd_whole, double jd_frac, uint32_t first, uint32_
   double rc = 1.0, rs = 0.0;
   if (frame == 3) { const double theta = sdnap::gmst(jd_whole, jd_frac); rc = std::cos(theta); rs = std::sin(theta); }
   for (uint32_t k = 0; k < count; ++k) {
-    const Obj& o = s.obj[first + k];
-    int32_t code = kNoSegment;
-    double r[3] = {nan, nan, nan}, v[3] = {nan, nan, nan};
-    if (!stale) {
-      if (o.kind != 0) code = o.kind;
-      else {
-        const double t = minutes_from(o, jd_whole, jd_frac);
-        const uint8_t* c = cell_at(s, o.cur);
-        if (c == nullptr || !covers_cell(c, t)) c = cell_at(s, o.nxt);
-        if (c != nullptr && covers_cell(c, t)) {
-          if (is_tombstone(c)) code = c[17];
-          else { eval_cell(c, t, r, v); code = kServed; }
-        }
-      }
-    }
+    double r[3], v[3];
+    const int32_t code = read_cell(s, first + k, jd_whole, jd_frac, stale, r, v);
     status[k] = code;
-    if (code == kServed && frame == 3) {
-      const double x = (rc * r[0] + rs * r[1]) * 1000.0, y = (-rs * r[0] + rc * r[1]) * 1000.0, z = r[2] * 1000.0;
-      r[0] = x; r[1] = y; r[2] = z;
-      if (!pos_only) {
-        const double vx = (rc * v[0] + rs * v[1]) * 1000.0, vy = (-rs * v[0] + rc * v[1]) * 1000.0;
-        v[0] = vx + sdnap::kEarthRotationRate * y; v[1] = vy - sdnap::kEarthRotationRate * x; v[2] = v[2] * 1000.0;
-      }
-    }
+    if (code == kServed && frame == 3) rotate_cell(rc, rs, pos_only, r, v);
     for (int c = 0; c < 3; ++c) { out[c * count + k] = r[c]; if (!pos_only) out[(3 + c) * count + k] = v[c]; }
   }
   (void)planes;

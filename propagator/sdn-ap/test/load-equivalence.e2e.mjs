@@ -5,7 +5,7 @@
 // cover the sets' order inside every series, a same-epoch duplicate with different content in both input orders, a capped load and theory-filtered loads, SGP4
 // and SGP4XP and AP sets, AP sets with a covariance, a set carrying a forecast track, two distinct weather series (sharing and the discard of an unused one),
 // and the refusals: each covariance refusal, several bad records in one load (the first one is reported), series-forces-differ; each compared by status, code
-// and message with the old build's, and after every refusal the new build's store is empty (series, kept and bytes).
+// and message with the old build's; each refused replacement preserves the resident snapshot and its bytes.
 // Two bases. The test compares what a load keeps. A covariance is not kept by the load: it is built from the kept set
 // when the store is asked for it, so the covariance's base must build it the way the build under test does. That base is
 // 91f56d37: the old build's loader, with stack #599's covariance (the bank on the record's own set). Everything else,
@@ -68,15 +68,17 @@ const fingerprint = (h, q, part = 'store') => {
   return JSON.stringify(part === 'store' ? out : covs, (k, v) => (typeof v === 'number' && !Number.isFinite(v) ? String(v) : v));
 };
 const bytesOf = q => { q.x.sdnap_epochs_stats(q.p); return q.f64(q.p, 8)[7]; };
-const emptyAfter = (q, what) => { q.x.sdnap_epochs_stats(q.p); const s = q.f64(q.p, 8); assert.deepEqual([q.x.sdnap_epochs_count(), s[1], s[7]], [0, 0, 0], `${what}: the store after a refusal holds series, kept, bytes ${q.x.sdnap_epochs_count()}, ${s[1]}, ${s[7]}`); };
+
 let compared = 0, covMoved = 0;  // covMoved: catalogs whose covariances differ from 796bacbe's (stack #599)
 const same = async (name, records, cfg = {}) => {
+  const before = fingerprint(fresh, pn), held = bytesOf(pn);
   const a = await load(old, records, cfg), b = await load(fresh, records, cfg);
   assert.equal(b.statusCode, a.statusCode, `${name}: status ${b.statusCode} (${b.errorCode}) against the old build's ${a.statusCode} (${a.errorCode})`);
   if (a.statusCode !== 0) {
     assert.deepEqual([b.errorCode, b.errorMessage], [a.errorCode, a.errorMessage], `${name}: the refusal`);
-    emptyAfter(pn, name);
-    console.log(`${name}: refused ${b.errorCode}, store empty`);
+    assert.equal(fingerprint(fresh, pn), before, `${name}: refused load changed resident states`);
+    assert.equal(bytesOf(pn), held, `${name}: refused load changed resident bytes`);
+    console.log(`${name}: refused ${b.errorCode}, resident snapshot preserved`);
     return b;
   }
   assert.equal(fingerprint(fresh, pn), fingerprint(old, po), `${name}: the store differs from the old build's`);
