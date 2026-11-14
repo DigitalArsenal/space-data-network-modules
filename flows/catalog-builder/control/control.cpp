@@ -313,7 +313,7 @@ void mark_product_batch(uint32_t id,const std::string& batch){
  auto& a=attempts.at(id);a.product_batch=batch;
  auto log=std::unique_ptr<NEVT>(GetSizePrefixedNEV(a.data.data())->UnPack());
  auto& detail=log->EVENTS[0]->DETAIL;const auto pos=detail.find(" product-batch=");if(pos!=std::string::npos)detail.erase(pos);
- detail+=" product-batch="+batch+"; prepared-generation;";
+ if(!batch.empty())detail+=" product-batch="+batch+"; prepared-generation;";
  // Preparation is newer than the dispatch snapshot, even at the same UTC time.
  const auto seq=detail.find("sequence="),end=detail.find(';',seq);a.sequence=++state_sequence;
  detail.replace(seq+9,end-seq-9,std::to_string(a.sequence));
@@ -353,10 +353,11 @@ int complete_reads(){
  for(auto& item:attempts){auto& a=item.second;const auto detail=attempt_detail(a);
   if(detail.rfind("in progress ",0)==0){const bool suspect=a.sequence==latest&&detail.find("prepared-generation;")==std::string::npos;if(suspect)interruption_suspect=item.first;ready_or_suspect(a,suspect);pruned=true;}
  }
- for(auto i=attempts.begin();i!=attempts.end();){const auto c=index.find(i->first);bool committed=false;
-  if(c!=index.end()){const auto* row=GetSizePrefixedCAT(c->second.data());if(row->PRODUCTS())for(const auto* product:*row->PRODUCTS())if(text(product->SELECTION_REASON()).find("catalog-input="+i->second.signature+";")!=std::string::npos&&text(product->SELECTION_REASON()).find("retry-fit;")==std::string::npos)committed=true;}
+ for(auto i=attempts.begin();i!=attempts.end();){const auto c=index.find(i->first);bool committed=false,selected=false;
+  if(c!=index.end()){const auto* row=GetSizePrefixedCAT(c->second.data());if(row->PRODUCTS())for(const auto* product:*row->PRODUCTS())if(text(product->SELECTION_REASON()).find("catalog-input="+i->second.signature+";")!=std::string::npos){selected=true;if(text(product->SELECTION_REASON()).find("retry-fit;")==std::string::npos)committed=true;}}
+  if(selected&&!committed&&!i->second.product_batch.empty()){mark_product_batch(i->first,"");pruned=true;}
   const bool orphan=complete_scan&&identity_complete&&index_complete&&!identities.count(i->first)&&!index.count(i->first)&&!protected_attempt(i->first,state_sequence);
-  if(committed||orphan){i=attempts.erase(i);pruned=true;}else ++i;
+  if(committed||orphan){retained-=i->second.read_bytes;i=attempts.erase(i);pruned=true;}else ++i;
  }
  if(poison_updates.empty()&&!pruned&&!state_evicted&&state_rows<=1)return build_work();return persist_events(Phase::PoisonStored);
 }
@@ -519,7 +520,7 @@ int advance() {
   }
   if((phase!=Phase::ProductStored&&phase!=Phase::IndexStored)||!text(r->REFUSED()).empty()||text(r->SCHEMA())!=pending_schema+".fbs"||text(r->PROVIDER_ID())!=cfg.provider||text(r->BATCH_ID())!=pending_batch||text(r->SOURCE_NAME())!=(phase==Phase::ProductStored?"catalog-products":"catalog-index")||r->INSERTED()>pending_count)return stop("Storage refused or did not acknowledge the complete generation batch; prior selection preserved.");
   if(phase==Phase::ProductStored){++product_batch_at;return store_generation_part();}
-  done=staged.size();for(const auto& item:staged)if(!item.retry)attempts.erase(item.id);return persist_events(Phase::SuccessStored);
+  done=staged.size();for(const auto& item:staged){if(!item.retry)attempts.erase(item.id);else mark_product_batch(item.id,"");}return persist_events(Phase::SuccessStored);
  }
  return stop("Incomplete controller response.");
 }
