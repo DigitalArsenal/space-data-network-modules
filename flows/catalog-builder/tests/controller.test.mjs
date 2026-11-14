@@ -28,7 +28,7 @@ const composer=await createBrowserModuleHarness({wasmSource:fs.readFileSync(repo
 const evidence={synthetic:true,stages:[]};const fitOriginals=new Map(),fallbackOriginals=new Map(),verified=new Set(),fallbackVerified=new Set(),sizes=[];
 const ap=await createStandaloneHarness('browser',process.env.SDNAP_WASM||repo+'/propagator/sdn-ap/dist/isomorphic/module.wasm',{surface:'direct',enableBrowserWasiThreads:false});
 const fly=async payload=>{const r=await ap.invoke({methodId:'propagate',inputs:[frame('ocm','OCM',payload),frame('configuration','PCF',checkPcf)]});assert.equal(r.statusCode,0,r.errorMessage);return Buffer.from(r.outputs.find(f=>f.portId==='ephemeris').payload);};
-let refusalCode,trapObject,lookupFailure=false,storageFailure=false,pageDelay=0;
+let refusalCode,trapObject,trapComposeObject,lookupFailure=false,storageFailure=false,pageDelay=0;
 const trap=new WebAssembly.Instance(new WebAssembly.Module(Uint8Array.from([0,97,115,109,1,0,0,0,1,4,1,96,0,0,3,2,1,0,7,8,1,4,116,114,97,112,0,0,10,5,1,3,0,0,11]))).exports.trap;
 async function tick(time,kill=false){
  let response=await control.invoke({methodId:'advance',inputs:[frame('tick','TimerTick',encodeTimerTick({triggerId:'refresh',firedMs:time}))]});
@@ -74,6 +74,7 @@ async function tick(time,kill=false){
    else if(out.index_records){++counters.indexes;const cat=C.CAT.getSizePrefixedRootAsCAT(new fb.ByteBuffer(b)).unpack();if(cat.PRODUCTS.length){assert.ok(records('OCM.fbs','synthetic-node','catalog-products').length>0,'product exists before index');}}
    input=[frame('stored','IngestResult',encodeIngestResult({schema:m.schema,...m.tags,inserted:exists?0:1,reconciledDuplicates:0,refused:storageFailure&&out.product_records?'synthetic disk refusal':undefined}))];
   }else if(out.recipe){
+   if(C.CAT.getSizePrefixedRootAsCAT(new fb.ByteBuffer(out.catalog.payload)).NORAD_CAT_ID()===trapComposeObject)trap();
    const r=await composer.invoke({methodId:'replace_products',inputs:[out.recipe,out.catalog,{...out.selection,portId:'decision'},...(out.selected?[{...out.selected,portId:'ocm_products'}]:[])]});assert.equal(r.statusCode,0,r.errorMessage);input=r.outputs.map(f=>({...f,portId:f.portId==='decision'?'compose_status':'replacement'}));
   }else throw Error('No progress: '+Object.keys(out));
   response=await control.invoke({methodId:'advance',inputs:input});
@@ -164,6 +165,11 @@ try{
  const reset=async (objectIds=ids)=>{store.clear();cfg['catalog.max_removal_fraction']=1;cfg['catalog.batch_size']=4;cfg['catalog.partition_count']=1;cfg['catalog.partition_index']=0;
   records('CAT.fbs','synthetic','identities').push(...objectIds.map(id=>pack(Object.assign(new C.CATT(),{NORAD_CAT_ID:id,OBJECT_NAME:'SYNTHETIC'}),'CAT')));
   records('OMM.fbs','synthetic','primary').push(...objectIds.map(id=>seed(id)));records('SPW.fbs','synthetic','weather').push(...split(Buffer.from(weather)));control.destroy();control=await createControl();};
+ await reset();await tick(now);trapComposeObject=Math.min(...ids);store.set(key('CAT.fbs','synthetic','identities'),records('CAT.fbs','synthetic','identities').filter(b=>C.CAT.getSizePrefixedRootAsCAT(new fb.ByteBuffer(b)).NORAD_CAT_ID()!==trapComposeObject));
+ records('OMM.fbs','synthetic','primary').push(seed(Math.max(...ids),.31));await assert.rejects(()=>tick(now+1000),WebAssembly.RuntimeError);trapComposeObject=undefined;control.destroy();control=await createControl();
+ const removalTrap=await tick(now+600000);assert.equal(removalTrap.indexes,1,'a trapped removal does not block a later changed object');assert.match(removalTrap.notice.reason,/in-progress attempt deferred/);
+ assert.equal((await tick(now+1201001)).indexes,1,'removal resumes after durable backoff');
+ console.log('PASS durable removal attempt protects composition traps');
  await reset();trapObject=Math.min(...ids);await assert.rejects(()=>tick(now),WebAssembly.RuntimeError);control.destroy();control=await createControl();trapObject=undefined;
  const afterTrap=await tick(now+600000);assert.equal(afterTrap.fits,1,'fresh guest sets aside the trapped first object and reaches the later object');assert.match(afterTrap.notice.reason,/in-progress attempt deferred/);
  control.destroy();control=await createControl();assert.equal((await tick(now+1200001)).fits,1,'durable attempt becomes retryable after backoff');

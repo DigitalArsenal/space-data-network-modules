@@ -57,7 +57,7 @@ std::set<std::string> products;
 std::vector<uint32_t> work;
 std::set<uint32_t> dropped;
 Bytes pending,chosen,object_weather;
-bool run_fit=false,complete_scan=true,capacity_limited=false,seed_complete=true,identity_complete=true,index_complete=true,removal_guard=false;
+bool compose_only=false,run_fit=false,complete_scan=true,capacity_limited=false,seed_complete=true,identity_complete=true,index_complete=true,removal_guard=false;
 struct Poison {unsigned count=0;std::string source;};
 std::map<std::string,Poison> poisons;
 std::set<std::string> poison_seen;
@@ -240,15 +240,21 @@ std::string weather_signature(){
   flatbuffers::FlatBufferBuilder b;FinishSizePrefixedSPWBuffer(b,SPW::Pack(b,&n));relevant.insert(relevant.end(),b.GetBufferPointer(),b.GetBufferPointer()+b.GetSize());at+=size_t(flatbuffers::ReadScalar<uint32_t>(object_weather.data()+at))+4;}
  return digest(relevant);
 }
+bool attempt_deferred(){const auto id=work[at];
+  const auto attempt=attempts.find(id);
+  if(attempt!=attempts.end()&&attempt->second.signature==signature){const auto& a=attempt->second;const auto after=a.time+std::min<int64_t>(86400000,1200000LL*(1LL<<(std::max(1u,a.count)-1)));
+   if(a.final||now<after){++diagnostics.deferred;diagnostics.add(a.final?"unchanged final failure":"in-progress attempt deferred after instance interruption");return true;}}
+ return false;
+}
 int next_object() {
  for(;at<work.size()&&done<cfg.batch;++at){
   if(!budget_left()){++diagnostics.deferred;diagnostics.add("object elapsed budget reserve exhausted","bounds");return finish();}object_start=Clock::now();
-  const auto id=work[at];if(id%cfg.partitions!=cfg.partition)continue;chosen.clear();signature.clear();reason.clear();object_weather.clear();const auto s=seeds.find(id);const auto identity=identities.find(id);const auto old=index.find(id);
+  const auto id=work[at];if(id%cfg.partitions!=cfg.partition)continue;compose_only=false;chosen.clear();signature.clear();reason.clear();object_weather.clear();const auto s=seeds.find(id);const auto identity=identities.find(id);const auto old=index.find(id);
   if(dropped.count(id)||(!index_complete&&old==index.end())||(capacity_limited&&(old==index.end()||s==seeds.end()||identity==identities.end()))){++diagnostics.deferred;continue;}
   const bool removed=identity==identities.end()||s==seeds.end()||decayed(identity->second);
   const auto* previous=old==index.end()?nullptr:GetSizePrefixedCAT(old->second.data());
   if(previous&&instant(text(previous->PRODUCTS_AS_OF()))>now){++diagnostics.deferred;if(!clock_reported){diagnostics.add("clock precedes a stored selection; affected objects deferred before dispatch","clock");clock_reported=true;}continue;}
-  if(removed){const bool decay=identity!=identities.end()&&decayed(identity->second);if(removal_guard||(!decay&&(!complete_scan||!seed_complete||!identity_complete))||(!decay&&!index_complete))continue;if(!previous||!previous->PRODUCTS()||!previous->PRODUCTS()->size())continue;reason="object removed from the configured current sources";++diagnostics.removed;diagnostics.add("object="+std::to_string(id)+" removal: "+reason,"removal");return compose();}
+  if(removed){const bool decay=identity!=identities.end()&&decayed(identity->second);if(removal_guard||(!decay&&(!complete_scan||!seed_complete||!identity_complete))||(!decay&&!index_complete))continue;if(!previous||!previous->PRODUCTS()||!previous->PRODUCTS()->size())continue;reason="object removed from the configured current sources";signature=digest(old->second)+"/removed/"+(identity==identities.end()?"absent":digest(identity->second));if(attempt_deferred())continue;compose_only=true;++diagnostics.removed;diagnostics.add("object="+std::to_string(id)+" removal: "+reason,"removal");return save_attempt();}
   const auto* omm=GetSizePrefixedOMM(s->second.data.data());
   const double n=omm->MEAN_MOTION()*6.2831853071795864769/1440;
   const bool resonant=n>.0035003818&&n<=.015751718;
@@ -264,14 +270,13 @@ int next_object() {
   if(previous&&previous->PRODUCTS()&&previous->PRODUCTS()->size()==1){const auto* p=previous->PRODUCTS()->Get(0);if(!text(p->RECORD_CID()).empty()&&text(p->SELECTION_REASON()).find("catalog-input="+signature+";")!=std::string::npos&&(!expired||p->KIND()!=catalogProductKind::ApElements)&&
    !(text(p->SELECTION_REASON()).find("future-seed")!=std::string::npos&&!future))continue;}
   reason=expired?"old-span fallback":future?"future-seed fallback":!eligible?"outside configured AP class":"accepted exact-W fit";run_fit=!expired&&!future&&eligible;
-  const auto attempt=attempts.find(id);
-  if(attempt!=attempts.end()&&attempt->second.signature==signature){const auto& a=attempt->second;const auto after=a.time+std::min<int64_t>(86400000,1200000LL*(1LL<<(std::max(1u,a.count)-1)));
-   if(a.final||now<after){++diagnostics.deferred;diagnostics.add(a.final?"unchanged final failure":"in-progress attempt deferred after instance interruption");continue;}}
+  if(attempt_deferred())continue;
   return save_attempt();
  }
  return finish();
 }
 int start_chain() {
+ if(compose_only)return compose();
  const auto& seed=seeds.at(work[at]);const auto s=seeds.find(work[at]);const auto* omm=GetSizePrefixedOMM(seed.data.data());
   if(!run_fit){phase=Phase::Chain;return push("fallback_seed","OMM",{s->second.data.begin()+4,s->second.data.end()});}
   PCFT flight;flight.THEORY=pcfTheory::SGP4;flight.OUTPUT=std::make_unique<PCFOutputT>();flight.OUTPUT->FRAME=pcfOutputFrame::GCRF;flight.OUTPUT->START_TIME=iso(s->second.epoch-216000000);flight.OUTPUT->STOP_TIME=iso(s->second.epoch+432000000);flight.OUTPUT->STEP_SECONDS=300;
