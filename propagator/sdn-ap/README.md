@@ -56,8 +56,7 @@ The output map and the terms above e 0.3 retain their definitions.
   waited forever. On a loaded machine that happened in AP batches of a test build, never in the shipped build with
   SGP4XP rows (0 of 40 processes).
 - The epoch store's state-only `sdnap_epochs_at` initializes and flies series on the pool in chunks of 16. Each series'
-  two slots belong to one thread during the batch. A series holding a wide set (AP above e 0.05 in no resonance class,
-  above e 0.3 in one) stays serial in series order, including its flight; requests for covariance stay serial.
+  two slots belong to one thread during the batch. Wide sets use the same pool dispatch. Requests for covariance stay serial.
   Initialization storage and cache room are reserved before the batch, and any series stopped by refused growth is
   retried serially. The thread-count and poisoned-storage test is
   `test/epoch-pool.e2e.mjs`.
@@ -87,9 +86,19 @@ The output map and the terms above e 0.3 retain their definitions.
   included); `sdnap_fit` then gives status -1 and leaves its row as it came. At its memory limit the module refuses a
   state, never aborts (`test/memory-limit.e2e.mjs`): a thread's caches are made before its first state, and a state on a
   thread that cannot make them answers the theory's refusal code.
-  `sdnap_wide_grid_budget(bytes, out)` sets the grid cache's byte bound (512 MiB by default; live and idle grids, each at
-  its allocated bytes, the least recently used idle grid freed first) when bytes is 1 or more (1 keeps no idle grid), and
-  writes the bound, the bytes held, the grids held and those idle. The bound decides which grids are kept, never a state.
+  `sdnap_wide_grid_budget(bytes, out)` sets a strict payload residency budget, 192 MiB by default.
+  The minimum is 172,362,864 bytes: two largest payloads for each of 16 pool threads and the caller.
+  Values below 1 read without changing it; updates below the minimum or above SIZE_MAX return -1.
+  The four output doubles are the budget, resident bytes, payload count and unpinned payload count.
+  Exact-key descriptors remain attached to sets; unpinned payloads are evicted in least-recently-used order.
+  A miss rebuilds identical coefficients. Allocation or capacity refusal is counted and retryable.
+  The budget includes a descriptor per resident payload; additional retained descriptors use 96 bytes each.
+  Each construction thread also retains two 3,686,400-byte buffers and uses at most 8,216,562 bytes
+  for exact arithmetic reuse. Epoch tables, ordinary caches, stacks and allocator reserve are additional.
+  `propagate_epochs` preserves per-object OEM outputs after a propagation refusal, including allocation
+  refusal. Its block COMMENT begins with status=ok, status=partial or status=refused, a refusal count,
+  and zero-based request indices with numeric codes. The method returns 3 if any object has a refusal;
+  later objects are attempted. Other methods retain the no-output allocation-refusal contract.
 - Covariance (SPEC 12; `test/covariance.e2e.mjs`): `fit` writes, for its SGP4XP sets, the fit's covariance at its epoch
   as COVARIANCE (TEME, 21 values) with USER_DEFINED_SDNAP_COV_x rows (the BTERM and AGOM parameters' covariances, the
   theory floor, the process noise); `sdnap_covariance_at(omm, length, minutes, count, out)` gives, per time, the TEME
@@ -624,9 +633,10 @@ and the count read 122 KB. Its nominal is the record's own set, so the store's c
 bit where both hold the same time (`test/store-covariance.e2e.mjs`). Through 0.6.55 the nominal was rebuilt from the
 parameter vector, and the store's covariance could differ from `propagate`'s by more than the matrix's largest element.
 
-Above e 0.048 with tesseral terms, each set holds a grid of its tesseral families of about 4.9 MB (with 0.6.14's slopes),
-and a node grid while it is flown: 10 MB a set flown when every set has its own elements (4.8 MB when 100 sets share one
-epoch grid). One process holds at most 256 such grids, so beyond them states are refused (stack #424).
+A wide AP set uses exact-key grid descriptors and a shared bounded payload cache. The branch requires
+nonzero tesseral terms and eccentricity above 0.05 in resonance class 0, or above 0.3 in a resonance class.
+A degree-12 payload occupies 5,069,496 accounting bytes. Holding more sets than fit in the payload budget
+causes reconstruction on subsequent requests; it does not impose a catalog-size refusal threshold.
 
 AP's cost against SGP4-XP's and SGP4's by request pattern, measured on 2026-11-10 with `test/kernel-patterns.mjs`:
 

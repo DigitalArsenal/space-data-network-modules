@@ -169,7 +169,8 @@ pages they added. `test/memory-step.e2e.mjs` probes the break directly. Against 
 the same bytes and the same sets answered at a limit, a host's pages intact, and at most 100 growths where the step-0
 build makes thousands.
 
-**A method during which one of them failed refuses with errorCode `out-of-memory` and emits nothing.** That holds for
+**A method during which one of them failed refuses with errorCode `out-of-memory` and emits nothing, except `propagate_epochs`.**
+That catalog method preserves per-object results and attempts later objects. That holds for
 `propagate`, `propagate_epochs`, `load_epochs`, `load_epochs_open`, `load_epochs_part`, `load_epochs_close`, `fit`, `maneuver`, `ingest_omm` and `export_omm`, whatever the method
 would otherwise have answered. That includes the decay answers of SPEC 16.25:
 - `decayed:<time>` and `decayed-in-arc:<time>`;
@@ -1719,20 +1720,16 @@ transfer orbit with and without tesseral 31, and Molniya. Against ascending orde
 test/carried-identity.e2e.mjs holds the paths: `propagate_epochs`, the store, and `propagate` of the record without its
 covariance give the same bits.
 
-The pool's threads change no state. Over 1,000 AP rows of a catalog mix in the row store, sdnap_propagate_soa on 0, 4 and
-15 threads gives one digest; 0.6.12 differed at 120 values between 0 and 4 threads (test/set-caches.e2e.mjs holds 0
-against 4). The exception today is stack #424: above e 0.048 with tesseral terms, a process holds at most 256 family
-grids. Beyond them a state is refused, and which eccentric set is refused depends on which thread asked first.
-
-The epoch store's state-only `sdnap_epochs_at` also uses the pool. A chunk holds 16 consecutive series; one thread
-owns both slots of each series through selection, initialization, flight and replacement. A series containing a wide
-set is initialized and flown on the calling thread, in series order, because both initialization and output-time nodes
-acquire the shared 256-slot grids. A wide set is an AP set above e 0.05 in no resonance class (class 0: low orbit, the
-LAGEOS band, below 0.8 rev/day) and above e 0.3 in a resonance class (`tess::wide_set`, SPEC 16.11). So a store of
-low-orbit sets at e 0.1 is built and flown serially, and the pool's speed-up holds for the near-circular sets below
-those switches. Calls requesting covariance remain serial. The atmosphere and force bindings and
-NRLMSISE-00's mutable state belong to each thread. Constant drag, gravity and leap-second tables are initialized before
-the batch. The context identifier, short-period generation tag and grouping identifier are cache keys only.
+The pool's threads change no state. The epoch store's state-only `sdnap_epochs_at` uses chunks of
+16 series. One thread owns both slots of each series through selection, initialization, flight and
+replacement. Wide series participate in the same dispatch. Their exact-key descriptors retain
+ownership independently of evictable payloads; an output pins at most two payloads while reading them.
+A wide set is an AP set with nonzero tesseral terms and eccentricity greater than 0.05 in resonance
+class 0, or greater than 0.3 in classes 1–4 (`tess::wide_set`, 16.11). Calls requesting covariance
+remain serial. Atmosphere bindings, construction buffers and mutable evaluation caches are per-thread.
+Constant drag, gravity and leap-second tables are initialized before the batch. Capacity and allocation
+failures are counted, so a failed initialization is retryable. The budget changes reconstruction work,
+not state values or permanent availability.
 
 The pool's threads wait for batches for the life of the instance and the module has no export that stops them (`plugin_destroy` frees the store only): a Node host ends them by destroying its harness, which terminates the instance's wasi-thread workers (`test/pool-end.e2e.mjs`), or by ending the process; a Node process that did neither stays alive after its script ends.
 
@@ -1783,7 +1780,7 @@ Three more rules for the pool threads:
 `test/epoch-pool.e2e.mjs` flies 2,048 seeded series (6,144 records) at 6 h, 18 h and 30 h: a blend of sets 0 and 1, then
 of 1 and 2 (slots replaced inside the batch), then set 2 alone. The store holds SGP4, SGP4XP and AP series, AP on
 NRLMSISE-00 at node heights under and over 325 km and on Jacchia 1970, two force sets and two weather tables
-alternating, covariance on half, and eight wide series flown on the calling thread.
+alternating, covariance on half, and eight wide series included in pool dispatch.
 - The reference is each series alone on the calling thread. Its digest is the one sdn-ap 0.6.59 gives; it differs from
   0.6.58's for the series flown on both sides of their epoch (the medium-orbit series at 18 h).
 - On 0, 1, 4 and 15 threads, in slices of 100 series, and with each building thread's scratch and its half-day
@@ -1829,7 +1826,7 @@ The pool and the memory (stack #487). A threaded batch grows nothing, and a pool
   - the set's caches from the pool (its record, tesseral copy, node runs). The pool's lists are made room for before the
     batch and are never grown inside one.
 
-  Never reached inside a batch: the wide grids (a wide series flies on the calling thread), covariance (such calls are
+  Wide payload construction participates in the pre-batch reserve. Never reached inside a batch: covariance (such calls are
   serial), the thread's caches and guarded statics (made before the batch), and the call's own flags and deferred list
   (made through the counted allocator before the first slice; without them the call runs on the calling thread).
 - Inside the batch, sbrk refuses every growth of the memory on every thread. It still serves a request below the
@@ -1850,7 +1847,7 @@ The pool and the memory (stack #487). A threaded batch grows nothing, and a pool
     on the states after the crossing, this checkout with the two old keys put back). 0.6.59 removes it.
   - Which sets are refused their caches and which series are deferred depend on the threads' timing; no state does.
     Two runs of the same calls give the same states, serially, on any number of threads, while one thread flies a given
-    set at a time (a set above e 0.3 stays on the calling thread: epoch_store.inc, wide_series), apart from the exception
+    set at a time, apart from the exception
     above (a record that carries a covariance, through `propagate`).
 - A pool thread runs a chunk only once its own memory.size covers the size published for the batch. Its claim read the
   batch's total, which was stored after that size, so it reads that size.
@@ -4172,25 +4169,35 @@ grid lookups since the last reset, out[0] by sets outside a fit and out[1] by a 
 sdnap_wide_grid_cache(out) writes the grids the cache holds (out[0]), their bytes (out[1]) and the grids built since the
 instance began (out[2]).
 
-*The cache's bound (stack #497).*
-- **The count:** at most 256 grids.
-- **The bytes:** while an idle grid remains to be freed, at most kGridCacheBytes (512 MiB) of grids, live and idle, counting
-  the grid about to be built at its size; the least recently used idle grid goes first. A grid in use is never freed, so live
-  grids alone may exceed the bound.
-- **A grid's bytes** are what it allocates (WideGrid::alloc_bytes): its block, sized for every family (m, w) of its degree
-  with their indices, and the WideGrid. At degree 12 on 128 anomalies that is 5,069,464 bytes (kGridMaxBytes); at degree 2,
-  169,044. Beside them sit the build's two double-precision family sets (3.7 MB each at degree 12, kept for the instance's
-  life). sdnap_wide_grid_cache and sdnap_wide_grid_budget report the same held bytes.
-- **The setter:** sdnap_wide_grid_budget(bytes, out) sets the bound when bytes is 1 or more (whole bytes, at most SIZE_MAX;
-  1 keeps no idle grid), only reads it otherwise. It writes the bound (out[0]), the bytes held (out[1]), the grids held
-  (out[2]) and those idle (out[3]).
-- **States never move:** the bound decides which grids are kept, never a grid's bytes. Measured bit for bit
-  (`test/grid-cache.e2e.mjs`):
-  - at the default bound, a 1-byte bound and a bound that holds a few grids;
-  - with a cold, warm or shuffled cache;
-  - on 1 and 8 pool threads.
+*The grid cache's memory contract.*
 
-Through 0.6.47 idle grids were bounded by their count alone (128 x 5,069,464 bytes: about 650 MB, 618.8 MiB, at degree 12). The 128-node rule is exact to 1e-13 to degree 20; at degree 31 its relative error is 1e-6 at e 0.72 and
+- Stable descriptors use exact binary64 keys (n, e, i), resonance class and degree. A descriptor
+  uses 96 bytes and is retained by its sets; a descriptor with no set and no payload is freed.
+- Payload residency is bounded by 192 MiB by default, including reserved in-progress builds.
+  Payloads are pinned only while read. Unpinned payloads are evicted in least-recently-used order,
+  including payloads whose descriptors still belong to live sets. A miss rebuilds identical bytes.
+- The minimum budget is 172,362,864 bytes, 34 maximum-size grid allocations: two for each of
+  16 pool threads plus the calling thread. Covariance sigma outputs read their grids sequentially.
+  Descriptor allocations beyond the resident payload count are additional. At degree 12 a resident
+  grid accounts for 5,069,496 bytes including its descriptor; degree 2 accounts for 169,076 bytes.
+- Each construction thread retains two 3,686,400-byte family buffers at degree 12. A family build
+  uses one checked reuse block of at most 8,216,562 bytes plus 31,744 workspace bytes. The grid
+  constructor also uses 600 temporary family-index bytes. Allocation failure releases temporary
+  storage and payload reservations, is counted, and permits retry. Arithmetic order is unchanged.
+- `sdnap_wide_grid_budget(bytes, out)` reads for values below 1. A finite whole-byte update from
+  the minimum through SIZE_MAX sets the bound; invalid updates return -1 and preserve the bound.
+  An update that cannot evict enough unpinned storage also returns -1. out[0..3] contain the budget,
+  resident accounting bytes, resident payload count and unpinned payload count. Read-only NaN
+  follows the values-below-1 convention; positive infinity is rejected.
+- A set keeps exact-key descriptors for its epoch and output nodes. There is no fixed descriptor
+  count limit; allocation is bounded by the instance's address space. A payload shortage is counted
+  as a resource failure and is never cached as a permanent refused initialization.
+- `test/wide-grid-cache.e2e.mjs` checks exact state identity and fixed-record request-order
+  availability, pool dispatch, reloads and budget validation. `SDN_AP_WIDE_FULL=1` selects 10,000
+  synthetic records. `test/wide-grid-failure.e2e.mjs` injects every counted grid allocation and
+  checks refusal, retry, and framed continuation.
+
+The 128-node rule is exact to 1e-13 to degree 20; at degree 31 its relative error is 1e-6 at e 0.72 and
 2e-3 at e 0.79. Against the full-field quadrature on THEMIS (e 0.82, 7 days at
 300 s): 0.12 m RMS, 2.6 m at most, 3 mm second difference, and 0.09 m RMS with the eccentricity drifting 3e-3 a week; a
 first-order series in M, the set the grid replaces, was 65 m RMS and 2.96 m. The near-resonant terms above degree 12 stay in
@@ -6636,3 +6643,16 @@ What a host that draws frames from a running clock needs, and what it gets.
 - Seidelmann, P. K., ed. (1992). Explanatory Supplement to the Astronomical Almanac.
 - US Space Force Astrodynamics Standards: release notes 7.7-9.9, JIRA summaries 8.2-9.9, Tle and Sgp4Prop
   interface documents (9.9 package); release notes v9.1.1.0 C Sgp4Prop WebAssembly.
+
+
+### Framed epoch propagation status
+
+`propagate_epochs` emits an OEM for each object attempted. Each block COMMENT begins with
+`status=ok`, `status=partial`, or `status=refused`, followed by `refused=N`. When N is nonzero,
+`request-status=` lists comma-separated `index:code` pairs in original zero-based request order;
+a counted allocation failure adds `:out-of-memory` to its pair. Successful states remain in their
+requested order; refused states have no numeric state line. A completely refused object has an
+empty state list and retains the requested time span. Input validation and output transport failure
+remain method-level errors. Propagation refusals return method status 3 with `partial-ephemeris`,
+or `out-of-memory` if an allocation failed, after all object series have been attempted. The method
+is serial; epoch-store state-only batch dispatch supplies pool parallelism.
