@@ -293,7 +293,7 @@ for (const [list, order] of [[[aa, gone, ...bb, an], [0, 1]], [[bb[0], an, gone,
 // A decayed direct record has the same flag as a decayed native row.
 const decayed = repackOcm(sg, t => { t.MEAN_ELEMENTS.MEAN_MOTION = 20; });
 ok(await call('load_epochs', [input([decayed])]));
-assert.equal(state(0).flags, 2); assert.notEqual(state(0).rc, 0);
+assert.equal(state(0).flags, 4); assert.notEqual(state(0).rc, 0);
 await load(); fill();
 let failedAllocations = 0;
 {
