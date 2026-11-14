@@ -438,7 +438,7 @@ the schema-wide anonymous-read boundary.
 
 ## Build and validation
 
-The bundled exact-W chain uses `sdn-ap` 0.6.58 with chain adapter 0.1.0.
+The bundled exact-W chain is built against sdn-ap 0.6.60 with chain adapter 0.1.0.
 Build the unsigned `sdn-ap` generated translation unit, then from this directory:
 
 ```sh
@@ -527,3 +527,38 @@ becoming a periodic product rewrite.
 Annotation errors `invalid-input`, `invalid-ocm`, `invalid-elements`, `unsupported-ocm`, `seed-mismatch`, `seed-epoch-mismatch`, `already-annotated`, `invalid-output`, and `invalid-models`, composer `invalid-replacement`, and malformed chain/fit/annotation/composition results are final for the same numerical signature. Resource, output and storage failures remain retryable. A recipe revision permits retry after a software or embedded-model correction.
 
 The controller and population annotator share `common/catalog_epoch.hpp`: comparisons use unrounded UTC seconds and the same strict one-millisecond bound. AP annotation embeds the original fit buffer unchanged. SGP4 fallback annotation unpacks and repacks the input to append its reason comment: FlatBuffer layout, offsets and padding can differ. Tests prove equality of every preexisting decoded field and bit-identical propagated states and formal covariance; they do not claim original SGP4 wire-byte identity.
+
+
+### Fallback records and repeated inputs
+
+An SGP4 fallback is an `$OCM` containing the seed set's mean elements, with
+`KIND=Sgp4Elements` in its catalog selection. `MEAN_ELEMENTS` carries
+`MEAN_ELEMENT_THEORY=SGP4`, `EPOCH` (UTC), `MEAN_MOTION` (revolutions/day),
+`ECCENTRICITY`, `INCLINATION`, `RA_OF_ASC_NODE`, `ARG_OF_PERICENTER`,
+`MEAN_ANOMALY` (angles in degrees), `BSTAR`, `MEAN_MOTION_DOT` and
+`MEAN_MOTION_DDOT`. These are every seed field read by the module's SGP4
+path; none is missing. The record also declares Earth, UTC, Kozai averaging
+and WGS-72 gravity. A catalog consumer converts these typed fields to its
+SGP4 input representation. No Cartesian state is required for that conversion.
+See `propagator/sdn-ap/src/ingest_omm.inc`, `src/ocm.inc` in that module,
+and this flow's `src/chain.cpp`.
+
+When ingestion succeeds but the seed cannot be propagated, the product still
+carries those mean elements and has no `STATE_DATA` state. Its header comment
+and the catalog product's `SELECTION_REASON` contain
+`fit refusal fallback: element-set-refused` for initialization refusal, or
+`fit refusal fallback: propagation-failed` for failure during flight. The
+selection reason also carries input and identity fingerprints. These reasons
+distinguish a failed flight from a policy fallback such as
+`outside configured AP class`; neither fallback supplies a Cartesian state.
+If ingestion itself refuses the seed, there is no new fallback product: the
+controller records the failure and preserves any previous selection.
+See `control/control.cpp` (`chain`) and the module's `src/propagate.inc`.
+
+Posting byte-identical element-set data has the same content record identifier
+and is not a new arrival. With unchanged weather, recipe and validity class,
+the controller's numerical-input fingerprint also stays equal, so the post
+rebuilds neither the product nor its selection. Independent weather changes,
+validity expiry or a transient failure's retry remain reconciliation triggers.
+See `common/sds_cid.hpp` and `control/control.cpp` (`fit_seed_signature` and
+`next_object`).
