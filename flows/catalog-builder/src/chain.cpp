@@ -70,3 +70,19 @@ extern "C" int run_chain() {
   if (!status && candidate.empty()) { status = 500; error("missing-fit", "Fitting emitted no candidate."); }
   return finish(status, fallback, candidate);
 }
+
+// A policy fallback needs only the propagator's original ingestion operation.
+extern "C" int ingest_seed() {
+  using namespace catalog_chain;
+  inputs.clear(); reset();
+  if (plugin_get_input_count() != 1) { error("invalid-input", "One seed frame is required."); return finish(400, {}); }
+  const auto* seed = plugin_get_input_frame(0);
+  if (!seed || !seed->port_id || std::strcmp(seed->port_id, "omm") || !seed->payload || seed->payload_length > 1024 * 1024) {
+    error("invalid-input", "Expected one bounded OMM seed."); return finish(400, {});
+  }
+  input("omm", seed);
+  const auto status = ingest_omm();
+  auto fallback = take("ocm");
+  if (!status && fallback.empty()) { error("missing-sgp4", "Ingestion emitted no SGP4 record."); return finish(500, {}); }
+  return finish(status, fallback);
+}
