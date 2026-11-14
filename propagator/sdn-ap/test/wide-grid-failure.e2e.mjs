@@ -1,0 +1,37 @@
+// Allocation and retry regression on made-up AP sets. Isolated successful
+// states are binary64 TEME km and km/s, UTC day one; tolerance is exact equality.
+import assert from 'node:assert/strict';
+import * as flatbuffers from 'flatbuffers';
+import {OEM} from 'spacedatastandards.org/lib/js/OEM/OEM.js';
+import {buildDiagnostic} from './lib/ap-diagnostic.mjs';
+import {records,open} from './lib/wide-catalog.mjs';
+const inject=s=>s.replace('namespace mem {',`namespace mem {
+inline int test_grid_depth=0,test_grid_at=0,test_grid_calls=0;
+struct TestGridScope {TestGridScope(){++test_grid_depth;}~TestGridScope(){--test_grid_depth;}};
+inline bool test_grid_fail(){return test_grid_depth && ++test_grid_calls == test_grid_at;}
+`).replace('  void* p = std::malloc(n);','  if(test_grid_fail()){note_failure(n);return nullptr;}\n  void* p = std::malloc(n);')
+.replace('  void* p = std::calloc(k, n);','  if(test_grid_fail()){note_failure(k*n);return nullptr;}\n  void* p = std::calloc(k, n);');
+const scope=(s,name)=>{const re=new RegExp('(inline [^\\n]* '+name+'\\([^;{]*\\) \\{)');if(!re.test(s))throw Error(name);return s.replace(re,'$1\n  sdnap::mem::TestGridScope allocation_scope;');};
+const file=buildDiagnostic('wide-grid-failure',`
+SDNAP_EXPORT("sdnap_test_grid_fail") void sdnap_test_grid_fail(int n){sdnap::mem::test_grid_at=n;sdnap::mem::test_grid_calls=0;}
+SDNAP_EXPORT("sdnap_test_grid_calls") int sdnap_test_grid_calls(){return sdnap::mem::test_grid_calls;}
+SDNAP_EXPORT("sdnap_test_grid_min") double sdnap_test_grid_min(){return sdnap::xpt::tess::kGridMinimumBytes;}
+`,s=>s,{'constants.inc':inject,'wide_grid_cache.inc':s=>scope(s,'wide_grid_acquire'),'tesseral.inc':s=>scope(s,'wide_grid_build')});
+const rs=records(21),cases=[];
+for(const k of [0,10]){
+ const base=await open(file);await base.load([rs[k]]);base.x.sdnap_test_grid_fail(0);const truth=base.one();assert.equal(truth.rc,0);const count=base.x.sdnap_test_grid_calls();assert.ok(count>=12);await base.close();
+ for(let at=1;at<=count;++at){
+  const h=await open(file);try{await h.load([rs[k]]);h.x.sdnap_test_grid_fail(at);const failed=h.one();assert.notEqual(failed.rc,0,'allocation '+at);h.x.sdnap_test_grid_fail(0);assert.deepEqual(h.one(),truth,'retry '+at);assert.ok(h.budget().out[1]<=h.budget().out[0]);}finally{await h.close();}
+ }
+ cases.push({class:k===0?'transfer':'eccentric-low',allocationSites:count});
+}
+const h=await open(file);
+try{
+ h.x.sdnap_test_grid_fail(1);
+ const frame=await h.frame(rs.slice(0,3));assert.equal(frame.statusCode,3);assert.equal(frame.errorCode,'out-of-memory');
+ const blocks=frame.outputs.filter(o=>o.portId==='ephemeris').flatMap(o=>OEM.getRootAsOEM(new flatbuffers.ByteBuffer(o.payload)).unpack().EPHEMERIS_DATA_BLOCK);
+ assert.equal(blocks.length,3);assert.match(String(blocks[0].COMMENT),/status=refused/);assert.match(String(blocks[0].COMMENT),/out-of-memory/);
+ for(const b of blocks.slice(1))assert.match(String(b.COMMENT),/status=ok/);
+ h.x.sdnap_test_grid_fail(0);assert.equal((await h.frame(rs.slice(0,3))).statusCode,0);
+}finally{await h.close();}
+console.log(JSON.stringify({complete:true,cases,framedContinuation:true}));
