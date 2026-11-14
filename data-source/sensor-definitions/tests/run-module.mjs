@@ -1,6 +1,6 @@
 // Runs plan_sources and build_sensors in the SDK's browser harness with the cassette as the only network.
 import fs from 'node:fs';
-import {storedCatRecords, SATCAT_URL} from './stored-cat-fixture.mjs';
+import {storedCatRecords, SATCAT_URL, discoveryRows, exactIdentityRows} from './stored-cat-fixture.mjs';
 import { fileURLToPath } from 'node:url';
 import { gunzipSync } from 'node:zlib';
 import { ByteBuffer } from 'flatbuffers';
@@ -21,10 +21,8 @@ export async function harness(config = { producer_peer_id: PEER }) {
   const host = await createBrowserModuleHarness({ wasmSource: fs.readFileSync(here('../dist/isomorphic/module.wasm')), manifest, surface: 'direct',
     hostcallDispatch(operation, params) {
       if (operation === 'plugin.getConfig') return config;
-      if (operation === 'storage.query') {
-        if (params.schema !== 'CAT.fbs' || params.limit !== 250000) throw Error('Unexpected identity query');
-        return stored;
-      }
+      if (operation === 'storage.query_sandboxed') return {kind:'rows', json:JSON.stringify(discoveryRows(stored, params.sql, params.params))};
+      if (operation === 'storage.query') return exactIdentityRows(stored, params);
       throw Error('Unexpected host operation ' + operation);
     } });
   host.setStored = records => { stored = records; };

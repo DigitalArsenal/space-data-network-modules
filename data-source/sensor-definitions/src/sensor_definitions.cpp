@@ -101,22 +101,68 @@ struct SatRow {
   int norad = 0;
 };
 
-// The daily SATCAT flow already stores these identities. Read its CSV lane through
-// the SDK storage capability, as catalog-synthesis reads stored OMMs. Never fetch SATCAT here.
+// Discover only roster identities through the SDK's sandboxed, parameterized SQL
+// surface (as hostcap/flatsql-query does), then read each identity with source tags.
+// storage.query is capped at 1,000 rows by the node: an unfiltered catalog read
+// would silently omit identities. Each discovery page and exact lookup is bounded.
+bool discover_satcat(const std::set<int>& wanted, const std::vector<std::string>& prefixes,
+                     std::set<int>* ids, std::string* error) {
+  constexpr size_t page_size = 32;
+  int cursor = 0;
+  for (;;) {
+    sdm_piv::SqlValues values;
+    values.i64(cursor);
+    std::string sql = "SELECT DISTINCT NORAD_CAT_ID FROM CAT WHERE NORAD_CAT_ID > ? AND (NORAD_CAT_ID IN (";
+    bool first = true;
+    for (int id : wanted) { if (!first) sql += ","; first = false; sql += "?"; values.i64(id); }
+    sql += ")";
+    for (const auto& prefix : prefixes) { sql += " OR OBJECT_NAME LIKE ?"; values.str(prefix + "%"); }
+    sql += ") ORDER BY NORAD_CAT_ID LIMIT 32";
+    A::SandboxQueryParams params{};
+    params.WANT = A::sandboxWant_Rows;
+    params.DELIVER = A::deliverMode_Inline;
+    const auto response = sdm_piv::call("storage.query_sandboxed", "SandboxQueryParams", params,
+                                       {sdm_piv::raw("sql", sql), values.frame()});
+    if (!response.ok()) { *error = response.error_code() + ": " + response.error_message(); return false; }
+    const auto* result = response.result<A::SandboxQueryResult>("SandboxQueryResult");
+    std::vector<sdm_piv::SqlValue> cells;
+    const auto [columns, column_count] = response.list<A::TextValue>("columns", "TextValue");
+    if (!result || result->KIND != A::sandboxWant_Rows || !sdm_piv::read_sql_values(response.raw("cells"), cells) ||
+        result->ROWS != cells.size() || cells.size() > page_size ||
+        (!cells.empty() && (result->COLUMNS != 1 || column_count != 1 || columns[0].VALUE.str() != "NORAD_CAT_ID"))) {
+      *error = "malformed stored CAT identity discovery page"; return false;
+    }
+    for (const auto& cell : cells) {
+      const int64_t id = cell.as_i64();
+      if (cell.tag != sdm_piv::kSqlI64 || cell.payload.size() != 8 || id <= cursor || id > 2147483647) {
+        *error = "CAT identity discovery is not a strictly increasing NORAD page"; return false;
+      }
+      cursor = static_cast<int>(id);
+      ids->insert(cursor);
+    }
+    if (ids->size() >= 250000) { *error = "stored CAT identity discovery exceeds its catalog bound"; return false; }
+    if (cells.size() < page_size) return true;
+  }
+}
+
 bool read_satcat(const std::string& peer, const std::set<int>& wanted, const std::vector<std::string>& prefixes,
                  std::map<int, SatRow>* rows, uint64_t* retrieved_ms, uint64_t* bytes, std::string* error) {
-  constexpr uint32_t limit = 250000;
+  constexpr uint32_t limit = 1000;
+  std::set<int> ids;
+  if (!discover_satcat(wanted, prefixes, &ids, error)) return false;
+  std::map<int, int64_t> newest;
+  for (int id : ids) {
   A::StorageQueryParams params{};
   sdm_piv::put(params.SCHEMA, "CAT.fbs");
   params.set_has_SCHEMA(true);
   params.LIMIT = limit;
+  params.NORAD_CAT_ID = static_cast<uint32_t>(id);
   const auto response = sdm_piv::call("storage.query", "StorageQueryParams", params);
   if (!response.ok()) { *error = response.error_code() + ": " + response.error_message(); return false; }
   const auto [meta, count] = response.list<A::StoredRecordMeta>("records_meta");
-  if (count >= limit) { *error = "CAT query reached its record limit; refusing an incomplete identity catalog"; return false; }
+  if (count >= limit) { *error = "CAT identity lookup reached its record limit; refusing incomplete source identities"; return false; }
   const std::string_view raw = response.raw("records");
   size_t at = 0;
-  std::map<int, int64_t> newest;
   for (size_t i = 0; i < count; ++i) {
     if (at + 4 > raw.size()) { *error = "CAT record stream has a truncated length"; return false; }
     const uint32_t length = flatbuffers::ReadScalar<uint32_t>(reinterpret_cast<const uint8_t*>(raw.data() + at));
@@ -133,6 +179,7 @@ bool read_satcat(const std::string& peer, const std::set<int>& wanted, const std
     SatRow r;
     r.norad = static_cast<int>(cat->NORAD_CAT_ID());
     r.name = cat->OBJECT_NAME() ? cat->OBJECT_NAME()->str() : std::string();
+    if (r.norad != id) { *error = "CAT identity lookup returned the wrong NORAD number"; return false; }
     bool keep = wanted.count(r.norad) > 0;
     for (const auto& prefix : prefixes) if (r.name.compare(0, prefix.size(), prefix) == 0) keep = true;
     *retrieved_ms = std::max(*retrieved_ms, static_cast<uint64_t>(std::max<int64_t>(0, meta[i].TIMESTAMP_MS)));
@@ -154,6 +201,7 @@ bool read_satcat(const std::string& peer, const std::set<int>& wanted, const std
     }
   }
   if (at != raw.size()) { *error = "CAT record stream has unaccounted bytes"; return false; }
+  }
   return true;
 }
 

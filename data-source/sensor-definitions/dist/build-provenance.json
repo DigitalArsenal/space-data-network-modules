@@ -23,5 +23,5 @@
     "src/sensor_definitions.cpp"
   ],
   "threadModel": "wasi-sequential",
-  "wasmSha256": "42bf9b6751ff080e58cacfddc71ad59bd3a0c629b30923c89c1ffaf950c83494"
+  "wasmSha256": "441c726b92e8bfbc6546873fb4c521a82a203927b64a99f8f9e85dc1a3797331"
 }

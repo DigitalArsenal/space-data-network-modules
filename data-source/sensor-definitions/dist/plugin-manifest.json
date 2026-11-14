@@ -14,9 +14,10 @@
       "direction": "bidirectional",
       "capability": "storage_query",
       "resource": "sdn://storage/CAT.fbs",
-      "description": "Read the local producer's celestrak-satcat-csv identities through storage.query; no additional SATCAT HTTP request.",
+      "description": "Discover roster NORAD identities through parameterized storage.query_sandboxed pages, then read each local producer CAT identity and source tags through storage.query; no SATCAT HTTP request.",
       "properties": {
         "hostOps": [
+          "storage.query_sandboxed",
           "storage.query"
         ]
       }
@@ -32,7 +33,7 @@
   ],
   "sequentialJustification": {
     "kind": "pure-transform",
-    "detail": "Serial source planning, one host storage query for existing CAT identities, and deterministic sensor record construction; the host owns I/O."
+    "detail": "Serial source planning, bounded host storage queries for existing CAT identities, and deterministic sensor record construction; the host owns I/O."
   },
   "schemasUsed": [
     {

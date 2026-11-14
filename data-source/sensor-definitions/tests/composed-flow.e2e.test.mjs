@@ -1,8 +1,8 @@
 // The composed flow: a weekly tick through the real plan, HTTP, build and ingest guests of the SDK scheduler; only the host boundary
-// (plugin.getConfig, http.request, storage.ingest_with_source) is substituted, by the cassette and a recorder. Wiring oracle: what the
+// (plugin.getConfig, http.request, storage queries, storage.ingest_with_source) is substituted, by the cassette and a recorder. Wiring oracle: what the
 // flow stores is byte-identical to what build_sensors emits standalone.
 import assert from "node:assert/strict";
-import {storedCatRecords} from "./stored-cat-fixture.mjs";
+import {storedCatRecords, withUnrelatedCatalog, discoveryRows, exactIdentityRows} from "./stored-cat-fixture.mjs";
 import { execFile } from "node:child_process";
 import { createHash } from "node:crypto";
 import fs from "node:fs";
@@ -13,7 +13,7 @@ import test from "node:test";
 import { fileURLToPath } from "node:url";
 import { promisify } from "node:util";
 import { createFlowRuntimeHost } from "space-data-module-sdk/flow";
-import { decodeFlowNotice, decodeHostCall, decodeIngestRequest, decodeIngestResult, encodeHostCallResult, encodeModuleConfig, encodeTimerTick, identifierOf } from "space-data-module-sdk/runtime-contracts";
+import { decodeFlowNotice, decodeHostCall, decodeSqlValues, encodeSqlValues, decodeIngestRequest, decodeIngestResult, encodeHostCallResult, encodeModuleConfig, encodeTimerTick, identifierOf } from "space-data-module-sdk/runtime-contracts";
 import { sensorDefinitionsFlow } from "../flow.mjs";
 import { build, cassette, frames, harness, PEER, plan, records } from "./run-module.mjs";
 
@@ -54,6 +54,7 @@ async function compile(t) {
 
 async function runFlow(wasmSource) {
   const calls = [], egress = [], urls = [];
+  const catalog = withUnrelatedCatalog(storedCatRecords(PEER));
   let memory, response = new Uint8Array();
   const extraImports = { space_data_module_host: {
     call(opPtr, opLen, ptr, len) {
@@ -76,10 +77,15 @@ async function runFlow(wasmSource) {
           answer = { result: { STATUS: 200, RETRIEVED_MS: BigInt(cassette[url].retrievedMs) }, raw: { url, headers: "", body: Buffer.from(cassette[url].body) } };
           break;
         }
+        case "storage.query_sandboxed": {
+          const rows = discoveryRows(catalog, Buffer.from(call.raw.sql).toString(), decodeSqlValues(call.raw.params));
+          answer = {result:{KIND:1,ROWS:BigInt(rows.length),COLUMNS:rows.length ? 1 : 0},
+            lists:{columns:rows.length ? [{VALUE:'NORAD_CAT_ID'}] : []},
+            raw:{cells:encodeSqlValues(rows.map(r => ({t:'i64',v:BigInt(r.NORAD_CAT_ID)})))}};
+          break;
+        }
         case "storage.query": {
-          assert.equal(call.params.SCHEMA, 'CAT.fbs');
-          assert.equal(call.params.LIMIT, 250000);
-          const stored = storedCatRecords(PEER);
+          const stored = exactIdentityRows(catalog, {schema:call.params.SCHEMA,limit:call.params.LIMIT,norad_cat_id:call.params.NORAD_CAT_ID});
           const chunks = stored.map(r => {const b=Buffer.alloc(4+r.Data.length); b.writeUInt32LE(r.Data.length); b.set(r.Data,4); return b;});
           answer = {lists: {records_meta: stored.map(r => ({CID:r.CID, TIMESTAMP_MS: BigInt(Date.parse(r.Timestamp)), LENGTH:r.Data.length,
             PROVIDER_ID:r.SourceTags.ProviderID, SOURCE_NAME:r.SourceTags.SourceName, PRODUCER_PEER_ID:r.SourceTags.ProducerPeerID}))},
@@ -131,7 +137,10 @@ test("composed sensor-definitions flow: weekly tick through the real HTTP and in
   const modis = records(frames(expected, 'space_records')[0]).find(r => r.snr.NORAD_CAT_ID === 25994 && r.snr.NAME === 'MODIS on TERRA');
   assert.equal(modis.snr.SPECTRAL_BANDS.length, 36);
   const run = await runFlow(wasm);
-  assert.equal(run.calls.filter(c => c.op === 'storage.query').length, 1, 'one stored identity query');
+  const lookups = run.calls.filter(c => c.op === 'storage.query');
+  assert.ok(lookups.length > 1);
+  assert.equal(new Set(lookups.map(c => c.params.NORAD_CAT_ID)).size, lookups.length, 'each identity read once');
+  assert.ok(run.calls.filter(c => c.op === 'storage.query_sandboxed').length > 1, 'discovery crosses page boundaries');
   assert.deepEqual(run.urls, planned.urls, "the flow requests exactly the planned URLs in order");
   assert.equal(run.calls.filter((c) => c.op === "plugin.getConfig").length, 1);
   const ingests = run.calls.filter((c) => c.op === "storage.ingest_with_source");

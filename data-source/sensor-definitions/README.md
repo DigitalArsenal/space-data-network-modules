@@ -105,7 +105,7 @@ reads every OSCAR channel table with its own code and requires the module's band
 (Sentinel-1C), an imager (MODIS on Terra, 36 bands) and a radar (AN/FPS-85) field by field; requires every number of a ground record
 to appear in a quote of its `NOTES`; and checks that a stale quote, a SATCAT launch date that disagrees with OSCAR, a failed OSCAR
 page and a missing SATCAT each stop exactly the values that depend on them. `tests/composed-flow.e2e.test.mjs` compiles `flow.mjs` with the
-SDK and runs it through the real HTTP and ingest guests with only the host boundary substituted, including stored CAT identity frames. Both SNR streams and their ingest metadata equal the original CSV-identity outputs byte for byte. `node tests/record-cassette.mjs` re-records (OSCAR and Wikipedia live; the SATCAT from `SATCAT_FILE`).
+SDK and runs it through the real HTTP and ingest guests with only the host boundary substituted, including stored CAT identity frames, multiple discovery pages, and an unrelated catalog larger than the node's query cap. Both SNR streams and their ingest metadata equal the original CSV-identity outputs byte for byte. `node tests/record-cassette.mjs` re-records (OSCAR and Wikipedia live; the SATCAT from `SATCAT_FILE`).
 
 ## Install on a node
 
@@ -113,4 +113,4 @@ The node needs the module and the flow (`flow.mjs`, program `com.digitalarsenal.
 (port `snr_records`), exact-hash `http`, `storage_query`, and `storage_ingest` capability approvals for the compiled flow, node `producer_peer_id` configuration, and an SDN
 node that stores `$SNR` at SDS 1.279.0 (the node's embedded catalog still carries the earlier `$SNR`).
 
-The identity read is bounded at 250,000 CAT records and fails if the bound is reached. Only the local `producer_peer_id` and `celestrak-satcat-csv` source are accepted; malformed or conflicting stored identities fail the run. The source CAT records retain their existing provenance; the emitted SATCAT provenance counts the stored bytes read.
+Identity discovery uses parameterized `storage.query_sandboxed` pages of 32 NORAD numbers, then exact-NORAD `storage.query` reads with source tags. The node caps each identity read at 1,000 records; reaching that cap fails the run. Discovery is bounded at 250,000 identities and rejects non-increasing or malformed pages. Only the local `producer_peer_id` and `celestrak-satcat-csv` source are accepted; malformed or conflicting stored identities fail the run. The source CAT records retain their existing provenance; the emitted SATCAT provenance counts the stored bytes read.
