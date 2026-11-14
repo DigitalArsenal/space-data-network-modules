@@ -28,7 +28,7 @@ const composer=await createBrowserModuleHarness({wasmSource:fs.readFileSync(repo
 const evidence={synthetic:true,stages:[]};const fitOriginals=new Map(),fallbackOriginals=new Map(),verified=new Set(),fallbackVerified=new Set(),sizes=[];
 const ap=await createStandaloneHarness('browser',process.env.SDNAP_WASM||repo+'/propagator/sdn-ap/dist/isomorphic/module.wasm',{surface:'direct',enableBrowserWasiThreads:false});
 const fly=async payload=>{const r=await ap.invoke({methodId:'propagate',inputs:[frame('ocm','OCM',payload),frame('configuration','PCF',checkPcf)]});assert.equal(r.statusCode,0,r.errorMessage);return Buffer.from(r.outputs.find(f=>f.portId==='ephemeris').payload);};
-let refusalCode,trapObject,trapComposeObject,lookupFailure=false,storageFailure=false,pageDelay=0;
+let annotationRefusal,composerRefusal,refusalCode,trapObject,trapComposeObject,lookupFailure=false,storageFailure=false,pageDelay=0;
 const trap=new WebAssembly.Instance(new WebAssembly.Module(Uint8Array.from([0,97,115,109,1,0,0,0,1,4,1,96,0,0,3,2,1,0,7,8,1,4,116,114,97,112,0,0,10,5,1,3,0,0,11]))).exports.trap;
 async function tick(time,kill=false){
  let response=await control.invoke({methodId:'advance',inputs:[frame('tick','TimerTick',encodeTimerTick({triggerId:'refresh',firedMs:time}))]});
@@ -50,7 +50,7 @@ async function tick(time,kill=false){
    input=r.outputs.map(f=>({...f,portId:{fallback:'fallback',elements:'candidate',decision:'chain_status'}[f.portId]}));
    if(fit&&refusalCode){input=input.filter(f=>!['candidate','chain_status'].includes(f.portId));input.push(frame('chain_status','QRP',pack(Object.assign(new Q.QRPT(),{KIND:Q.qrpKind.Error,STATUS:Q.qrpStatus.Invalid,ERROR_CODE:refusalCode}),'QRP',false)));}
   }else if(out.annotate_orbit){
-   const r=await gp.invoke({methodId:'annotate_population_flow',inputs:[frame('ocm','OCM',out.annotate_orbit.payload),frame('elements','OMM',out.annotate_seed.payload)]});assert.equal(r.statusCode,0,r.errorMessage);input=r.outputs.map(f=>({...f,portId:f.portId==='decision'?'annotation_status':'annotated'}));
+   const r=await gp.invoke({methodId:'annotate_population_flow',inputs:[frame('ocm','OCM',out.annotate_orbit.payload),frame('elements','OMM',out.annotate_seed.payload)]});assert.equal(r.statusCode,0,r.errorMessage);input=r.outputs.map(f=>({...f,portId:f.portId==='decision'?'annotation_status':'annotated'}));if(annotationRefusal)input=[frame('annotation_status','QRP',pack(Object.assign(new Q.QRPT(),{KIND:Q.qrpKind.Error,STATUS:Q.qrpStatus.Invalid,ERROR_CODE:annotationRefusal}),'QRP',false))];
   }else if(out.meta){
    const m=decodeIngestRequest(out.meta.payload);assert.match(m.tags.batchId,out.state_records?/^catalog-attempt-[0-9a-f]{64}$/:out.index_records?/^catalog-[0-9a-f]{64}:complete$/:/^catalog-[0-9a-f]{64}$/);const b=Buffer.from((out.product_records??out.index_records??out.state_records).payload);const destination=records(m.schema,m.tags.providerId,m.tags.sourceName);const exists=destination.some(x=>hash(x)===hash(b));if(out.state_records){assert.equal(m.reconcile,"current");destination.splice(0,destination.length,...split(b));}else if(!exists&&!(storageFailure&&out.product_records))destination.push(...split(b));
    if(out.product_records){
@@ -75,7 +75,7 @@ async function tick(time,kill=false){
    input=[frame('stored','IngestResult',encodeIngestResult({schema:m.schema,...m.tags,inserted:exists?0:1,reconciledDuplicates:0,refused:storageFailure&&out.product_records?'synthetic disk refusal':undefined}))];
   }else if(out.recipe){
    if(C.CAT.getSizePrefixedRootAsCAT(new fb.ByteBuffer(out.catalog.payload)).NORAD_CAT_ID()===trapComposeObject)trap();
-   const r=await composer.invoke({methodId:'replace_products',inputs:[out.recipe,out.catalog,{...out.selection,portId:'decision'},...(out.selected?[{...out.selected,portId:'ocm_products'}]:[])]});assert.equal(r.statusCode,0,r.errorMessage);input=r.outputs.map(f=>({...f,portId:f.portId==='decision'?'compose_status':'replacement'}));
+   const r=await composer.invoke({methodId:'replace_products',inputs:[out.recipe,out.catalog,{...out.selection,portId:'decision'},...(out.selected?[{...out.selected,portId:'ocm_products'}]:[])]});assert.equal(r.statusCode,0,r.errorMessage);input=r.outputs.map(f=>({...f,portId:f.portId==='decision'?'compose_status':'replacement'}));if(composerRefusal)input=[frame('compose_status','QRP',pack(Object.assign(new Q.QRPT(),{KIND:Q.qrpKind.Error,STATUS:Q.qrpStatus.Invalid,ERROR_CODE:composerRefusal}),'QRP',false))];
   }else throw Error('No progress: '+Object.keys(out));
   response=await control.invoke({methodId:'advance',inputs:input});
  }
@@ -94,7 +94,7 @@ try{
  weatherRows.splice(-2);await tick(now+1130);
 
  const renamed=C.CAT.getSizePrefixedRootAsCAT(new fb.ByteBuffer(records('CAT.fbs','synthetic','identities')[0])).unpack();renamed.OBJECT_NAME='SYNTHETIC RENAMED';renamed.OBJECT_ID='SYNTHETIC-DESIGNATOR';records('CAT.fbs','synthetic','identities').push(pack(renamed,'CAT'));
- await tick(now+1200);assert.equal(current().get(ids[0]).OBJECT_NAME,renamed.OBJECT_NAME);assert.equal(current().get(ids[0]).OBJECT_ID,renamed.OBJECT_ID);
+ const identityRefresh=await tick(now+1200);assert.equal(identityRefresh.fits+identityRefresh.products,0,'identity metadata recomposes only the index');assert.equal(identityRefresh.indexes,1);assert.equal(current().get(ids[0]).OBJECT_NAME,renamed.OBJECT_NAME);assert.equal(current().get(ids[0]).OBJECT_ID,renamed.OBJECT_ID);
  records('CAT.fbs','synthetic','identities').pop();await tick(now+1300);
 
  records('OMM.fbs','synthetic','primary').push(seed(ids[0],.1));const corrected=await tick(now+2000);assert.equal(corrected.fits,1);assert.equal(corrected.indexes,1);
@@ -205,6 +205,18 @@ try{
  const unusedWeather=await tick(now+1000);assert.equal(unusedWeather.fits+unusedWeather.products+unusedWeather.indexes,0,'excluded fallback never hashes unused weather');
  const agedFallback=await tick(now+6*86400000);assert.equal(agedFallback.indexes,2);assert.ok([...current().values()].every(c=>c.PRODUCTS[0].SELECTION_REASON.startsWith('old-span fallback')));delete cfg['catalog.nonresonant_max_e'];
  console.log('PASS submillisecond epoch, unused fallback weather and fallback aging');
+ await reset();refusalCode='pool-dead';const temporary=await tick(now);assert.equal(temporary.indexes,2);assert.ok([...current().values()].every(c=>c.PRODUCTS[0].KIND===C.catalogProductKind.Sgp4Elements));
+ control.destroy();control=await createControl();assert.equal((await tick(now+1000)).fits,0,'transient fallback retains backoff across replacement');
+ refusalCode=undefined;assert.equal((await tick(now+1200001)).fits,2,'transient fallback eventually upgrades to AP');
+ for(const kind of ['annotation','composer']){await reset();if(kind==='annotation')annotationRefusal='invalid-models';else composerRefusal='invalid-replacement';const failed=await tick(now);assert.equal(failed.indexes,0);control.destroy();control=await createControl();assert.equal((await tick(now+86400001)).fits,0,'deterministic '+kind+' refusal is final');annotationRefusal=composerRefusal=undefined;}
+ console.log('PASS deterministic downstream refusals and transient fallback recovery');
+ await reset();records('CAT.fbs','synthetic-node','catalog-index').push(pack(new C.CATT(),'CAT'));
+ for(let i=0;i<3;i++){control.destroy();control=await createControl();const observation=await tick(now+i*1000);assert.equal(observation.indexes,i===2?2:0);}
+ control.destroy();control=await createControl();const quarantined=await tick(now+4000);assert.equal(quarantined.fits+quarantined.indexes,0);assert.doesNotMatch(quarantined.notice.reason,/invalid record-sha256/);
+ records('NEV.fbs','synthetic-node','catalog-attempts').unshift(pack(new C.CATT(),'CAT'));control.destroy();control=await createControl();await tick(now+5000);
+ assert.equal(records('NEV.fbs','synthetic-node','catalog-attempts').length,1,'state compaction removes its malformed historical row');
+ console.log('PASS index and operational-source quarantine');
+
 
  cfg['catalog.partition_count']=2;
  cfg['catalog.partition_index']=2;control.destroy();control=await createControl();
