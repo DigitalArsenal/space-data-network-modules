@@ -7,6 +7,7 @@
 // - low orbit at 500 km and at 290 km (NRLMSISE-00 under 325 km), tesseral 31 / zonal 20 and 70 with the slow set;
 // - the half-day class (a 12-hour orbit) and the one-day class (geostationary), at 31 and at 70 with the slow set;
 // - an eccentric orbit under the wide branch's switch (e 0.2), at 31 and 70;
+// - wide eccentric and half-day sets, including degree 70;
 // - a decaying set (a 150 km perigee and a large BTERM: its flight ends decayed);
 // - SGP4XP without AP's terms.
 // Asserted: every thread's high-water at most half its stack (a factor of two of margin), every series answered or decayed
@@ -81,6 +82,8 @@ for (const [deg, slow] of [[[31, 20], false], [[70, 20], true]]) {
   ap(`290 km ${tag}`, { n: revPerDay(RE + 290), e: 0.001, i: 51.6, tesseral, zonal, slow });
   ap(`half-day ${tag}`, { n: 2.0056, e: 0.005, i: 55, tesseral, zonal, slow });
   ap(`one-day ${tag}`, { n: 1.0027, e: 0.0002, i: 0.05, tesseral, zonal, slow });
+  ap(`wide e 0.052 ${tag}`, { n: 14.8, e: 0.052, i: 55, tesseral, zonal, slow });
+  ap(`wide half-day ${tag}`, { n: 2.006, e: 0.65, i: 63.4, tesseral, zonal, slow });
   ap(`e 0.2 ${tag}`, { n: revPerDay((RE + 800) / 0.8), e: 0.2, i: 63.4, tesseral, zonal, slow });
 }
 ap("decaying 150 km", { n: revPerDay(RE + 150), e: 0.001, i: 51.6, bterm: 0.05, tesseral: 31, zonal: 20 });

@@ -1,3 +1,4 @@
+import {releaseReference} from './lib/release-reference.mjs';
 // Bounded residency and retry, including schedule-node blending and covariance.
 // Synthetic TEME states (km, km/s) at UTC day two; comparison is bit equality
 // against isolated release states. Covariance entries use km and km/s products.
@@ -15,7 +16,7 @@ SDNAP_EXPORT("sdnap_test_hold_grids") int sdnap_test_hold_grids(int count){
  if(!grid_pin(g)){wide_grid_drop(g);return -2;}held_grids[i]=g;}
  return 0;
 }`);
-const rs=records(400),days=2-.1/1440,reference=process.env.SDN_AP_REFERENCE_WASM||file;
+const rs=records(400),days=2-.1/1440,reference=releaseReference();
 const truth=[];for(const r of rs){const h=await open(reference);try{await h.load([r]);const v=h.one(0,days);assert.equal(v.rc,0);truth.push(v.state);}finally{await h.close();}}
 const outcomes=[];
 for(const threads of [0,3,14,16]){
