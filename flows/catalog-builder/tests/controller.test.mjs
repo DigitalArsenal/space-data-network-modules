@@ -52,7 +52,7 @@ async function tick(time,kill=false){
   }else if(out.annotate_orbit){
    const r=await gp.invoke({methodId:'annotate_population_flow',inputs:[frame('ocm','OCM',out.annotate_orbit.payload),frame('elements','OMM',out.annotate_seed.payload)]});assert.equal(r.statusCode,0,r.errorMessage);input=r.outputs.map(f=>({...f,portId:f.portId==='decision'?'annotation_status':'annotated'}));
   }else if(out.meta){
-   const m=decodeIngestRequest(out.meta.payload);assert.match(m.tags.batchId,out.state_records?/^catalog-attempt-[0-9a-f]{64}$/:out.index_records?/^catalog-[0-9a-f]{64}:complete$/:/^catalog-[0-9a-f]{64}$/);const b=Buffer.from((out.product_records??out.index_records??out.state_records).payload);const destination=records(m.schema,m.tags.providerId,m.tags.sourceName);const exists=destination.some(x=>hash(x)===hash(b));if(!exists&&!(storageFailure&&out.product_records))destination.push(...split(b));
+   const m=decodeIngestRequest(out.meta.payload);assert.match(m.tags.batchId,out.state_records?/^catalog-attempt-[0-9a-f]{64}$/:out.index_records?/^catalog-[0-9a-f]{64}:complete$/:/^catalog-[0-9a-f]{64}$/);const b=Buffer.from((out.product_records??out.index_records??out.state_records).payload);const destination=records(m.schema,m.tags.providerId,m.tags.sourceName);const exists=destination.some(x=>hash(x)===hash(b));if(out.state_records){assert.equal(m.reconcile,"current");destination.splice(0,destination.length,...split(b));}else if(!exists&&!(storageFailure&&out.product_records))destination.push(...split(b));
    if(out.product_records){
     const product=O.OCM.getSizePrefixedRootAsOCM(new fb.ByteBuffer(b)).unpack();const id=product.METADATA.NORAD_CAT_ID;
     if(product.MEAN_ELEMENTS.MEAN_ELEMENT_THEORY===O.meanElementSource.AP&&!verified.has(id)){
@@ -84,6 +84,7 @@ async function tick(time,kill=false){
 const current=()=>{const map=new Map();for(const b of records('CAT.fbs','synthetic-node','catalog-index')){const c=C.CAT.getSizePrefixedRootAsCAT(new fb.ByteBuffer(b)).unpack();if(!map.has(c.NORAD_CAT_ID)||map.get(c.NORAD_CAT_ID).PRODUCTS_AS_OF<=c.PRODUCTS_AS_OF)map.set(c.NORAD_CAT_ID,c);}return map;};
 try{
  const first=await tick(now);assert.equal(first.fits,2);assert.equal(first.indexes,2);assert.ok([...current().values()].every(c=>c.PRODUCTS[0].KIND===C.catalogProductKind.ApElements));
+ assert.equal(records('NEV.fbs','synthetic-node','catalog-attempts').length,1);assert.equal(N.NEV.getSizePrefixedRootAsNEV(new fb.ByteBuffer(records('NEV.fbs','synthetic-node','catalog-attempts')[0])).EVENTSLength(),0,'successful selections leave no attempt events');
  const unchanged=await tick(now+1000);assert.equal(unchanged.fits+unchanged.products+unchanged.indexes,0);
  const metadata=OMM.getSizePrefixedRootAsOMM(new fb.ByteBuffer(seed(ids[0]))).unpack();metadata.OBJECT_NAME='SYNTHETIC METADATA';records('OMM.fbs','synthetic','primary').push(pack(metadata,'OMM'));
  assert.equal((await tick(now+1100)).fits,0,'metadata-only seed reissue does not refit');
@@ -160,7 +161,7 @@ try{
  cfg['catalog.max_bytes']=512*1024*1024;control.destroy();control=await createControl();await assert.rejects(()=>tick(now+400));delete cfg['catalog.max_bytes'];
  cfg['catalog.max_removal_fraction']=.25;store.set(key('OMM.fbs','synthetic','primary'),[]);control.destroy();control=await createControl();
  const guarded=await tick(now+1000);assert.equal(guarded.indexes,0);assert.match(guarded.notice.reason,/mass-removal guard/);
- cfg['catalog.invocation_budget_ms']=1000;control.destroy();control=await createControl();const budget=await tick(now+2000);assert.equal(budget.fits+budget.fallbacks,0);assert.equal(budget.notice.kind,'unchanged');
+ cfg['catalog.invocation_budget_ms']=1000;control.destroy();control=await createControl();const budget=await tick(now+2000);assert.equal(budget.fits+budget.fallbacks,0);assert.equal(budget.notice.kind,'missing');
  delete cfg['catalog.invocation_budget_ms'];
  const reset=async (objectIds=ids)=>{store.clear();cfg['catalog.max_removal_fraction']=1;cfg['catalog.batch_size']=4;cfg['catalog.partition_count']=1;cfg['catalog.partition_index']=0;
   records('CAT.fbs','synthetic','identities').push(...objectIds.map(id=>pack(Object.assign(new C.CATT(),{NORAD_CAT_ID:id,OBJECT_NAME:'SYNTHETIC'}),'CAT')));
@@ -190,11 +191,11 @@ try{
  console.log('PASS per-source poison quarantine and independent decay removal');
  await reset([999994,999995,999996,999997]);lookupFailure=true;await assert.rejects(()=>tick(now),/Storage circuit breaker/);lookupFailure=false;
  assert.equal(records('OCM.fbs','synthetic-node','catalog-products').length,0);
- const failureLog=records('NEV.fbs','synthetic-node','catalog-attempts').map(b=>N.NEV.getSizePrefixedRootAsNEV(new fb.ByteBuffer(b)).unpack().EVENTS[0]);assert.equal(failureLog.filter(e=>e.DETAIL.startsWith('in progress')).length,3,'host-wide lookup failure attempts only three objects');
+ const failureLog=records('NEV.fbs','synthetic-node','catalog-attempts').map(b=>N.NEV.getSizePrefixedRootAsNEV(new fb.ByteBuffer(b)).unpack().EVENTS).flat();assert.equal(failureLog.length,3,'host-wide lookup failure attempts only three objects');
  await reset([999994,999995,999996,999997]);storageFailure=true;await assert.rejects(()=>tick(now),/Storage circuit breaker/);storageFailure=false;
  assert.equal(records('OCM.fbs','synthetic-node','catalog-products').length,0);
  console.log('PASS lookup isolation and three-refusal storage circuit breaker');
- await reset();cfg['catalog.invocation_budget_ms']=3000;pageDelay=1150;control.destroy();control=await createControl();const scanBudget=await tick(now);assert.equal(scanBudget.pages,1,'elapsed scan time consumes budget; a frozen clock fails this assertion');assert.equal(scanBudget.fits+scanBudget.fallbacks,0);assert.equal(scanBudget.notice.kind,'unchanged');pageDelay=0;delete cfg['catalog.invocation_budget_ms'];
+ await reset();cfg['catalog.invocation_budget_ms']=3000;pageDelay=1150;control.destroy();control=await createControl();const scanBudget=await tick(now);assert.equal(scanBudget.pages,1,'elapsed scan time consumes budget; a frozen clock fails this assertion');assert.equal(scanBudget.fits+scanBudget.fallbacks,0);assert.equal(scanBudget.notice.kind,'missing');assert.match(scanBudget.notice.reason,/scan elapsed budget exhausted/);pageDelay=0;delete cfg['catalog.invocation_budget_ms'];
  console.log('PASS elapsed monotonic scan budget');
  await reset();const subms=OMM.getRootAsOMM(new fb.ByteBuffer(ommBytes)).unpack();subms.EPOCH=subms.EPOCH.replace('.000','.000499');
  store.set(key('OMM.fbs','synthetic','primary'),ids.map(id=>pack(Object.assign(OMM.getRootAsOMM(new fb.ByteBuffer(ommBytes)).unpack(),subms,{NORAD_CAT_ID:id}),'OMM')));

@@ -44,7 +44,7 @@ struct Settings {
  double max_removal_fraction=.25,margin=0,nonres_e=.05,res_e=.3,max_rms=2,max_error=10;
  std::vector<Source> seeds;
 } cfg;
-enum class Phase {Idle,Scan,Lookup,AttemptStored,FailureStored,PoisonStored,Chain,Annotate,ProductStored,Compose,IndexStored};
+enum class Phase {Idle,Scan,Lookup,AttemptStored,FailureStored,PoisonStored,SuccessStored,Chain,Annotate,ProductStored,Compose,IndexStored};
 Phase phase=Phase::Idle;
 std::vector<Source> scans;size_t scan_at=0,pages=0,seen=0,retained=0,done=0,at=0;
 std::string cursor,signature,reason,pending_batch,pending_schema;
@@ -59,11 +59,14 @@ std::set<uint32_t> dropped;
 Bytes pending,chosen,object_weather;
 bool compose_only=false,run_fit=false,complete_scan=true,capacity_limited=false,seed_complete=true,identity_complete=true,index_complete=true,weather_complete=true,removal_guard=false;
 struct Poison {unsigned count=0;std::string source;};
+constexpr size_t state_limit=4096;
+uint64_t state_sequence=0;bool state_complete=true,scan_exhausted=false;
+std::string state_source(){return "catalog-attempts"+(cfg.partitions==1?std::string():"-"+std::to_string(cfg.partition)+"-of-"+std::to_string(cfg.partitions));}
 std::map<std::string,Poison> poisons;
 std::set<std::string> poison_seen;
 Bytes poison_updates;
 struct Retry {unsigned attempts=0;int64_t after=0;std::string reason;};
-struct Attempt {Bytes data;std::string signature;unsigned count=0;int64_t time=0;bool final=false;};
+struct Attempt {Bytes data;std::string signature;unsigned count=0;int64_t time=0;bool final=false;uint64_t sequence=0;};
 std::map<uint32_t,Attempt> attempts;
 bool transient_refusal(const std::string& code);
 int save_attempt(bool final=false,const std::string& failure="");
@@ -86,7 +89,7 @@ int push(const char* port,const char* code,const Bytes& data) {
  return plugin_push_output_ex(port,schema.c_str(),id.c_str(),PLUGIN_PAYLOAD_WIRE_FORMAT_FLATBUFFER,code,0,0,data.data(),data.size())<0?500:0;
 }
 int notice(const std::string& message,bool failed=false) {
- R::FlowNoticeT n;n.KIND=failed?R::flowNoticeKind_Missing:done?R::flowNoticeKind_Info:R::flowNoticeKind_Unchanged;
+ R::FlowNoticeT n;n.KIND=(failed||scan_exhausted)?R::flowNoticeKind_Missing:done?R::flowNoticeKind_Info:R::flowNoticeKind_Unchanged;
  n.SCHEMA="CAT.fbs";n.PROVIDER_ID=cfg.provider;n.SOURCE_NAME="catalog-index";n.REASON=message+"; "+diagnostics.summary();n.COUNT=done;
  flatbuffers::FlatBufferBuilder b;R::FinishFlowNoticeBuffer(b,R::FlowNotice::Pack(b,&n));
  return plugin_push_output_ex("notice","FlowNotice.fbs","FNTC",PLUGIN_PAYLOAD_WIRE_FORMAT_FLATBUFFER,"FlowNotice",0,0,b.GetBufferPointer(),b.GetSize())<0?500:0;
@@ -106,7 +109,7 @@ bool configure() {
  return std::isfinite(cfg.max_removal_fraction)&&cfg.max_removal_fraction>=0&&cfg.max_removal_fraction<=1&&std::isfinite(cfg.margin)&&cfg.margin>=0&&cfg.nonres_e>=0&&cfg.nonres_e<=.05&&cfg.res_e>=0&&cfg.res_e<=.3&&std::isfinite(cfg.max_rms)&&cfg.max_rms>0&&std::isfinite(cfg.max_error)&&cfg.max_error>0;
 }
 int query() {
- if(scan_at>=scans.size())return 0;if(!budget_left()){++diagnostics.deferred;diagnostics.add("scan elapsed budget exhausted before all sources completed","bounds");return finish();}
+ if(scan_at>=scans.size())return 0;if(!budget_left()){scan_exhausted=true;++diagnostics.deferred;diagnostics.add("scan elapsed budget exhausted before all sources completed","bounds");return finish();}
  const auto& s=scans[scan_at];QRPT q;q.KIND=qrpKind::Request;q.SCHEMA_NAME=s.schema+".fbs";q.PROVIDER_ID=s.provider;q.SOURCE_NAME=s.name;q.LIMIT=cfg.page;q.MAX_BYTES=8*1024*1024;q.CURSOR=cursor;
  flatbuffers::FlatBufferBuilder b;FinishQRPBuffer(b,QRP::Pack(b,&q));phase=Phase::Scan;
  return push("query","QRP",{b.GetBufferPointer(),b.GetBufferPointer()+b.GetSize()});
@@ -120,12 +123,25 @@ bool retain(const uint8_t* p,size_t n) {
  auto account=[&](size_t old_size){retained=retained-(old_size?old_size+256:0)+n+256;};
  if(scan.schema=="NEV") {
   flatbuffers::Verifier v(p,n);if(!VerifySizePrefixedNEVBuffer(v))return false;const auto* log=GetSizePrefixedNEV(p);
-  if(!log->EVENTS()||log->EVENTS()->size()!=1||text(log->NODE_ID())!=cfg.provider)return false;const auto* e=log->EVENTS()->Get(0);
-  if(text(e->SUBJECT()).rfind("catalog-invalid/",0)==0){const auto key=text(e->SUBJECT());if(poisons.size()<4096||poisons.count(key)){auto& item=poisons[key];if(e->COUNT()>item.count)item={unsigned(std::min<uint64_t>(e->COUNT(),3)),text(e->DETAIL())};}return true;}
-  unsigned id=0;char tail=0;const auto subject=text(e->SUBJECT());if(std::sscanf(subject.c_str(),"catalog-object/%u%c",&id,&tail)!=1||!id)return false;if(id%cfg.partitions!=cfg.partition)return true;
-  const auto detail=text(e->DETAIL());const auto first=detail.find("input="),last=detail.find(';',first);if(first==std::string::npos||last==std::string::npos||e->TIME_MS()<=0)return false;
-  auto old=attempts.find(id);if(old==attempts.end()||e->TIME_MS()>=old->second.time){const auto size=old==attempts.end()?0:old->second.data.size();if(!room(size)){dropped.insert(id);complete_scan=false;capacity_limited=true;return true;}account(size);
-   attempts[id]={std::move(data),detail.substr(first+6,last-first-6),unsigned(std::min<uint64_t>(e->COUNT(),8)),e->TIME_MS(),detail.rfind("final ",0)==0};}
+  if(text(log->NODE_ID())!=cfg.provider)return false;
+  if(!log->EVENTS())return true;
+  for(const auto* e:*log->EVENTS()){
+   const auto subject=text(e->SUBJECT());
+   if(subject.rfind("catalog-invalid/",0)==0){if(poisons.size()+attempts.size()<state_limit||poisons.count(subject)){auto& item=poisons[subject];if(e->COUNT()>item.count)item={unsigned(std::min<uint64_t>(e->COUNT(),3)),text(e->DETAIL())};}else state_complete=false;continue;}
+   unsigned id=0;char tail=0;if(std::sscanf(subject.c_str(),"catalog-object/%u%c",&id,&tail)!=1||!id)return false;if(id%cfg.partitions!=cfg.partition)continue;
+   const auto detail=text(e->DETAIL());const auto first=detail.find("input="),last=detail.find(';',first),seq_at=detail.find("sequence=");
+   if(first==std::string::npos||last==std::string::npos||e->TIME_MS()<=0)return false;
+   uint64_t seq=0;if(seq_at!=std::string::npos){try{seq=std::stoull(detail.substr(seq_at+9));}catch(...){return false;}}state_sequence=std::max(state_sequence,seq);
+   auto old=attempts.find(id);
+   if(old==attempts.end()||seq>old->second.sequence||(seq==old->second.sequence&&e->TIME_MS()>old->second.time)){
+    if(old==attempts.end()&&poisons.size()+attempts.size()>=state_limit){state_complete=false;continue;}
+    NEVT single;single.NODE_ID=cfg.provider;single.EVENTS.emplace_back(e->UnPack());flatbuffers::FlatBufferBuilder b;FinishSizePrefixedNEVBuffer(b,NEV::Pack(b,&single));
+    Bytes one(b.GetBufferPointer(),b.GetBufferPointer()+b.GetSize());const auto size=old==attempts.end()?0:old->second.data.size();
+    if(retained-(size?size+256:0)+one.size()+256>cfg.max_bytes){state_complete=false;continue;}
+    retained=retained-(size?size+256:0)+one.size()+256;
+    attempts[id]={std::move(one),detail.substr(first+6,last-first-6),unsigned(std::min<uint64_t>(e->COUNT(),8)),e->TIME_MS(),detail.rfind("final ",0)==0,seq};
+   }
+  }
  } else if(scan.schema=="OMM") {
   flatbuffers::Verifier v(p,n);if(!VerifySizePrefixedOMMBuffer(v))return false;const auto* o=GetSizePrefixedOMM(p);const auto epoch=instant(text(o->EPOCH()));const auto id=o->NORAD_CAT_ID();if(!id||epoch<0)return false;if(id%cfg.partitions!=cfg.partition)return true;
   auto found=seeds.find(id);if(found==seeds.end()||scan_at<found->second.rank||(scan_at==found->second.rank&&epoch>=found->second.epoch)){
@@ -163,6 +179,7 @@ int page(const plugin_input_frame_t* f) {
  if(!VerifySizePrefixedQRPBuffer(v))return stop("Complete read failed; restart the sweep from its first page.");
  const auto* q=GetSizePrefixedQRP(p);const auto& scan=scans[scan_at];
  if(q->KIND()!=qrpKind::Page||q->STATUS()!=qrpStatus::Ok||text(q->SCHEMA_NAME())!=scan.schema+".fbs"||text(q->PROVIDER_ID())!=scan.provider||text(q->SOURCE_NAME())!=scan.name)return stop("Complete read failed or changed its source filter.");
+ if(scan.schema=="NEV"&&seen>2*state_limit)return stop("Operational state exceeds bounded read; compact the source before resuming.");
  if(++pages>10000){if(scan.schema=="SPW")weather_complete=false;complete_scan=false;diagnostics.add("source="+scan.name+" exceeds 10000 pages; increase catalog.page_size");cursor.clear();pages=0;++scan_at;return scan_at<scans.size()?query():complete_reads();}
  size_t off=n,count=0;while(off<f->payload_length){if(f->payload_length-off<4)return stop("Truncated page record.");const auto len=size_t(flatbuffers::ReadScalar<uint32_t>(p+off))+4;if(len>f->payload_length-off)return stop("Truncated page record.");
  if(!retain(p+off,len)){
@@ -170,7 +187,7 @@ int page(const plugin_input_frame_t* f) {
   ++diagnostics.invalid;const auto source=scan.schema+"/"+scan.provider+"/"+scan.name;const auto key="catalog-invalid/"+digest(Bytes(p+off,p+off+len))+"/"+digest(Bytes(source.begin(),source.end()));
   unsigned count=poisons.count(key)?poisons[key].count:0;
   if(count==0)diagnostics.add(source+" invalid record-sha256="+digest(Bytes(p+off,p+off+len)),"invalid");
-  if(count<3&&poison_seen.insert(key).second&&poisons.size()<4096){++count;poisons[key]={count,source};
+  if(count<3&&poison_seen.insert(key).second&&poisons.size()+attempts.size()<state_limit){++count;poisons[key]={count,source};
    NEVT log;log.NODE_ID=cfg.provider;log.GENERATED_AT_MS=now;auto e=std::make_unique<NEVEventT>();e->TIME_MS=now;e->KIND=nevEventKind::Warning;e->SUBJECT=key;e->COUNT=count;e->DETAIL=source;log.EVENTS.push_back(std::move(e));
    flatbuffers::FlatBufferBuilder b;FinishSizePrefixedNEVBuffer(b,NEV::Pack(b,&log));poison_updates.insert(poison_updates.end(),b.GetBufferPointer(),b.GetBufferPointer()+b.GetSize());}
   if(count<3){if(scan.schema=="OMM")seed_complete=false;if(scan.schema=="CAT"&&scan.provider==cfg.identity_provider&&scan.name==cfg.identity_source)identity_complete=false;}
@@ -207,25 +224,39 @@ int ingest(const Bytes& data,bool is_index) {
  if(plugin_push_output_ex("meta","IngestRequest.fbs","INGQ",PLUGIN_PAYLOAD_WIRE_FORMAT_FLATBUFFER,"IngestRequest",0,0,b.GetBufferPointer(),b.GetSize())<0||push(is_index?"index_records":"product_records",pending_schema.c_str(),data))return stop("Cannot queue storage input.");
  phase=is_index?Phase::IndexStored:Phase::ProductStored;return 0;
 }
+// Each partition serializes one bounded snapshot through current-batch reconciliation.
+// A success removes its marker and emits no success event.
 int persist_events(Phase after) {
- R::IngestRequestT request;request.SCHEMA="NEV.fbs";request.RECONCILE=R::reconcileMode_Duplicates;request.TAGS=std::make_unique<R::SourceTagsT>();request.TAGS->PROVIDER_ID=cfg.provider;request.TAGS->SOURCE_NAME="catalog-attempts";request.TAGS->BATCH_ID=pending_batch;request.TAGS->CONTENT_KEY_ID="public";
- flatbuffers::FlatBufferBuilder b;R::FinishIngestRequestBuffer(b,R::IngestRequest::Pack(b,&request));
- if(plugin_push_output_ex("meta","IngestRequest.fbs","INGQ",PLUGIN_PAYLOAD_WIRE_FORMAT_FLATBUFFER,"IngestRequest",0,0,b.GetBufferPointer(),b.GetSize())<0||push("state_records","NEV",pending))return stop("Cannot persist operational event.");phase=after;return 0;
+ if(!state_complete)return stop("Operational state incomplete; no replacement or dispatch is safe.");
+ NEVT log;log.NODE_ID=cfg.provider;log.GENERATED_AT_MS=now;
+ for(const auto& item:attempts)log.EVENTS.emplace_back(GetSizePrefixedNEV(item.second.data.data())->EVENTS()->Get(0)->UnPack());
+ for(const auto& item:poisons){auto e=std::make_unique<NEVEventT>();e->TIME_MS=now;e->KIND=nevEventKind::Warning;e->SUBJECT=item.first;e->COUNT=item.second.count;e->DETAIL=item.second.source;log.EVENTS.push_back(std::move(e));}
+ flatbuffers::FlatBufferBuilder b;FinishSizePrefixedNEVBuffer(b,NEV::Pack(b,&log));pending.assign(b.GetBufferPointer(),b.GetBufferPointer()+b.GetSize());
+ if(pending.size()>8*1024*1024)return stop("Operational state exceeds 8 MiB; dispatch deferred.");
+ pending_schema="NEV";pending_batch="catalog-attempt-"+digest(pending);
+ R::IngestRequestT request;request.SCHEMA="NEV.fbs";request.RECONCILE=R::reconcileMode_Current;request.TAGS=std::make_unique<R::SourceTagsT>();request.TAGS->PROVIDER_ID=cfg.provider;request.TAGS->SOURCE_NAME=state_source();request.TAGS->BATCH_ID=pending_batch;request.TAGS->CONTENT_KEY_ID="public";
+ b.Clear();R::FinishIngestRequestBuffer(b,R::IngestRequest::Pack(b,&request));
+ if(plugin_push_output_ex("meta","IngestRequest.fbs","INGQ",PLUGIN_PAYLOAD_WIRE_FORMAT_FLATBUFFER,"IngestRequest",0,0,b.GetBufferPointer(),b.GetSize())<0||push("state_records","NEV",pending))return stop("Cannot persist operational state.");phase=after;return 0;
 }
 int complete_reads(){
- if(poison_updates.empty())return build_work();pending=std::move(poison_updates);pending_schema="NEV";pending_batch="catalog-attempt-"+digest(pending);return persist_events(Phase::PoisonStored);
+ if(!state_complete)return stop("Operational state incomplete; retry the bounded source read.");
+ bool pruned=false;
+ for(auto i=attempts.begin();i!=attempts.end();){const auto c=index.find(i->first);bool committed=false;
+  if(c!=index.end()){const auto* row=GetSizePrefixedCAT(c->second.data());if(row->PRODUCTS())for(const auto* product:*row->PRODUCTS())if(text(product->SELECTION_REASON()).find("catalog-input="+i->second.signature+";")!=std::string::npos&&text(product->SELECTION_REASON()).find("retry-fit;")==std::string::npos)committed=true;}
+  if(committed){i=attempts.erase(i);pruned=true;}else ++i;
+ }
+ if(poison_updates.empty()&&!pruned)return build_work();return persist_events(Phase::PoisonStored);
 }
-// Operational events record dispatched attempts, not committed orbit progress.
 int save_attempt(bool final,const std::string& failure) {
  const auto id=work[at];const auto old=attempts.find(id);const bool starting=failure.empty();
+ if(old==attempts.end()&&attempts.size()+poisons.size()>=state_limit)return stop("Operational state capacity reached; dispatch deferred.");
  const unsigned count=old!=attempts.end()&&old->second.signature==signature?std::min(old->second.count+(starting?1:0),8u):1;
  NEVT log;log.NODE_ID=cfg.provider;log.GENERATED_AT_MS=now;
  auto e=std::make_unique<NEVEventT>();e->TIME_MS=now;e->KIND=starting?nevEventKind::Other:nevEventKind::Failure;
- e->SUBJECT="catalog-object/"+std::to_string(id);e->COUNT=count;e->DETAIL=(final?"final ":starting?"in progress ":"retry ")+std::string("input=")+signature+"; "+failure;
+ e->SUBJECT="catalog-object/"+std::to_string(id);e->COUNT=count;e->DETAIL=(final?"final ":starting?"in progress ":"retry ")+std::string("input=")+signature+"; sequence="+std::to_string(++state_sequence)+"; "+failure;
  log.EVENTS.push_back(std::move(e));flatbuffers::FlatBufferBuilder b;FinishSizePrefixedNEVBuffer(b,NEV::Pack(b,&log));
- pending.assign(b.GetBufferPointer(),b.GetBufferPointer()+b.GetSize());pending_schema="NEV";pending_batch="catalog-attempt-"+digest(pending);
+ attempts[id]={{b.GetBufferPointer(),b.GetBufferPointer()+b.GetSize()},signature,count,now,final,state_sequence};
  return persist_events(starting?Phase::AttemptStored:Phase::FailureStored);
-
 }
 // Match the numerical fields and ingestion guards read by ingest_omm.
 std::string fit_seed_signature(const OMM* o){
@@ -319,7 +350,7 @@ int storage_failure(const std::string& message){if(++storage_failures>=3)return 
 int advance() {
  if(input("tick")){
   if(!configure())return stop("Invalid catalog ModuleConfig.");const auto* f=input("tick");flatbuffers::Verifier v(f->payload,f->payload_length);if(!R::VerifyTimerTickBuffer(v))return stop("Invalid timer tick.");now=R::GetTimerTick(f->payload)->FIRED_MS();if(now<=0)return stop("Timer requires a positive UTC time.");
-  diagnostics=Diagnostics{};storage_failures=0;clock_reported=false;tick_start=Clock::now();allowance=cfg.allowance_ms;complete_scan=true;capacity_limited=false;seed_complete=identity_complete=index_complete=weather_complete=true;removal_guard=false;poisons.clear();poison_seen.clear();poison_updates.clear();dropped.clear();seeds.clear();identities.clear();index.clear();weather.clear();products.clear();attempts.clear();scans={{"CAT",cfg.provider,"catalog-index"},{"NEV",cfg.provider,"catalog-attempts"}};scans.insert(scans.end(),cfg.seeds.begin(),cfg.seeds.end());scans.push_back({"CAT",cfg.identity_provider,cfg.identity_source});scans.push_back({"SPW",cfg.weather_provider,cfg.weather_source});scan_at=pages=seen=retained=done=at=0;cursor.clear();return query();
+  diagnostics=Diagnostics{};state_complete=true;scan_exhausted=false;state_sequence=0;storage_failures=0;clock_reported=false;tick_start=Clock::now();allowance=cfg.allowance_ms;complete_scan=true;capacity_limited=false;seed_complete=identity_complete=index_complete=weather_complete=true;removal_guard=false;poisons.clear();poison_seen.clear();poison_updates.clear();dropped.clear();seeds.clear();identities.clear();index.clear();weather.clear();products.clear();attempts.clear();scans={{"NEV",cfg.provider,state_source()},{"CAT",cfg.provider,"catalog-index"}};scans.insert(scans.end(),cfg.seeds.begin(),cfg.seeds.end());scans.push_back({"CAT",cfg.identity_provider,cfg.identity_source});scans.push_back({"SPW",cfg.weather_provider,cfg.weather_source});scan_at=pages=seen=retained=done=at=0;cursor.clear();return query();
  }
  if(const auto* f=input("query_status")){flatbuffers::Verifier v(f->payload,f->payload_length);if(!VerifyQRPBuffer(v)||GetQRP(f->payload)->KIND()==qrpKind::Error){if(phase==Phase::Lookup)return storage_failure("Product lookup host failure.");return stop("Complete read failed; no partial sweep is committed.");}}
  if(const auto* f=input("page")){
@@ -349,15 +380,15 @@ int advance() {
  if(const auto* f=input("replacement")){if(phase!=Phase::Compose)return stop("Unexpected index replacement.");return ingest(bytes(f),true);}
  if(const auto* f=input("stored")){
   flatbuffers::Verifier v(f->payload,f->payload_length);if(!R::VerifyIngestResultBuffer(v))return stop("Invalid storage acknowledgment.");const auto* r=R::GetIngestResult(f->payload);
-  if(phase==Phase::AttemptStored||phase==Phase::FailureStored||phase==Phase::PoisonStored){
-   if(!text(r->REFUSED()).empty()||text(r->SCHEMA())!="NEV.fbs"||text(r->PROVIDER_ID())!=cfg.provider||text(r->SOURCE_NAME())!="catalog-attempts"||text(r->BATCH_ID())!=pending_batch||(phase!=Phase::PoisonStored&&r->INSERTED()>1))return stop("Attempt storage refused; object processing stopped.");
+  if(phase==Phase::AttemptStored||phase==Phase::FailureStored||phase==Phase::PoisonStored||phase==Phase::SuccessStored){
+   if(!text(r->REFUSED()).empty()||text(r->SCHEMA())!="NEV.fbs"||text(r->PROVIDER_ID())!=cfg.provider||text(r->SOURCE_NAME())!=state_source()||text(r->BATCH_ID())!=pending_batch||(phase!=Phase::PoisonStored&&r->INSERTED()>1))return stop("Attempt storage refused; object processing stopped.");
    if(phase==Phase::PoisonStored)return build_work();
-   const auto* e=GetSizePrefixedNEV(pending.data())->EVENTS()->Get(0);attempts[work[at]]={pending,signature,unsigned(e->COUNT()),now,text(e->DETAIL()).rfind("final ",0)==0};
+   if(phase==Phase::SuccessStored){++at;return next_object();}
    if(phase==Phase::AttemptStored)return start_chain();++at;return next_object();
   }
   if((phase!=Phase::ProductStored&&phase!=Phase::IndexStored)||!text(r->REFUSED()).empty()||text(r->SCHEMA())!=pending_schema+".fbs"||text(r->PROVIDER_ID())!=cfg.provider||text(r->BATCH_ID())!=pending_batch||text(r->SOURCE_NAME())!=(phase==Phase::ProductStored?"catalog-products":"catalog-index")||r->INSERTED()>1)return storage_failure("Storage refused or did not acknowledge the complete deterministic batch.");
   if(phase==Phase::ProductStored){products.insert(cid(chosen));return compose();}
-  allowance=std::max(allowance,2*std::chrono::duration<double,std::milli>(Clock::now()-object_start).count());index[work[at]]=pending;storage_failures=0;++done;++at;return next_object();
+  allowance=std::max(allowance,2*std::chrono::duration<double,std::milli>(Clock::now()-object_start).count());index[work[at]]=pending;storage_failures=0;++done;attempts.erase(work[at]);return persist_events(Phase::SuccessStored);
  }
  return stop("Incomplete controller response.");
 }
