@@ -236,6 +236,26 @@ try{
  const repeatedTransient=await tick(now+1200001);assert.equal(repeatedTransient.fits,2);assert.equal(repeatedTransient.products+repeatedTransient.indexes,0,'repeated transient failure changes only operational state');refusalCode=undefined;assert.equal((await tick(now+3600002)).fits,2,'transient fallback eventually upgrades to AP');
  for(const kind of ['annotation','composer']){await reset();if(kind==='annotation')annotationRefusal='invalid-models';else composerRefusal='invalid-replacement';const failed=await tick(now);assert.equal(failed.indexes,0);const stateRows=records('NEV.fbs','synthetic-node','catalog-attempts');const staleState=N.NEV.getSizePrefixedRootAsNEV(new fb.ByteBuffer(stateRows[0])).unpack();for(const e of staleState.EVENTS)e.DETAIL=e.DETAIL.replace(/^final /,'in progress ').replace(/sequence=\d+;/,'sequence=0;');stateRows.push(pack(staleState,'NEV'));control.destroy();control=await createControl();assert.equal((await tick(now+86400001)).fits,0,'deterministic '+kind+' refusal is final');annotationRefusal=composerRefusal=undefined;}
  console.log('PASS deterministic downstream refusals and transient fallback recovery');
+ // Two active retry selections share a full state snapshot with retained retry entries.
+ await reset();cfg['catalog.page_size']=512;cfg['catalog.batch_size']=2;refusalCode='pool-dead';
+ control.destroy();control=await createControl();await tick(now);refusalCode=undefined;
+ const capacityRows=records('NEV.fbs','synthetic-node','catalog-attempts');
+ const capacityState=N.NEV.getSizePrefixedRootAsNEV(new fb.ByteBuffer(capacityRows[0])).unpack();
+ assert.equal(capacityState.EVENTS.length,2);
+ for(let i=0;i<4094;i++){const e=Object.assign(new N.NEVEventT(),capacityState.EVENTS[0]);e.SUBJECT='catalog-object/'+(2000000+i);capacityState.EVENTS.push(e);}
+ capacityRows.splice(0,capacityRows.length,pack(capacityState,'NEV'));
+ records('CAT.fbs','synthetic','identities').push(pack(Object.assign(new C.CATT(),{NORAD_CAT_ID:999997,OBJECT_NAME:'SYNTHETIC'}),'CAT'));
+ records('OMM.fbs','synthetic','primary').push(seed(999997));
+ const capacityRuns=[];
+ for(let i=0;i<3;i++){control.destroy();control=await createControl();capacityRuns.push(await tick(now+1200001+i));}
+ console.log('CAPACITY_CONTROL '+JSON.stringify(capacityRuns.map(r=>({fits:r.fits,indexes:r.indexes,kind:r.notice.kind,reason:r.notice.reason}))));
+ assert.equal(capacityRuns[0].fits,2,'capacity skips unbuilt objects and reaches due retry fits');
+ assert.equal(capacityRuns[0].indexes,2);assert.match(capacityRuns[0].notice.reason,/deferred=1/);assert.notEqual(capacityRuns[0].notice.kind,'unchanged');
+ assert.equal(capacityRuns[1].fits,1,'freed attempts admit the deferred new object');assert.equal(capacityRuns[1].indexes,1);
+ assert.equal(capacityRuns[2].fits,0);assert.equal(current().size,3);
+ assert.equal(N.NEV.getSizePrefixedRootAsNEV(new fb.ByteBuffer(capacityRows[0])).eventsLength(),4094);
+ console.log('PASS capacity retries free entries and resume new selections');
+ cfg['catalog.page_size']=1;
  await reset();records('CAT.fbs','synthetic-node','catalog-index').push(pack(new C.CATT(),'CAT'));
  for(let i=0;i<3;i++){control.destroy();control=await createControl();const observation=await tick(now+i*1000);assert.equal(observation.indexes,i===2?2:0);}
  control.destroy();control=await createControl();const indexQuarantined=await tick(now+4000);assert.equal(indexQuarantined.fits+indexQuarantined.indexes,0);assert.doesNotMatch(indexQuarantined.notice.reason,/invalid record-sha256/);
