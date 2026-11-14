@@ -85,6 +85,7 @@ Bytes poison_updates;
 struct Retry {unsigned attempts=0;int64_t after=0;std::string reason;};
 struct Attempt {Bytes data;std::string signature;unsigned count=0;int64_t time=0;bool final=false;uint64_t sequence=0;std::string product_batch;size_t read_bytes=0;};
 std::map<uint32_t,Attempt> attempts;
+std::set<uint32_t> dirty_attempts;
 std::string attempt_detail(const Attempt& a){return text(GetSizePrefixedNEV(a.data.data())->EVENTS()->Get(0)->DETAIL());}
 void ready_or_suspect(Attempt& a,bool suspect){
  auto log=std::unique_ptr<NEVT>(GetSizePrefixedNEV(a.data.data())->UnPack());auto& detail=log->EVENTS[0]->DETAIL;
@@ -141,7 +142,8 @@ int notice(const std::string& message,bool failed=false) {
 }
 int stop(const std::string& message) {phase=Phase::Idle;plugin_set_error("catalog-controller",message.c_str());notice(message,true);return 1;}
 int finished() {phase=Phase::Idle;return notice("Catalog reconciliation complete for the bounded selection batch.");}
-int finish(){return staged.empty()?finished():flush_generation();}
+int persist_events(Phase after);
+int finish(){return staged.empty()?persist_events(Phase::SuccessStored):flush_generation();}
 bool configure() {
  const auto c=sdm_piv::get_config();if(!c.ok())return false;
  cfg.provider=std::string(c.string("catalog.provider"));cfg.identity_provider=std::string(c.string("catalog.identity_provider"));cfg.identity_source=std::string(c.string("catalog.identity_source"));
@@ -293,28 +295,34 @@ int ingest(const Bytes& data,bool is_index) {
  if(plugin_push_output_ex("meta","IngestRequest.fbs","INGQ",PLUGIN_PAYLOAD_WIRE_FORMAT_FLATBUFFER,"IngestRequest",0,0,b.GetBufferPointer(),b.GetSize())<0||push(is_index?"index_records":"product_records",pending_schema.c_str(),data))return stop("Cannot queue storage input.");
  phase=is_index?Phase::IndexStored:Phase::ProductStored;return 0;
 }
-// Dispatch and failure markers append up to the entry bound. The following
-// write and generation boundaries compact all entries; successes leave no event.
+// Markers and preparation deltas append; one terminal snapshot compacts the run.
+// Replay applies the same FIFO to earlier snapshots and their later appends.
 int persist_events(Phase after) {
  if(!state_complete)return stop("Operational state incomplete; no replacement or dispatch is safe.");
- const bool single=(after==Phase::AttemptStored||after==Phase::FailureStored)&&state_appends<state_limit&&!state_evicted;
+ const bool compact=after==Phase::SuccessStored;
+ const bool single=after==Phase::AttemptStored||after==Phase::FailureStored;
  NEVT log;log.NODE_ID=cfg.provider;log.GENERATED_AT_MS=now;
- if(single)log.EVENTS.emplace_back(GetSizePrefixedNEV(attempts.at(work[at]).data.data())->EVENTS()->Get(0)->UnPack());
- else for(const auto& item:attempts)log.EVENTS.emplace_back(GetSizePrefixedNEV(item.second.data.data())->EVENTS()->Get(0)->UnPack());
- if(!single)for(const auto& item:poisons){auto e=std::make_unique<NEVEventT>();e->TIME_MS=now;e->KIND=nevEventKind::Warning;e->SUBJECT=item.first;e->COUNT=item.second.count;e->DETAIL=poison_detail(item.second);log.EVENTS.push_back(std::move(e));}
+ auto add_attempt=[&](uint32_t id){const auto i=attempts.find(id);if(i!=attempts.end())log.EVENTS.emplace_back(GetSizePrefixedNEV(i->second.data.data())->EVENTS()->Get(0)->UnPack());};
+ if(single)add_attempt(work[at]);
+ else if(compact)for(const auto& item:attempts)add_attempt(item.first);
+ else for(auto id:dirty_attempts)add_attempt(id);
+ if(compact)for(const auto& item:poisons){auto e=std::make_unique<NEVEventT>();e->TIME_MS=now;e->KIND=nevEventKind::Warning;e->SUBJECT=item.first;e->COUNT=item.second.count;e->DETAIL=poison_detail(item.second);log.EVENTS.push_back(std::move(e));}
+ else if(!single)for(size_t off=0;off<poison_updates.size();){const auto* row=GetSizePrefixedNEV(poison_updates.data()+off);for(const auto* e:*row->EVENTS())log.EVENTS.emplace_back(e->UnPack());off+=size_t(flatbuffers::ReadScalar<uint32_t>(poison_updates.data()+off))+4;}
  flatbuffers::FlatBufferBuilder b;FinishSizePrefixedNEVBuffer(b,NEV::Pack(b,&log));pending.assign(b.GetBufferPointer(),b.GetBufferPointer()+b.GetSize());
  if(pending.size()>8*1024*1024)return stop("Operational state exceeds 8 MiB; dispatch deferred.");
  pending_schema="NEV";pending_batch="catalog-attempt-"+digest(pending);
- R::IngestRequestT request;request.SCHEMA="NEV.fbs";request.RECONCILE=single?R::reconcileMode_None:R::reconcileMode_Current;request.TAGS=std::make_unique<R::SourceTagsT>();request.TAGS->PROVIDER_ID=cfg.provider;request.TAGS->SOURCE_NAME=state_source();request.TAGS->BATCH_ID=pending_batch;request.TAGS->CONTENT_KEY_ID="public";
+ R::IngestRequestT request;request.SCHEMA="NEV.fbs";request.RECONCILE=compact?R::reconcileMode_Current:R::reconcileMode_None;request.TAGS=std::make_unique<R::SourceTagsT>();request.TAGS->PROVIDER_ID=cfg.provider;request.TAGS->SOURCE_NAME=state_source();request.TAGS->BATCH_ID=pending_batch;request.TAGS->CONTENT_KEY_ID="public";
  b.Clear();R::FinishIngestRequestBuffer(b,R::IngestRequest::Pack(b,&request));
- if(plugin_push_output_ex("meta","IngestRequest.fbs","INGQ",PLUGIN_PAYLOAD_WIRE_FORMAT_FLATBUFFER,"IngestRequest",0,0,b.GetBufferPointer(),b.GetSize())<0||push("state_records","NEV",pending))return stop("Cannot persist operational state.");state_appends=single?state_appends+1:0;state_evicted=false;phase=after;return 0;
+ if(plugin_push_output_ex("meta","IngestRequest.fbs","INGQ",PLUGIN_PAYLOAD_WIRE_FORMAT_FLATBUFFER,"IngestRequest",0,0,b.GetBufferPointer(),b.GetSize())<0||push("state_records","NEV",pending))return stop("Cannot persist operational state.");
+ if(single)dirty_attempts.erase(work[at]);else {dirty_attempts.clear();poison_updates.clear();}
+ state_appends=compact?0:state_appends+1;state_evicted=false;phase=after;return 0;
 }
 int store_generation_part(){
  if(product_batch_at<product_batches.size())return ingest(product_batches[product_batch_at].data,false);
  return ingest(generation_index,true);
 }
 void mark_product_batch(uint32_t id,const std::string& batch){
- auto& a=attempts.at(id);a.product_batch=batch;
+ auto& a=attempts.at(id);a.product_batch=batch;dirty_attempts.insert(id);
  auto log=std::unique_ptr<NEVT>(GetSizePrefixedNEV(a.data.data())->UnPack());
  auto& detail=log->EVENTS[0]->DETAIL;const auto pos=detail.find(" product-batch=");if(pos!=std::string::npos)detail.erase(pos);
  if(!batch.empty())detail+=" product-batch="+batch+"; prepared-generation;";
@@ -355,7 +363,7 @@ int complete_reads(){
  // The latest unprepared in-progress marker is the suspect, even if its work finished.
  uint64_t latest=0,suspect_sequence=0;for(const auto& item:attempts){latest=std::max(latest,item.second.sequence);if(item.second.sequence>=suspect_sequence&&attempt_detail(item.second).find("instance-interrupted;")!=std::string::npos){suspect_sequence=item.second.sequence;interruption_suspect=item.first;}}
  for(auto& item:attempts){auto& a=item.second;const auto detail=attempt_detail(a);
-  if(detail.rfind("in progress ",0)==0){const bool suspect=a.sequence==latest&&detail.find("prepared-generation;")==std::string::npos;if(suspect)interruption_suspect=item.first;ready_or_suspect(a,suspect);pruned=true;}
+  if(detail.rfind("in progress ",0)==0){const bool suspect=a.sequence==latest&&detail.find("prepared-generation;")==std::string::npos;if(suspect)interruption_suspect=item.first;ready_or_suspect(a,suspect);dirty_attempts.insert(item.first);pruned=true;}
  }
  for(auto i=attempts.begin();i!=attempts.end();){const auto c=index.find(i->first);bool committed=false;
   if(c!=index.end()){const auto* row=GetSizePrefixedCAT(c->second.data());if(row->PRODUCTS())for(const auto* product:*row->PRODUCTS())if(text(product->SELECTION_REASON()).find("catalog-input="+i->second.signature+";")!=std::string::npos&&text(product->SELECTION_REASON()).find("retry-fit;")==std::string::npos)committed=true;}
@@ -481,7 +489,7 @@ int storage_failure(const std::string& message){if(++storage_failures>=3)return 
 int advance() {
  if(input("tick")){
   if(!configure())return stop("Invalid catalog ModuleConfig.");const auto* f=input("tick");flatbuffers::Verifier v(f->payload,f->payload_length);if(!R::VerifyTimerTickBuffer(v))return stop("Invalid timer tick.");now=R::GetTimerTick(f->payload)->FIRED_MS();if(now<=0)return stop("Timer requires a positive UTC time.");
-  staged.clear();product_batches.clear();generation_index.clear();staged_bytes=product_batch_at=pending_count=0;checked_batches.clear();lookup_cursor.clear();fallback_annotation.clear();diagnostics=Diagnostics{};state_complete=true;scan_exhausted=false;state_rows=state_appends=0;state_history_oversized=false;state_sequence=0;state_evicted=false;interruption_suspect=0;storage_failures=0;clock_reported=false;tick_start=Clock::now();allowance=cfg.allowance_ms;complete_scan=true;capacity_limited=false;seed_complete=identity_complete=index_complete=weather_complete=true;removal_guard=false;poisons.clear();poison_seen.clear();poison_updates.clear();dropped.clear();seeds.clear();identities.clear();index.clear();weather.clear();products.clear();attempts.clear();scans={{"NEV",cfg.provider,state_source()},{"CAT",cfg.provider,"catalog-index"}};scans.insert(scans.end(),cfg.seeds.begin(),cfg.seeds.end());scans.push_back({"CAT",cfg.identity_provider,cfg.identity_source});scans.push_back({"SPW",cfg.weather_provider,cfg.weather_source});scan_at=pages=seen=retained=done=at=0;cursor.clear();return query();
+  staged.clear();product_batches.clear();generation_index.clear();staged_bytes=product_batch_at=pending_count=0;checked_batches.clear();lookup_cursor.clear();fallback_annotation.clear();diagnostics=Diagnostics{};state_complete=true;scan_exhausted=false;state_rows=state_appends=0;state_history_oversized=false;state_sequence=0;state_evicted=false;interruption_suspect=0;storage_failures=0;clock_reported=false;tick_start=Clock::now();allowance=cfg.allowance_ms;complete_scan=true;capacity_limited=false;seed_complete=identity_complete=index_complete=weather_complete=true;removal_guard=false;poisons.clear();poison_seen.clear();poison_updates.clear();dropped.clear();seeds.clear();identities.clear();index.clear();weather.clear();products.clear();attempts.clear();dirty_attempts.clear();scans={{"NEV",cfg.provider,state_source()},{"CAT",cfg.provider,"catalog-index"}};scans.insert(scans.end(),cfg.seeds.begin(),cfg.seeds.end());scans.push_back({"CAT",cfg.identity_provider,cfg.identity_source});scans.push_back({"SPW",cfg.weather_provider,cfg.weather_source});scan_at=pages=seen=retained=done=at=0;cursor.clear();return query();
  }
  if(const auto* f=input("query_status")){flatbuffers::Verifier v(f->payload,f->payload_length);if(!VerifyQRPBuffer(v)||GetQRP(f->payload)->KIND()==qrpKind::Error){if(phase==Phase::Lookup)return storage_failure("Product lookup host failure.");return stop("Complete read failed; no partial sweep is committed.");}}
  if(const auto* f=input("page")){
