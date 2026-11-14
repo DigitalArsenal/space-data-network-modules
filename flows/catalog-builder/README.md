@@ -7,8 +7,8 @@ compression of this configuration are unmeasured. [Resident capacity](PERFORMANC
 describes a synthetic memory fixture, not processing or publication capacity.
 
 The ten-minute timer reads configured OMM, CAT identity and SPW sources through
-`index_page`, chooses one product per object, stores that product, and replaces
-its CAT selection. The node provides publication under the behavior in
+`index_page`, chooses one product per object, and commits one generation per tick: bounded
+product batches followed by one complete CAT batch. The node provides publication under the behavior in
 [publication requirements](PUBLICATION.md). The flow fetches no provider data.
 
 ## Selection and recovery
@@ -78,9 +78,25 @@ that count. Annotation/composer refusals return typed outcomes. Transport
 corruption and failed source-page queries stop the scan.
 
 A matching committed selection avoids any OCM read. After recomputation,
-recovery checks only the deterministic product batch, reusing identical stored
-bytes after interruption. Products precede index writes; terminal index batch
-identifiers end in `:complete`. Each replacement is a complete generation.
+recovery checks only the prepared product batches named in durable attempt state,
+reusing identical stored records after interruption, including when the retry's
+object grouping changes. Legacy single-product batch identifiers remain readable.
+The controller stages successful selections; a failed object retains its attempt
+state and does not prevent the others from committing. Product batches are bounded
+to 4 MiB and 1,000 records; the single terminal index batch is bounded to 4 MiB,
+and staged output to 32 MiB. These output buffers are additional to resident-input
+accounting. A 256-object tick with products fitting in 4 MiB uses one product batch
+and one index batch, rather than 512 publication batches. Operational snapshots
+remain separate writes: one before each dispatch, one before generation storage,
+and one after the index acknowledgment, plus failures or quarantine updates.
+
+Products precede the index write; only the terminal batch identifier ends in
+`:complete`. A kill between them leaves the prior selection visible. The retry
+obeys durable attempt backoff, reuses stored products, and commits the complete
+replacement. A refused product or index batch aborts generation storage; successful
+objects retain their attempts for recovery. A byte-bound stop flushes staged
+objects and defers the object that did not fit. No tick publishes an intermediate
+index generation.
 The host must preserve referenced products and expose its live index through
 complete pages. The controller does not scan retained OCM history or depend
 on publication-journal internals. Seed/identity/index paging remains proportional
@@ -144,8 +160,15 @@ and parallel arrays `catalog.seed_providers` and `catalog.seed_sources` (1–16)
 | `catalog.max_fit_rms_km` | 2 | Positive finite acceptance bound |
 | `catalog.max_fit_error_km` | 10 | Positive finite acceptance bound |
 
-The resonance rule uses mean motion greater than 0.0035003818 and at most
-0.015751718 radians/minute. Resident accounting includes bytes plus 256 bytes
+The exact class setting is `catalog.nonresonant_max_e: 0.05` together with
+`catalog.resonant_max_e: 0.3`. Eccentricity above the relevant limit produces
+`KIND: Sgp4Elements` with reason `outside configured AP class`; equality remains
+eligible for fitting. The module's resonance bands (`src/resonance.inc::band_of`
+in `sdn-ap`) in radians/minute are (0.0035003818, 0.0052505727),
+[0.0070007636, 0.0105011454], (0.0105011454, 0.015751718], and
+[0.0052505727, 0.007875859]. Their union is (0.0035003818, 0.015751718],
+which is the controller's test. Mean motion converts from revolutions/day by
+multiplying by 2π/1440. No additional class option is required. Resident accounting includes bytes plus 256 bytes
 per retained entry and replaces superseded entries. Other partitions' records
 are validated but not retained. Operational-state bookkeeping has the combined 4,096-entry bound above. A bounded partial scan reports read count and
 settings and processes only objects with retained seed, identity and selection
@@ -162,6 +185,254 @@ Configure `execution_timeout: 10m` with the 540-second controller budget and
 `release_after_run: true` so an interrupted instance is discarded. A host must
 replace a poisoned invocation before reuse; keeping an interrupted instance
 is unsupported. Durable attempt events preserve failure backoff across that replacement.
+
+## Operator configuration: 33,000 objects on four services
+
+Build the unsigned bundle with `CATALOG_FLOW_PARTITIONS=4`, install the four
+`dist/flow/partitions/0` through `dist/flow/partitions/3` bundles under their
+program IDs below, and prime their native compiled artifacts through the host's
+flow installation/prewarm path. The host needs indexed storage pages, threaded
+flow execution, typed timer input and paired catalog publication. This example
+is a host configuration fragment; JSON is also valid YAML. Merge it into the
+node configuration, preserving other required services and publication rules.
+
+Replace `catalog-producer` consistently with the node's publication provider ID.
+Replace the three input provider/source pairs with the exact sources populated
+by the installed element, identity and weather retrieval flows. The controller
+performs no retrieval. Inputs are `OMM.fbs`, `CAT.fbs` identities and `SPW.fbs`;
+outputs are `OCM.fbs/catalog-products`, `CAT.fbs/catalog-index`, and private
+`NEV.fbs/catalog-attempts-0-of-4` through `catalog-attempts-3-of-4` under that
+same provider. Each operational source has exactly one serial service owner;
+exclude those four sources from automatic publication and expiry. Enable
+publication retention on empty product/index sources in store format 4 before
+first ingestion; keep effective series-retention overrides at zero.
+
+```json
+{
+  "flows": {
+    "enabled": true,
+    "max_flows": 4,
+    "max_memory_pages": 4096,
+    "first_fire_when_due": true,
+    "services": [
+      {
+        "flow": "com.digitalarsenal.flows.catalog-builder.partition-0",
+        "memory_pages": 4096,
+        "execution_timeout": "10m",
+        "release_after_run": true,
+        "exclusive_group": "",
+        "intervals": {
+          "refresh": "10m"
+        },
+        "retrieval_interval": "1m",
+        "config": {
+          "catalog.provider": "catalog-producer",
+          "catalog.identity_provider": "identity-provider",
+          "catalog.identity_source": "current-identities",
+          "catalog.weather_provider": "weather-provider",
+          "catalog.weather_source": "daily-weather",
+          "catalog.seed_providers": [
+            "element-provider"
+          ],
+          "catalog.seed_sources": [
+            "public-elements"
+          ],
+          "catalog.nonresonant_max_e": 0.05,
+          "catalog.resonant_max_e": 0.3,
+          "catalog.batch_size": 256,
+          "catalog.partition_count": 4,
+          "catalog.partition_index": 0,
+          "catalog.page_size": 512,
+          "catalog.max_records": 400000,
+          "catalog.max_bytes": 67108864,
+          "catalog.invocation_budget_ms": 540000,
+          "catalog.object_allowance_ms": 2000,
+          "catalog.max_removal_fraction": 0.25,
+          "catalog.recipe_revision": "W/1",
+          "catalog.validity_margin_seconds": 0,
+          "catalog.max_fit_rms_km": 2,
+          "catalog.max_fit_error_km": 10
+        }
+      },
+      {
+        "flow": "com.digitalarsenal.flows.catalog-builder.partition-1",
+        "memory_pages": 4096,
+        "execution_timeout": "10m",
+        "release_after_run": true,
+        "exclusive_group": "",
+        "intervals": {
+          "refresh": "10m"
+        },
+        "retrieval_interval": "1m",
+        "config": {
+          "catalog.provider": "catalog-producer",
+          "catalog.identity_provider": "identity-provider",
+          "catalog.identity_source": "current-identities",
+          "catalog.weather_provider": "weather-provider",
+          "catalog.weather_source": "daily-weather",
+          "catalog.seed_providers": [
+            "element-provider"
+          ],
+          "catalog.seed_sources": [
+            "public-elements"
+          ],
+          "catalog.nonresonant_max_e": 0.05,
+          "catalog.resonant_max_e": 0.3,
+          "catalog.batch_size": 256,
+          "catalog.partition_count": 4,
+          "catalog.partition_index": 1,
+          "catalog.page_size": 512,
+          "catalog.max_records": 400000,
+          "catalog.max_bytes": 67108864,
+          "catalog.invocation_budget_ms": 540000,
+          "catalog.object_allowance_ms": 2000,
+          "catalog.max_removal_fraction": 0.25,
+          "catalog.recipe_revision": "W/1",
+          "catalog.validity_margin_seconds": 0,
+          "catalog.max_fit_rms_km": 2,
+          "catalog.max_fit_error_km": 10
+        }
+      },
+      {
+        "flow": "com.digitalarsenal.flows.catalog-builder.partition-2",
+        "memory_pages": 4096,
+        "execution_timeout": "10m",
+        "release_after_run": true,
+        "exclusive_group": "",
+        "intervals": {
+          "refresh": "10m"
+        },
+        "retrieval_interval": "1m",
+        "config": {
+          "catalog.provider": "catalog-producer",
+          "catalog.identity_provider": "identity-provider",
+          "catalog.identity_source": "current-identities",
+          "catalog.weather_provider": "weather-provider",
+          "catalog.weather_source": "daily-weather",
+          "catalog.seed_providers": [
+            "element-provider"
+          ],
+          "catalog.seed_sources": [
+            "public-elements"
+          ],
+          "catalog.nonresonant_max_e": 0.05,
+          "catalog.resonant_max_e": 0.3,
+          "catalog.batch_size": 256,
+          "catalog.partition_count": 4,
+          "catalog.partition_index": 2,
+          "catalog.page_size": 512,
+          "catalog.max_records": 400000,
+          "catalog.max_bytes": 67108864,
+          "catalog.invocation_budget_ms": 540000,
+          "catalog.object_allowance_ms": 2000,
+          "catalog.max_removal_fraction": 0.25,
+          "catalog.recipe_revision": "W/1",
+          "catalog.validity_margin_seconds": 0,
+          "catalog.max_fit_rms_km": 2,
+          "catalog.max_fit_error_km": 10
+        }
+      },
+      {
+        "flow": "com.digitalarsenal.flows.catalog-builder.partition-3",
+        "memory_pages": 4096,
+        "execution_timeout": "10m",
+        "release_after_run": true,
+        "exclusive_group": "",
+        "intervals": {
+          "refresh": "10m"
+        },
+        "retrieval_interval": "1m",
+        "config": {
+          "catalog.provider": "catalog-producer",
+          "catalog.identity_provider": "identity-provider",
+          "catalog.identity_source": "current-identities",
+          "catalog.weather_provider": "weather-provider",
+          "catalog.weather_source": "daily-weather",
+          "catalog.seed_providers": [
+            "element-provider"
+          ],
+          "catalog.seed_sources": [
+            "public-elements"
+          ],
+          "catalog.nonresonant_max_e": 0.05,
+          "catalog.resonant_max_e": 0.3,
+          "catalog.batch_size": 256,
+          "catalog.partition_count": 4,
+          "catalog.partition_index": 3,
+          "catalog.page_size": 512,
+          "catalog.max_records": 400000,
+          "catalog.max_bytes": 67108864,
+          "catalog.invocation_budget_ms": 540000,
+          "catalog.object_allowance_ms": 2000,
+          "catalog.max_removal_fraction": 0.25,
+          "catalog.recipe_revision": "W/1",
+          "catalog.validity_margin_seconds": 0,
+          "catalog.max_fit_rms_km": 2,
+          "catalog.max_fit_error_km": 10
+        }
+      }
+    ]
+  },
+  "publishing": {
+    "enabled": true,
+    "retention": {
+      "keep_series": 0
+    },
+    "auto_publish": [
+      {
+        "schema": "OCM.fbs",
+        "provider_id": "catalog-producer",
+        "source_name": "catalog-products",
+        "retain_for_publication": true,
+        "min_interval": "5m",
+        "settle": "10s"
+      },
+      {
+        "schema": "CAT.fbs",
+        "provider_id": "catalog-producer",
+        "source_name": "catalog-index",
+        "retain_for_publication": true,
+        "min_interval": "5m",
+        "settle": "10s"
+      },
+      {
+        "schema": "CAT.fbs",
+        "provider_id": "catalog-producer",
+        "source_name": "catalog-index",
+        "publish_scope": "source",
+        "paired_publication": true,
+        "catalog_product_source": "catalog-products",
+        "min_interval": "24h"
+      }
+    ]
+  }
+}
+```
+
+This starts four independent modulo partitions, with 256 successful objects per
+tick and a ten-minute timer, a 540-second controller budget and ten-minute host
+timeout. The one-minute retrieval debounce admits each scheduled tick; failures
+still back off. Each instance has 4,096 memory pages (256 MiB), so four service
+limits sum to 1 GiB of guest linear memory, excluding host, runtime and publication
+memory. Distinct program IDs and empty exclusive groups permit four services;
+the memory and CPU cost remains operator provisioned.
+
+For an evenly distributed 33,000-object catalog, 8,250 objects per partition need
+33 full-capacity rounds at 256 objects each. That is 330 minutes of ten-minute
+schedule slots, or 147,456 processing slots/day across four services. These are
+arithmetic ceilings, not measured fit throughput; source scans, fitting, durable
+state writes, failures, and publication can bind earlier. Each ordinary
+256-object tick contributes two catalog batches and one complete generation.
+All four services contribute eight such batches per round. Larger products can
+require additional 4 MiB product batches, still followed by one index batch.
+
+The first consumer follows whole paired snapshots at the configured 24-hour
+interval. Both signed snapshot announcements are needed: products and index at
+the same cutoff. The five-minute batch rules retain and drain changed batches
+through the host's publication path; they do not change that consumer policy.
+Inspect publication backlog and errors before increasing batch size or cadence.
+[Publication and trust requirements](PUBLICATION.md) describe verification and
+the schema-wide anonymous-read boundary.
 
 ## Build and validation
 

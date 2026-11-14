@@ -6,15 +6,21 @@ and reclamation consume storage and memory. Sustained capacity is unmeasured.
 
 ## Producer and host contract
 
-Each selected product is acknowledged in `catalog-products` before its CAT
-replacement is submitted to `catalog-index`. The batch identity is
-`catalog-<content digest>` for a product and
-`catalog-<content digest>:complete` for an index. Each single-object replacement
-is one completed catalog generation, including removals with an empty product
-list. A completed generation can represent partial progress through a bounded
-timer invocation or the initial catalog build; it guarantees reference closure,
-not that every input object has been processed.
+Each tick stages its successful selections and acknowledges their products in
+`catalog-products` before submitting one CAT stream to `catalog-index`. Product
+batches contain at most 4 MiB and 1,000 records; the terminal index stream is at
+most 4 MiB. Batch identities are `catalog-<content digest>` for product streams
+and `catalog-<content digest>:complete` for the index stream. Only that final
+index write declares the generation complete, including removals and identity
+updates. Failed objects do not prevent the others from committing. A generation
+guarantees reference closure for the tick's successful objects, not completion
+of the entire input catalog.
 
+Prepared product batch identities are written to durable attempt state before
+product ingestion. Recovery queries those batches, reuses matching records even
+when the retry groups objects differently, and preserves attempt backoff. A
+product or terminal-index refusal aborts the generation without clearing those
+attempts. The previous complete selection remains visible.
 The host must retain exact pending batch bytes durably before CAT replacement,
 recover them after restart, defer publication across rate limits, and acknowledge
 completion only after successful publication. A product-only interruption leaves
