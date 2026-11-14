@@ -76,7 +76,7 @@ async function tick(time,kill=false){
     }
     ++counters.products;if(exists)++counters.duplicateProducts;}if(kill){reclaimOrphans();control.destroy();control=await createControl();evidence.stages.push({...counters,killedAfterProduct:true});return counters;}}
    else if(out.index_records){const rows=split(b).map(row=>C.CAT.getSizePrefixedRootAsCAT(new fb.ByteBuffer(row)).unpack());for(const row of rows)for(const product of row.PRODUCTS)assert.ok(journal.has(product.RECORD_CID),'catalog snapshot has an unresolved product reference');generations.push(rows);++counters.indexBatches;for(const b of split(Buffer.from(out.index_records.payload))){++counters.indexes;const cat=C.CAT.getSizePrefixedRootAsCAT(new fb.ByteBuffer(b)).unpack();if(cat.PRODUCTS.length){assert.ok(records('OCM.fbs','synthetic-node','catalog-products').length>0,'product exists before index');}}}
-   if(out.state_records&&m.reconcile==='current'&&crashAfterStateSnapshot){crashAfterStateSnapshot=false;control.destroy();control=await createControl();return counters;}
+   if(out.state_records&&crashAfterStateSnapshot){crashAfterStateSnapshot=false;control.destroy();control=await createControl();return counters;}
    input=[frame('stored','IngestResult',encodeIngestResult({schema:m.schema,...m.tags,inserted:exists?0:split(b).length,reconciledDuplicates:0,refused:stateRefusal&&out.state_records?'synthetic state refusal':storageFailure&&out.product_records?'synthetic disk refusal':undefined}))];
   }else if(out.recipe){
    if(C.CAT.getSizePrefixedRootAsCAT(new fb.ByteBuffer(out.catalog.payload)).NORAD_CAT_ID()===trapComposeObject)trap();
@@ -192,7 +192,7 @@ try{
  await reset([999994,999995,999996]);trapObject=999996;
  await assert.rejects(()=>tick(now),WebAssembly.RuntimeError);assert.equal(current().size,0);
  control.destroy();control=await createControl();
- crashAfterStateSnapshot=true;await tick(now+599999);assert.equal(current().size,0,'recovery snapshot ingestion can precede reconciliation and acknowledgment');
+ crashAfterStateSnapshot=true;await tick(now+599999);assert.equal(current().size,0,'recovery delta ingestion can precede acknowledgment');
  const stagedRecovery=await tick(now+600000);assert.equal(stagedRecovery.products,2);assert.equal(stagedRecovery.indexes,2);assert.equal(stagedRecovery.indexBatches,1);assert.equal(current().size,2);assert.match(stagedRecovery.notice.reason,/in-progress attempt deferred/);
  records('OMM.fbs','synthetic','primary').push(seed(999992),seed(999993));records('CAT.fbs','synthetic','identities').push(...[999992,999993].map(id=>pack(Object.assign(new C.CATT(),{NORAD_CAT_ID:id,OBJECT_NAME:'SYNTHETIC'}),'CAT')));
  control.destroy();control=await createControl();

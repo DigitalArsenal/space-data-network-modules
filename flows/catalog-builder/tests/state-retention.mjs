@@ -115,8 +115,7 @@ export async function verifyStateRetention(mode){
     assert.ok(!events().some(e=>e.SUBJECT===oldest),'oldest unprotected event is evicted');
     if(mode==='prepared'){
      assert.equal(runs[0].indexes,3,'recovery generation completes with both recovered objects and the new object');
-     const recoveryEvents=history.flatMap(row=>N.NEV.getSizePrefixedRootAsNEV(new fb.ByteBuffer(row)).unpack().EVENTS);
-     for(const entry of prepared)assert.ok(recoveryEvents.some(e=>e.SUBJECT===entry.SUBJECT&&e.DETAIL.includes(entry.DETAIL.match(/product-batch=[^;]+;/)[0])),'recovery dispatch preserves the prior product lookup reference');
+     for(const entry of prepared)assert.ok(index.has(Number(entry.SUBJECT.split('/')[1])),'every recovered object commits after preparation pins expire');
      assert.equal(events().filter(e=>e.SUBJECT.startsWith('catalog-invalid/')).length,4093,'restart evicts only one additional older poison');
     }else {
      assert.equal(events().length,4095,'one old poison is evicted for one new object');

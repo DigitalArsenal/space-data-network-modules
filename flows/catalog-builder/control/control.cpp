@@ -17,7 +17,6 @@
 #include <ctime>
 #include <chrono>
 #include <algorithm>
-#include <cassert>
 namespace catalog_control {
 namespace R = sdn::runtime;
 using Bytes = std::vector<uint8_t>;
@@ -77,7 +76,7 @@ bool compose_only=false,run_fit=false,complete_scan=true,capacity_limited=false,
 struct Poison {unsigned count=0;std::string source;uint64_t sequence=0;};
 constexpr size_t state_limit=4096,max_batch_size=1024;
 static_assert(max_batch_size+1<state_limit,"A generation and its interruption suspect fit in the attempt cache.");
-bool state_evicted=false;uint32_t interruption_suspect=0;
+bool state_evicted=false,state_compacted=false;uint32_t interruption_suspect=0;
 size_t state_rows=0,state_appends=0;uint64_t state_sequence=0;bool state_complete=true,state_history_oversized=false,scan_exhausted=false;
 std::string state_source(){return "catalog-attempts"+(cfg.partitions==1?std::string():"-"+std::to_string(cfg.partition)+"-of-"+std::to_string(cfg.partitions));}
 std::map<std::string,Poison> poisons;
@@ -307,7 +306,8 @@ int ingest(const Bytes& data,bool is_index) {
 // Replay applies the same FIFO to earlier snapshots and their later appends.
 int persist_events(Phase after) {
  if(!state_complete)return stop("Operational state incomplete; no replacement or dispatch is safe.");
- const bool compact=after==Phase::SuccessStored;
+ if(after==Phase::SuccessStored&&state_compacted&&dirty_attempts.empty()&&poison_updates.empty())return finished();
+ const bool compact=!state_compacted&&(after==Phase::SuccessStored||(after==Phase::PoisonStored&&state_rows>2*state_limit+1));
  const bool single=after==Phase::AttemptStored||after==Phase::FailureStored;
  NEVT log;log.NODE_ID=cfg.provider;log.GENERATED_AT_MS=now;
  auto add_attempt=[&](uint32_t id){const auto i=attempts.find(id);if(i!=attempts.end())log.EVENTS.emplace_back(GetSizePrefixedNEV(i->second.data.data())->EVENTS()->Get(0)->UnPack());};
@@ -323,7 +323,7 @@ int persist_events(Phase after) {
  b.Clear();R::FinishIngestRequestBuffer(b,R::IngestRequest::Pack(b,&request));
  if(plugin_push_output_ex("meta","IngestRequest.fbs","INGQ",PLUGIN_PAYLOAD_WIRE_FORMAT_FLATBUFFER,"IngestRequest",0,0,b.GetBufferPointer(),b.GetSize())<0||push("state_records","NEV",pending))return stop("Cannot persist operational state.");
  if(single)dirty_attempts.erase(work[at]);else {dirty_attempts.clear();poison_updates.clear();}
- state_appends=compact?0:state_appends+1;state_evicted=false;phase=after;return 0;
+ if(compact)state_compacted=true;state_appends=compact?0:state_appends+1;state_evicted=false;phase=after;return 0;
 }
 int store_generation_part(){
  if(product_batch_at<product_batches.size())return ingest(product_batches[product_batch_at].data,false);
@@ -505,7 +505,7 @@ int storage_failure(const std::string& message){if(++storage_failures>=3)return 
 int advance() {
  if(input("tick")){
   if(!configure())return stop("Invalid catalog ModuleConfig.");const auto* f=input("tick");flatbuffers::Verifier v(f->payload,f->payload_length);if(!R::VerifyTimerTickBuffer(v))return stop("Invalid timer tick.");now=R::GetTimerTick(f->payload)->FIRED_MS();if(now<=0)return stop("Timer requires a positive UTC time.");
-  dispatches=built_dispatches=new_dispatches=initial_work_size=0;unbuilt_work=false;staged.clear();product_batches.clear();generation_index.clear();staged_bytes=product_batch_at=pending_count=0;checked_batches.clear();lookup_cursor.clear();fallback_annotation.clear();diagnostics=Diagnostics{};state_complete=true;scan_exhausted=false;state_rows=state_appends=0;state_history_oversized=false;state_sequence=0;state_evicted=false;interruption_suspect=0;storage_failures=0;clock_reported=false;tick_start=Clock::now();allowance=cfg.allowance_ms;complete_scan=true;capacity_limited=false;seed_complete=identity_complete=index_complete=weather_complete=true;removal_guard=false;index_defects=false;poisons.clear();poison_seen.clear();poison_updates.clear();dropped.clear();seeds.clear();identities.clear();index.clear();weather.clear();products.clear();attempts.clear();dirty_attempts.clear();scans={{"NEV",cfg.provider,state_source()},{"CAT",cfg.provider,"catalog-index"}};scans.insert(scans.end(),cfg.seeds.begin(),cfg.seeds.end());scans.push_back({"CAT",cfg.identity_provider,cfg.identity_source});scans.push_back({"SPW",cfg.weather_provider,cfg.weather_source});scan_at=pages=seen=retained=done=at=0;cursor.clear();return query();
+  dispatches=built_dispatches=new_dispatches=initial_work_size=0;unbuilt_work=false;staged.clear();product_batches.clear();generation_index.clear();staged_bytes=product_batch_at=pending_count=0;checked_batches.clear();lookup_cursor.clear();fallback_annotation.clear();diagnostics=Diagnostics{};state_complete=true;scan_exhausted=false;state_rows=state_appends=0;state_history_oversized=false;state_sequence=0;state_evicted=false;state_compacted=false;interruption_suspect=0;storage_failures=0;clock_reported=false;tick_start=Clock::now();allowance=cfg.allowance_ms;complete_scan=true;capacity_limited=false;seed_complete=identity_complete=index_complete=weather_complete=true;removal_guard=false;index_defects=false;poisons.clear();poison_seen.clear();poison_updates.clear();dropped.clear();seeds.clear();identities.clear();index.clear();weather.clear();products.clear();attempts.clear();dirty_attempts.clear();scans={{"NEV",cfg.provider,state_source()},{"CAT",cfg.provider,"catalog-index"}};scans.insert(scans.end(),cfg.seeds.begin(),cfg.seeds.end());scans.push_back({"CAT",cfg.identity_provider,cfg.identity_source});scans.push_back({"SPW",cfg.weather_provider,cfg.weather_source});scan_at=pages=seen=retained=done=at=0;cursor.clear();return query();
  }
  if(const auto* f=input("query_status")){flatbuffers::Verifier v(f->payload,f->payload_length);if(!VerifyQRPBuffer(v)||GetQRP(f->payload)->KIND()==qrpKind::Error){if(phase==Phase::Lookup)return storage_failure("Product lookup host failure.");return stop("Complete read failed; no partial sweep is committed.");}}
  if(const auto* f=input("page")){
