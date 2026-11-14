@@ -195,7 +195,7 @@
     {
       "methodId": "load_epochs_open",
       "displayName": "Open a load of the epoch store in parts",
-      "description": "Starts a load in parts (SPEC 14.1.1): drops any load in progress, empties the store, reads the optional $PCF EPOCH_STORE. A non-zero status of the three methods closes the load and empties the store, except load-not-open and pool-dead (no change, SPEC 9). Refused by name: pool-dead, configuration-refused, invalid-configuration, out-of-memory.",
+      "description": "Starts a load in parts (SPEC 14.1.1): replaces any pending load and reads the optional $PCF EPOCH_STORE while preserving resident rows, records and cells. A refused open, part or close drops the pending load and preserves the resident snapshot. load-not-open and pool-dead change nothing. Refused by name: pool-dead, configuration-refused, invalid-configuration, out-of-memory.",
       "inputPorts": [
         {
           "portId": "configuration",
@@ -257,7 +257,7 @@
     {
       "methodId": "load_epochs_close",
       "displayName": "Close a load of the epoch store",
-      "description": "Closes the open load: sort and install, as load_epochs does (SPEC 14.1.1). The load is closed either way and a refusal empties the store, except load-not-open (no change). Refused by name: load-not-open, missing-ocm, series-forces-differ, out-of-memory.",
+      "description": "Prepares and validates the open load, then publishes its snapshot and selects records for plugin calls (SPEC 14.1.1). Publication closes the old frames and preserves rows. Every refusal preserves the resident snapshot. Refused by name: load-not-open, missing-ocm, series-forces-differ, pool-dead, out-of-memory.",
       "inputPorts": [],
       "outputPorts": [],
       "maxBatch": 65535,

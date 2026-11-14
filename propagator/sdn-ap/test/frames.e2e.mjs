@@ -348,6 +348,8 @@ const T_START = Date.now();
   }));
   assert.ok((await a.propagateEpochs(live.slice(0, 6).map((o) => ocmOfObject(o)), isoTimes)).equals(propBefore), "propagate_epochs changed after a refill");
   console.log(`purity: ${compared} served states from two fill orders identical; epochs_at (TEME, Earth-fixed), set_at and propagate_epochs unchanged, the instance with 4 pool threads that ran the batches of sdnap_epochs_at`);
+  await a.h.destroy();
+  await b.h.destroy();
   finish("purity", t0);
 }
 
@@ -397,6 +399,8 @@ const T_START = Date.now();
   });
   assert.ok(againstFirst >= 3 * 30, `${againstFirst} cells compared with the store's first asks`);
   console.log(`cells: ${compared} served states identical to a clean instance's; ${againstFirst} within 1 cm of the store's first asks`);
+  await a.h.destroy();
+  await c.h.destroy();
   finish("cells against AP history dependence", t0);
 }
 

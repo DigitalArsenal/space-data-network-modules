@@ -270,13 +270,9 @@ set holds no caches and flies on the thread's.
   refusal code -3, and so does a time the bank cannot reach.
 - `sdnap_epochs_at` (and the other `sdnap_epochs_*` readers) with a covariance asked: a bank that cannot be built, or a moved
   set's flight that fails, gives status 0 and the state without its covariance.
-- `ingest_omm`, refused `out-of-memory`: by then the old row store is dropped (the new store's build begins by freeing it).
-  When the new store's arrays could be had, it is installed; a row whose set failed to initialize for want of memory holds
-  the theory's refusal. Its $OCM outputs are discarded with the refusal.
-- `load_epochs`, refused once its build has begun (a record, a failed allocation, series-forces-differ): the old snapshot is gone
-  and the store is empty. A `load_epochs` refused before its build begins (a frame of a wrong type, a bad $PCF) leaves the old
-  snapshot as it was. A record's carried forecast is a counted block (its copy, when it is kept) and counted arrays, refused
-  `out-of-memory`. The forecast check that flies a set
+- `ingest_omm`, refused `out-of-memory`: the previous row store is preserved; prepared outputs are discarded.
+- `load_epochs` and the staged-load methods preserve the resident snapshot on every refusal. A carried forecast is
+  held in counted blocks and arrays, refused `out-of-memory` when allocation fails. The forecast check that flies a set
   at the carried span's ends (`carried::build`) is reached only by `fit`; there a set that cannot be initialized writes "the
   theory does not reach it", and the fit then answers `out-of-memory`.
 
@@ -1714,10 +1710,9 @@ slow may still be building, flying or replacing its series' slots. So the store'
 store is replaced:
 - `sdnap_epochs_at` answers -20 with every status 9, `sdnap_epochs_set_at` and `sdnap_drag_orbit_check` answer 9, and
   the store's byte count (`sdnap_epochs_stats`, the eighth value) reads NaN;
-- `load_epochs` and `load_epochs_open` refuse "pool-dead" while a pool thread is active, before they free anything:
-  the store stays as it is, and no load is open (a part or a close answers "load-not-open"). `load_epochs_open`
-  refuses so before it reads its $PCF, so a bad $PCF there also answers "pool-dead"; `load_epochs` reads its inputs
-  first and answers their refusals as before. A thread that trapped never stops being active.
+- `load_epochs`, `load_epochs_open` and `load_epochs_close` refuse "pool-dead" while a pool thread is active,
+  before freeing stores or pending loads. Open and single-call load check this before reading their inputs, so bad
+  input also answers "pool-dead" in that state. A thread that trapped remains active.
 - Once no pool thread is active, `load_epochs`, or `load_epochs_open` and the parts and the close, replace the store.
   The pool is not used again: the new store's calls run on the calling thread.
 - The other readers of the store (`sdnap_epochs_count`, `_series`, `_select`, `_source_at`) read only its entries and
