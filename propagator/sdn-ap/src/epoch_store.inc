@@ -188,12 +188,16 @@ struct Stats {
   double records = 0, kept = 0, aged = 0, capped = 0, theory = 0, other_center = 0, duplicate = 0;
 };
 
+struct FreePluginOrder {
+  void operator()(uint32_t* p) const { std::free(p); }
+};
+
 struct Store {
   Config cfg;
   Array<Entry> entries;
   Array<Series> series;
-  Array<uint32_t> plugin_order;  ///< plugin entity to raw series; empty when accepted input order equals series order
-  uint32_t plugin_series_index(uint32_t index) const { return plugin_order.empty() ? index : plugin_order[index]; }
+  std::unique_ptr<uint32_t[], FreePluginOrder> plugin_order;  ///< allocated only for nonidentity input order; length is series.size()
+  uint32_t plugin_series_index(uint32_t index) const { return plugin_order ? plugin_order[index] : index; }
   Stats stats;
   Array<std::unique_ptr<atm::Atmosphere>> atmospheres;  ///< the distinct row series and node vectors of the load
   uint32_t generation = 0;                                    ///< counts the store's replacements (clear, install): the frames (SPEC 19) drop their cells when it changes
@@ -230,7 +234,7 @@ inline void clear(Store& st) {
   // the buffers go back too: a cleared store (a refused load, the next load's start) holds nothing, and a later load is sized afresh
   st.entries.release();
   st.series.release();
-  st.plugin_order.release();
+  st.plugin_order.reset();
   st.stats = Stats{};
   ++st.generation;
   st.atmospheres.release();
@@ -557,7 +561,9 @@ inline int close(Store& st, Build& b) {
   bool input_is_series_order = true;
   for (size_t i = 1; i + 1 < starts.size(); ++i)
     if (order[i - 1] > order[i]) input_is_series_order = false;
-  bool room = (input_is_series_order || st.plugin_order.reserve(starts.size() - 1)) &&
+  if (!input_is_series_order)
+    st.plugin_order.reset(static_cast<uint32_t*>(mem::malloc((starts.size() - 1) * sizeof(uint32_t))));
+  bool room = (input_is_series_order || st.plugin_order) &&
       st.entries.reserve(kept.size()) && st.series.reserve(starts.size() - 1) && live.reserve(st.atmospheres.size());
   for (size_t k = 0; room && k < st.atmospheres.size(); ++k) live.push_back(0);
   if (!room) {
@@ -623,8 +629,8 @@ inline int close(Store& st, Build& b) {
     if (live[k]) { if (used != k) st.atmospheres[used] = std::move(st.atmospheres[k]); ++used; }
   while (st.atmospheres.size() > used) st.atmospheres.pop_back();
   if (!input_is_series_order) {
-    for (uint32_t i = 0; i < st.series.size(); ++i) st.plugin_order.push_back(i);
-    std::sort(st.plugin_order.begin(), st.plugin_order.end(),
+    for (uint32_t i = 0; i < st.series.size(); ++i) st.plugin_order[i] = i;
+    std::sort(st.plugin_order.get(), st.plugin_order.get() + st.series.size(),
         [&](uint32_t a, uint32_t b) { return order[a] < order[b]; });
   }
   st.stats.kept = static_cast<double>(st.entries.size());
@@ -1025,7 +1031,7 @@ inline uint64_t build_bytes(const Build& b) {
 
 inline uint64_t bytes_of(const Store& st) {
   // the arrays at their capacity: what the store holds, not what it uses
-  uint64_t b = st.plugin_order.capacity() * sizeof(uint32_t) + st.entries.capacity() * sizeof(Entry) + st.series.capacity() * sizeof(Series) + st.atmospheres.capacity() * sizeof(std::unique_ptr<atm::Atmosphere>);
+  uint64_t b = (st.plugin_order ? st.series.size() * sizeof(uint32_t) : 0) + st.entries.capacity() * sizeof(Entry) + st.series.capacity() * sizeof(Series) + st.atmospheres.capacity() * sizeof(std::unique_ptr<atm::Atmosphere>);
   for (const Entry& e : st.entries) b += (e.cov != nullptr ? sizeof(cov::Set) + e.cov->C.size() * sizeof(double) : 0) + (e.track ? e.track->bytes() : 0);
   // the interned rows and nodes, one copy each
   for (const auto& a : st.atmospheres) b += sizeof(atm::Atmosphere) + a->days.size() * sizeof(atm::SpwDay) + a->dca_ms.size() * (sizeof(int64_t) + 2 * sizeof(double));
