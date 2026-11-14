@@ -54,7 +54,7 @@ const gates=[
   "kind": "hp",
   "value": 1000,
   "epsilon": 1e-08,
-  "fixture": 13,
+  "fixture": 14,
   "forms": [
    1,
    0
