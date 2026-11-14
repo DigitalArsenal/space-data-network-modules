@@ -1,9 +1,12 @@
 import assert from 'node:assert/strict';
 import {test} from 'node:test';
+import fs from 'node:fs';
 import path from 'node:path';
+import {createRequire} from 'node:module';
 import {fileURLToPath} from 'node:url';
 import * as fb from 'flatbuffers';
 import {createStandaloneHarness} from 'space-data-module-sdk/testing/isomorphic';
+import {validateArtifactWithStandards} from 'space-data-module-sdk/compliance';
 import {OEM} from 'spacedatastandards.org/lib/js/OEM/OEM.js';
 import {QRP} from 'spacedatastandards.org/lib/js/QRP/QRP.js';
 import {qrpKind} from 'spacedatastandards.org/lib/js/QRP/qrpKind.js';
@@ -18,6 +21,14 @@ const payload = (r, port) => r.outputs.find(f => f.portId === port)?.payload;
 const inputs = includeWeather => [frame('omm', 'OMM', ommBytes), frame('flight_config', 'PCF', flightPcf),
   frame('fit_config', 'PCF', fitPcf), ...(includeWeather ? [frame('weather', 'SPW', weather)] : [])];
 const outcome = r => QRP.getRootAsQRP(new fb.ByteBuffer(payload(r, 'decision'))).unpack();
+
+test('adapter artifact satisfies the SDK contract', async () => {
+  const require = createRequire(import.meta.url);
+  const standardsRoot = path.dirname(require.resolve('spacedatastandards.org/package.json'));
+  const manifest = JSON.parse(fs.readFileSync(path.join(root, 'plugin-manifest.json')));
+  const report = await validateArtifactWithStandards({manifest, wasmPath: candidate, standardsRoot});
+  assert.equal(report.ok, true, JSON.stringify(report.issues));
+});
 
 // Synthetic orbit, UTC epochs, GCRF flight in km and km/s. These are serialization
 // and orchestration tests: the reference is the unchanged propagator, with zero

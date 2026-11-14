@@ -1,0 +1,10 @@
+{
+  "format": "wasm-object",
+  "language": "c++",
+  "symbolPrefix": "sdm_guest_636f6d2e6469676974616c617273656e616c2e666c6f77732e636174616c6f672d6275696c6465722e636861696e_",
+  "methodSymbols": {
+    "run_chain": "sdm_guest_636f6d2e6469676974616c617273656e616c2e666c6f77732e636174616c6f672d6275696c6465722e636861696e_run_chain"
+  },
+  "threadModel": "emscripten-pthreads",
+  "capabilities": []
+}
