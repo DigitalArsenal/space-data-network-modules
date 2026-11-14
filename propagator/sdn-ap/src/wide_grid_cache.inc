@@ -68,7 +68,7 @@ inline bool fit_grids_now() { return g_fit_grid_depth > 0; }
 inline int64_t* grid_counts() { static int64_t n[3]{}; return n; }
 inline WideGrid* wide_grid_acquire(int degree, int cls, double n, double e, double inc, bool transient = false) {
   __atomic_add_fetch(&grid_counts()[transient ? 1 : 0], 1, __ATOMIC_RELAXED);
-  if (degree < 2 || degree > kSpCap) { sdnap::mem::note_failure(1); return nullptr; }
+  if (degree < 2 || degree > kSpCap) return nullptr;
   auto& c = grid_cache(); cache_lock(&c.word);
   const unsigned bucket = grid_hash(degree, cls, n, e, inc);
   for (auto* g = c.bucket[bucket]; g; g = g->link)
@@ -99,9 +99,16 @@ inline void wide_grid_drop(WideGrid* g) {
 inline bool grid_pin(WideGrid* g) {
   if (!g) return true;
   auto& c = grid_cache();
-  for (;;) {
+  for (unsigned waits = 0;;) {
     cache_lock(&c.word);
-    if (g->building) { cache_unlock(&c.word); continue; }
+    if (g->building) {
+      cache_unlock(&c.word);
+      if (++waits >= 65536 || sdnap::pool::wide_build_cancelled()) {
+        sdnap::mem::note_failure(wide_grid_bytes_bound(g->degree)); return false;
+      }
+      sched_yield();
+      continue;
+    }
     if (g->v) {
       ++g->pins; grid_unlink(c, g); grid_touch(c, g); cache_unlock(&c.word); return true;
     }

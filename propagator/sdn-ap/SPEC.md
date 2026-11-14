@@ -170,8 +170,8 @@ the same bytes and the same sets answered at a limit, a host's pages intact, and
 build makes thousands.
 
 **A method during which one of them failed refuses with errorCode `out-of-memory` and emits nothing, except `propagate_epochs`.**
-That catalog method preserves per-object results and attempts later objects. That holds for
-`propagate`, `propagate_epochs`, `load_epochs`, `load_epochs_open`, `load_epochs_part`, `load_epochs_close`, `fit`, `maneuver`, `ingest_omm` and `export_omm`, whatever the method
+That catalog method preserves its first named refusal and emits per-object results. The no-output rule holds for
+`propagate`, `load_epochs`, `load_epochs_open`, `load_epochs_part`, `load_epochs_close`, `fit`, `maneuver`, `ingest_omm` and `export_omm`, whatever the method
 would otherwise have answered. That includes the decay answers of SPEC 16.25:
 - `decayed:<time>` and `decayed-in-arc:<time>`;
 - a record whose held-out states past the crossing read DECAYED;
@@ -6702,3 +6702,8 @@ bit-identical before and after preparation. A corrupted eight-hour body node sta
 cached through a five-day scan; a node 256 slots away replaces it, after which its
 re-evaluation agrees with the reference. The six-node interpolation window and
 integrated mean-state history can carry its effect beyond its immediate interval.
+
+The field census returns -2 for retryable resource shortage and -1 for invalid elements.
+A wide census pins its grid once for the census traversal. A concurrent payload builder
+waits with scheduling yields and refuses retryably after 65,536 unsuccessful checks or
+a dead-pool signal. Invalid degrees do not count as memory exhaustion.

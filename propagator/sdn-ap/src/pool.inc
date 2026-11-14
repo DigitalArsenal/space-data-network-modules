@@ -107,7 +107,6 @@ struct Job {
   int32_t pages;   ///< the memory's size (pages) as the thread that last grew it saw it: no thread uses less (await_view)
   // arguments
   epochs::Store* epochs;
-  const uint8_t* serial_series;
   double jd_whole, jd_frac;
   const double* minutes;
   uint32_t first, count, frame;
@@ -175,6 +174,7 @@ inline void (*g_chunk_hook)(int32_t chunk, bool pool_thread) = nullptr;
 /// Test builds only (nullptr in the shipped build): called after each row a chunk computes.
 inline void (*g_row_hook)(uint32_t row, bool pool_thread) = nullptr;
 inline thread_local bool g_pool_thread = false;
+bool wide_build_cancelled() { return load(&job().dead) != 0; }
 /// Test builds only (false in the shipped build): no reserve before a threaded batch, so every growth a batch would
 /// need is refused (the refusals' fall-backs and deferrals all taken).
 inline bool g_reserve_off = false;

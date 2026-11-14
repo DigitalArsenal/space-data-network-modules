@@ -5707,7 +5707,7 @@ inline int wide_families(int degree, int cls, double n, double e, double inc, in
   double (*D)[2][NE] = reinterpret_cast<double (*)[2][NE]>(ws + 5 * 2 * NE);  // their transforms and H[H[g]]
   double (*X)[NE] = reinterpret_cast<double (*)[NE]>(ws + 10 * 2 * NE);
 
-  if (degree < 2 || degree > kSpCap) { std::free(ws); sdnap::mem::note_failure(1); return -1; }
+  if (degree < 2 || degree > kSpCap) { std::free(ws); return -1; }
   const size_t powerN = (degree + 2) * NE, rotationN = (2 * degree + 1) * NE * 2, amplitudeN = degree + 1;
   const int jcap = degree + 64, jwidth = 2 * jcap + 1;
   const size_t phaseN = (2 * degree + 1) * jwidth * NE * 2, jmN = jwidth * NE * 2;

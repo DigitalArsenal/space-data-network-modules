@@ -1489,13 +1489,6 @@ inline void write_series(Store& st, double jd_whole, double jd_frac, uint32_t fi
       for (int q = 0; q < 36; ++q) cov[36 * k + q] = e == sdnap::kPropOk && have_p ? P[q] : std::numeric_limits<double>::quiet_NaN();
 }
 
-/// Whether any entry in a series selects the wide tesseral branch.
-inline bool wide_series(const Store& st, const Series& s) {
-  for (uint32_t k = 0; k < s.count; ++k)
-    if (((st.entries[s.first + k].branch >> 16) & 0xffu) != 0) return true;  // the packed branch's wide_tess byte (load)
-  return false;
-}
-
 /// Reserve retained sets, cache-pool room and each thread's largest table build before forbidding growth. The retained
 /// allowance is 64 KiB per selected cold XP/AP set; SGP4 reserves its satellite and deep-space checkpoints; larger tables use the same allocation-refusal and serial retry as rows.
 inline size_t series_reserve(Store& st, const pool::Job& j) {
@@ -1505,7 +1498,6 @@ inline size_t series_reserve(Store& st, const pool::Job& j) {
   int degree = 0;
   const double t = minutes_of(j.jd_whole, j.jd_frac), jd[2] = {j.jd_whole, j.jd_frac};
   for (uint32_t i = 0; i < j.count; ++i) {  // the batch's slice of the call
-    if (j.serial_series[j.slice + i]) continue;
     const Series& s = st.series[j.first + j.slice + i];
     const auto selected = choose(st, s, t, jd);
     const int32_t indices[2] = {static_cast<int32_t>(selected.a), selected.b};
@@ -1573,25 +1565,17 @@ int32_t sdnap_epochs_at(double jd_whole, double jd_frac, uint32_t first, uint32_
       sdnap::epochs::write_series(st, jd_whole, jd_frac, first, count, frame, out, status, cov, k);
     return 0;
   }
-  // the call's flags (one byte a series) and one slice's deferred rows, through the counted allocator; none to be had: the
+  // One slice's deferred rows, through the counted allocator; none to be had: the
   // call runs on the calling thread
-  static uint8_t* serial = nullptr;
   static uint32_t* deferred = nullptr;
-  static uint32_t serial_cap = 0, deferred_cap = 0;
+  static uint32_t deferred_cap = 0;
   const uint32_t slice_max = sdnap::pool::epoch_slice();
-  if (count > serial_cap) {
-    if (uint8_t* s = static_cast<uint8_t*>(sdnap::mem::realloc(serial, count))) { serial = s; serial_cap = count; }
-  }
   if (slice_max > deferred_cap) {
     if (uint32_t* d = static_cast<uint32_t*>(sdnap::mem::realloc(deferred, sizeof(uint32_t) * slice_max))) { deferred = d; deferred_cap = slice_max; }
   }
-  if (count > serial_cap || slice_max > deferred_cap) {
+  if (slice_max > deferred_cap) {
     for (uint32_t k = 0; k < count; ++k) sdnap::epochs::write_series(st, jd_whole, jd_frac, first, count, frame, out, status, nullptr, k);
     return 0;
-  }
-  for (uint32_t k = 0; k < count; ++k) {
-    serial[k] = 0;
-    if (serial[k]) sdnap::epochs::write_series(st, jd_whole, jd_frac, first, count, frame, out, status, nullptr, k);
   }
   // Constant tables and ERFA's leap-second globals are initialized before any concurrent set build.
   (void)sdnap::drag::table();
@@ -1600,7 +1584,6 @@ int32_t sdnap_epochs_at(double jd_whole, double jd_frac, uint32_t first, uint32_
   (void)sdnap::frames::utc_to_tt(jd_whole, jd_frac, tt1, tt2);
   j.kind = sdnap::pool::kJobEpochs;
   j.epochs = &st;
-  j.serial_series = serial;
   j.jd_whole = jd_whole; j.jd_frac = jd_frac;
   j.first = first; j.stride = count; j.frame = frame;
   j.out = out; j.status = status; j.deferred = deferred;
@@ -1635,7 +1618,7 @@ int32_t sdnap_epochs_at(double jd_whole, double jd_frac, uint32_t first, uint32_
     }
     if (!batch) {
       for (uint32_t k = a; k < a + len; ++k)
-        if (!serial[k]) sdnap::epochs::write_series(st, jd_whole, jd_frac, first, count, frame, out, status, nullptr, k);
+        sdnap::epochs::write_series(st, jd_whole, jd_frac, first, count, frame, out, status, nullptr, k);
       __atomic_add_fetch(&sdnap::xpt::batch_stats().slices_serial, 1, __ATOMIC_RELAXED);
       a += len;
       continue;

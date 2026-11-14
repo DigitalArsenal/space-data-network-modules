@@ -6309,6 +6309,8 @@ inline int census_rows(const XpSat& s, int cap, double n, double e, double inc, 
   const int table_cap = low_table ? tess::kFastCap : tess::kSpCap;
   const int table_degree = cap > table_cap ? table_cap : cap;
   const tess::WideGrid* grid = c.wide;
+  tess::GridPin census_pin(grid);
+  if (!census_pin.ok) return -2;
   double F[72], dF[72], G[72][25], dG[72][25], amp[72];
   amp[0] = kMu / a;
   for (int l = 1; l <= 70; ++l) amp[l] = amp[l - 1] / a;  // mu / a^(l+1)
@@ -6331,8 +6333,6 @@ inline int census_rows(const XpSat& s, int cap, double n, double e, double inc, 
       const int jlo = static_cast<int>(std::floor(nu - band / sr.mdot)) - 1, jhi = static_cast<int>(std::ceil(nu + band / sr.mdot)) + 1;
       bool on_grid = false;
       if (grid != nullptr) {
-        tess::GridPin pin(grid);
-        if (!pin.ok) return -1;
         for (int k = 0; k < grid->count && !on_grid; ++k) on_grid = grid->m[k] == m && grid->w[k] == w;
       }
       for (int l = l0; l <= 70; l += 2) {
@@ -6429,14 +6429,15 @@ inline int census_radiation_row(const RateContext& ctx, int count, double* rows,
 /// `cap` with the slow set (a fit's record), built as a flight builds it (ap_init) and released. -1 for elements it refuses.
 inline int field_census(int cap, double n, double e, double inc, double cut, double* rows, int max_rows) {
   if (!(n > 0.0) || !(e >= 0.0 && e < 1.0) || !(inc >= 0.0 && inc < kPi) || cap < 2 || cap > 70 || !(cut > 0.0)) return -1;
-  if (!pool::thread_ready(true)) return -1;  // SPEC 1.6: AP's tables are built with the thread's caches (stack #600)
+  if (!pool::thread_ready(true)) return -2;
   Elements el{};
   el.epoch_jd_whole = 2461000.5;
   el.xno = n;
   el.eo = e;
   el.xincl = inc;
   XpSat* sp = static_cast<XpSat*>(sdnap::mem::malloc(sizeof(XpSat)));
-  if (sp == nullptr) return -1;
+  if (sp == nullptr) return -2;
+  const uint32_t resource_mark = sdnap::mem::thread_failures();
   new (sp) XpSat{};
   XpSat& s = *sp;
   s.ctx.ctx_id = next_ctx_id();
@@ -6458,7 +6459,7 @@ inline int field_census(int cap, double n, double e, double inc, double cut, dou
   xp_release(s);
   s.~XpSat();
   std::free(sp);
-  return count;
+  return count < 0 && sdnap::mem::thread_failures() != resource_mark ? -2 : count;
 }
 
 inline void lock(int32_t* word) {
@@ -7372,14 +7373,9 @@ inline bool drag_pass_rates(XpSat& s, double t, const double* y, DragPassRates& 
   const bool valid = s.window_valid[di] != 0;
   const Node lo = s.window[di][0], hi = s.window[di][1];
   unlock(&s.lock);
-  // The window is the bracket mean_at just left for this time, read again here after mean_at released the set's lock. That holds
-  // while one thread flies a set at a time. The argument is by reading the code: this function serves a set above e 0.3 only
-  // (drag_pass is set under wide_e), a set above e 0.3 is a wide_tess set (e0 > 0.3 implies e0 > 0.05 and e0 > 0.3, the two
-  // thresholds), and the epoch store keeps every series holding a wide_tess set on the calling thread (epoch_store.inc,
-  // wide_series); the row store's batch gives each row, so each set, to one thread. A set flown by two threads at once could find
-  // the window moved to another bracket, and the state would then come from drag_part and not from the segment polynomial: a
-  // function of the interleaving. The count of such calls is below; the state-purity test reads it, with the count of calls, as a
-  // guard on determinism, not as a proof of the key.
+  // The window is the bracket mean_at left for this time. Both row-store and
+  // epoch-store dispatch assign each set to one thread for the complete flight.
+  // The window therefore stays private to that flight through this read.
   if (!valid || !(dir * lo.t <= dir * t && dir * t < dir * hi.t)) {
     __atomic_fetch_add(&g_drag_pass_window_misses, 1u, __ATOMIC_RELAXED);
     return false;

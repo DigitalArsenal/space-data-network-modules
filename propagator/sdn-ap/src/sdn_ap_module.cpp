@@ -70,6 +70,7 @@
 #include "fastmath.inc"
 #include "drag.inc"
 #include "atmosphere.inc"
+namespace sdnap { namespace pool { bool wide_build_cancelled(); } }
 #include "xp_theory.inc"
 #include "store.inc"
 #include "gcrf.inc"
