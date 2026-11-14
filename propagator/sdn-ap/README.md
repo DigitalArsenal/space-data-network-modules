@@ -11,6 +11,15 @@ propagator that carries it (SPEC 16.14).
 An `$OMM` whose MEAN_ELEMENT_THEORY is neither SGP4 nor SGP4XP, a `$PCF` whose THEORY is not UNSPECIFIED, SGP4 or SGP4XP and an
 `ElementRow` of theory 16 are refused.
 
+## AP coefficient forms
+
+Four of 942 synthetic fitted records end farther from their numerical flight by more than 1 cm; the largest increase is 0.152457 m. Strong drag has a median cost 0.260% higher, ratio 1.002597 [0.998698, 1.004848]; eccentric has a median cost 0.773% higher, ratio 1.007726 [0.991527, 1.024483]; high eccentric has a median cost 0.824% higher, ratio 1.008237 [1.001407, 1.023386]; deep resonance has a median cost 0.767% higher, ratio 1.007674 [0.990502, 1.023074]. Forms A, CM, and R add 768 B per cache-holding set and per thread that needs their m-daily derivative rows. U and C add no derivative-row storage. Selection at an element threshold permits a finite state change of 0.063 m; selection is fixed for the entire flight.
+
+The fixed epoch-element rule selects unchanged, first-order, coarse, or directly evaluated resonant coefficients. Across 942 synthetic fitted records, no record newly crosses 100 m from its numerical flight and no class loses a record within that bound. The largest sampled distance from direct state-element evaluation is 0.047561 m. The largest fitted coefficient-boundary jump among 17 measured classes is 0.015414 m. SPEC section 9 gives the selection bands, complete accuracy and cost tables, bytes, and diagnostic compile definition `SDNAP_CONTINUITY_RULE=0`.
+
+Run `SDM_MODULE_UNSIGNED_BUILD=1 node test/coefficient-forms.e2e.mjs` with `SDNAP_WASM` naming the tested build and `COEFFICIENT_CONTROL` naming the unchanged build. The four-thread state-purity checks pass. The additional 15-thread poisoned-cache test fails intermittently on both the unchanged base and the selected forms; its cause is not established. The committed version and distribution artifact describe the existing release.
+
+
 | Theory | Sets | Source |
 |---|---|---|
 | SGP4 | type 0 | SPACETRACK REPORT No. 3; Vallado et al. 2006 (AFSPC mode) |

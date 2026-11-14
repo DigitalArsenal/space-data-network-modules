@@ -1,5 +1,13 @@
 # Changelog
 
+## AP coefficient forms (source change)
+
+Four of 942 synthetic fitted records end farther from their numerical flight by more than 1 cm; the largest increase is 0.152457 m. Strong drag has a median cost 0.260% higher, ratio 1.002597 [0.998698, 1.004848]; eccentric has a median cost 0.773% higher, ratio 1.007726 [0.991527, 1.024483]; high eccentric has a median cost 0.824% higher, ratio 1.008237 [1.001407, 1.023386]; deep resonance has a median cost 0.767% higher, ratio 1.007674 [0.990502, 1.023074]. Forms A, CM, and R add 768 B per cache-holding set and per thread that needs their m-daily derivative rows. U and C add no derivative-row storage. Selection at an element threshold permits a finite state change of 0.063 m; selection is fixed for the entire flight.
+
+The pure epoch-element selector preserves the old path for U and instantiates one shared coefficient implementation for U, A, C, CM, and R. The 17-class boundary and direct-evaluation test passes. All 942 numerical-flight comparisons retain the within-100 m class counts, with no new crossing. Ascending, descending, shuffled, cross-epoch, and mixed four-thread state-purity checks pass. U regimes and SGP4/SGP4XP controls remain bit for bit. The additional 15-thread poisoned-cache check fails intermittently on the unchanged base and on these sources; SPEC section 9 records the control and limitation.
+
+No version or distribution artifact is changed.
+
 ## 0.6.59 — An AP set's state is a function of the set and the time
 
 What gets worse: every set holds 16 more bytes, the upper node's time in its drag-pass cache (768 to 784 bytes a set, 1.6 MB at 100,000 objects). The 80 MiB store of 6,000 SGP4XP sets without AP's terms

@@ -2155,6 +2155,105 @@ node values are returned unchanged.
 short-period terms (section 8); position and velocity (section 10). Failure codes: mean motion not positive,
 eccentricity at or above 1, or an angle beyond 1e10 rad; a negative interpolated eccentricity is set to 0.
 
+
+### Epoch-selected AP coefficient forms
+
+Four of 942 synthetic fitted records end farther from their numerical flight by more than 1 cm; the largest increase is 0.152457 m. Strong drag has a median cost 0.260% higher, ratio 1.002597 [0.998698, 1.004848]; eccentric has a median cost 0.773% higher, ratio 1.007726 [0.991527, 1.024483]; high eccentric has a median cost 0.824% higher, ratio 1.008237 [1.001407, 1.023386]; deep resonance has a median cost 0.767% higher, ratio 1.007674 [0.990502, 1.023074]. Forms A, CM, and R add 768 B per cache-holding set and per thread that needs their m-daily derivative rows. U and C add no derivative-row storage. Selection at an element threshold permits a finite state change of 0.063 m; selection is fixed for the entire flight.
+
+The selection is a pure function of the record's epoch mean motion n (rad/min), eccentricity e, BTERM, and whether AP gravity terms are present. Perigee height in kilometers is `h = ((kKe / n)^(2/3) * (1 - e) - 1) * kRe`, using the theory's constants. `RateContext.continuity_form` is assigned once by initialization. Query time, cache history, and thread identity do not enter it. The covariance nominal retains its original perigee-drag rate source.
+
+The rules apply in the listed order:
+
+| Condition | Form | Measurements defining the region |
+|---|---|---|
+| No AP gravity terms | U | SGP4 and SGP4XP state comparisons have zero difference. |
+| h >= 30000 and e < 0.02 | C | The geosynchronous class favors C; its measured error and jump appear below. |
+| h >= 1000 | U | Medium-orbit correction costs exceed U in the form comparison; higher-perigee stored records pass the error bound with U. |
+| e >= 0.02, e < 0.2, h >= 350 | R | The 500 km, e 0.1 deep-resonance case favors direct resonant evaluation under the accuracy tie rule. |
+| Remaining e >= 0.02 | A | Strong drag at 200 km and eccentricity 0.05–0.7 retain the first-order correction. |
+| Remaining h < 600 and BTERM == 0 | A | The zero-drag 500 km comparison favors first-order evaluation within the two-percent cost tie. |
+| Remaining h < 600 | CM | The 300 and 500 km near-circular comparisons favor the coarse form with the m-daily derivative correction. |
+| Remaining sets | C | The 650 and 800 km near-circular measurements bound the coarse form without that correction. |
+
+The 350 km boundary separates the measured strong-drag and deep-resonance regions; 600 km lies between the measured 500 and 650 km near-circular cases; 1000 and 30000 km separate those low-orbit, medium-orbit, and geosynchronous regions. Eccentricity 0.02 separates the measured near-circular 0.001–0.01 cases from the 0.05–0.1 cases; 0.2 separates the 0.1 resonance case from the 0.3 and higher cases. These are measured operating regions, not a proof that every orbit within one region has the same cost or error.
+
+U retains the original bake levels and coefficient evaluation. A evaluates baked coefficients to first order in the state's own semimajor axis and eccentricity, with resonant derivatives taken at their resonant bake. C and CM reuse the base tesseral and full m-daily bake points; C omits the m-daily SIMD derivative correction and CM retains it. R evaluates resonant blocks at each state, uses four-times-finer anchored base and m-daily tolerances, and raises the part cap to 256. Other forms retain the cap of 64. `coefficient_evaluation.inc` supplies all five specializations; preprocessing removes form choices from their inner loops.
+
+`SDNAP_CONTINUITY_RULE=0` is a **diagnostic compile definition** selecting U. It preserves the original coefficient states bit for bit; it is not a runtime configuration field. The derivative arrays are a separate 768 B allocation within a corrected set's cache allocation. A thread allocates its rows only when a corrected form needs them. An allocation failure converts the existing double derivative rows with the same float rounding. The selector occupies existing context padding.
+
+Fifteen measured neighborhoods straddle the thresholds and the zero-drag branch. Their fine-offset maximum change in approximation error is 0.016281170 m; the accepted threshold switch allowance is 0.063 m. The physical separation of two nearby sets is distinct from that approximation change. The selector is not continuous in the elements, and the neighborhood experiment is not a universal bound for every possible set.
+
+**States and boundaries.** Committed synthetic OCM fixtures, TEME meters, common 300 s samples over 0–120 h. A boundary jump is the difference between cubic fits at every measured bake boundary and bracket node, using 0.1 s samples over 8 s on each side and excluding the central half second. Unsupported states are excluded. Direct state-element evaluation is the reference for coefficient approximation, not an independent physical truth.
+
+| Synthetic class | Form | Largest exact distance m | Largest jump m | Largest movement from U m | Unchanged/common states |
+|---|---|---:|---:|---:|---:|
+| near-circular 190 km | CM | 0.015023 | 0.003250 | 1.571045 | 0/900 |
+| near-circular 300 km | CM | 0.017624 | 0.000263 | 0.016145 | 0/1441 |
+| near-circular 300 km e 0.001 | CM | 0.015526 | 0.000285 | 0.015598 | 0/1441 |
+| near-circular 400 km | CM | 0.010680 | 0.000183 | 0.010189 | 0/1441 |
+| near-circular 500 km | CM | 0.003148 | 0.000166 | 0.002709 | 0/1441 |
+| near-circular 650 km | C | 0.010447 | 0.000567 | 0.013432 | 0/1441 |
+| near-circular 800 km | C | 0.002376 | 0.000252 | 0.004120 | 0/1441 |
+| medium orbit | U | 0.000022 | 0.000139 | 0.000000 | 1441/1441 |
+| geosynchronous | C | 0.000120 | 0.000090 | 0.000115 | 0/1441 |
+| strong drag e 0.1 | A | 0.007565 | 0.015414 | 1.958146 | 1/1441 |
+| strong drag e 0.1 polar | A | 0.003435 | 0.006045 | 0.636945 | 1/1441 |
+| strong drag e 0.05 | A | 0.004111 | 0.008600 | 0.004193 | 1/1441 |
+| eccentric e 0.5 | A | 0.003299 | 0.005389 | 0.046751 | 1/1441 |
+| eccentric e 0.3 low | A | 0.002107 | 0.004172 | 0.002645 | 1/1441 |
+| eccentric e 0.3 | A | 0.005625 | 0.012069 | 0.105798 | 1/1441 |
+| deep resonance | R | 0.004913 | 0.008168 | 2.043831 | 0/1441 |
+| eccentric e 0.7 | A | 0.002561 | 0.001715 | 0.000898 | 1/1441 |
+
+`SDM_MODULE_UNSIGNED_BUILD=1 node test/coefficient-forms.e2e.mjs` builds the read-only probes and direct-evaluation reference and prints this table with measured per-class bounds. `SDNAP_WASM` selects the tested production artifact; `COEFFICIENT_CONTROL` selects the unchanged artifact. U states and the diagnostic U build are compared at zero tolerance. The state-purity test covers ascending, descending, shuffled, and cross-epoch queries on every form, with set and thread caches and a mixed four-thread pool.
+
+**Numerical flights.** Unchanged committed 0.6.59 against the selected forms, GCRF position distance in meters, at common 300 s samples through the available numerical flight up to 120 h. Acceptance requires each record's sampled distance from direct state-element evaluation below 1 m and no class losing a record within 100 m of its numerical flight. All 942 records satisfy these conditions; none newly crosses 100 m. The 446 records selected as U retain all 642,686 common states bit for bit.
+
+| Class | Records | U within 100 m | Selected within 100 m | Worse by >1 cm | Largest exact distance m |
+|---|---:|---:|---:|---:|---:|
+| low orbit below 700 km | 125 | 100 | 100 | 2 | 0.047561 |
+| eccentric below 1000 km | 276 | 128 | 128 | 2 | 0.018839 |
+| low orbit 700 to 2000 km | 97 | 97 | 97 | 0 | 0.030301 |
+| eccentric 1000 km and above | 295 | 272 | 272 | 0 | 0.026471 |
+| medium and high orbit | 149 | 149 | 149 | 0 | 0.001357 |
+
+Every increase over 1 cm:
+
+| Class | U worst m | Selected worst m | Direct-evaluation worst m | Increase m |
+|---|---:|---:|---:|---:|
+| eccentric below 1000 km | 321.203283 | 321.355740 | 321.354552 | 0.152457 |
+| low orbit below 700 km | 1805.721534 | 1805.739157 | 1805.739032 | 0.017623 |
+| eccentric below 1000 km | 259.070057 | 259.106117 | 259.107145 | 0.036060 |
+| low orbit below 700 km | 24.624647 | 24.638802 | 24.638792 | 0.014155 |
+
+**State cost.** Selected production build on the 0.6.59 sources divided by committed 0.6.58, paired control–candidate–candidate–control rounds. Each call uses 200 instants separated by 420 s; initialization is excluded. Ratios are medians of per-round ratios; brackets contain the interpolated middle half. Each reported spread is at most 5% of its median. Medium orbit's middle half includes 1.000. Of the classes with median cost increases, only high eccentricity has its middle half wholly above 1.000.
+
+| Class | Series | Rounds | Ratio | Middle half |
+|---|---:|---:|---:|---:|
+| 300 km | 1000 | 8 | 0.965234 | [0.959678, 0.971027] |
+| 500 km | 1000 | 8 | 0.812110 | [0.803484, 0.814213] |
+| 800 km | 1000 | 24 | 0.727526 | [0.711089, 0.740184] |
+| medium | 4000 | 8 | 0.994830 | [0.991792, 1.000829] |
+| geosynchronous | 1000 | 12 | 0.973958 | [0.963292, 1.008880] |
+| strong drag | 1000 | 8 | 1.002597 | [0.998698, 1.004848] |
+| eccentric | 100 | 8 | 1.007726 | [0.991527, 1.024483] |
+| high eccentric | 100 | 8 | 1.008237 | [1.001407, 1.023386] |
+| deep resonance | 100 | 8 | 1.007674 | [0.990502, 1.023074] |
+| no drag 500 km | 1000 | 8 | 0.691931 | [0.684149, 0.714495] |
+
+**Held cache bytes per set**, over 100 synthetic series and 20 instants:
+
+| Class | Form | U bytes | Selected bytes |
+|---|---|---:|---:|
+| near-circular 300 km | CM | 87568 | 88336 |
+| near-circular 500 km | CM | 77264 | 78032 |
+| near-circular 800 km | C | 65232 | 65232 |
+| medium orbit | U | 20496 | 20496 |
+| strong drag e 0.1 | A | 17808 | 18576 |
+| deep resonance | R | 18960 | 19728 |
+
+The broader 256-series pool check passes unpoisoned cases at 0, 1, 4, and 15 threads. Its 15-thread poisoned-cache case fails intermittently on both unchanged 0.6.59 and the selected forms: 6 of 8 repeated runs on each, with 12 and 11 refused states respectively across those runs. Its cause is not established. The four-thread state-purity check passes with reserved memory and with allocations refused. The poisoned-cache failure is a release limitation; no pinned reference is changed.
+
 ## 10. Frames and output
 
 - Output frame: TEME (true equator, mean equinox of date), the same as legacy SGP4 (Vallado et al. 2006,
