@@ -6604,7 +6604,9 @@ What a host that draws frames from a running clock needs, and what it gets.
 VALID flag is clear. Unsupported AP series, including multiple-set and wide-branch series, have no display state through
 these calls. Their direct paths remain available. AP singleton and struct-batch states use the frame approximation of
 section 19, including its existing position and velocity bounds. SGP4 and SGP4XP records use their own exact epoch
-propagation without AP cells or AP caches. Loading a catalog releases the previous frame allocation and all its cells;
+propagation without AP cells or AP caches. Each direct display read releases its entity slots before reading another
+entity, bounding transient direct storage to at most two initialized sets. Repeated frames pay initialization again.
+Loading a catalog releases the previous frame allocation and all its cells;
 the host opens and refills a new budget. One owning thread serializes load, refill, reads, paths and replacement, so a
 refill can delay a display update. Direct path requests allocate theory caches temporarily and release the path entity's
 caches on completion. These changes add no concurrent-reader guarantee or implicit refill.

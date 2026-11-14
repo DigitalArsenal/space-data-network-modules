@@ -54,7 +54,14 @@ inline int32_t plugin_record_read(const PluginTime& time, double jd, uint32_t in
   auto& st = epochs::resident();
   if (st.pool_dead != 0) return ORBPRO_PROP_UNPHYSICAL;
   const uint32_t raw = st.plugin_order[index];
-  if (st.series[raw].met != meanElementSource_AP) return plugin_direct_state(raw, time.whole, time.frac, out);
+  if (st.series[raw].met != meanElementSource_AP) {
+    const int32_t rc = plugin_direct_state(raw, time.whole, time.frac, out);
+    // Reclaim after this entity, bounding transient direct storage even for a complete catalog call.
+    auto& series = st.series[raw];
+    for (auto& slot : series.slots) epochs::release(slot);
+    series.next = 0;
+    return rc;
+  }
   const auto& fs = frames::state();
   if (!fs.open || raw >= fs.objects || (!positions_only && (fs.flags & frames::kFlagPositionOnly) != 0)) return -8;
   double r[3], v[3];
