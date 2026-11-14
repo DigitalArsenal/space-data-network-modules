@@ -15,7 +15,7 @@ const decode = b => O.OCM.getSizePrefixedRootAsOCM(new fb.ByteBuffer(b));
 const seed = OMM.getRootAsOMM(new fb.ByteBuffer(ommBytes)).unpack();
 const seedBytes = pack(seed,'OMM');
 const model = E.ERM.getSizePrefixedRootAsERM(new fb.ByteBuffer(bytes('../data/e14-s3-kc.erm'))).unpack();
-const ages = [0,...model.MODEL.STRATA_SETTINGS.AGE_BINS.map(b=>(b.MIN_DAYS+b.MAX_DAYS)/2)];
+const ages = model.MODEL.STRATA_SETTINGS.AGE_BINS.map(b=>(b.MIN_DAYS+b.MAX_DAYS)/2);
 let h, ap, products;
 test.before(async()=>{
   h=await createBrowserModuleHarness({wasmSource:bytes('../dist/isomorphic/module.wasm'),manifest:JSON.parse(bytes('../plugin-manifest.json')),surface:'direct',hostOptions:{config:{'object.source':{id:'synthetic',kind:'element-set',originator:'synthetic',provider:'synthetic',lineage:'synthetic',licence:{class:'reproducible',id:'synthetic'}}}}});

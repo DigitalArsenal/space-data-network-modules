@@ -98,9 +98,9 @@ extern "C" int annotate_population() {
   sp::Model model; Options options; bool has_model = false;
   auto error = read_population_model(&model, &options, &has_model);
   if (!error.empty()) return fail("invalid-models", error);
-  if (!has_model || options.ages.size() != 6)
-    return fail("invalid-models", "The seven-block contract requires a model with six age bins.");
-  std::vector<double> ages{0};
+  if (!has_model || options.ages.size() != 7)
+    return fail("invalid-models", "The seven-block contract requires a model with seven age bins.");
+  std::vector<double> ages;
   for (const auto& bin : options.ages) {
     const auto age = (bin.first + bin.second) / 2;
     if (!(std::isfinite(age) && bin.first >= 0 && bin.second > bin.first))
