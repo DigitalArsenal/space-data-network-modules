@@ -83,9 +83,8 @@ The native first-build check exercises actual storage pages and acknowledgment
 of operational events before fitting. Older export-fixture byte counts and
 throughput readings do not describe this controller.
 
-Operational `catalog-attempts` events are not selected products and are not part
-of paired catalog snapshots or announcements. Their latest per-object state
-must survive restart. A host retention policy that deletes it removes failure
+Operational `catalog-attempts` state (or the partition-specific source) are not selected products and are not part
+of paired catalog snapshots or announcements. Live failed/in-progress entries must survive restart; current-source batch reconciliation removes completed markers. A host retention policy that deletes it removes failure
 backoff. Reclamation must preserve pending publication bytes and active product
 references; live expiry alone does not prove safe journal reclamation.
 
@@ -93,3 +92,11 @@ Signing, announcement delivery, consumer trust, signed-out reads and deployment
 are outside these checks. Current-generation snapshot export, superseding-batch
 recovery and publication reclamation require host validation with the intended
 configuration; no obsolete fixture counts are presented as that evidence.
+
+## Consumer trust and anonymous reads
+
+A consumer needs the publisher's authenticated signing public key and explicit permission to import both `CAT.fbs/catalog-index` and `OCM.fbs/catalog-products` for the configured provider. A node operator enrolls the publisher through its trusted-peer configuration and permits these source identities in `peers.trusted_import.allow`; unlisted new sources are denied by default, and explicit deny rules win. A reachable peer address alone does not authorize importing its publications.
+
+Verify the PNM with the pinned provider key, resolve its content-addressed DPM, verify the DPM signature with that same key, and verify each asset's CID/hash and declared size before import. Resolve product references before exposing the index generation. The client helper `verifySignedPnm` accepts an optional public key: omitting it validates envelope fields without checking the signature. A trusted catalog consumer must supply the key and perform manifest/asset verification as well.
+
+The inspected host's anonymous-read allow-list includes `CAT.fbs` and excludes `OCM.fbs`. CAT metadata is anonymously readable through the standard public record/sync surface; OCM needs private-read authorization there. The list is schema-wide, so adding OCM affects the standard's records across sources. Publication pins and schema authorization are separate: an exposed public content gateway can serve pinned bytes to a reader with their CID. No allow-list, authorization or deployment setting is changed by this flow.
