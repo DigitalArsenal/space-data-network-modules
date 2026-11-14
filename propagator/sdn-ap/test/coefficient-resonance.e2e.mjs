@@ -10,10 +10,12 @@ import {buildDiagnostic} from './lib/ap-diagnostic.mjs';
 import {exactCoefficients} from './lib/coefficient-forms.mjs';
 const extra=String.raw`
 static sdnap::xpt::XpSat* test_res_sat=nullptr;
+static int test_res_degree=70;
+SDNAP_EXPORT("sdnap_test_res_degree") void sdnap_test_res_degree(int d){test_res_degree=d;}
 SDNAP_EXPORT("sdnap_test_res_init") int sdnap_test_res_init(double n,double ecc,double bterm){
  using namespace sdnap;using namespace sdnap::xpt;
  if(test_res_sat){xp_release(*test_res_sat);delete test_res_sat;}
- tess::active()=tess::Terms{70,20,false,false};Elements e{};e.epoch_jd_whole=2461206.5;e.xincl=.9599310885968813;e.xnodeo=.7;e.omegao=1.2;e.xmo=.3;e.bterm=bterm;e.eo=ecc;e.xno=n;
+ tess::active()=tess::Terms{test_res_degree,20,false,false};Elements e{};e.epoch_jd_whole=2461206.5;e.xincl=.9599310885968813;e.xnodeo=.7;e.omegao=1.2;e.xmo=.3;e.bterm=bterm;e.eo=ecc;e.xno=n;
  test_res_sat=new XpSat{};return xp_init(e,*test_res_sat);
 }
 SDNAP_EXPORT("sdnap_test_res_state") int sdnap_test_res_state(double t,double* out){
@@ -39,8 +41,9 @@ for(let j=1;j<=6;j++)for(let m=1;m<=70;m++)if(gcd(m,j)===1){
 assert(roots.some(r=>r.m===14&&r.j===1));assert(roots.some(r=>r.m===15&&r.j===1));
 async function open(file){const h=await createStandaloneHarness('browser',file,{surface:'direct',maxThreads:1,enableBrowserWasiThreads:false}),x=h.instance.exports,p=x.sdnap_alloc(64);return {x,close:()=>h.close?.(),init(n,e,b){assert.equal(x.sdnap_test_res_init(n,e,b),0);},st(t){const status=x.sdnap_test_res_state(t,p);const v=Array.from(new Float64Array(h.memory.buffer,p,8));if(status!==0)console.log(JSON.stringify({refusedBuild:file.includes('-exact')?'exact':'R',timeMinutes:t,status}));assert.equal(status,0);assert(v.every(Number.isFinite));return v;}};}
 const a=await open(candidate),b=await open(exact);let states=0,maxExactM=0,maxResidualJumpM=0,crossings=0;
-for(const root of roots){
- console.log(JSON.stringify({testingRoot:root}));
+for(const degree of [31,70])for(const root of roots){
+ a.x.sdnap_test_res_degree(degree);b.x.sdnap_test_res_degree(degree);
+ console.log(JSON.stringify({degree,testingRoot:root}));
  let prior;
  for(const dn of [-1e-9,0,1e-9]){
   a.init(root.n*(1+dn),root.e,0);b.init(root.n*(1+dn),root.e,0);const va=a.st(0),vb=b.st(0);assert.equal(va[7],4);
@@ -48,13 +51,13 @@ for(const root of roots){
  }
  // The q=0 member also decays through its commensurability over five days.
  if(root.w===root.j){
-  a.init(root.n*(1-1e-6),root.e,.1);b.init(root.n*(1-1e-6),root.e,.1);let before=rate(root.n*(1-1e-6),root.e,root.m,root.j,root.w);prior=null;
+  a.init(root.n*(1-1e-9),root.e,.1);b.init(root.n*(1-1e-9),root.e,.1);let before=rate(root.n*(1-1e-9),root.e,root.m,root.j,root.w);prior=null;
   let crossed=false;
   for(let t=0;t<=7200;t+=30){const va=a.st(t),vb=b.st(t),after=rate(va[6],root.e,root.m,root.j,root.w);if(after*before<=0)crossed=true;before=after;
    const residual=va.slice(0,3).map((v,k)=>1000*(v-vb[k]));maxExactM=Math.max(maxExactM,Math.hypot(...residual));if(prior)maxResidualJumpM=Math.max(maxResidualJumpM,Math.hypot(...residual.map((v,k)=>v-prior[k])));prior=residual;states++;
   }
-  if(crossed)crossings++;
+  if(crossed)crossings++;else console.log(JSON.stringify({degree,uncrossed:[root.m,root.j]}));
  }
- console.log(JSON.stringify({order:[root.m,root.j,root.w],states,maxExactM,maxResidualJumpM,crossings}));
+ console.log(JSON.stringify({degree,order:[root.m,root.j,root.w],states,maxExactM,maxResidualJumpM,crossings}));
 }
 await a.close();await b.close();assert(crossings>0);assert(maxExactM<1);assert(maxResidualJumpM<1);console.log(JSON.stringify({roots:roots.length,states,maxExactM,maxResidualJumpM,crossings}));process.exit(0);
