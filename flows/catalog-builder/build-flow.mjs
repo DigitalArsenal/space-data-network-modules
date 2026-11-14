@@ -30,7 +30,7 @@ const source=await read('files/orbit-products/src/sha256.hpp')+'\n'+await read('
 const control=await compile('flows/catalog-builder/control',source,['OMM','OCM','SPW','PCF','CAT','XMT','QRP']);
 if(process.argv.includes('--control-only'))process.exit(0);
 const dependencies=new Map([[control.manifest.pluginId,control]]);
-for(const folder of ['flows/catalog-builder','analysis/gp-error-model','analysis/catalog-composer'])for(const [id,entry]of await resolveFlowDependencies({depsPath:path.join(repo,folder)}))dependencies.set(id,entry);
+for(const folder of ['flows/catalog-builder','analysis/gp-error-model','analysis/catalog-composer'])for(const [id,entry]of await resolveFlowDependencies({depsPath:path.join(repo,folder)}))if(!dependencies.has(id))dependencies.set(id,entry);
 for(const [folder,file,inline] of [['hostcap/flatsql-query','flatsql_query_module.cpp',['FSO','FSB','QRP']],['hostcap/storage-ingest','storage_ingest_module.cpp',[]]]){
  const entry=await compile(folder,await read(folder+'/src/'+file),[],inline);dependencies.set(entry.manifest.pluginId,entry);
 }
