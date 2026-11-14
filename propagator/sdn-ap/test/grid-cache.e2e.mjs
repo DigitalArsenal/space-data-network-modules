@@ -256,7 +256,7 @@ assert.equal(starvedFit.errorCode, "out-of-memory", `fit with the memory exhaust
 const [, , heldAfter] = H.budget(), [, , heldFresh] = (await open()).budget();
 assert.equal(heldAfter, heldFresh, `after the refused calls the cache holds ${heldAfter} grids; a fresh instance ${heldFresh}`);
 const storeRc = H.rc(0, TIMES[3]);
-assert.equal(storeRc, 1, `an epoch-store state with the memory exhausted answers the theory's refusal code 1 (${storeRc})`);
+assert.equal(storeRc, 91, `an epoch-store state with the memory exhausted answers retryable resource status 91 (${storeRc})`);
 console.log(`the memory exhausted (${(freed / MB).toFixed(1)} MB freed of 256): propagate and fit refused by name (${starved.errorMessage}); the cache holds what a fresh instance holds; the epoch store answers the theory's refusal code (${storeRc})`);
 for (const [p] of hog) H.x.sdnap_free(p);
 const after = await flightOf(H.h, RECORDS[0], few);

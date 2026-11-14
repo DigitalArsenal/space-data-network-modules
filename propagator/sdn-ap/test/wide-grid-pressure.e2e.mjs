@@ -11,9 +11,9 @@ static sdnap::xpt::tess::WideGrid* held_grids[34]{};
 SDNAP_EXPORT("sdnap_test_grid_wait") int sdnap_test_grid_wait(int dead){
  using namespace sdnap::xpt::tess;
  auto* g=wide_grid_acquire(12,0,.06123,.07,.8);if(!g)return -1;
- g->building=true;sdnap::pool::store(&sdnap::pool::job().dead,dead);
+ g->building=true;__atomic_store_n(&sdnap::pool::job().dead,dead,__ATOMIC_SEQ_CST);
  const auto before=sdnap::mem::thread_failures();test_short_wait=true;const bool ok=grid_pin(g);test_short_wait=false;
- sdnap::pool::store(&sdnap::pool::job().dead,0);g->building=false;wide_grid_drop(g);
+ __atomic_store_n(&sdnap::pool::job().dead,0,__ATOMIC_SEQ_CST);g->building=false;wide_grid_drop(g);
  return !ok && sdnap::mem::thread_failures()==before+1 ? 0 : -2;
 }
 SDNAP_EXPORT("sdnap_test_bad_grid_degree") int sdnap_test_bad_grid_degree(){
