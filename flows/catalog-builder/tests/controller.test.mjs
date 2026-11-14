@@ -15,6 +15,10 @@ const obj=OMM.getRootAsOMM(new fb.ByteBuffer(ommBytes)).unpack();
 const seed=(id,change=0)=>{const x=OMM.getRootAsOMM(new fb.ByteBuffer(ommBytes)).unpack();x.NORAD_CAT_ID=id;x.MEAN_ANOMALY+=change;return pack(x,'OMM');};
 const ids=[999999,999998];let now=Date.parse(obj.EPOCH+'Z')+86400000;
 const cfg={'catalog.provider':'synthetic-node','catalog.identity_provider':'synthetic','catalog.identity_source':'identities','catalog.weather_provider':'synthetic','catalog.weather_source':'weather','catalog.seed_sources':['primary','secondary'],'catalog.seed_providers':['synthetic','synthetic'],'catalog.page_size':1,'catalog.batch_size':2,'catalog.max_removal_fraction':0.5};
+// Live records survive reclamation; a complete generation resolves only journaled products.
+const journal=new Map(),generations=[];
+const cid=b=>{const data=Buffer.concat([Buffer.from([1,0x55,0x12,0x20]),createHash('sha256').update(b).digest()]);let bits=0,value=0,out='b';for(const byte of data){value=(value<<8)|byte;bits+=8;while(bits>=5){bits-=5;out+='abcdefghijklmnopqrstuvwxyz234567'[(value>>>bits)&31];}}if(bits)out+='abcdefghijklmnopqrstuvwxyz234567'[(value<<(5-bits))&31];return out;};
+const reclaimOrphans=()=>{const wanted=new Set(generations.flatMap(rows=>rows.flatMap(row=>row.PRODUCTS.map(p=>p.RECORD_CID))));for(const id of journal.keys())if(!wanted.has(id))journal.delete(id);};
 const batches=new Map();const store=new Map();const key=(schema,provider,source)=>[schema,provider,source].join('/');const records=(schema,provider,source)=>{const k=key(schema,provider,source);if(!store.has(k))store.set(k,[]);return store.get(k);};
 records('OMM.fbs','synthetic','primary').push(...ids.map(id=>seed(id)));
 records('OMM.fbs','synthetic','secondary').push(seed(ids[0],1));
@@ -32,7 +36,7 @@ let annotationRefusal,composerRefusal,refusalCode,trapObject,trapComposeObject,l
 const trap=new WebAssembly.Instance(new WebAssembly.Module(Uint8Array.from([0,97,115,109,1,0,0,0,1,4,1,96,0,0,3,2,1,0,7,8,1,4,116,114,97,112,0,0,10,5,1,3,0,0,11]))).exports.trap;
 async function tick(time,kill=false){
  let response=await control.invoke({methodId:'advance',inputs:[frame('tick','TimerTick',encodeTimerTick({triggerId:'refresh',firedMs:time}))]});
- const counters={fits:0,fallbacks:0,products:0,indexes:0,productBatches:0,indexBatches:0,pages:0,duplicateProducts:0};
+ const counters={fits:0,fallbacks:0,products:0,indexes:0,productBatches:0,indexBatches:0,pages:0,duplicateProducts:0,stateBytes:0,stateWrites:0,productBytes:0};
  for(let count=0;count<10000;count++){
   assert.equal(response.statusCode,0,response.errorMessage);const out=Object.fromEntries(response.outputs.map(f=>[f.portId,f]));let input=[];
   if(out.notice){counters.notice=decodeFlowNotice(out.notice.payload);evidence.stages.push(counters);return counters;}
@@ -52,8 +56,8 @@ async function tick(time,kill=false){
   }else if(out.annotate_orbit){
    const r=await gp.invoke({methodId:'annotate_population_flow',inputs:[frame('ocm','OCM',out.annotate_orbit.payload),frame('elements','OMM',out.annotate_seed.payload)]});assert.equal(r.statusCode,0,r.errorMessage);input=r.outputs.map(f=>({...f,portId:f.portId==='decision'?'annotation_status':'annotated'}));if(annotationRefusal)input=[frame('annotation_status','QRP',pack(Object.assign(new Q.QRPT(),{KIND:Q.qrpKind.Error,STATUS:Q.qrpStatus.Error,ERROR_CODE:annotationRefusal}),'QRP',false))];
   }else if(out.meta){
-   const m=decodeIngestRequest(out.meta.payload);assert.match(m.tags.batchId,out.state_records?/^catalog-attempt-[0-9a-f]{64}$/:out.index_records?/^catalog-[0-9a-f]{64}:complete$/:/^catalog-[0-9a-f]{64}$/);const b=Buffer.from((out.product_records??out.index_records??out.state_records).payload);const destination=records(m.schema,m.tags.providerId,m.tags.sourceName);const exists=batches.has(m.tags.batchId);if(out.state_records){assert.equal(m.reconcile,"current");destination.splice(0,destination.length,...split(b));}else if(!exists&&!(storageFailure&&out.product_records)){batches.set(m.tags.batchId,split(b));for(const row of split(b))if(!destination.some(x=>hash(x)===hash(row)))destination.push(row);}
-   if(out.product_records){++counters.productBatches;for(const b of split(Buffer.from(out.product_records.payload))){
+   const m=decodeIngestRequest(out.meta.payload);assert.match(m.tags.batchId,out.state_records?/^catalog-attempt-[0-9a-f]{64}$/:out.index_records?/^catalog-[0-9a-f]{64}:complete$/:/^catalog-[0-9a-f]{64}$/);const b=Buffer.from((out.product_records??out.index_records??out.state_records).payload);const destination=records(m.schema,m.tags.providerId,m.tags.sourceName);const exists=batches.has(m.tags.batchId);if(out.state_records){counters.stateBytes+=b.length;++counters.stateWrites;assert.equal(m.reconcile,"current");destination.splice(0,destination.length,...split(b));}else if(!exists&&!(storageFailure&&out.product_records)){batches.set(m.tags.batchId,split(b));for(const row of split(b))if(!destination.some(x=>hash(x)===hash(row)))destination.push(row);}
+   if(out.product_records){counters.productBytes+=b.length;if(!storageFailure)for(const row of split(b))journal.set(cid(row),row);++counters.productBatches;for(const b of split(Buffer.from(out.product_records.payload))){
     const product=O.OCM.getSizePrefixedRootAsOCM(new fb.ByteBuffer(b)).unpack();const id=product.METADATA.NORAD_CAT_ID;
     if(product.MEAN_ELEMENTS.MEAN_ELEMENT_THEORY===O.meanElementSource.AP&&!verified.has(id)){
       const original=fitOriginals.get(id);assert.ok(original);assert.ok(b.indexOf(original)>=0,'stored product embeds the entire fit output unchanged');
@@ -70,8 +74,8 @@ async function tick(time,kill=false){
      assert.deepEqual(stored.HEADER.COMMENT.slice(0,raw.HEADER.COMMENT.length),raw.HEADER.COMMENT);assert.equal(stored.HEADER.COMMENT.length,raw.HEADER.COMMENT.length+1);stored.HEADER.COMMENT=raw.HEADER.COMMENT;
      assert.deepEqual(stored,raw,'fallback repack preserves every original field');assert.deepEqual(await fly(b.subarray(4)),await fly(original),'stored fallback preserves SGP4 states and formal covariance');fallbackVerified.add(id);
     }
-    ++counters.products;if(exists)++counters.duplicateProducts;}if(kill){control.destroy();control=await createControl();evidence.stages.push({...counters,killedAfterProduct:true});return counters;}}
-   else if(out.index_records){++counters.indexBatches;for(const b of split(Buffer.from(out.index_records.payload))){++counters.indexes;const cat=C.CAT.getSizePrefixedRootAsCAT(new fb.ByteBuffer(b)).unpack();if(cat.PRODUCTS.length){assert.ok(records('OCM.fbs','synthetic-node','catalog-products').length>0,'product exists before index');}}}
+    ++counters.products;if(exists)++counters.duplicateProducts;}if(kill){reclaimOrphans();control.destroy();control=await createControl();evidence.stages.push({...counters,killedAfterProduct:true});return counters;}}
+   else if(out.index_records){const rows=split(b).map(row=>C.CAT.getSizePrefixedRootAsCAT(new fb.ByteBuffer(row)).unpack());for(const row of rows)for(const product of row.PRODUCTS)assert.ok(journal.has(product.RECORD_CID),'catalog snapshot has an unresolved product reference');generations.push(rows);++counters.indexBatches;for(const b of split(Buffer.from(out.index_records.payload))){++counters.indexes;const cat=C.CAT.getSizePrefixedRootAsCAT(new fb.ByteBuffer(b)).unpack();if(cat.PRODUCTS.length){assert.ok(records('OCM.fbs','synthetic-node','catalog-products').length>0,'product exists before index');}}}
    input=[frame('stored','IngestResult',encodeIngestResult({schema:m.schema,...m.tags,inserted:exists?0:split(b).length,reconciledDuplicates:0,refused:storageFailure&&out.product_records?'synthetic disk refusal':undefined}))];
   }else if(out.recipe){
    if(C.CAT.getSizePrefixedRootAsCAT(new fb.ByteBuffer(out.catalog.payload)).NORAD_CAT_ID()===trapComposeObject)trap();
@@ -98,7 +102,7 @@ try{
  records('CAT.fbs','synthetic','identities').pop();await tick(now+1300);
 
  records('OMM.fbs','synthetic','primary').push(seed(ids[0],.1));const corrected=await tick(now+2000);assert.equal(corrected.fits,1);assert.equal(corrected.indexes,1);
- records('OMM.fbs','synthetic','primary').push(...ids.map(id=>seed(id,.2)));const beforeKill=current();const killed=await tick(now+3000,true);assert.equal(killed.products,2);assert.equal(killed.productBatches,1);assert.deepEqual(current(),beforeKill,'multi-object product batch cannot expose a partial selection');const deferred=await tick(now+4000);assert.equal(deferred.products+deferred.indexes,0);now+=1200000;const resumed=await tick(now+4000);assert.equal(resumed.fits,2);assert.equal(resumed.products,0);assert.equal(resumed.duplicateProducts,0);assert.equal(resumed.indexes,2);assert.equal(resumed.productBatches,0);assert.equal(resumed.indexBatches,1);
+ records('OMM.fbs','synthetic','primary').push(...ids.map(id=>seed(id,.2)));const beforeKill=current();const killed=await tick(now+3000,true);assert.equal(killed.products,2);assert.equal(killed.productBatches,1);assert.deepEqual(current(),beforeKill,'multi-object product batch cannot expose a partial selection');const deferred=await tick(now+4000);assert.equal(deferred.products+deferred.indexes,0);now+=1200000;const resumed=await tick(now+4000);assert.equal(resumed.fits,2);assert.equal(resumed.products,2);assert.equal(resumed.duplicateProducts,2);assert.equal(resumed.indexes,2);assert.equal(resumed.productBatches,1);assert.equal(resumed.indexBatches,1);assert.equal(generations.at(-1).length,2);console.log("PASS reclaimed-journal recovery resends every product in one complete generation");
  cfg['catalog.weather_source']='missing-weather';control.destroy();control=await createControl();const refused=await tick(now+5000);assert.equal(refused.fits,2);assert.ok([...current().values()].every(c=>c.PRODUCTS[0].KIND===C.catalogProductKind.Sgp4Elements&&/weather/.test(c.PRODUCTS[0].SELECTION_REASON)));
  const noRetry=await tick(now+6000);assert.equal(noRetry.fits+noRetry.products,0);
  cfg['catalog.weather_source']='weather';control.destroy();control=await createControl();const restored=await tick(now+7000);assert.equal(restored.fits,2);
@@ -147,7 +151,7 @@ try{
  control.destroy();control=await createControl();const backwards=await tick(now+6*86400000+6000);
  assert.match(backwards.notice.reason,/clock precedes/);assert.equal(backwards.products,1,'clock rollback does not create an orphan');assert.ok(backwards.indexes>=1);
  // Future seeds become eligible without a content change.
- store.clear();batches.clear();records('CAT.fbs','synthetic','identities').push(...ids.map(id=>pack(Object.assign(new C.CATT(),{NORAD_CAT_ID:id,OBJECT_NAME:'SYNTHETIC'}),'CAT')));
+ store.clear();batches.clear();journal.clear();generations.length=0;records('CAT.fbs','synthetic','identities').push(...ids.map(id=>pack(Object.assign(new C.CATT(),{NORAD_CAT_ID:id,OBJECT_NAME:'SYNTHETIC'}),'CAT')));
  records('OMM.fbs','synthetic','primary').push(...ids.map(id=>seed(id)));
  records('SPW.fbs','synthetic','weather').push(...split(Buffer.from(weather)));
  control.destroy();control=await createControl();const future=await tick(Date.parse(obj.EPOCH+'Z')-1000);assert.equal(future.fits,0);assert.equal(future.fallbacks,2);
@@ -163,7 +167,7 @@ try{
  const guarded=await tick(now+1000);assert.equal(guarded.indexes,0);assert.match(guarded.notice.reason,/mass-removal guard/);
  cfg['catalog.invocation_budget_ms']=1000;control.destroy();control=await createControl();const budget=await tick(now+2000);assert.equal(budget.fits+budget.fallbacks,0);assert.equal(budget.notice.kind,'missing');
  delete cfg['catalog.invocation_budget_ms'];
- const reset=async (objectIds=ids)=>{store.clear();batches.clear();cfg['catalog.max_removal_fraction']=1;cfg['catalog.batch_size']=4;cfg['catalog.partition_count']=1;cfg['catalog.partition_index']=0;
+ const reset=async (objectIds=ids)=>{store.clear();batches.clear();journal.clear();generations.length=0;cfg['catalog.max_removal_fraction']=1;cfg['catalog.batch_size']=4;cfg['catalog.partition_count']=1;cfg['catalog.partition_index']=0;
   records('CAT.fbs','synthetic','identities').push(...objectIds.map(id=>pack(Object.assign(new C.CATT(),{NORAD_CAT_ID:id,OBJECT_NAME:'SYNTHETIC'}),'CAT')));
   records('OMM.fbs','synthetic','primary').push(...objectIds.map(id=>seed(id)));records('SPW.fbs','synthetic','weather').push(...split(Buffer.from(weather)));control.destroy();control=await createControl();};
  await reset();await tick(now);records('OMM.fbs','synthetic','primary').push(...ids.map(id=>seed(id,.2)));
@@ -228,13 +232,13 @@ try{
  await reset();await tick(now+6*86400000);records('OMM.fbs','synthetic','primary').push(...ids.map(id=>seed(id,.41)));
  const beforeRegroup=current();await tick(now+6*86400000+1000,true);assert.deepEqual(current(),beforeRegroup);
  records('OMM.fbs','synthetic','primary').push(seed(ids[0],.42));
- const regrouped=await tick(now+6*86400000+1201001);assert.equal(regrouped.products,1,'unchanged product is reused from the earlier multi-object batch');assert.equal(regrouped.indexes,2);assert.equal(regrouped.productBatches,1);assert.equal(regrouped.indexBatches,1);
- console.log('PASS recovery reuses identical records after product grouping changes');
+ const regrouped=await tick(now+6*86400000+1201001);assert.equal(regrouped.products,2,'every recovered product is journaled in the replacement generation');assert.equal(regrouped.indexes,2);assert.equal(regrouped.productBatches,1);assert.equal(regrouped.indexBatches,1);
+ console.log('PASS recovery resends identical records after product grouping changes');
  await reset(Array.from({length:256},(_,i)=>1000000+i));cfg['catalog.batch_size']=256;
  control.destroy();control=await createControl();const bulk=await tick(now+6*86400000);
  assert.equal(bulk.products,256);assert.equal(bulk.indexes,256);assert.equal(bulk.productBatches,1);assert.equal(bulk.indexBatches,1);
  assert.equal(current().size,256);assert.equal(N.NEV.getSizePrefixedRootAsNEV(new fb.ByteBuffer(records('NEV.fbs','synthetic-node','catalog-attempts')[0])).eventsLength(),0);
- console.log('PASS 256 selections use one product batch and one complete index batch');
+ console.log('PASS 256 selections use one product batch and one complete index batch');console.log('STATE_MEASUREMENT '+JSON.stringify({objects:256,stateBytes:bulk.stateBytes,stateWrites:bulk.stateWrites,productBytes:bulk.productBytes,dailyBytesFourPartitions:bulk.stateBytes*4*144}));
  await reset(Array.from({length:16},(_,i)=>1000000+i));cfg['catalog.batch_size']=256;cfg['catalog.partition_count']=4;
  for(let partition=0;partition<4;partition++){
   cfg['catalog.partition_index']=partition;control.destroy();control=await createControl();const part=await tick(now+6*86400000);
