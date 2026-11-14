@@ -83,6 +83,8 @@ const fingerprint = (pr = q) => {
       out.push(['source', i32(st, 1)[0]]);
     }
   }
+  // State reads initialize lazy slots; capture their settled byte count in the snapshot.
+  x.sdnap_epochs_stats(p); out[0] = Array.from(f64(p, 8));
   return JSON.stringify(out, (k, v) => (Object.is(v, -0) ? '-0' : typeof v === 'number' && !Number.isFinite(v) ? String(v) : v));
 };
 const emptyStore = what => { q.x.sdnap_epochs_stats(q.p); const s = q.f64(q.p, 8); assert.deepEqual([q.x.sdnap_epochs_count(), s[0], s[1], s[7]], [0, 0, 0, 0], `${what}: the store holds series, records, kept, bytes ${q.x.sdnap_epochs_count()}, ${s[0]}, ${s[1]}, ${s[7]}`); };
