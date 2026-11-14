@@ -1,6 +1,6 @@
 # Catalog throughput measurements
 
-The compact product averages about 9.86 KB in the fitted synthetic sample. Parallel execution increases peak CPU and process memory. A deadline failure poisons the interrupted guest and requires replacement. Publication retention and export costs are outside these measurements. The measured host did not journal pending publication bytes; the integrated durable-retention host has additional synchronous write costs.
+The benchmark compact product averages about 9.86 KB in the fitted synthetic sample. Parallel execution increases peak CPU and process memory. A deadline failure poisons the interrupted guest and requires replacement. Publication retention and export costs are outside these measurements. The measured host did not journal pending publication bytes; the integrated durable-retention host has additional synchronous write costs.
 
 A complete 2,000-object first-build measurement is unavailable. The larger-catalog numbers below are arithmetic from 32-object samples. Eight distinct installed services passed a functional eight-object probe, which does not establish eight-service throughput.
 

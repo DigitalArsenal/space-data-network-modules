@@ -4,6 +4,7 @@ import test from 'node:test';
 import * as fb from 'flatbuffers';
 import * as O from 'spacedatastandards.org/lib/js/OCM/main.js';
 import * as E from 'spacedatastandards.org/lib/js/ERM/main.js';
+import * as Q from 'spacedatastandards.org/lib/js/QRP/main.js';
 import { OMM } from 'spacedatastandards.org/lib/js/OMM/OMM.js';
 import { OEM } from 'spacedatastandards.org/lib/js/OEM/OEM.js';
 import { createBrowserModuleHarness } from 'space-data-module-sdk/host/browser-module';
@@ -106,6 +107,7 @@ test('malformed, mismatched, duplicate and repeated annotation inputs are refuse
   for(const original of [products[0].subarray(0,20),Buffer.concat([products[0],products[0]])])assert.notEqual((await annotate(original)).statusCode,0);
   const other=Object.assign(OMM.getRootAsOMM(new fb.ByteBuffer(ommBytes)).unpack(),{NORAD_CAT_ID:999998});
   assert.equal((await annotate(products[0],pack(other,'OMM'))).errorCode,'seed-mismatch');
+  const outcome=await h.invoke({methodId:'annotate_population_flow',inputs:[frame('ocm','OCM',products[0]),frame('elements','OMM',pack(other,'OMM'))]});assert.equal(outcome.statusCode,0);assert.equal(outcome.outputs.length,1);assert.equal(outcome.outputs[0].portId,'decision');assert.equal(Q.QRP.getRootAsQRP(new fb.ByteBuffer(outcome.outputs[0].payload)).ERROR_CODE(),'seed-mismatch');
   const wrongEpoch={...seed,EPOCH:'2026-01-01T00:00:00'};for(const product of products)assert.equal((await annotate(product,pack(Object.assign(OMM.getRootAsOMM(new fb.ByteBuffer(ommBytes)).unpack(),wrongEpoch),'OMM'))).errorCode,'seed-epoch-mismatch');
   assert.notEqual((await annotate(products[0],seedBytes,[frame('ocm','OCM',products[0])])).statusCode,0);
   assert.equal((await annotate(await accepted(products[0]))).errorCode,'already-annotated');
