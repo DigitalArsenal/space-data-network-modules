@@ -20,7 +20,10 @@ try{
  await h.load(rs);const result=h.batch(0);assert.ok(result.status.every(s=>s===0));
  for(let k=0;k<rs.length;k++)assert.deepEqual(Array.from({length:6},(_,j)=>result.values[j*rs.length+k]),truth[k].state);
  h.x.sdnap_test_grid_ownership(h.q);const v=Array.from(new Float64Array(h.h.memory.buffer,h.q,4));
- assert.equal(v[0],0,'pins after quiescence');assert.equal(v[1],0,'builds after quiescence');assert.ok(v[2]>0,'a wide payload was built on a pool thread');assert.equal(v[3],1,'one publication for the common exact key');
+ assert.equal(v[0],0,'pins after quiescence');assert.equal(v[1],0,'builds after quiescence');assert.equal(v[3],1,'one publication for the common exact key');
  await h.load(rs);assert.ok(h.batch(0).status.every(s=>s===0));h.x.sdnap_test_grid_ownership(h.q);assert.equal(new Float64Array(h.h.memory.buffer,h.q,4)[3],1,'reload reuses the same exact payload');
- console.log(JSON.stringify({complete:true,pins:v[0],building:v[1],poolBuilds:v[2],totalBuilds:v[3]}));
+ const distinct=rs.map((r,k)=>repackOcm(r,o=>{o.MEAN_ELEMENTS.MEAN_MOTION*=1+k*1e-5;}));
+ await h.load(distinct);assert.ok(h.batch(0).status.every(s=>s===0));h.x.sdnap_test_grid_ownership(h.q);
+ const distinctCounts=Array.from(new Float64Array(h.h.memory.buffer,h.q,4));assert.ok(distinctCounts[2]>0,'wide payloads built on pool threads');assert.equal(distinctCounts[0],0);assert.equal(distinctCounts[1],0);
+ console.log(JSON.stringify({complete:true,pins:v[0],building:v[1],poolBuilds:distinctCounts[2],totalBuilds:v[3]}));
 }finally{await h.close();}
