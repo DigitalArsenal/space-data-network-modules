@@ -1,7 +1,5 @@
 import fs from 'node:fs';
 import {createHash} from 'node:crypto';
-import {CID} from 'multiformats/cid';
-import * as digest from 'multiformats/hashes/digest';
 import {fileURLToPath} from 'node:url';
 import assert from 'node:assert/strict';
 import * as fb from 'flatbuffers';
@@ -34,6 +32,7 @@ export async function verifyStateRetention(mode){
  const create=()=>createBrowserModuleHarness({wasmSource:fs.readFileSync(dir+'/dist/isomorphic/module.wasm'),manifest:JSON.parse(fs.readFileSync(dir+'/plugin-manifest.json')),surface:'direct',hostOptions:{config:cfg}});
  let control=await create();let state=[],history=[];const index=new Map(),journal=new Set(),fitCounts=new Map();let failing=mode==='final';const newcomer=2999999;
  const composer=await createBrowserModuleHarness({wasmSource:fs.readFileSync(repo+'/analysis/catalog-composer/dist/isomorphic/module.wasm'),manifest:JSON.parse(fs.readFileSync(repo+'/analysis/catalog-composer/plugin-manifest.json')),surface:'direct'});
+ const cid=b=>{const data=Buffer.concat([Buffer.from([1,0x55,0x12,0x20]),createHash('sha256').update(b).digest()]);let bits=0,value=0,out='b';for(const byte of data){value=(value<<8)|byte;bits+=8;while(bits>=5){bits-=5;out+='abcdefghijklmnopqrstuvwxyz234567'[(value>>>bits)&31];}}if(bits)out+='abcdefghijklmnopqrstuvwxyz234567'[(value<<(5-bits))&31];return out;};
  const sha=b=>createHash('sha256').update(b).digest('hex');
  const latest=rows=>{const events=new Map();for(const row of rows)for(const e of N.NEV.getSizePrefixedRootAsNEV(new fb.ByteBuffer(row)).unpack().EVENTS){const old=events.get(e.SUBJECT);if(!old||Number(e.DETAIL.match(/sequence=(\d+);/)[1])>Number(old.DETAIL.match(/sequence=(\d+);/)[1]))events.set(e.SUBJECT,e);}return [...events.values()].sort((a,b)=>a.SUBJECT.localeCompare(b.SUBJECT));};
  async function tick(time,kill=false){
@@ -51,7 +50,7 @@ export async function verifyStateRetention(mode){
    }else if(out.annotate_orbit){if(!failing||OCM.getSizePrefixedRootAsOCM(new fb.ByteBuffer(out.annotate_orbit.payload)).METADATA().NORAD_CAT_ID()===newcomer){inputs=[frame('annotated','OCM',out.annotate_orbit.payload)];}else inputs=[frame('annotation_status','QRP',pack(Object.assign(new Q.QRPT(),{KIND:Q.qrpKind.Error,STATUS:Q.qrpStatus.Error,ERROR_CODE:'invalid-models'}),'QRP',false))];
    }else if(out.recipe){const result=await composer.invoke({methodId:'replace_products',inputs:[out.recipe,out.catalog,{...out.selection,portId:'decision'},...(out.selected?[{...out.selected,portId:'ocm_products'}]:[])]});assert.equal(result.statusCode,0,result.errorMessage);inputs=result.outputs.map(f=>({...f,portId:f.portId==='decision'?'compose_status':'replacement'}));
    }else if(out.product_records||out.index_records){const m=decodeIngestRequest(out.meta.payload),rows=split(Buffer.from((out.product_records??out.index_records).payload));
-    if(out.product_records){for(const row of rows)journal.add(CID.createV1(0x55,digest.create(0x12,createHash('sha256').update(row).digest())).toString());if(kill){journal.clear();return counts;}}
+    if(out.product_records){for(const row of rows)journal.add(cid(row));if(kill){journal.clear();return counts;}}
     if(out.index_records){for(const row of rows){const cat=C.CAT.getSizePrefixedRootAsCAT(new fb.ByteBuffer(row)).unpack();for(const product of cat.PRODUCTS)assert.ok(journal.has(product.RECORD_CID),'terminal generation references a re-sent product');index.set(cat.NORAD_CAT_ID,row);}counts.indexes+=rows.length;}
     inputs=[frame('stored','IngestResult',encodeIngestResult({schema:m.schema,...m.tags,inserted:rows.length,reconciledDuplicates:0}))];   }else if(out.state_records){const m=decodeIngestRequest(out.meta.payload),rows=split(Buffer.from(out.state_records.payload));assert.equal(m.schema,'NEV.fbs');++counts.writes;history.push(...rows);
     if(m.reconcile==='current'){++counts.snapshots;state=rows;}else{assert.equal(m.reconcile,'none');state.push(...rows);}counts.maxRows=Math.max(counts.maxRows,state.length);
@@ -96,7 +95,7 @@ export async function verifyStateRetention(mode){
     assert.ok(!events().some(e=>e.SUBJECT===oldest),'oldest unprotected event is evicted');
     if(mode==='prepared'){
      assert.equal(runs[0].indexes,2,'recovery generation completes with every object');
-     const firstSnapshot=N.NEV.getSizePrefixedRootAsNEV(new fb.ByteBuffer(history[0])).unpack().EVENTS;
+     const firstSnapshot=history.map(row=>N.NEV.getSizePrefixedRootAsNEV(new fb.ByteBuffer(row)).unpack().EVENTS).find(all=>all.some(e=>e.SUBJECT==='catalog-object/'+newcomer));assert.ok(firstSnapshot);
      assert.ok(firstSnapshot.some(e=>e.SUBJECT===prepared[0].SUBJECT&&e.DETAIL.includes(prepared[0].DETAIL.match(/product-batch=[^;]+;/)[0])),'old prepared recovery reference survives eviction');
      assert.equal(events().filter(e=>e.SUBJECT.startsWith('catalog-invalid/')).length,4094,'only one older poison was evicted');
     }else assert.equal(events().length,4095,'one old poison is evicted for one new object');
