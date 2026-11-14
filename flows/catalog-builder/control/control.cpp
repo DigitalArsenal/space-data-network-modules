@@ -204,6 +204,12 @@ int page(const plugin_input_frame_t* f) {
 }
 int compose() {
  const auto id=work[at];const auto old=index.find(id);const auto identity=identities.find(id);
+ if(retry_fallback&&old!=index.end()&&identity!=identities.end()){
+  const auto* previous=GetSizePrefixedCAT(old->second.data());
+  if(previous->PRODUCTS()&&previous->PRODUCTS()->size()==1){const auto* product=previous->PRODUCTS()->Get(0);const auto selected=text(product->SELECTION_REASON());
+   if(text(product->RECORD_CID())==cid(chosen)&&selected.find("catalog-input="+signature+";")!=std::string::npos&&selected.find("catalog-identity="+digest(identity->second)+";")!=std::string::npos){++at;return next_object();}
+  }
+ }
  Bytes cat=old!=index.end()?old->second:identity->second;
  if(identity!=identities.end()){
   auto fresh=std::unique_ptr<CATT>(GetSizePrefixedCAT(identity->second.data())->UnPack());
