@@ -3,6 +3,7 @@
 // exports at the same UTC double JD; ECEF m and m/s. Layout comparisons are bit exact. AP versus direct uses the frame
 // contract's 0.01 m and 0.0001 m/s 3-D bounds. Metadata uses the input elements and the definition of minutes per day.
 import assert from 'node:assert/strict';
+import {buildPluginDiagnostic} from './lib/plugin-diagnostic.mjs';
 import { openFrames, population, ocmOfObject, EPOCH_MS, revPerDay } from './lib/frame-cells.mjs';
 import { T, repackOcm } from './lib/ocm.mjs';
 import { configuration } from './lib/pcf.mjs';
@@ -21,8 +22,12 @@ const records = [ap[2], ignored, sg, ap[3], xp, ap[0], ap[1], ap[4], newer];
 const rawOrder = [2, 6, 3, 5, 0, 1, 4];
 const prefixed = bytes => { const b = Buffer.alloc(bytes.length + 4); b.writeUInt32LE(bytes.length); b.set(bytes, 4); return b; };
 const input = bytes => ({ portId: 'ocm', typeRef: T('OCM'), payload: Buffer.concat(bytes.map(prefixed)) });
-const f = await openFrames({ initialMemoryBytes: 2 << 20 });
+const wasm = process.env.SDNAP_WASM ?? buildPluginDiagnostic();
+const f = await openFrames({ wasm, initialMemoryBytes: 2 << 20 });
 const { x, h, mem } = f;
+for (const name of ['sdnap_test_fail_at', 'sdnap_test_alloc_count', 'sdnap_test_plugin_dead',
+  'sdnap_test_plugin_active', 'sdnap_test_plugin_slot_bytes', 'sdnap_test_plugin_init_tables'])
+  assert.equal(typeof x[name], 'function', `${name} requires test/lib/plugin-diagnostic.mjs buildPluginDiagnostic(); unset SDNAP_WASM to build it`);
 const p = x.sdnap_alloc(65536), structs = p, positions = p + 8192, planes = p + 24576, statuses = p + 32768, omm = p + 40000;
 const f64 = (ptr, count) => new Float64Array(mem(), ptr, count);
 const bytes = (ptr, count) => Buffer.from(new Uint8Array(mem(), ptr, count));
@@ -34,8 +39,9 @@ const refusal = (r, code) => { assert.equal(r.statusCode, 3); assert.equal(r.err
 const state = (index, when = jd) => { const rc = x.plugin_propagate(when, index, structs); return { rc, bytes: bytes(structs, 64), values: Array.from(f64(structs + 8, 6)), flags: new DataView(mem()).getUint32(structs + 60, true) }; };
 const bulk = (when = jd, count = 7) => { assert.equal(x.plugin_propagate_all_positions(when, positions, count), Math.min(7, count)); return bytes(positions, Math.min(7, count) * 24); };
 async function load(parts = [records]) {
+  const oldCount = x.plugin_entity_count();
   ok(await call('load_epochs_open'));
-  assert.equal(x.plugin_entity_count(), 0);
+  assert.equal(x.plugin_entity_count(), oldCount);
   for (const part of parts) ok(await call('load_epochs_part', [input(part)]));
   ok(await call('load_epochs_close'));
   assert.equal(x.plugin_entity_count(), 7);
@@ -91,7 +97,7 @@ assert.equal(x.get_orbital_period(99), 0); assert.ok(Number.isNaN(x.get_eccentri
 let samples = 0;
 for (const [index, step, count] of [[0, 20 / 86400, 360], [1, -20 / 86400, 8], [2, 0, 3], [3, 30 / 86400, 8], [6, 10 / 86400, 3]]) {
   assert.equal(x.plugin_propagate_path(index, jd, step, count, positions), count);
-  if (x.sdnap_test_plugin_slot_bytes) assert.equal(x.sdnap_test_plugin_slot_bytes(index), 0);
+  assert.equal(x.sdnap_test_plugin_slot_bytes(index), 0);
   const path = bytes(positions, 24 * count);
   for (let i = 0; i < count; ++i) {
     const [w, frac] = split(jd + i * step);
@@ -126,17 +132,17 @@ assert.equal(state(0).rc, 0); assert.notDeepEqual(bulk().subarray(0, 24), before
 assert.deepEqual(bulk().subarray(24), beforeReplace.subarray(24));
 // Repeated replacement owns no growing collection of detached records or cells.
 for (let i = 0; i < 12; ++i) ok(await call('replace_epoch', [input([i % 2 ? newer : changed])]));
-// Refused and incomplete loads publish no prior rows or records.
-ok(await call('load_epochs_open')); assert.equal(x.plugin_entity_count(), 0);
+// Refused and incomplete loads preserve the active snapshot.
+ok(await call('load_epochs_open')); assert.equal(x.plugin_entity_count(), 7);
 refusal(await call('replace_epoch', [input([changed])]), 'records-not-loaded');
 assert.equal((await call('load_epochs_part', [input([new Uint8Array([0])])])).statusCode, 3);
-assert.equal(x.plugin_entity_count(), 0); refusal(await call('load_epochs_close'), 'load-not-open');
+assert.equal(x.plugin_entity_count(), 7); refusal(await call('load_epochs_close'), 'load-not-open');
 // The unchanged 88-byte struct input and 64-byte output are compared with the control artifact.
 const data = new Uint8Array(3 * 88), view = new DataView(data.buffer);
 for (let i = 0; i < 3; ++i) [jd - 1 / 24, 14 + i / 10, .001, 55, 8 * i, 30, 30 + i, .001, 0, .001].forEach((v, k) => view.setFloat64(88 * i + 8 * k, v, true));
 new Uint8Array(mem(), omm, data.length).set(data);
 await load(); new Uint8Array(mem(), omm, data.length).set(data);
-assert.equal(x.plugin_init_omm(omm, 3), 3); assert.equal(x.sdnap_epochs_count(), 0); assert.equal(x.plugin_entity_count(), 3);
+assert.equal(x.plugin_init_omm(omm, 3), 3); assert.equal(x.sdnap_epochs_count(), 7); assert.equal(x.plugin_entity_count(), 3);
 assert.equal(x.plugin_propagate_batch(jd, structs, 3), 0); const rowBytes = bytes(structs, 192);
 let controlCompared = false;
 if (process.env.SDNAP_CONTROL_WASM) {
@@ -170,7 +176,7 @@ ok(await call('load_epochs', [configuration({ epochStore: { THEORIES: [1] } }), 
 assert.equal(x.plugin_entity_count(), 1); assert.equal(state(0).rc, 0);
 await load(); fill();
 let failedAllocations = 0;
-if (x.sdnap_test_fail_at) {
+{
   x.sdnap_test_fail_at(0); ok(await call('replace_epoch', [input([changed])]));
   const allocations = x.sdnap_test_alloc_count();
   for (let fail = 1; fail <= allocations; ++fail) {
