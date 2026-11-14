@@ -4,6 +4,7 @@ import test from 'node:test';
 import * as fb from 'flatbuffers';
 import * as O from 'spacedatastandards.org/lib/js/OCM/main.js';
 import * as E from 'spacedatastandards.org/lib/js/ERM/main.js';
+import * as P from 'spacedatastandards.org/lib/js/PCF/main.js';
 import * as Q from 'spacedatastandards.org/lib/js/QRP/main.js';
 import { OMM } from 'spacedatastandards.org/lib/js/OMM/OMM.js';
 import { OEM } from 'spacedatastandards.org/lib/js/OEM/OEM.js';
@@ -111,4 +112,24 @@ test('malformed, mismatched, duplicate and repeated annotation inputs are refuse
   const wrongEpoch={...seed,EPOCH:'2026-01-01T00:00:00'};for(const product of products)assert.equal((await annotate(product,pack(Object.assign(OMM.getRootAsOMM(new fb.ByteBuffer(ommBytes)).unpack(),wrongEpoch),'OMM'))).errorCode,'seed-epoch-mismatch');
   assert.notEqual((await annotate(products[0],seedBytes,[frame('ocm','OCM',products[0])])).statusCode,0);
   assert.equal((await annotate(await accepted(products[0]))).errorCode,'already-annotated');
+});
+
+test('population axes use independently propagated seed state rather than the AP product state',async()=>{
+  // Closed-form J P J^T in GCRF, km and km/s, at the first model age midpoint.
+  // The independent SGP4 flight supplies the seed state. Relative matrix-scale
+  // tolerance 1e-8 covers propagation/frame rounding and decimal serialization.
+  const annotated=decode(await accepted(products[0])).unpack(),block=annotated.COVARIANCE_BLOCKS[0];
+  const epoch=new Date(Date.parse(seed.EPOCH+'Z')+ages[0]*86400000).toISOString();
+  const pcf=Object.assign(new P.PCFT(),{THEORY:P.pcfTheory.SGP4,OUTPUT:Object.assign(new P.PCFOutputT(),{FRAME:P.pcfOutputFrame.GCRF,EPOCHS:[epoch]})});
+  const flight=await ap.invoke({methodId:'propagate',inputs:[frame('ocm','OCM',products[1].subarray(4)),frame('configuration','PCF',pack(pcf,'PCF'))]});assert.equal(flight.statusCode,0,flight.errorMessage);
+  const state=OEM.getRootAsOEM(new fb.ByteBuffer(flight.outputs.find(f=>f.portId==='ephemeris').payload)).unpack().EPHEMERIS_DATA_BLOCK[0].EPHEMERIS_DATA_LINES[0];
+  const normalize=a=>{const n=Math.hypot(...a);return a.map(x=>x/n);},cross=(a,b)=>[a[1]*b[2]-a[2]*b[1],a[2]*b[0]-a[0]*b[2],a[0]*b[1]-a[1]*b[0]];
+  const radial=normalize([state.X,state.Y,state.Z]),normal=normalize(cross(radial,[state.X_DOT,state.Y_DOT,state.Z_DOT])),axes=[radial,cross(normal,radial),normal];
+  const stratum=model.MODEL.STRATA.find(s=>s.REGIME===block.COV_REALISM[0].REGIME&&s.AGE_INDEX===0);assert.ok(stratum);
+  const factor=model.MODEL.STRATUM_FACTORS.find(f=>f.REGIME_INDEX===stratum.REGIME_INDEX&&f.AGE_INDEX===0)?.FACTOR??1;
+  const covariance=Array.from({length:6},()=>Array(6).fill(0));for(let row=0,k=0;row<6;row++)for(let col=0;col<=row;col++,k++)covariance[row][col]=covariance[col][row]=stratum.COVARIANCE[k]*factor;
+  const actual=block.LINES[0].split(' ').slice(1).map(Number),scale=Math.max(...actual.map(Math.abs));
+  for(let row=0,k=0;row<6;row++)for(let col=0;col<=row;col++,k++){let expected=0;for(let a=0;a<3;a++)for(let b=0;b<3;b++)expected+=axes[a][row%3]*covariance[a+3*Math.floor(row/3)][b+3*Math.floor(col/3)]*axes[b][col%3];assert.ok(Math.abs(actual[k]-expected)<=1e-8*scale,`${k}: independent seed-state rotation`);}
+  const changed=decode(products[0]).unpack();changed.MEAN_ELEMENTS.INCLINATION+=20;changed.MEAN_ELEMENTS.MEAN_ANOMALY+=40;
+  assert.deepEqual(decode(await accepted(pack(changed,'OCM'))).unpack().COVARIANCE_BLOCKS,annotated.COVARIANCE_BLOCKS,'changing AP elements cannot change a seed-population matrix');
 });

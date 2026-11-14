@@ -131,7 +131,7 @@ try{
  records('OMM.fbs','synthetic','primary').push(...ids.map(id=>seed(id,.4)));
  const poisoned=await tick(now+6*86400000+3000);assert.equal(poisoned.indexes,2);assert.match(poisoned.notice.reason,/invalid=4/);assert.equal(poisoned.notice.kind,'info');
  // An ingestion failure between two healthy identifiers cannot starve the last.
- const three=[999996,999997,999998];
+ const three=[999996,999997,999998];store.set(key('CAT.fbs','synthetic-node','catalog-index'),records('CAT.fbs','synthetic-node','catalog-index').filter(b=>C.CAT.getSizePrefixedRootAsCAT(new fb.ByteBuffer(b)).NORAD_CAT_ID()));
  store.set(key('CAT.fbs','synthetic','identities'),three.map(id=>pack(Object.assign(new C.CATT(),{NORAD_CAT_ID:id,OBJECT_NAME:'SYNTHETIC'}),'CAT')));
  const failing=OMM.getRootAsOMM(new fb.ByteBuffer(ommBytes)).unpack();failing.NORAD_CAT_ID=three[1];failing.MEAN_MOTION=-1;
  store.set(key('OMM.fbs','synthetic','primary'),[seed(three[0],.5),pack(failing,'OMM'),seed(three[2],.5)]);
