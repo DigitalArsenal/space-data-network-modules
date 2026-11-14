@@ -74,8 +74,9 @@ export async function verifyFifoRegression(mode){
    let run;try{run=await tick(now);}catch(e){console.log('FIFO_PROTECTED '+JSON.stringify({trapped:true,message:e.message}));throw e;}
    console.log('FIFO_PROTECTED '+JSON.stringify(run));assert.equal(run.indexes,1,'expired preparation pins never trap admission');
    // Oversized legacy protected histories have a defined warning and victim.
+   all[0].DETAIL=all[0].DETAIL.replace(/^ready /,'retry ')+' instance-interrupted;';
    snapshot([...all,Object.assign(new N.NEVEventT(),all[0],{SUBJECT:'catalog-object/5000000',DETAIL:'ready input=absent; sequence=5000; product-batch=catalog-old; prepared-generation;'})]);
-   control.destroy();control=await create();const oversized=await tick(now+1000);assert.match(oversized.notice.reason,/protected.*evict|evict.*protected/);assert.ok(events().length<=4096);
+   control.destroy();control=await create();const oversized=await tick(now+1000);assert.match(oversized.notice.reason,/protected.*evict|evict.*protected/);assert.ok(events().length<=4096);assert.ok(events().some(e=>e.SUBJECT===all[0].SUBJECT&&e.DETAIL.includes('instance-interrupted;')),'protected overflow preserves the interruption suspect');
   }else if(mode==='poison'){
    badIndex=pack(new C.CATT(),'CAT');const source='CAT/synthetic-node/catalog-index';
    const present=Object.assign(new N.NEVEventT(),{TIME_MS:BigInt(now),KIND:N.nevEventKind.Warning,SUBJECT:'catalog-invalid/'+sha(badIndex)+'/'+sha(Buffer.from(source)),COUNT:3n,DETAIL:source+'; sequence=1;'});

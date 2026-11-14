@@ -1,0 +1,354 @@
+{
+  "programId": "com.digitalarsenal.flows.catalog-builder.partition-0",
+  "name": "Catalog builder partition 0",
+  "version": "0.1.0",
+  "engineLinkage": "bridge",
+  "allowCycles": true,
+  "description": "Timer-driven reconciliation over complete storage pages; exact-W AP selection with SGP4 fallback and independently timestamped population covariance.",
+  "nodes": [
+    {
+      "nodeId": "control",
+      "pluginId": "com.digitalarsenal.flows.catalog-builder.control",
+      "methodId": "advance",
+      "kind": "transform",
+      "drainPolicy": "single-shot"
+    },
+    {
+      "nodeId": "query",
+      "pluginId": "com.digitalarsenal.hostcap.flatsql-query",
+      "methodId": "index_page",
+      "kind": "transform",
+      "drainPolicy": "single-shot"
+    },
+    {
+      "nodeId": "chain",
+      "pluginId": "com.digitalarsenal.flows.catalog-builder.chain",
+      "methodId": "run_chain",
+      "kind": "transform",
+      "drainPolicy": "single-shot"
+    },
+    {
+      "nodeId": "fallback",
+      "pluginId": "com.digitalarsenal.flows.catalog-builder.chain",
+      "methodId": "ingest_seed",
+      "kind": "transform",
+      "drainPolicy": "single-shot"
+    },
+    {
+      "nodeId": "annotation",
+      "pluginId": "com.digitalarsenal.analysis.gp-error-model",
+      "methodId": "annotate_population_flow",
+      "kind": "transform",
+      "drainPolicy": "single-shot"
+    },
+    {
+      "nodeId": "composer",
+      "pluginId": "com.digitalarsenal.analysis.catalog-composer",
+      "methodId": "replace_products",
+      "kind": "transform",
+      "drainPolicy": "single-shot"
+    },
+    {
+      "nodeId": "ingest",
+      "pluginId": "com.digitalarsenal.hostcap.storage-ingest",
+      "methodId": "ingest",
+      "kind": "transform",
+      "drainPolicy": "single-shot"
+    },
+    {
+      "nodeId": "egress",
+      "pluginId": "sdn.flow.egress",
+      "methodId": "emit",
+      "kind": "sink",
+      "drainPolicy": "single-shot"
+    }
+  ],
+  "edges": [
+    {
+      "edgeId": "control-query-query-query",
+      "fromNodeId": "control",
+      "fromPortId": "query",
+      "toNodeId": "query",
+      "toPortId": "query",
+      "backpressurePolicy": "queue",
+      "queueDepth": 2
+    },
+    {
+      "edgeId": "query-page-control-page",
+      "fromNodeId": "query",
+      "fromPortId": "page",
+      "toNodeId": "control",
+      "toPortId": "page",
+      "backpressurePolicy": "queue",
+      "queueDepth": 2
+    },
+    {
+      "edgeId": "query-decision-control-query_status",
+      "fromNodeId": "query",
+      "fromPortId": "decision",
+      "toNodeId": "control",
+      "toPortId": "query_status",
+      "backpressurePolicy": "queue",
+      "queueDepth": 2
+    },
+    {
+      "edgeId": "control-flight_config-chain-flight_config",
+      "fromNodeId": "control",
+      "fromPortId": "flight_config",
+      "toNodeId": "chain",
+      "toPortId": "flight_config",
+      "backpressurePolicy": "queue",
+      "queueDepth": 2
+    },
+    {
+      "edgeId": "control-fit_config-chain-fit_config",
+      "fromNodeId": "control",
+      "fromPortId": "fit_config",
+      "toNodeId": "chain",
+      "toPortId": "fit_config",
+      "backpressurePolicy": "queue",
+      "queueDepth": 2
+    },
+    {
+      "edgeId": "control-weather-chain-weather",
+      "fromNodeId": "control",
+      "fromPortId": "weather",
+      "toNodeId": "chain",
+      "toPortId": "weather",
+      "backpressurePolicy": "queue",
+      "queueDepth": 2
+    },
+    {
+      "edgeId": "control-seed-chain-omm",
+      "fromNodeId": "control",
+      "fromPortId": "seed",
+      "toNodeId": "chain",
+      "toPortId": "omm",
+      "backpressurePolicy": "queue",
+      "queueDepth": 2
+    },
+    {
+      "edgeId": "control-fallback_seed-fallback-omm",
+      "fromNodeId": "control",
+      "fromPortId": "fallback_seed",
+      "toNodeId": "fallback",
+      "toPortId": "omm",
+      "backpressurePolicy": "queue",
+      "queueDepth": 2
+    },
+    {
+      "edgeId": "chain-fallback-control-fallback",
+      "fromNodeId": "chain",
+      "fromPortId": "fallback",
+      "toNodeId": "control",
+      "toPortId": "fallback",
+      "backpressurePolicy": "queue",
+      "queueDepth": 2
+    },
+    {
+      "edgeId": "chain-decision-control-chain_status",
+      "fromNodeId": "chain",
+      "fromPortId": "decision",
+      "toNodeId": "control",
+      "toPortId": "chain_status",
+      "backpressurePolicy": "queue",
+      "queueDepth": 2
+    },
+    {
+      "edgeId": "fallback-fallback-control-fallback",
+      "fromNodeId": "fallback",
+      "fromPortId": "fallback",
+      "toNodeId": "control",
+      "toPortId": "fallback",
+      "backpressurePolicy": "queue",
+      "queueDepth": 2
+    },
+    {
+      "edgeId": "fallback-decision-control-chain_status",
+      "fromNodeId": "fallback",
+      "fromPortId": "decision",
+      "toNodeId": "control",
+      "toPortId": "chain_status",
+      "backpressurePolicy": "queue",
+      "queueDepth": 2
+    },
+    {
+      "edgeId": "chain-elements-control-candidate",
+      "fromNodeId": "chain",
+      "fromPortId": "elements",
+      "toNodeId": "control",
+      "toPortId": "candidate",
+      "backpressurePolicy": "queue",
+      "queueDepth": 2
+    },
+    {
+      "edgeId": "control-annotate_orbit-annotation-ocm",
+      "fromNodeId": "control",
+      "fromPortId": "annotate_orbit",
+      "toNodeId": "annotation",
+      "toPortId": "ocm",
+      "backpressurePolicy": "queue",
+      "queueDepth": 2
+    },
+    {
+      "edgeId": "control-annotate_seed-annotation-elements",
+      "fromNodeId": "control",
+      "fromPortId": "annotate_seed",
+      "toNodeId": "annotation",
+      "toPortId": "elements",
+      "backpressurePolicy": "queue",
+      "queueDepth": 2
+    },
+    {
+      "edgeId": "annotation-ocm-control-annotated",
+      "fromNodeId": "annotation",
+      "fromPortId": "ocm",
+      "toNodeId": "control",
+      "toPortId": "annotated",
+      "backpressurePolicy": "queue",
+      "queueDepth": 2
+    },
+    {
+      "edgeId": "control-recipe-composer-recipe",
+      "fromNodeId": "control",
+      "fromPortId": "recipe",
+      "toNodeId": "composer",
+      "toPortId": "recipe",
+      "backpressurePolicy": "queue",
+      "queueDepth": 2
+    },
+    {
+      "edgeId": "control-catalog-composer-catalog",
+      "fromNodeId": "control",
+      "fromPortId": "catalog",
+      "toNodeId": "composer",
+      "toPortId": "catalog",
+      "backpressurePolicy": "queue",
+      "queueDepth": 2
+    },
+    {
+      "edgeId": "control-selected-composer-ocm_products",
+      "fromNodeId": "control",
+      "fromPortId": "selected",
+      "toNodeId": "composer",
+      "toPortId": "ocm_products",
+      "backpressurePolicy": "queue",
+      "queueDepth": 2
+    },
+    {
+      "edgeId": "control-selection-composer-decision",
+      "fromNodeId": "control",
+      "fromPortId": "selection",
+      "toNodeId": "composer",
+      "toPortId": "decision",
+      "backpressurePolicy": "queue",
+      "queueDepth": 2
+    },
+    {
+      "edgeId": "composer-catalog-control-replacement",
+      "fromNodeId": "composer",
+      "fromPortId": "catalog",
+      "toNodeId": "control",
+      "toPortId": "replacement",
+      "backpressurePolicy": "queue",
+      "queueDepth": 2
+    },
+    {
+      "edgeId": "control-meta-ingest-meta",
+      "fromNodeId": "control",
+      "fromPortId": "meta",
+      "toNodeId": "ingest",
+      "toPortId": "meta",
+      "backpressurePolicy": "queue",
+      "queueDepth": 2
+    },
+    {
+      "edgeId": "control-product_records-ingest-ocm_records",
+      "fromNodeId": "control",
+      "fromPortId": "product_records",
+      "toNodeId": "ingest",
+      "toPortId": "ocm_records",
+      "backpressurePolicy": "queue",
+      "queueDepth": 2
+    },
+    {
+      "edgeId": "control-index_records-ingest-cat_records",
+      "fromNodeId": "control",
+      "fromPortId": "index_records",
+      "toNodeId": "ingest",
+      "toPortId": "cat_records",
+      "backpressurePolicy": "queue",
+      "queueDepth": 2
+    },
+    {
+      "edgeId": "ingest-result-control-stored",
+      "fromNodeId": "ingest",
+      "fromPortId": "result",
+      "toNodeId": "control",
+      "toPortId": "stored",
+      "backpressurePolicy": "queue",
+      "queueDepth": 2
+    },
+    {
+      "edgeId": "control-notice-egress-notice",
+      "fromNodeId": "control",
+      "fromPortId": "notice",
+      "toNodeId": "egress",
+      "toPortId": "notice",
+      "backpressurePolicy": "queue",
+      "queueDepth": 2
+    },
+    {
+      "edgeId": "composer-decision-control-compose_status",
+      "fromNodeId": "composer",
+      "fromPortId": "decision",
+      "toNodeId": "control",
+      "toPortId": "compose_status",
+      "backpressurePolicy": "queue",
+      "queueDepth": 2
+    },
+    {
+      "edgeId": "annotation-decision-control-annotation_status",
+      "fromNodeId": "annotation",
+      "fromPortId": "decision",
+      "toNodeId": "control",
+      "toPortId": "annotation_status",
+      "backpressurePolicy": "queue",
+      "queueDepth": 2
+    },
+    {
+      "edgeId": "control-state-records-ingest-nev-records",
+      "fromNodeId": "control",
+      "fromPortId": "state_records",
+      "toNodeId": "ingest",
+      "toPortId": "nev_records",
+      "backpressurePolicy": "queue",
+      "queueDepth": 2
+    }
+  ],
+  "triggers": [
+    {
+      "triggerId": "refresh",
+      "kind": "timer",
+      "source": "host-cron",
+      "defaultIntervalMs": 600000
+    }
+  ],
+  "triggerBindings": [
+    {
+      "triggerId": "refresh",
+      "targetNodeId": "control",
+      "targetPortId": "tick",
+      "backpressurePolicy": "queue",
+      "queueDepth": 1
+    }
+  ],
+  "requiredPlugins": [
+    "com.digitalarsenal.flows.catalog-builder.control",
+    "com.digitalarsenal.hostcap.flatsql-query",
+    "com.digitalarsenal.flows.catalog-builder.chain",
+    "com.digitalarsenal.analysis.gp-error-model",
+    "com.digitalarsenal.analysis.catalog-composer",
+    "com.digitalarsenal.hostcap.storage-ingest"
+  ]
+}
