@@ -82,7 +82,7 @@ void sdnap_test_safety(uint32_t spin, uint32_t budget_mb, uint32_t hold, double 
   out[4] = sdnap::pool::load(&sdnap::pool::job().active);
 }`;
 const once = (text, from, to) => { assert.equal(text.split(from).length, 2, `the seam's anchor ${JSON.stringify(from)} is not unique`); return text.replace(from, to); };
-const testBuild = buildDiagnostic("epoch-pool-safety", SEAMS,
+const testBuild = buildDiagnostic(widePool ? "wide-pool-safety" : "epoch-pool-safety", SEAMS,
   (t) => once(once(t, "inline bool pool_reclaim_locked(",
     "inline void (*g_test_reclaim_hook)(XpSat&) = nullptr;\ninline XpSat* g_test_reclaim_target = nullptr;\ninline uint32_t g_test_late = 0;\ninline bool pool_reclaim_locked("),
     "    p.reclaimed += 1;\n", "    p.reclaimed += 1;\n    if (g_test_reclaim_hook != nullptr) g_test_reclaim_hook(*v);\n"),
