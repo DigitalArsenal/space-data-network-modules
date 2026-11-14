@@ -89,8 +89,8 @@ extern "C" int annotate_population() {
   const auto* vt = root - flatbuffers::ReadScalar<flatbuffers::soffset_t>(root);
   if (flatbuffers::ReadScalar<flatbuffers::voffset_t>(vt) > OCM::VT_RPO_INSPECTION + 2)
     return fail("unsupported-ocm", "The OCM root contains fields outside the pinned contract.");
-  if (!orbit->MEAN_ELEMENTS() || !orbit->MEAN_ELEMENTS()->NORAD_CAT_ID() ||
-      orbit->MEAN_ELEMENTS()->NORAD_CAT_ID() != omm->NORAD_CAT_ID())
+  if (!orbit->MEAN_ELEMENTS() || !orbit->METADATA() || !orbit->METADATA()->NORAD_CAT_ID() ||
+      orbit->METADATA()->NORAD_CAT_ID() != omm->NORAD_CAT_ID())
     return fail("seed-mismatch", "The seed and orbit must identify the same object.");
   if (orbit->COVARIANCE_BLOCKS()) for (const auto* block : *orbit->COVARIANCE_BLOCKS())
     if (block->COV_ID() && block->COV_ID()->str().rfind("population/", 0) == 0)

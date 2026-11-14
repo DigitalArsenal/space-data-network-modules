@@ -2047,7 +2047,9 @@
           "required": true,
           "description": "One size-prefixed orbit record. Existing orbit tables and primary covariance are retained verbatim."
         }
-      ]
+      ],
+      "maxBatch": 1,
+      "drainPolicy": "single-shot"
     }
   ]
 }
