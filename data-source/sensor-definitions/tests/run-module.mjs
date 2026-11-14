@@ -1,5 +1,6 @@
 // Runs plan_sources and build_sensors in the SDK's browser harness with the cassette as the only network.
 import fs from 'node:fs';
+import {storedCatRecords, SATCAT_URL} from './stored-cat-fixture.mjs';
 import { fileURLToPath } from 'node:url';
 import { gunzipSync } from 'node:zlib';
 import { ByteBuffer } from 'flatbuffers';
@@ -16,7 +17,18 @@ const HRSP = { schemaName: 'HttpResponse.fbs', fileIdentifier: 'HRSP', rootTypeN
 export const PEER = '16Uiu2HAmTestProducer';
 
 export async function harness(config = { producer_peer_id: PEER }) {
-  return createBrowserModuleHarness({ wasmSource: fs.readFileSync(here('../dist/isomorphic/module.wasm')), manifest, surface: 'direct', hostOptions: { config } });
+  let stored = storedCatRecords(PEER);
+  const host = await createBrowserModuleHarness({ wasmSource: fs.readFileSync(here('../dist/isomorphic/module.wasm')), manifest, surface: 'direct',
+    hostcallDispatch(operation, params) {
+      if (operation === 'plugin.getConfig') return config;
+      if (operation === 'storage.query') {
+        if (params.schema !== 'CAT.fbs' || params.limit !== 250000) throw Error('Unexpected identity query');
+        return stored;
+      }
+      throw Error('Unexpected host operation ' + operation);
+    } });
+  host.setStored = records => { stored = records; };
+  return host;
 }
 
 export async function plan(host) {
@@ -26,6 +38,7 @@ export async function plan(host) {
 
 // `mutate(url, entry)` may change or replace a response (a stale quote, a failed fetch, a changed SATCAT row).
 export async function build(host, urls, mutate = (u, e) => e) {
+  host.setStored(storedCatRecords(PEER, mutate(SATCAT_URL, structuredClone(cassette[SATCAT_URL]))));
   const inputs = urls.map((url) => {
     const e = mutate(url, structuredClone(cassette[url]));
     return { portId: 'response', typeRef: HRSP, payload: encodeHttpResponse({ url, status: e.status, error: e.error ?? '', headers: {}, body: new Uint8Array(Buffer.from(e.body)), retrievedMs: e.retrievedMs }) };
