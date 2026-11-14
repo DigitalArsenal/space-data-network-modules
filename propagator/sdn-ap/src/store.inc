@@ -180,18 +180,19 @@ inline int32_t store_prepare(Store& st, const ElementRow* rows, uint32_t count, 
 /// Prepare before replacing so a failed store allocation preserves the previous rows and plugin source.
 /// Native rows retain their original replacement lifetime unless explicit plugin OMM selection needs preservation.
 inline int32_t store_init(const ElementRow* rows, uint32_t count, const uint8_t* refused = nullptr,
-                          bool require_all_allocations = true) {
+                          bool require_all_allocations = true, bool plugin_load = false) {
   if (!plugin_can_release()) return -1;
-  if (!require_all_allocations && !plugin_rows_active()) {
-    store_free();
-    return store_prepare(store(), rows, count, refused);
-  }
+  const bool preserve = plugin_load || plugin_rows_active();
   Store prepared;
+  Store& target = preserve ? prepared : store();
+  if (!preserve) store_free();
   const uint32_t failures = mem::failures();
-  const int32_t held = store_prepare(prepared, rows, count, refused);
-  if (held < 0 || (require_all_allocations && mem::failures() != failures)) { store_free(prepared); return -1; }
-  store_free();
-  store() = prepared;
+  const int32_t held = store_prepare(target, rows, count, refused);
+  if (held < 0 || (require_all_allocations && mem::failures() != failures)) { store_free(target); return -1; }
+  if (preserve) {
+    store_free();
+    store() = prepared;
+  }
   return held;
 }
 

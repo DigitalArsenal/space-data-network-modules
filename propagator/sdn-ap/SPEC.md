@@ -6751,14 +6751,14 @@ physics calibration.
 
 ### Native row initialization at the memory limit
 
-Before `plugin_init_omm` selects rows, `sdnap_init_elements` releases the preceding native rows before allocating the
+Before `plugin_init_omm` selects rows, `sdnap_init_elements` and `ingest_omm` release the preceding native rows before allocating the
 replacement, matching the native store's memory lifetime. A failed store allocation leaves those native rows empty.
 The positive count includes sets whose initialization is refused; `sdnap_init_error` and each propagation status
 identify them. Record selection remains intact when native rows change.
 
 After explicit plugin OMM selection, replacement rows are prepared alongside the old rows so a refused store allocation
-preserves the active plugin source. Plugin OMM initialization and stream ingestion also preserve the previous rows
-when an individual set allocation fails. This transactional lifetime holds both stores during preparation.
+preserves the active plugin source. Plugin OMM initialization always preserves the previous rows on refusal; stream
+ingestion does so after explicit plugin OMM selection, including when an individual set allocation fails. This transactional lifetime holds both stores during preparation.
 Every answered native row uses the newly supplied set and its requested time.
 
 `test/memory-limit.e2e.mjs` compares every answered state bit for bit against an instance with the default maximum,

@@ -210,7 +210,7 @@ int32_t plugin_init_omm(const OrbProOMMRecord* records, uint32_t count) {
   sdnap::ElementRow* rows = static_cast<sdnap::ElementRow*>(sdnap::mem::malloc(sizeof(sdnap::ElementRow) * (count ? count : 1)));
   if (rows == nullptr) return ORBPRO_PROP_BAD_INPUT;
   for (uint32_t i = 0; i < count; ++i) rows[i] = sdnap::row_of_omm(records[i], sdnap::omm_theory());
-  const int32_t held = sdnap::store_init(rows, count);
+  const int32_t held = sdnap::store_init(rows, count, nullptr, true, true);
   std::free(rows);
   if (held >= 0) sdnap::plugin_rows_selected();
   return held < 0 ? ORBPRO_PROP_BAD_INPUT : held;
