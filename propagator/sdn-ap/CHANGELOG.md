@@ -1,3 +1,11 @@
+## Shared table initialization
+
+Instance startup evaluates the shared leap-second, atmosphere, gravity, and
+half-precision tables before exports or pool threads run. This adds startup
+work without changing state formulas or per-state lookup paths. The leap-table
+publication race could expose a nonzero count with a null pointer; serialized
+pool preparation also prepares the time table.
+
 # Changelog
 
 ## Unreleased — Bounded wide-grid payloads

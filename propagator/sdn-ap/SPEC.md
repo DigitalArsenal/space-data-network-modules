@@ -6672,3 +6672,33 @@ Status 91 is distinct from invalid elements, decay, missing weather rows and a d
 It reports a counted resource failure during a refused state request. A successful retry
 returns 0 and the same state as an isolated request. The batch return remains 0 when
 individual rows refuse; the host reads the row statuses.
+### Shared lookup initialization
+
+Instance initialization performs the time, atmosphere, gravity, and half-conversion
+fills before exports or pool threads run. This adds startup work; its elapsed cost
+is unmeasured. The tables keep their original storage, contents, and per-state
+lookup expressions. AP thread preparation also prepares the time table.
+
+The time library publishes its leap-entry count before its pointer. A concurrent
+reader can capture a null pointer with a nonzero count. A deterministic test holds
+the initializer in that gap; other probes hold the atmosphere and gravity table
+fills open so that overlapping writers are observable. `node test/shared-tables.e2e.mjs`
+fails on 0.6.60 sources and passes with instance preparation. The test hook preserves
+every original instruction in the time conversion.
+
+On the committed 0.6.60 artifact, forcing one interrupted-reader capture and then
+completing the pointer publication changes a synthetic geosynchronous flight by
+at most 0.09061098147164132 m over five days at 300-second spacing. This conditional
+control is not an occurrence rate or a public pooled-path reproduction. The
+published row-store ingest selects SGP4 or SGP4XP, without AP terms; AP row-store
+tests need a diagnostic selection hook. Epoch batches prepare the time table on
+the calling thread before parallel initialization. Frames use one host thread and
+exclude concurrent pool batches. An isolated single-threaded host has no competing
+initializer. Hosts calling time-using exports concurrently require the instance
+initialization barrier.
+
+Seventeen synthetic AP fixtures, 24,497 states/statuses through five days, are
+bit-identical before and after preparation. A corrupted eight-hour body node stays
+cached through a five-day scan; a node 256 slots away replaces it, after which its
+re-evaluation agrees with the reference. The six-node interpolation window and
+integrated mean-state history can carry its effect beyond its immediate interval.
