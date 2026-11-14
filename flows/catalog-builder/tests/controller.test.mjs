@@ -25,7 +25,7 @@ records('OMM.fbs','synthetic','secondary').push(seed(ids[0],1));
 records('CAT.fbs','synthetic','identities').push(...ids.map(id=>pack(Object.assign(new C.CATT(),{NORAD_CAT_ID:id,OBJECT_NAME:'SYNTHETIC'}),'CAT')));
 records('SPW.fbs','synthetic','weather').push(...split(Buffer.from(weather)).map(b=>pack(SPW.getSizePrefixedRootAsSPW(new fb.ByteBuffer(b)).unpack(),'SPW')));
 const manifest=path=>JSON.parse(fs.readFileSync(path+'/plugin-manifest.json'));
-const createControl=()=>createBrowserModuleHarness({wasmSource:fs.readFileSync(controlDir+'/dist/isomorphic/module.wasm'),manifest:manifest(controlDir),surface:'direct',hostOptions:{config:cfg}});
+const createControl=()=>createBrowserModuleHarness({wasmSource:fs.readFileSync(controlDir+'/dist/isomorphic/module.wasm'),manifest:manifest(repo+'/flows/catalog-builder/control'),surface:'direct',hostOptions:{config:cfg}});
 let control=await createControl();const chain=await createStandaloneHarness('browser',repo+'/flows/catalog-builder/dist/isomorphic/module.wasm',{surface:'direct',enableBrowserWasiThreads:false});
 const gp=await createBrowserModuleHarness({wasmSource:fs.readFileSync(repo+'/analysis/gp-error-model/dist/isomorphic/module.wasm'),manifest:manifest(repo+'/analysis/gp-error-model'),surface:'direct'});
 const composer=await createBrowserModuleHarness({wasmSource:fs.readFileSync(repo+'/analysis/catalog-composer/dist/isomorphic/module.wasm'),manifest:manifest(repo+'/analysis/catalog-composer'),surface:'direct'});

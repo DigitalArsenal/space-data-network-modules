@@ -55,7 +55,7 @@ test('configured AP class follows eccentricity limits and every resonance-band b
  for(const [n,e,fit] of cases){
   const cfg=service.config,seed=OMM.getRootAsOMM(new fb.ByteBuffer(ommBytes)).unpack();seed.NORAD_CAT_ID=1000000;seed.ECCENTRICITY=e;seed.MEAN_MOTION=n*1440/(2*Math.PI);
   const identity=Object.assign(new C.CATT(),{NORAD_CAT_ID:seed.NORAD_CAT_ID,OBJECT_NAME:'SYNTHETIC'});
-  const h=await createBrowserModuleHarness({wasmSource:fs.readFileSync(new URL('dist/isomorphic/module.wasm',dir)),manifest:JSON.parse(fs.readFileSync(new URL('plugin-manifest.json',dir))),surface:'direct',hostOptions:{config:cfg}});
+  const h=await createBrowserModuleHarness({wasmSource:fs.readFileSync(new URL('dist/isomorphic/module.wasm',dir)),manifest:JSON.parse(fs.readFileSync(new URL('../control/plugin-manifest.json',import.meta.url))),surface:'direct',hostOptions:{config:cfg}});
   try{
    let response=await h.invoke({methodId:'advance',inputs:[frame('tick','TimerTick',encodeTimerTick({triggerId:'refresh',firedMs:Date.parse(seed.EPOCH+'Z')+86400000}))]}),dispatched=false;
    for(let i=0;i<12;i++){

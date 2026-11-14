@@ -29,7 +29,7 @@ export async function verifyStateRetention(mode){
  const chain=await createStandaloneHarness('browser',repo+'/flows/catalog-builder/dist/isomorphic/module.wasm',{surface:'direct',enableBrowserWasiThreads:false});
  let fallback;
  try{const r=await chain.invoke({methodId:'ingest_seed',inputs:[frame('omm','OMM',ommBytes)]});assert.equal(r.statusCode,0,r.errorMessage);fallback=OCM.getRootAsOCM(new fb.ByteBuffer(r.outputs.find(f=>f.portId==='fallback').payload)).unpack();}finally{chain.destroy();}
- const create=()=>createBrowserModuleHarness({wasmSource:fs.readFileSync(dir+'/dist/isomorphic/module.wasm'),manifest:JSON.parse(fs.readFileSync(dir+'/plugin-manifest.json')),surface:'direct',hostOptions:{config:cfg}});
+ const create=()=>createBrowserModuleHarness({wasmSource:fs.readFileSync(dir+'/dist/isomorphic/module.wasm'),manifest:JSON.parse(fs.readFileSync(new URL('../control/plugin-manifest.json',import.meta.url))),surface:'direct',hostOptions:{config:cfg}});
  let control=await create();let state=[],history=[];const index=new Map(),journal=new Set(),fitCounts=new Map();let failing=mode==='final';const newcomer=2999999;
  const composer=await createBrowserModuleHarness({wasmSource:fs.readFileSync(repo+'/analysis/catalog-composer/dist/isomorphic/module.wasm'),manifest:JSON.parse(fs.readFileSync(repo+'/analysis/catalog-composer/plugin-manifest.json')),surface:'direct'});
  const cid=b=>{const data=Buffer.concat([Buffer.from([1,0x55,0x12,0x20]),createHash('sha256').update(b).digest()]);let bits=0,value=0,out='b';for(const byte of data){value=(value<<8)|byte;bits+=8;while(bits>=5){bits-=5;out+='abcdefghijklmnopqrstuvwxyz234567'[(value>>>bits)&31];}}if(bits)out+='abcdefghijklmnopqrstuvwxyz234567'[(value<<(5-bits))&31];return out;};

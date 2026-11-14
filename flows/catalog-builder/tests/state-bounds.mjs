@@ -28,7 +28,7 @@ export async function verifyStateBounds(){
  const chain=await createStandaloneHarness('browser',repo+'/flows/catalog-builder/dist/isomorphic/module.wasm',{surface:'direct',enableBrowserWasiThreads:false});
  let fallback;
  try{const r=await chain.invoke({methodId:'ingest_seed',inputs:[frame('omm','OMM',ommBytes)]});assert.equal(r.statusCode,0,r.errorMessage);fallback=OCM.getRootAsOCM(new fb.ByteBuffer(r.outputs.find(f=>f.portId==='fallback').payload)).unpack();}finally{chain.destroy();}
- const create=()=>createBrowserModuleHarness({wasmSource:fs.readFileSync(dir+'/dist/isomorphic/module.wasm'),manifest:JSON.parse(fs.readFileSync(dir+'/plugin-manifest.json')),surface:'direct',hostOptions:{config:cfg}});
+ const create=()=>createBrowserModuleHarness({wasmSource:fs.readFileSync(dir+'/dist/isomorphic/module.wasm'),manifest:JSON.parse(fs.readFileSync(new URL('../control/plugin-manifest.json',import.meta.url))),surface:'direct',hostOptions:{config:cfg}});
  let control=await create();let state=[],history=[];
  const latest=rows=>{const events=new Map();for(const row of rows)for(const e of N.NEV.getSizePrefixedRootAsNEV(new fb.ByteBuffer(row)).unpack().EVENTS){const old=events.get(e.SUBJECT);if(!old||Number(e.DETAIL.match(/sequence=(\d+);/)[1])>Number(old.DETAIL.match(/sequence=(\d+);/)[1]))events.set(e.SUBJECT,e);}return [...events.values()].sort((a,b)=>a.SUBJECT.localeCompare(b.SUBJECT));};
  async function tick(time){

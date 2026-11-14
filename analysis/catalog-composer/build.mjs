@@ -1,6 +1,6 @@
 import fs from 'node:fs/promises';
 import path from 'node:path';
-import { fileURLToPath } from 'node:url';
+import { fileURLToPath, pathToFileURL } from 'node:url';
 import { compileModuleFromSource } from 'space-data-module-sdk/compiler';
 import { createHash } from 'node:crypto';
 import { gzipSync } from 'node:zlib';
@@ -14,6 +14,7 @@ import { bundleXmt, generateSdsHeaders } from './sds-headers.mjs';
 const root = fileURLToPath(new URL('.', import.meta.url));
 const repo = path.resolve(root, '../..');
 const manifest = JSON.parse(await fs.readFile(path.join(root, 'plugin-manifest.json'), 'utf8'));
+export async function compileCatalogComposer() {
 // The SDS headers are generated from the standards' schema files, every family the module reads or writes at one
 // release, with internal linkage (scripts/lib/sds-cpp-headers.mjs). $XMT (with the $OIL, $CVR, $MNV and $PRW it
 // includes) carries the recipes, requests and reports; SPACE_DATA_STANDARDS_ROOT names the standards tree that holds it.
@@ -42,13 +43,12 @@ const result = await compileModuleFromSource({
   // wasm32-wasip1-threads toolchain and identical bytes in every runtime.
   threadModel: 'wasi-sequential',
 });
-if (!result.report?.ok) throw new Error(JSON.stringify(result.report?.issues));
-const linkDir = path.join(root, 'dist/guest-link');
-await fs.mkdir(linkDir, { recursive: true });
-await fs.writeFile(path.join(linkDir, 'module-link.o'), result.guestLink.objectBytes);
-const { objectBytes, ...linkMetadata } = result.guestLink;
-await fs.writeFile(path.join(linkDir, 'metadata.json'), JSON.stringify(linkMetadata, null, 2) + '\n');
-await fs.copyFile(path.join(root, 'plugin-manifest.json'), path.join(root, 'dist/plugin-manifest.json'));
+if (!result.report?.ok) throw new Error('Catalog composer refused by the SDK', {cause: result.report});
+return {...result, manifest, sds};
+}
+
+if (process.argv[1] && pathToFileURL(path.resolve(process.argv[1])).href === import.meta.url) {
+const {sds, outputPath} = await compileCatalogComposer();
 
 const canonical = await computeCanonicalModuleHash(await fs.readFile(outputPath));
 // Dependencies are loaded by the generic APP bridge with exact artifact hashes.
@@ -88,3 +88,5 @@ const bundle = await createSingleFileBundle({ wasmBytes: canonical.canonicalWasm
 });
 await fs.writeFile(outputPath, bundle.wasmBytes);
 console.log(`Catalog Editor compiled: ${outputPath}`);
+
+}
