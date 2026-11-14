@@ -14,6 +14,7 @@
 #include <cstring>
 #include <cstdio>
 #include <ctime>
+#include <chrono>
 #include <algorithm>
 namespace catalog_control {
 namespace R = sdn::runtime;
@@ -39,6 +40,7 @@ struct Seed {Bytes data;int64_t epoch=0;size_t rank=0;};
 struct Settings {
  std::string provider,identity_provider,identity_source,weather_provider,weather_source,recipe;
  size_t page=512,batch=128,partitions=1,partition=0,max_records=400000,max_bytes=64*1024*1024;
+ size_t budget_ms=540000,allowance_ms=2000;
  double margin=0,nonres_e=.05,res_e=.3,max_rms=2,max_error=10;
  std::vector<Source> seeds;
 } cfg;
@@ -47,6 +49,7 @@ Phase phase=Phase::Idle;
 std::vector<Source> scans;size_t scan_at=0,pages=0,seen=0,retained=0,done=0,at=0;
 std::string cursor,signature,reason,pending_batch,pending_schema;
 int64_t now=0;
+using Clock=std::chrono::steady_clock;Clock::time_point tick_start,object_start;double allowance=2000;
 std::map<uint32_t,Seed> seeds;
 std::map<uint32_t,Bytes> identities,index;
 std::map<std::string,Bytes> weather;
@@ -61,6 +64,7 @@ struct Diagnostics {
  void add(const std::string& value){if(examples.size()<16)examples.push_back(value);}
  std::string summary()const{std::string out="invalid="+std::to_string(invalid)+" failed="+std::to_string(failed)+" deferred="+std::to_string(deferred);for(const auto& e:examples)out+="; "+e;return out;}
 } diagnostics;
+bool budget_left(){return std::chrono::duration<double,std::milli>(Clock::now()-tick_start).count()+allowance<cfg.budget_ms;}
 int next_object();
 int fail_object(const std::string& message){
  if(at>=work.size())return 1;
@@ -89,12 +93,12 @@ bool configure() {
  if(sources.empty()||sources.size()!=providers.size()||sources.size()>16||cfg.provider.empty()||cfg.identity_provider.empty()||cfg.identity_source.empty()||cfg.weather_provider.empty()||cfg.weather_source.empty())return false;
  cfg.seeds.clear();for(size_t i=0;i<sources.size();++i){if(sources[i].empty()||providers[i].empty())return false;cfg.seeds.push_back({"OMM",std::string(providers[i]),std::string(sources[i])});}
  auto bound=[&](const char* key,size_t& value,size_t low,size_t high){const double v=c.number(key,value);if(!std::isfinite(v)||v<low||v>high||std::floor(v)!=v)return false;value=size_t(v);return true;};
- if(!bound("catalog.page_size",cfg.page,1,1000)||!bound("catalog.batch_size",cfg.batch,1,4096)||!bound("catalog.partition_count",cfg.partitions,1,8)||!bound("catalog.partition_index",cfg.partition,0,cfg.partitions-1)||!bound("catalog.max_records",cfg.max_records,1,500000)||!bound("catalog.max_bytes",cfg.max_bytes,1024,96*1024*1024))return false;
+ if(!bound("catalog.invocation_budget_ms",cfg.budget_ms,1000,540000)||!bound("catalog.object_allowance_ms",cfg.allowance_ms,2000,60000)||!bound("catalog.page_size",cfg.page,1,1000)||!bound("catalog.batch_size",cfg.batch,1,1024)||!bound("catalog.partition_count",cfg.partitions,1,8)||!bound("catalog.partition_index",cfg.partition,0,cfg.partitions-1)||!bound("catalog.max_records",cfg.max_records,1,500000)||!bound("catalog.max_bytes",cfg.max_bytes,1024,96*1024*1024))return false;
  cfg.margin=c.number("catalog.validity_margin_seconds",0);cfg.nonres_e=c.number("catalog.nonresonant_max_e",.05);cfg.res_e=c.number("catalog.resonant_max_e",.3);cfg.max_rms=c.number("catalog.max_fit_rms_km",2);cfg.max_error=c.number("catalog.max_fit_error_km",10);
  return std::isfinite(cfg.margin)&&cfg.margin>=0&&cfg.nonres_e>=0&&cfg.nonres_e<=.05&&cfg.res_e>=0&&cfg.res_e<=.3&&std::isfinite(cfg.max_rms)&&cfg.max_rms>0&&std::isfinite(cfg.max_error)&&cfg.max_error>0;
 }
 int query() {
- if(scan_at>=scans.size())return 0;
+ if(scan_at>=scans.size())return 0;if(!budget_left()){++diagnostics.deferred;return finish();}
  const auto& s=scans[scan_at];QRPT q;q.KIND=qrpKind::Request;q.SCHEMA_NAME=s.schema+".fbs";q.PROVIDER_ID=s.provider;q.SOURCE_NAME=s.name;q.LIMIT=cfg.page;q.MAX_BYTES=8*1024*1024;q.CURSOR=cursor;
  flatbuffers::FlatBufferBuilder b;FinishQRPBuffer(b,QRP::Pack(b,&q));phase=Phase::Scan;
  return push("query","QRP",{b.GetBufferPointer(),b.GetBufferPointer()+b.GetSize()});
@@ -184,6 +188,7 @@ std::string weather_signature(){
 }
 int next_object() {
  for(;at<work.size()&&done<cfg.batch;++at){
+  if(!budget_left()){++diagnostics.deferred;return finish();}object_start=Clock::now();
   const auto id=work[at];if(id%cfg.partitions!=cfg.partition)continue;const auto retry=retries.find(id);if(retry!=retries.end()&&now<retry->second.after){++diagnostics.deferred;continue;}chosen.clear();signature.clear();reason.clear();object_weather.clear();const auto s=seeds.find(id);const auto identity=identities.find(id);const auto old=index.find(id);
   const bool removed=identity==identities.end()||s==seeds.end()||(GetSizePrefixedCAT(identity->second.data())->DECAY_DATE()&&!text(GetSizePrefixedCAT(identity->second.data())->DECAY_DATE()).empty()&&text(GetSizePrefixedCAT(identity->second.data())->DECAY_DATE())<=iso(now).substr(0,10));
   const auto* previous=old==index.end()?nullptr:GetSizePrefixedCAT(old->second.data());
@@ -229,7 +234,7 @@ int chain() {
 int advance() {
  if(input("tick")){
   if(!configure())return stop("Invalid catalog ModuleConfig.");const auto* f=input("tick");flatbuffers::Verifier v(f->payload,f->payload_length);if(!R::VerifyTimerTickBuffer(v))return stop("Invalid timer tick.");now=R::GetTimerTick(f->payload)->FIRED_MS();if(now<=0)return stop("Timer requires a positive UTC time.");
-  diagnostics=Diagnostics{};complete_scan=true;seeds.clear();identities.clear();index.clear();weather.clear();products.clear();scans=cfg.seeds;scans.push_back({"CAT",cfg.identity_provider,cfg.identity_source});scans.push_back({"SPW",cfg.weather_provider,cfg.weather_source});scans.push_back({"CAT",cfg.provider,"catalog-index"});scan_at=pages=seen=retained=done=at=0;cursor.clear();return query();
+  diagnostics=Diagnostics{};tick_start=Clock::now();allowance=cfg.allowance_ms;complete_scan=true;seeds.clear();identities.clear();index.clear();weather.clear();products.clear();scans=cfg.seeds;scans.push_back({"CAT",cfg.identity_provider,cfg.identity_source});scans.push_back({"SPW",cfg.weather_provider,cfg.weather_source});scans.push_back({"CAT",cfg.provider,"catalog-index"});scan_at=pages=seen=retained=done=at=0;cursor.clear();return query();
  }
  if(const auto* f=input("query_status")){flatbuffers::Verifier v(f->payload,f->payload_length);if(!VerifyQRPBuffer(v)||GetQRP(f->payload)->KIND()==qrpKind::Error)return stop("Complete read failed; no partial sweep is committed.");}
  if(const auto* f=input("page")){
@@ -258,7 +263,7 @@ int advance() {
   flatbuffers::Verifier v(f->payload,f->payload_length);if(!R::VerifyIngestResultBuffer(v))return stop("Invalid storage acknowledgment.");const auto* r=R::GetIngestResult(f->payload);
   if((phase!=Phase::ProductStored&&phase!=Phase::IndexStored)||!text(r->REFUSED()).empty()||text(r->SCHEMA())!=pending_schema+".fbs"||text(r->PROVIDER_ID())!=cfg.provider||text(r->BATCH_ID())!=pending_batch||text(r->SOURCE_NAME())!=(phase==Phase::ProductStored?"catalog-products":"catalog-index")||r->INSERTED()>1)return stop("Storage refused or did not acknowledge the complete deterministic batch.");
   if(phase==Phase::ProductStored){products.insert(cid(chosen));return compose();}
-  index[work[at]]=pending;retries.erase(work[at]);++done;++at;return next_object();
+  allowance=std::max(allowance,2*std::chrono::duration<double,std::milli>(Clock::now()-object_start).count());index[work[at]]=pending;retries.erase(work[at]);++done;++at;return next_object();
  }
  return stop("Incomplete controller response.");
 }
