@@ -474,6 +474,7 @@ test("index_page: preserves request filters and the host's complete bounded page
   const out = sandboxOutputs(result);
   assert.deepEqual(calls.map((c) => c.op), ["storage.index_page"]);
   assert.deepEqual(calls[0].raw.request, request.payload);
+  assert.equal(out.decision.KIND, QRP.qrpKind.Request, out.decision.MESSAGE);
   assert.deepEqual(out.decisionBytes, request.payload);
   assert.deepEqual(result.outputs.find((o) => o.portId === "page").payload, stream);
   assert.deepEqual([out.page.header.NEXT_CURSOR, Number(out.page.header.TOTAL_COUNT)], ["continue", 33000]);

@@ -15,12 +15,13 @@
       "direction": "bidirectional",
       "capability": "storage_query",
       "resource": "storage://flatsql",
-      "description": "Host FlatSQL engine queries as SDS $PIV hostcalls: storage.flatsql_query_stream (operator surface, unsandboxed, auth-gated at the wall), storage.query_sandboxed and storage.query_surface (the public read-only surface).",
+      "description": "Host FlatSQL engine queries as SDS $PIV hostcalls: storage.flatsql_query_stream (operator surface, unsandboxed, auth-gated at the wall), storage.query_sandboxed and storage.query_surface (the public read-only surface). storage.index_page reads durable snapshot pages under the same storage_query grant.",
       "properties": {
         "hostOps": [
           "storage.flatsql_query_stream",
           "storage.query_sandboxed",
-          "storage.query_surface"
+          "storage.query_surface",
+          "storage.index_page"
         ]
       }
     },

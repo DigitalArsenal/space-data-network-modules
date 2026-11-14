@@ -693,8 +693,8 @@ int index_page(void) {
     const auto* data = reinterpret_cast<const uint8_t*>(stream.data());
     const uint32_t size = read_u32le(data);
     if (size > stream.size() - 4) return refuse(ctx, "host-failed", "truncated durable page header");
-    flatbuffers::Verifier header_verifier(data + 4, size);
-    if (!VerifyQRPBuffer(header_verifier) || GetQRP(data + 4)->KIND() != qrpKind_Page)
+    flatbuffers::Verifier header_verifier(data, size + 4);
+    if (!VerifySizePrefixedQRPBuffer(header_verifier) || GetSizePrefixedQRP(data)->KIND() != qrpKind_Page)
         return refuse(ctx, "host-failed", "invalid durable page header");
     if (push_decision_verbatim(frame) != 0) return 500;
     return plugin_push_output_ex("page", "QRP.fbs", QRPIdentifier(), PLUGIN_PAYLOAD_WIRE_FORMAT_FLATBUFFER,
