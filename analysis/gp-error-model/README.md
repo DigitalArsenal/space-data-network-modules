@@ -760,7 +760,8 @@ The seven-bin model produces seven independently timestamped covariance blocks:
 each timestamp is the seed epoch plus that bin's midpoint. The embedded model's
 midpoints are 0.125, 0.5, 1.125, 2, 3.25, 5, and 7 days.
 
-Each block contains a full row-major Cartesian 6 by 6 matrix in GCRF, with
+Each block contains a symmetric Cartesian 6 by 6 matrix in GCRF, stored as
+21 lower-triangular entries (`LTM`) in a timestamped decimal text row, with
 position in kilometers and velocity in kilometers per second. Its realism
 label identifies the model, regime, and seed age and states that the covariance
 is uncalibrated for the object. A screening consumer selects the block nearest
@@ -782,3 +783,5 @@ copies that reason into its selection text. No covariance is fabricated.
 Repeated annotation of an already annotated record is refused; callers pass
 the original fitted or fallback record. Malformed streams, mismatched object
 identities, oversized records, and models without seven bins are refused.
+
+The block schema stores text lines rather than binary double vectors. Decimal values round-trip without loss. Equal strings share offsets across blocks and realism labels; unstated NaN fields use their schema defaults. Model identity remains explicit in every block and realism label. Repacking the complete native object can duplicate shared strings and materialize default fields, increasing its serialized size.

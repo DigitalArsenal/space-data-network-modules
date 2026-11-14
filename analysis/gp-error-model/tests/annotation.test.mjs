@@ -65,6 +65,11 @@ test('AP states and formal covariance rows remain bit identical at ten epochs',a
   assert.ok(labels.every(l=>l.CALIBRATION!==O.covarianceCalibration.Calibrated));
 });
 
+test('SGP4 fallback propagation remains byte identical after annotation',async()=>{
+  const original=products[1];
+  assert.deepEqual(Buffer.from(await fly(await accepted(original))),Buffer.from(await fly(original)));
+});
+
 test('seven symmetric matrices use seed epoch and model midpoints and agree with the established population method',async()=>{
   assert.equal(ages.length,7);
   const request=Object.assign(new E.ERMT(),{CALIBRATED_COVARIANCES:Object.assign(new E.ERMCalibratedCovariancesT(),{OBJECTS:ages.map(age=>Object.assign(new E.ERMCalibrationObjectT(),{ID:'synthetic',SET_NORAD_CAT_ID:seed.NORAD_CAT_ID,SET_EPOCH:seed.EPOCH,AGE_DAYS:age}))})});

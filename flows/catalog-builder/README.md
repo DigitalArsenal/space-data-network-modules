@@ -28,7 +28,8 @@ the header comment and index selection reason.
 
 `gp-error-model:annotate_population` adds seven independently timestamped
 population covariance blocks, at the seed epoch plus each model-bin midpoint.
-They are full 6-by-6 GCRF matrices labeled uncalibrated and identified by the
+They are symmetric 6-by-6 GCRF matrices encoded in lower-triangular text rows,
+labeled uncalibrated and identified by the
 model. The AP formal posterior and its propagation flag remain unchanged.
 The consumer selects the closest age block; `sdn-ap` does not propagate these
 added blocks. Unsupported population-model cases have an explicit explanation
