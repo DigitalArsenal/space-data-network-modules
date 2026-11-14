@@ -145,9 +145,14 @@ int page(const plugin_input_frame_t* f) {
 }
 int compose() {
  const auto id=work[at];const auto old=index.find(id);const auto identity=identities.find(id);
- const Bytes& cat=old!=index.end()?old->second:identity->second;
+ Bytes cat=old!=index.end()?old->second:identity->second;
+ if(identity!=identities.end()){
+  auto fresh=std::unique_ptr<CATT>(GetSizePrefixedCAT(identity->second.data())->UnPack());
+  if(old!=index.end())fresh->PRODUCTS_AS_OF=text(GetSizePrefixedCAT(old->second.data())->PRODUCTS_AS_OF());
+  flatbuffers::FlatBufferBuilder b;FinishSizePrefixedCATBuffer(b,CAT::Pack(b,fresh.get()));cat.assign(b.GetBufferPointer(),b.GetBufferPointer()+b.GetSize());
+ }
  XMTT x;x.INTEGRATE_RECIPE=std::make_unique<XMTIntegrateRecipeT>();x.INTEGRATE_RECIPE->AS_OF_MS=now;
- QRPT q;q.KIND=qrpKind::Page;q.STATUS=qrpStatus::Ok;q.MESSAGE=reason+"; catalog-input="+signature;
+ QRPT q;q.KIND=qrpKind::Page;q.STATUS=qrpStatus::Ok;q.MESSAGE=reason+"; catalog-input="+signature+";";
  flatbuffers::FlatBufferBuilder b;FinishSizePrefixedXMTBuffer(b,XMT::Pack(b,&x));
  if(push("recipe","XMT",{b.GetBufferPointer(),b.GetBufferPointer()+b.GetSize()})||push("catalog","CAT",cat))return stop("Cannot queue catalog replacement.");
  b.Clear();FinishQRPBuffer(b,QRP::Pack(b,&q));if(push("selection","QRP",{b.GetBufferPointer(),b.GetBufferPointer()+b.GetSize()}))return stop("Cannot queue selection reason.");
@@ -165,7 +170,7 @@ int ingest(const Bytes& data,bool is_index) {
 }
 // Match the numerical fields and ingestion guards read by ingest_omm.
 std::string fit_seed_signature(const OMM* o){
- OMMT n;n.NORAD_CAT_ID=o->NORAD_CAT_ID();n.EPOCH=iso(instant(text(o->EPOCH())));n.CENTER_NAME=text(o->CENTER_NAME());n.MEAN_ELEMENT_THEORY=o->MEAN_ELEMENT_THEORY();
+ OMMT n;n.NORAD_CAT_ID=o->NORAD_CAT_ID();n.EPOCH=text(o->EPOCH());n.CENTER_NAME=text(o->CENTER_NAME());n.MEAN_ELEMENT_THEORY=o->MEAN_ELEMENT_THEORY();
  n.MEAN_MOTION=o->MEAN_MOTION();n.ECCENTRICITY=o->ECCENTRICITY();n.INCLINATION=o->INCLINATION();n.RA_OF_ASC_NODE=o->RA_OF_ASC_NODE();n.ARG_OF_PERICENTER=o->ARG_OF_PERICENTER();n.MEAN_ANOMALY=o->MEAN_ANOMALY();n.BSTAR=o->BSTAR();n.MEAN_MOTION_DOT=o->MEAN_MOTION_DOT();n.MEAN_MOTION_DDOT=o->MEAN_MOTION_DDOT();n.BTERM=o->BTERM();n.AGOM=o->AGOM();
  const auto* t=reinterpret_cast<const flatbuffers::Table*>(o);
  const std::string guards=std::to_string(t->CheckField(OMM::VT_BTERM))+"/"+std::to_string(t->CheckField(OMM::VT_AGOM))+"/"+std::to_string(o->USER_DEFINED_PARAMETERS()?o->USER_DEFINED_PARAMETERS()->size():0);
@@ -187,13 +192,15 @@ int next_object() {
   const auto low=iso(s->second.epoch-216000000-86400000).substr(0,10),high=iso(s->second.epoch-216000000+30LL*86400000).substr(0,10);
   for(auto i=weather.lower_bound(low);i!=weather.end()&&i->first<=high;++i)object_weather.insert(object_weather.end(),i->second.begin(),i->second.end());
   const std::string policy=cfg.recipe+"/"+std::to_string(cfg.nonres_e)+"/"+std::to_string(cfg.res_e)+"/"+std::to_string(cfg.max_rms)+"/"+std::to_string(cfg.max_error);
-  signature=fit_seed_signature(omm)+"/"+weather_signature()+"/"+ephem::sha256_hex(reinterpret_cast<const uint8_t*>(policy.data()),policy.size());
+  signature=fit_seed_signature(omm)+"/"+weather_signature()+"/"+ephem::sha256_hex(reinterpret_cast<const uint8_t*>(policy.data()),policy.size())+"/"+digest(identity->second);
   const double n=omm->MEAN_MOTION()*6.2831853071795864769/1440;
   const bool resonant=n>.0035003818&&n<=.015751718;
   const bool eligible=std::isfinite(omm->ECCENTRICITY())&&omm->ECCENTRICITY()>=0&&omm->ECCENTRICITY()<=(resonant?cfg.res_e:cfg.nonres_e);
   const bool expired=s->second.epoch+5LL*86400000<now+cfg.margin*1000;
   const bool future=s->second.epoch>now;
-  if(previous&&previous->PRODUCTS()&&previous->PRODUCTS()->size()==1){const auto* p=previous->PRODUCTS()->Get(0);if(!text(p->RECORD_CID()).empty()&&text(p->SELECTION_REASON()).find("catalog-input="+signature)!=std::string::npos&&(!expired||p->KIND()!=catalogProductKind::ApElements))continue;}
+  if(previous&&previous->PRODUCTS()&&previous->PRODUCTS()->size()==1){const auto* p=previous->PRODUCTS()->Get(0);if(!text(p->RECORD_CID()).empty()&&text(p->SELECTION_REASON()).find("catalog-input="+signature+";")!=std::string::npos&&(!expired||p->KIND()!=catalogProductKind::ApElements)&&
+   !(text(p->SELECTION_REASON()).find("future-seed")!=std::string::npos&&!future)&&
+   !(text(p->SELECTION_REASON()).find("retry-at=")!=std::string::npos&&instant(text(p->SELECTION_REASON()).substr(text(p->SELECTION_REASON()).find("retry-at=")+9,24))<=now))continue;}
   reason=expired?"old-span fallback":future?"future-seed fallback":!eligible?"outside configured AP class":"accepted exact-W fit";run_fit=!expired&&!future&&eligible;
   if(!run_fit){phase=Phase::Chain;return push("fallback_seed","OMM",{s->second.data.begin()+4,s->second.data.end()});}
   PCFT flight;flight.THEORY=pcfTheory::SGP4;flight.OUTPUT=std::make_unique<PCFOutputT>();flight.OUTPUT->FRAME=pcfOutputFrame::GCRF;flight.OUTPUT->START_TIME=iso(s->second.epoch-216000000);flight.OUTPUT->STOP_TIME=iso(s->second.epoch+432000000);flight.OUTPUT->STEP_SECONDS=300;
@@ -210,7 +217,10 @@ int chain() {
  const auto& seed=seeds.at(work[at]);const plugin_input_frame_t* use=fallback;
  if(run_fit&&candidate&&q->STATUS()==qrpStatus::Ok){flatbuffers::Verifier v(candidate->payload,candidate->payload_length);if(!VerifyOCMBuffer(v))return fail_object("Invalid fit record.");const auto* o=GetOCM(candidate->payload);const auto* stats=o->ORBIT_DETERMINATION()?o->ORBIT_DETERMINATION()->FIT_STATISTICS():nullptr;
   if(stats&&stats->FIT_STATES()==2161&&std::isfinite(stats->FIT_RMS_KM())&&stats->FIT_RMS_KM()<=cfg.max_rms&&std::isfinite(stats->FIT_MAX_KM())&&stats->FIT_MAX_KM()<=cfg.max_error&&instant(text(stats->FIT_START()))==seed.epoch-216000000&&instant(text(stats->FIT_STOP()))==seed.epoch+432000000)use=candidate;else reason="fit-statistics refusal fallback";
- }else if(run_fit)reason="fit refusal fallback: "+text(q->ERROR_CODE());
+ }else if(run_fit){const auto code=text(q->ERROR_CODE());reason="fit refusal fallback: "+code;
+  const bool permanent=code.rfind("weather-rows-",0)==0||code=="fit-implausible"||code=="invalid-omm"||code.rfind("unsupported-",0)==0;
+  if(!permanent)reason+="; retry-at="+iso(now+600000);
+ }
  flatbuffers::Verifier ov(use->payload,use->payload_length);if(!VerifyOCMBuffer(ov))return fail_object("Invalid selected orbit.");auto record=std::unique_ptr<OCMT>(GetOCM(use->payload)->UnPack());
  if(use==fallback){if(!record->HEADER)record->HEADER=std::make_unique<HeaderT>();record->HEADER->COMMENT.push_back(reason);}
  flatbuffers::FlatBufferBuilder b;FinishSizePrefixedOCMBuffer(b,OCM::Pack(b,record.get()));
