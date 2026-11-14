@@ -2158,7 +2158,7 @@ eccentricity at or above 1, or an angle beyond 1e10 rad; a negative interpolated
 
 ### Epoch-selected AP coefficient forms
 
-Four of 942 synthetic fitted records end farther from their numerical flight by more than 1 cm; the largest increase is 0.152457 m. Strong drag has a median cost 0.260% higher, ratio 1.002597 [0.998698, 1.004848]; eccentric has a median cost 0.773% higher, ratio 1.007726 [0.991527, 1.024483]; high eccentric has a median cost 0.824% higher, ratio 1.008237 [1.001407, 1.023386]; deep resonance has a median cost 0.767% higher, ratio 1.007674 [0.990502, 1.023074]. Forms A, CM, and R add 768 B per cache-holding set and per thread that needs their m-daily derivative rows. U and C add no derivative-row storage. The fifteen tested threshold neighborhoods have a maximum switch residual of 0.016281421 m and a regression bound of 0.063 m. A separate eccentric neighborhood reaches 0.111527867 m; neither figure is a global bound. Selection is fixed for the entire flight.
+Four of 942 synthetic fitted records end farther from their numerical flight by more than 1 cm; the largest increase is 0.152457 m. The forced-U non-AP control comparison also measures a 2.64% median cost increase, ratio 1.026425 [1.014825, 1.038268]; the larger production/default non-AP comparison measures 1.68%, ratio 1.016801 [1.000626, 1.051224]. The five-class table and production diagnostics are in SPEC. Strong drag has a median cost 0.260% higher, ratio 1.002597 [0.998698, 1.004848]; eccentric has a median cost 0.773% higher, ratio 1.007726 [0.991527, 1.024483]; high eccentric has a median cost 0.824% higher, ratio 1.008237 [1.001407, 1.023386]; deep resonance has a median cost 0.767% higher, ratio 1.007674 [0.990502, 1.023074]. Forms A, CM, and R add 768 B per cache-holding set and per thread that needs their m-daily derivative rows. U and C add no derivative-row storage. The fifteen tested threshold neighborhoods have a maximum switch residual of 0.016281421 m and a regression bound of 0.063 m. A separate eccentric neighborhood reaches 0.111527867 m; neither figure is a global bound. Selection is fixed for the entire flight.
 
 The selection is a function of the record's epoch mean motion n (rad/min), eccentricity e, BTERM, and the AP gravity selection in force during initialization. Perigee height in kilometers is `h = ((kKe / n)^(2/3) * (1 - e) - 1) * kRe`, using the theory's constants. `RateContext.continuity_form` is assigned once by initialization. A covariance sigma set inherits its nominal's form, so the covariance columns difference one function. Both coefficient caches include that form in their freshness checks. NaN mean motion or eccentricity is refused before selection. NaN BTERM is accepted as CM in the tested low-orbit AP case and as U without AP gravity; changing the ambient selection after initialization does not change the stored form. Query time, cache history, and thread identity do not enter it. The covariance nominal retains its original perigee-drag rate source.
 
@@ -6421,3 +6421,29 @@ pass W4 (18.5, #394).
 - Seidelmann, P. K., ed. (1992). Explanatory Supplement to the Astronomical Almanac.
 - US Space Force Astrodynamics Standards: release notes 7.7-9.9, JIRA summaries 8.2-9.9, Tle and Sgp4Prop
   interface documents (9.9 package); release notes v9.1.1.0 C Sgp4Prop WebAssembly.
+
+
+### U control cost by orbit class
+
+The candidate forced-U build was compared with the committed 0.6.59 binary in paired ABBA rounds. Ratios are candidate/control propagation time, with the median and quartiles computed from the per-round ratios. Each quartet returned identical state/status digests. Each case met the 5% interquartile-spread limit; measurements used separate shared timing slots.
+
+| Synthetic orbit class | Series | Rounds | Median ratio | Q1 | Q3 |
+|---|---:|---:|---:|---:|---:|
+| medium | 4000 | 8 | 0.996357 | 0.989274 | 0.999331 |
+| geosynchronous | 1000 | 8 | 1.005135 | 0.984179 | 1.007751 |
+| transfer | 100 | 20 | 1.005525 | 0.971819 | 1.021624 |
+| deep-resonance | 100 | 8 | 0.997593 | 0.970740 | 1.018722 |
+| non-AP | 1000 | 8 | 1.026425 | 1.014825 | 1.038268 |
+
+Transfer and deep-resonance quartile ranges are close to the acceptance limit; these measurements do not establish a small speed gain or loss.
+
+Forced U isolates the U path for geosynchronous and deep-resonant inputs, which otherwise select a compressed form. These timings do not certify the four separately documented wide-grid exact-root refusals.
+
+The forced-U non-AP cell measured a 2.64% median slowdown, with both quartiles above 1.0. This is a measured cost in that comparison. The production/default non-AP follow-ups are retained separately:
+
+| Production non-AP series | Rounds | Median ratio | Q1 | Q3 | Spread accepted |
+|---|---:|---:|---:|---:|---|
+| 1000 | 24 | 1.024690 | 0.967722 | 1.067644 | no |
+| 10000 | 20 | 1.016801 | 1.000626 | 1.051224 | yes |
+
+The 10,000-series production/default comparison qualifies after 20 rounds and measures a 1.68% median cost increase, with its Q1 just above 1.0 and spread close to the acceptance limit. The result supports a production non-AP cost but does not identify its cause. The rejected 1,000-series spread is a diagnostic observation, not a qualified performance result.
