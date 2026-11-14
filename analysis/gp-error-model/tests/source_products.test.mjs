@@ -55,6 +55,7 @@ test('rule 4: a source with no model of its own uses the pooled model, uncalibra
   const { report, ocms, omms } = await attach([leoH], { ages: [0, 0.5], recipe });
   assert.equal(report.counts.rule4, 1);
   const ocm = ocms[0];
+  assert.deepEqual(ocm.COV_UNITS,["km","km","km","km/s","km/s","km/s"],"OCM standard defines diagonal-standard-deviation units");
   closeAll(lowerOf(ocm, 0), expectedCovariance('LEO-H', 0), 'covariance');
   const [row] = ocm.COV_REALISM;
   assert.equal(row.RULE, OCM.covarianceRule.PooledModel);

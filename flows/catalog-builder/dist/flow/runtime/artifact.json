@@ -1,0 +1,189 @@
+{
+  "programId": "com.digitalarsenal.flows.catalog-builder",
+  "name": "Catalog builder",
+  "version": "0.1.0",
+  "compiler": "space-data-module flow compile (isomorphic, wasi-threads)",
+  "threadModel": "wasi-threads",
+  "nodes": 8,
+  "edges": 29,
+  "triggers": 1,
+  "capabilities": [
+    "clock",
+    "storage_ingest",
+    "storage_query"
+  ],
+  "engineLinkage": "bridge",
+  "dispatch": [
+    {
+      "nodeId": "control",
+      "pluginId": "com.digitalarsenal.flows.catalog-builder.control",
+      "methodId": "advance",
+      "dispatchModel": "linked-direct",
+      "resolvedFromPluginFamily": null
+    },
+    {
+      "nodeId": "query",
+      "pluginId": "com.digitalarsenal.hostcap.flatsql-query",
+      "methodId": "index_page",
+      "dispatchModel": "linked-direct",
+      "resolvedFromPluginFamily": null
+    },
+    {
+      "nodeId": "chain",
+      "pluginId": "com.digitalarsenal.flows.catalog-builder.chain",
+      "methodId": "run_chain",
+      "dispatchModel": "linked-direct",
+      "resolvedFromPluginFamily": null
+    },
+    {
+      "nodeId": "fallback",
+      "pluginId": "com.digitalarsenal.flows.catalog-builder.chain",
+      "methodId": "ingest_seed",
+      "dispatchModel": "linked-direct",
+      "resolvedFromPluginFamily": null
+    },
+    {
+      "nodeId": "annotation",
+      "pluginId": "com.digitalarsenal.analysis.gp-error-model",
+      "methodId": "annotate_population_flow",
+      "dispatchModel": "linked-direct",
+      "resolvedFromPluginFamily": null
+    },
+    {
+      "nodeId": "composer",
+      "pluginId": "com.digitalarsenal.analysis.catalog-composer",
+      "methodId": "replace_products",
+      "dispatchModel": "linked-direct",
+      "resolvedFromPluginFamily": null
+    },
+    {
+      "nodeId": "ingest",
+      "pluginId": "com.digitalarsenal.hostcap.storage-ingest",
+      "methodId": "ingest",
+      "dispatchModel": "linked-direct",
+      "resolvedFromPluginFamily": null
+    },
+    {
+      "nodeId": "egress",
+      "pluginId": "sdn.flow.egress",
+      "methodId": "emit",
+      "dispatchModel": "host",
+      "resolvedFromPluginFamily": null
+    }
+  ],
+  "dependencies": [
+    {
+      "kind": "node",
+      "dependencyId": "com.digitalarsenal.flows.catalog-builder.control",
+      "pluginId": "com.digitalarsenal.flows.catalog-builder.control",
+      "version": "0.1.0",
+      "sha256": "63e236eddbd0f57f1d49e4ca82055a22211cc714c230afadfb9874eaac40532f",
+      "dispatchModel": "linked-direct",
+      "artifactPath": null,
+      "publisher": null,
+      "symbolPrefix": "sdm_guest_636f6d2e6469676974616c617273656e616c2e666c6f77732e636174616c6f672d6275696c6465722e636f6e74726f6c_",
+      "methodSymbols": {
+        "advance": "sdm_guest_636f6d2e6469676974616c617273656e616c2e666c6f77732e636174616c6f672d6275696c6465722e636f6e74726f6c_advance"
+      }
+    },
+    {
+      "kind": "node",
+      "dependencyId": "com.digitalarsenal.hostcap.flatsql-query",
+      "pluginId": "com.digitalarsenal.hostcap.flatsql-query",
+      "version": "0.3.1",
+      "sha256": "4e2609404690899ee74a3002f50ab07ace702e0fe310ae710dacebf90c15a2ba",
+      "dispatchModel": "linked-direct",
+      "artifactPath": null,
+      "publisher": null,
+      "symbolPrefix": "sdm_guest_636f6d2e6469676974616c617273656e616c2e686f73746361702e666c617473716c2d7175657279_",
+      "methodSymbols": {
+        "query": "sdm_guest_636f6d2e6469676974616c617273656e616c2e686f73746361702e666c617473716c2d7175657279_query",
+        "sandbox_query": "sdm_guest_636f6d2e6469676974616c617273656e616c2e686f73746361702e666c617473716c2d7175657279_sandbox_query",
+        "index_page": "sdm_guest_636f6d2e6469676974616c617273656e616c2e686f73746361702e666c617473716c2d7175657279_index_page"
+      }
+    },
+    {
+      "kind": "node",
+      "dependencyId": "com.digitalarsenal.flows.catalog-builder.chain",
+      "pluginId": "com.digitalarsenal.flows.catalog-builder.chain",
+      "version": "0.1.0",
+      "sha256": "ae6ada285e839ca574d0dd33dc41091db912463f8f10ed3bac21133ae719cf71",
+      "dispatchModel": "linked-direct",
+      "artifactPath": null,
+      "publisher": null,
+      "symbolPrefix": "sdm_guest_636f6d2e6469676974616c617273656e616c2e666c6f77732e636174616c6f672d6275696c6465722e636861696e_",
+      "methodSymbols": {
+        "run_chain": "sdm_guest_636f6d2e6469676974616c617273656e616c2e666c6f77732e636174616c6f672d6275696c6465722e636861696e_run_chain",
+        "ingest_seed": "sdm_guest_636f6d2e6469676974616c617273656e616c2e666c6f77732e636174616c6f672d6275696c6465722e636861696e_ingest_seed"
+      }
+    },
+    {
+      "kind": "node",
+      "dependencyId": "com.digitalarsenal.analysis.gp-error-model",
+      "pluginId": "com.digitalarsenal.analysis.gp-error-model",
+      "version": "0.16.0",
+      "sha256": "ffeffe581ebae097d58917e2e2f1bb5ea8f01bd675e22d0db216fa0d29da651c",
+      "dispatchModel": "linked-direct",
+      "artifactPath": null,
+      "publisher": null,
+      "symbolPrefix": "sdm_guest_636f6d2e6469676974616c617273656e616c2e616e616c797369732e67702d6572726f722d6d6f64656c_",
+      "methodSymbols": {
+        "accumulate": "sdm_guest_636f6d2e6469676974616c617273656e616c2e616e616c797369732e67702d6572726f722d6d6f64656c_accumulate",
+        "finalize": "sdm_guest_636f6d2e6469676974616c617273656e616c2e616e616c797369732e67702d6572726f722d6d6f64656c_finalize",
+        "scale_model": "sdm_guest_636f6d2e6469676974616c617273656e616c2e616e616c797369732e67702d6572726f722d6d6f64656c_scale_model",
+        "screening_evaluation": "sdm_guest_636f6d2e6469676974616c617273656e616c2e616e616c797369732e67702d6572726f722d6d6f64656c_screening_evaluation",
+        "ffm_arcs": "sdm_guest_636f6d2e6469676974616c617273656e616c2e616e616c797369732e67702d6572726f722d6d6f64656c_ffm_arcs",
+        "ffm_coverage": "sdm_guest_636f6d2e6469676974616c617273656e616c2e616e616c797369732e67702d6572726f722d6d6f64656c_ffm_coverage",
+        "common_epoch": "sdm_guest_636f6d2e6469676974616c617273656e616c2e616e616c797369732e67702d6572726f722d6d6f64656c_common_epoch",
+        "map_covariance": "sdm_guest_636f6d2e6469676974616c617273656e616c2e616e616c797369732e67702d6572726f722d6d6f64656c_map_covariance",
+        "screening_cases": "sdm_guest_636f6d2e6469676974616c617273656e616c2e616e616c797369732e67702d6572726f722d6d6f64656c_screening_cases",
+        "pair_statistics": "sdm_guest_636f6d2e6469676974616c617273656e616c2e616e616c797369732e67702d6572726f722d6d6f64656c_pair_statistics",
+        "fit_calibration": "sdm_guest_636f6d2e6469676974616c617273656e616c2e616e616c797369732e67702d6572726f722d6d6f64656c_fit_calibration",
+        "calibrate_covariance": "sdm_guest_636f6d2e6469676974616c617273656e616c2e616e616c797369732e67702d6572726f722d6d6f64656c_calibrate_covariance",
+        "dcp_covariance": "sdm_guest_636f6d2e6469676974616c617273656e616c2e616e616c797369732e67702d6572726f722d6d6f64656c_dcp_covariance",
+        "noise_responses": "sdm_guest_636f6d2e6469676974616c617273656e616c2e616e616c797369732e67702d6572726f722d6d6f64656c_noise_responses",
+        "attach_covariance": "sdm_guest_636f6d2e6469676974616c617273656e616c2e616e616c797369732e67702d6572726f722d6d6f64656c_attach_covariance",
+        "attribute_maneuvers": "sdm_guest_636f6d2e6469676974616c617273656e616c2e616e616c797369732e67702d6572726f722d6d6f64656c_attribute_maneuvers",
+        "fit_elements": "sdm_guest_636f6d2e6469676974616c617273656e616c2e616e616c797369732e67702d6572726f722d6d6f64656c_fit_elements",
+        "element_residuals": "sdm_guest_636f6d2e6469676974616c617273656e616c2e616e616c797369732e67702d6572726f722d6d6f64656c_element_residuals",
+        "object_covariance": "sdm_guest_636f6d2e6469676974616c617273656e616c2e616e616c797369732e67702d6572726f722d6d6f64656c_object_covariance",
+        "source_covariance": "sdm_guest_636f6d2e6469676974616c617273656e616c2e616e616c797369732e67702d6572726f722d6d6f64656c_source_covariance",
+        "annotate_population": "sdm_guest_636f6d2e6469676974616c617273656e616c2e616e616c797369732e67702d6572726f722d6d6f64656c_annotate_population",
+        "annotate_population_flow": "sdm_guest_636f6d2e6469676974616c617273656e616c2e616e616c797369732e67702d6572726f722d6d6f64656c_annotate_population_flow"
+      }
+    },
+    {
+      "kind": "node",
+      "dependencyId": "com.digitalarsenal.analysis.catalog-composer",
+      "pluginId": "com.digitalarsenal.analysis.catalog-composer",
+      "version": "0.7.0",
+      "sha256": "ce5acac529623e0097bca46a46c703c93998a4b71209a710edcb26c0ffe127fa",
+      "dispatchModel": "linked-direct",
+      "artifactPath": null,
+      "publisher": null,
+      "symbolPrefix": "sdm_guest_636f6d2e6469676974616c617273656e616c2e616e616c797369732e636174616c6f672d636f6d706f736572_",
+      "methodSymbols": {
+        "compose": "sdm_guest_636f6d2e6469676974616c617273656e616c2e616e616c797369732e636174616c6f672d636f6d706f736572_compose",
+        "integrate_catalog": "sdm_guest_636f6d2e6469676974616c617273656e616c2e616e616c797369732e636174616c6f672d636f6d706f736572_integrate_catalog",
+        "match_catalog": "sdm_guest_636f6d2e6469676974616c617273656e616c2e616e616c797369732e636174616c6f672d636f6d706f736572_match_catalog",
+        "validate_epoch": "sdm_guest_636f6d2e6469676974616c617273656e616c2e616e616c797369732e636174616c6f672d636f6d706f736572_validate_epoch",
+        "fit_epoch_step": "sdm_guest_636f6d2e6469676974616c617273656e616c2e616e616c797369732e636174616c6f672d636f6d706f736572_fit_epoch_step",
+        "replace_products": "sdm_guest_636f6d2e6469676974616c617273656e616c2e616e616c797369732e636174616c6f672d636f6d706f736572_replace_products"
+      }
+    },
+    {
+      "kind": "node",
+      "dependencyId": "com.digitalarsenal.hostcap.storage-ingest",
+      "pluginId": "com.digitalarsenal.hostcap.storage-ingest",
+      "version": "0.6.1",
+      "sha256": "a3551289f338ca9faee641b2bd3f719df656d3ab3f1992040209b0488ba15157",
+      "dispatchModel": "linked-direct",
+      "artifactPath": null,
+      "publisher": null,
+      "symbolPrefix": "sdm_guest_636f6d2e6469676974616c617273656e616c2e686f73746361702e73746f726167652d696e67657374_",
+      "methodSymbols": {
+        "ingest": "sdm_guest_636f6d2e6469676974616c617273656e616c2e686f73746361702e73746f726167652d696e67657374_ingest"
+      }
+    }
+  ]
+}

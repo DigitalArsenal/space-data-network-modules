@@ -1,0 +1,14 @@
+{
+  "name": "@digitalarsenal/catalog-builder-flow",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "build": "node build.mjs",
+    "test": "node --test tests/sdk_compat.test.mjs"
+  },
+  "dependencies": {
+    "space-data-module-sdk": "0.9.14",
+    "spacedatastandards.org": "1.279.0"
+  },
+  "version": "0.1.0"
+}

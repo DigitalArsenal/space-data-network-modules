@@ -976,7 +976,7 @@ std::vector<uint8_t> build_ocm(const Recipe& r, const std::string& key, const st
   }
   ocm->COV_ORDERING = covarianceOrdering::LTM;
   ocm->COV_SIZE = 6;
-  ocm->COV_UNITS = {"km**2", "km**2", "km**2", "km**2/s**2", "km**2/s**2", "km**2/s**2"};
+  ocm->COV_UNITS = {"km", "km", "km", "km/s", "km/s", "km/s"};
   // Calibrated only when every row's CVR is; the evidence is the first row's (a product's rows share their model's).
   ocm->COV_CALIBRATION = all_calibrated(p) ? covarianceCalibration::Calibrated : covarianceCalibration::Uncalibrated;
   ocm->COV_CALIBRATION_REFERENCE = p.rows.front().label.evidence;

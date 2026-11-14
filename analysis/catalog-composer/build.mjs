@@ -1,6 +1,6 @@
 import fs from 'node:fs/promises';
 import path from 'node:path';
-import { fileURLToPath } from 'node:url';
+import { fileURLToPath, pathToFileURL } from 'node:url';
 import { compileModuleFromSource } from 'space-data-module-sdk/compiler';
 import { createHash } from 'node:crypto';
 import { gzipSync } from 'node:zlib';
@@ -14,10 +14,11 @@ import { bundleXmt, generateSdsHeaders } from './sds-headers.mjs';
 const root = fileURLToPath(new URL('.', import.meta.url));
 const repo = path.resolve(root, '../..');
 const manifest = JSON.parse(await fs.readFile(path.join(root, 'plugin-manifest.json'), 'utf8'));
+export async function compileCatalogComposer() {
 // The SDS headers are generated from the standards' schema files, every family the module reads or writes at one
 // release, with internal linkage (scripts/lib/sds-cpp-headers.mjs). $XMT (with the $OIL, $CVR, $MNV and $PRW it
 // includes) carries the recipes, requests and reports; SPACE_DATA_STANDARDS_ROOT names the standards tree that holds it.
-const sds = await generateSdsHeaders(['CAT', 'OEM', 'OPM', 'NCD', 'OMM', 'OCM', 'MNV', 'XMT'], import.meta.url);
+const sds = await generateSdsHeaders(['CAT', 'OEM', 'OPM', 'NCD', 'OMM', 'OCM', 'MNV', 'XMT', 'QRP'], import.meta.url);
 // The $XMT JavaScript binding (from the standards' TypeScript) for the editor and the tests: dist/sds/xmt.mjs.
 await bundleXmt(process.env.SPACE_DATA_STANDARDS_ROOT, path.join(root, 'dist/sds/xmt.mjs'));
 const headers = [sds.header];
@@ -32,7 +33,7 @@ const json = await fs.readFile(path.join(repo, 'propagator/sgp4/src/cpp/include/
 // The module's sources in dependency order, one translation unit: composition, matching, epoch fitting, then the integrator
 // (records, maneuvers, selection, identity, and the method that calls them).
 const implementation = (await Promise.all(['catalog_composer.cpp', 'catalog_match.cpp', 'epoch_fit.cpp', 'integrator_records.cpp', 'integrator_maneuvers.cpp',
-  'integrator_selection.cpp', 'integrator_identity.cpp', 'catalog_integrator.cpp'].map((file) => fs.readFile(path.join(root, 'src', file), 'utf8')))).join('\n\n');
+  'integrator_selection.cpp', 'integrator_identity.cpp', 'catalog_integrator.cpp', 'replace_products.cpp'].map((file) => fs.readFile(path.join(root, 'src', file), 'utf8')))).join('\n\n');
 const outputPath = path.join(root, 'dist/isomorphic/module.wasm');
 await fs.mkdir(path.dirname(outputPath), { recursive: true });
 const result = await compileModuleFromSource({
@@ -42,7 +43,13 @@ const result = await compileModuleFromSource({
   // wasm32-wasip1-threads toolchain and identical bytes in every runtime.
   threadModel: 'wasi-sequential',
 });
-if (!result.report?.ok) throw new Error(JSON.stringify(result.report?.issues));
+if (!result.report?.ok) throw new Error('Catalog composer refused by the SDK', {cause: result.report});
+return {...result, manifest, sds};
+}
+
+if (process.argv[1] && pathToFileURL(path.resolve(process.argv[1])).href === import.meta.url) {
+const {sds, outputPath} = await compileCatalogComposer();
+
 const canonical = await computeCanonicalModuleHash(await fs.readFile(outputPath));
 // Dependencies are loaded by the generic APP bridge with exact artifact hashes.
 const matchingModules = [];
@@ -81,3 +88,5 @@ const bundle = await createSingleFileBundle({ wasmBytes: canonical.canonicalWasm
 });
 await fs.writeFile(outputPath, bundle.wasmBytes);
 console.log(`Catalog Editor compiled: ${outputPath}`);
+
+}

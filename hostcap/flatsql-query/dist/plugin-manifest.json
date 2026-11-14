@@ -15,12 +15,13 @@
       "direction": "bidirectional",
       "capability": "storage_query",
       "resource": "storage://flatsql",
-      "description": "Host FlatSQL engine queries as SDS $PIV hostcalls: storage.flatsql_query_stream (operator surface, unsandboxed, auth-gated at the wall), storage.query_sandboxed and storage.query_surface (the public read-only surface).",
+      "description": "Host FlatSQL engine queries as SDS $PIV hostcalls: storage.flatsql_query_stream (operator surface, unsandboxed, auth-gated at the wall), storage.query_sandboxed and storage.query_surface (the public read-only surface). storage.index_page reads durable snapshot pages under the same storage_query grant.",
       "properties": {
         "hostOps": [
           "storage.flatsql_query_stream",
           "storage.query_sandboxed",
-          "storage.query_surface"
+          "storage.query_surface",
+          "storage.index_page"
         ]
       }
     },
@@ -215,6 +216,80 @@
       "maxBatch": 1,
       "drainPolicy": "single-shot",
       "description": "Executes one sandboxed public query (storage.query_sandboxed; WANT Stream for FlatBuffer/Default, Auto for Json; DELIVER Ref for FlatBuffer/Default, Inline for Json) or lists the queryable surface (storage.query_surface), composing profile SQL and sort/limit in-wasm. BATCHING: every input port here is single-stream BY CONTRACT and ENFORCED IN CODE: maxStreams/maxBatch/drainPolicy are purely DECLARATIVE in the compiled flow runtime (space_data_module_runtime_begin_node_invocation pops the node's whole queue port-blind up to the drain budget of 64), so a surplus frame on a port is refused with error code \"batched-input-frames\", naming the port and the count, rather than silently destroyed (graph task modules-guest-nodes-drop-batched-frames). Port-filtered access only."
+    },
+    {
+      "methodId": "index_page",
+      "displayName": "Durable Store Page",
+      "inputPorts": [
+        {
+          "portId": "query",
+          "acceptedTypeSets": [
+            {
+              "setId": "sds-qrp-query-request",
+              "allowedTypes": [
+                {
+                  "schemaName": "QRP.fbs",
+                  "fileIdentifier": "$QRP",
+                  "rootTypeName": "QRP",
+                  "wireFormat": "flatbuffer"
+                }
+              ],
+              "description": "QRP Request: SCHEMA_NAME, PROVIDER_ID, SOURCE_NAME, BATCH_ID, CURSOR, LIMIT (default 100, maximum 1000), MAX_BYTES (default and maximum 8 MiB)."
+            }
+          ],
+          "minStreams": 0,
+          "maxStreams": 1,
+          "required": false,
+          "description": "A public query (exactly one of query / surface carries a frame)."
+        }
+      ],
+      "outputPorts": [
+        {
+          "portId": "decision",
+          "acceptedTypeSets": [
+            {
+              "setId": "sds-qrp-decision",
+              "allowedTypes": [
+                {
+                  "schemaName": "QRP.fbs",
+                  "fileIdentifier": "$QRP",
+                  "rootTypeName": "QRP",
+                  "wireFormat": "flatbuffer"
+                }
+              ],
+              "description": "The QRP request verbatim when served, else a QRP Error (ERROR_CODE, MESSAGE, HTTP_STATUS, REPRESENTATION and ETAG carried over)."
+            }
+          ],
+          "minStreams": 1,
+          "maxStreams": 1,
+          "required": true,
+          "description": "Exactly one decision per invocation, for foundation/http-respond respond_query."
+        },
+        {
+          "portId": "page",
+          "acceptedTypeSets": [
+            {
+              "setId": "sds-qrp-page-stream",
+              "allowedTypes": [
+                {
+                  "schemaName": "QRP.fbs",
+                  "fileIdentifier": "$QRP",
+                  "rootTypeName": "QRP",
+                  "wireFormat": "flatbuffer"
+                }
+              ],
+              "description": "Size-prefixed QRP Page followed by verbatim size-prefixed records. CURSOR and NEXT_CURSOR use the durable index snapshot format. RECORD_COUNT is this page; TOTAL_COUNT is the pinned snapshot count; MAX_BYTES bounds the complete stream."
+            }
+          ],
+          "minStreams": 0,
+          "maxStreams": 1,
+          "required": false,
+          "description": "The answer, only when served."
+        }
+      ],
+      "maxBatch": 1,
+      "drainPolicy": "single-shot",
+      "description": "Reads a complete bounded page from the durable record index through storage.index_page. The storage_query grant is required. SQL relation windows do not limit this read. Continue with NEXT_CURSOR and the same schema/provider/source/batch filters; an empty NEXT_CURSOR ends the snapshot. A record unavailable during resolution fails the page without advancing the cursor."
     }
   ],
   "buildArtifacts": [

@@ -1,0 +1,873 @@
+{
+  "pluginId": "com.digitalarsenal.flows.catalog-builder.partition-3",
+  "name": "Catalog builder partition 3",
+  "version": "0.1.0",
+  "pluginFamily": "flow",
+  "description": "Timer-driven reconciliation over complete storage pages; exact-W AP selection with SGP4 fallback and independently timestamped population covariance.",
+  "capabilities": [
+    "clock",
+    "storage_ingest",
+    "storage_query"
+  ],
+  "dependencies": [
+    {
+      "pluginId": "com.digitalarsenal.flows.catalog-builder.control",
+      "minVersion": "0.1.0",
+      "maxVersion": "0.1.0"
+    },
+    {
+      "pluginId": "com.digitalarsenal.hostcap.flatsql-query",
+      "minVersion": "0.3.1",
+      "maxVersion": "0.3.1"
+    },
+    {
+      "pluginId": "com.digitalarsenal.flows.catalog-builder.chain",
+      "minVersion": "0.1.0",
+      "maxVersion": "0.1.0"
+    },
+    {
+      "pluginId": "com.digitalarsenal.analysis.gp-error-model",
+      "minVersion": "0.16.0",
+      "maxVersion": "0.16.0"
+    },
+    {
+      "pluginId": "com.digitalarsenal.analysis.catalog-composer",
+      "minVersion": "0.7.0",
+      "maxVersion": "0.7.0"
+    },
+    {
+      "pluginId": "com.digitalarsenal.hostcap.storage-ingest",
+      "minVersion": "0.6.1",
+      "maxVersion": "0.6.1"
+    }
+  ],
+  "externalInterfaces": [
+    {
+      "interfaceId": "flatsql-query-stream",
+      "kind": "host-service",
+      "direction": "bidirectional",
+      "capability": "storage_query",
+      "resource": "storage://flatsql",
+      "description": "Host FlatSQL engine queries as SDS $PIV hostcalls: storage.flatsql_query_stream (operator surface, unsandboxed, auth-gated at the wall), storage.query_sandboxed and storage.query_surface (the public read-only surface). storage.index_page reads durable snapshot pages under the same storage_query grant.",
+      "properties": {
+        "hostOps": [
+          "storage.flatsql_query_stream",
+          "storage.query_sandboxed",
+          "storage.query_surface",
+          "storage.index_page"
+        ]
+      }
+    },
+    {
+      "interfaceId": "host-clock",
+      "kind": "host-service",
+      "direction": "input",
+      "capability": "clock",
+      "resource": "host://clock",
+      "description": "clock.now defaults a profile query's epoch to now (Go node built-in; capability-gated on the SDK hosts).",
+      "properties": {
+        "hostOps": [
+          "clock.now"
+        ]
+      }
+    },
+    {
+      "interfaceId": "host-storage-ingest",
+      "kind": "host-service",
+      "direction": "bidirectional",
+      "capability": "storage_ingest",
+      "resource": "sdn://storage/ingest",
+      "description": "Provenance/batch-capable record ingest through the host storage.ingest_with_source hostcall, sent as an SDS $PIV invocation (StorageIngestParams + raw records/archive + list provenance; sdn-server modulert/caps/storage.go).",
+      "properties": {
+        "hostOps": [
+          "storage.ingest_with_source"
+        ]
+      }
+    }
+  ],
+  "methods": [
+    {
+      "methodId": "refresh",
+      "displayName": "Flow trigger refresh",
+      "description": "Compiled-flow ingress for trigger \"refresh\" (timer).",
+      "inputPorts": [
+        {
+          "portId": "tick",
+          "acceptedTypeSets": [
+            {
+              "setId": "tick-typed",
+              "allowedTypes": [
+                {
+                  "schemaName": "TimerTick.fbs",
+                  "fileIdentifier": "TICK",
+                  "rootTypeName": "TimerTick",
+                  "wireFormat": "flatbuffer"
+                }
+              ]
+            }
+          ],
+          "minStreams": 0,
+          "maxStreams": 1,
+          "required": false
+        }
+      ],
+      "outputPorts": [
+        {
+          "portId": "notice",
+          "acceptedTypeSets": [
+            {
+              "setId": "notice-typed",
+              "allowedTypes": [
+                {
+                  "schemaName": "FlowNotice.fbs",
+                  "fileIdentifier": "FNTC",
+                  "rootTypeName": "FlowNotice",
+                  "wireFormat": "flatbuffer"
+                }
+              ]
+            }
+          ],
+          "minStreams": 0,
+          "maxStreams": 1,
+          "required": false
+        }
+      ],
+      "maxBatch": 1,
+      "drainPolicy": "single-shot"
+    }
+  ],
+  "schemasUsed": [
+    {
+      "schemaName": "OMM.fbs",
+      "fileIdentifier": "$OMM",
+      "rootTypeName": "OMM"
+    },
+    {
+      "schemaName": "OEM.fbs",
+      "fileIdentifier": "$OEM",
+      "rootTypeName": "OEM"
+    },
+    {
+      "schemaName": "OCM.fbs",
+      "fileIdentifier": "$OCM",
+      "rootTypeName": "OCM"
+    },
+    {
+      "schemaName": "MNV.fbs",
+      "fileIdentifier": "$MNV",
+      "rootTypeName": "MNV"
+    },
+    {
+      "schemaName": "ERM.fbs",
+      "fileIdentifier": "$ERM",
+      "rootTypeName": "ERM"
+    },
+    {
+      "schemaName": "CDM.fbs",
+      "fileIdentifier": "$CDM",
+      "rootTypeName": "CDM"
+    },
+    {
+      "schemaName": "PRW.fbs",
+      "fileIdentifier": "$PRW",
+      "rootTypeName": "PRW"
+    }
+  ],
+  "runtimeTargets": [
+    "browser",
+    "wasmedge"
+  ],
+  "buildArtifacts": [
+    {
+      "artifactId": "com_digitalarsenal_flows_catalog_builder_partition_3-flow-runtime",
+      "kind": "wasm",
+      "path": "dist/isomorphic/module.wasm",
+      "target": "browser,wasmedge"
+    }
+  ],
+  "flowNodes": [
+    {
+      "nodeId": "control",
+      "pluginId": "com.digitalarsenal.flows.catalog-builder.control",
+      "methodId": "advance",
+      "kind": "transform",
+      "dispatchModel": null,
+      "uiX": 0,
+      "uiY": 0
+    },
+    {
+      "nodeId": "query",
+      "pluginId": "com.digitalarsenal.hostcap.flatsql-query",
+      "methodId": "index_page",
+      "kind": "transform",
+      "dispatchModel": null,
+      "uiX": 0,
+      "uiY": 0
+    },
+    {
+      "nodeId": "chain",
+      "pluginId": "com.digitalarsenal.flows.catalog-builder.chain",
+      "methodId": "run_chain",
+      "kind": "transform",
+      "dispatchModel": null,
+      "uiX": 0,
+      "uiY": 0
+    },
+    {
+      "nodeId": "fallback",
+      "pluginId": "com.digitalarsenal.flows.catalog-builder.chain",
+      "methodId": "ingest_seed",
+      "kind": "transform",
+      "dispatchModel": null,
+      "uiX": 0,
+      "uiY": 0
+    },
+    {
+      "nodeId": "annotation",
+      "pluginId": "com.digitalarsenal.analysis.gp-error-model",
+      "methodId": "annotate_population_flow",
+      "kind": "transform",
+      "dispatchModel": null,
+      "uiX": 0,
+      "uiY": 0
+    },
+    {
+      "nodeId": "composer",
+      "pluginId": "com.digitalarsenal.analysis.catalog-composer",
+      "methodId": "replace_products",
+      "kind": "transform",
+      "dispatchModel": null,
+      "uiX": 0,
+      "uiY": 0
+    },
+    {
+      "nodeId": "ingest",
+      "pluginId": "com.digitalarsenal.hostcap.storage-ingest",
+      "methodId": "ingest",
+      "kind": "transform",
+      "dispatchModel": null,
+      "uiX": 0,
+      "uiY": 0
+    },
+    {
+      "nodeId": "egress",
+      "pluginId": "sdn.flow.egress",
+      "methodId": "emit",
+      "kind": "sink",
+      "dispatchModel": "host-capability",
+      "uiX": 0,
+      "uiY": 0
+    }
+  ],
+  "flowEdges": [
+    {
+      "edgeId": "control-query-query-query",
+      "fromNodeId": "control",
+      "fromPortId": "query",
+      "toNodeId": "query",
+      "toPortId": "query",
+      "contract": {
+        "canonicalType": {
+          "schemaName": "QRP.fbs",
+          "fileIdentifier": "$QRP",
+          "rootTypeName": "QRP",
+          "wireFormat": "flatbuffer"
+        },
+        "alignedType": null,
+        "canonicalFallbackAvailable": true,
+        "alignedEligible": false,
+        "opaque": false,
+        "routePolicy": "canonical-only"
+      }
+    },
+    {
+      "edgeId": "query-page-control-page",
+      "fromNodeId": "query",
+      "fromPortId": "page",
+      "toNodeId": "control",
+      "toPortId": "page",
+      "contract": {
+        "canonicalType": {
+          "schemaName": "QRP.fbs",
+          "fileIdentifier": "$QRP",
+          "rootTypeName": "QRP",
+          "wireFormat": "flatbuffer"
+        },
+        "alignedType": null,
+        "canonicalFallbackAvailable": true,
+        "alignedEligible": false,
+        "opaque": false,
+        "routePolicy": "canonical-only"
+      }
+    },
+    {
+      "edgeId": "query-decision-control-query_status",
+      "fromNodeId": "query",
+      "fromPortId": "decision",
+      "toNodeId": "control",
+      "toPortId": "query_status",
+      "contract": {
+        "canonicalType": {
+          "schemaName": "QRP.fbs",
+          "fileIdentifier": "$QRP",
+          "rootTypeName": "QRP",
+          "wireFormat": "flatbuffer"
+        },
+        "alignedType": null,
+        "canonicalFallbackAvailable": true,
+        "alignedEligible": false,
+        "opaque": false,
+        "routePolicy": "canonical-only"
+      }
+    },
+    {
+      "edgeId": "control-flight_config-chain-flight_config",
+      "fromNodeId": "control",
+      "fromPortId": "flight_config",
+      "toNodeId": "chain",
+      "toPortId": "flight_config",
+      "contract": {
+        "canonicalType": {
+          "schemaName": "PCF.fbs",
+          "fileIdentifier": "$PCF",
+          "rootTypeName": "PCF",
+          "wireFormat": "flatbuffer"
+        },
+        "alignedType": null,
+        "canonicalFallbackAvailable": true,
+        "alignedEligible": false,
+        "opaque": false,
+        "routePolicy": "canonical-only"
+      }
+    },
+    {
+      "edgeId": "control-fit_config-chain-fit_config",
+      "fromNodeId": "control",
+      "fromPortId": "fit_config",
+      "toNodeId": "chain",
+      "toPortId": "fit_config",
+      "contract": {
+        "canonicalType": {
+          "schemaName": "PCF.fbs",
+          "fileIdentifier": "$PCF",
+          "rootTypeName": "PCF",
+          "wireFormat": "flatbuffer"
+        },
+        "alignedType": null,
+        "canonicalFallbackAvailable": true,
+        "alignedEligible": false,
+        "opaque": false,
+        "routePolicy": "canonical-only"
+      }
+    },
+    {
+      "edgeId": "control-weather-chain-weather",
+      "fromNodeId": "control",
+      "fromPortId": "weather",
+      "toNodeId": "chain",
+      "toPortId": "weather",
+      "contract": {
+        "canonicalType": {
+          "schemaName": "SPW.fbs",
+          "fileIdentifier": "$SPW",
+          "rootTypeName": "SPW",
+          "wireFormat": "flatbuffer"
+        },
+        "alignedType": null,
+        "canonicalFallbackAvailable": true,
+        "alignedEligible": false,
+        "opaque": false,
+        "routePolicy": "canonical-only"
+      }
+    },
+    {
+      "edgeId": "control-seed-chain-omm",
+      "fromNodeId": "control",
+      "fromPortId": "seed",
+      "toNodeId": "chain",
+      "toPortId": "omm",
+      "contract": {
+        "canonicalType": {
+          "schemaName": "OMM.fbs",
+          "fileIdentifier": "$OMM",
+          "rootTypeName": "OMM",
+          "wireFormat": "flatbuffer"
+        },
+        "alignedType": null,
+        "canonicalFallbackAvailable": true,
+        "alignedEligible": false,
+        "opaque": false,
+        "routePolicy": "canonical-only"
+      }
+    },
+    {
+      "edgeId": "control-fallback_seed-fallback-omm",
+      "fromNodeId": "control",
+      "fromPortId": "fallback_seed",
+      "toNodeId": "fallback",
+      "toPortId": "omm",
+      "contract": {
+        "canonicalType": {
+          "schemaName": "OMM.fbs",
+          "fileIdentifier": "$OMM",
+          "rootTypeName": "OMM",
+          "wireFormat": "flatbuffer"
+        },
+        "alignedType": null,
+        "canonicalFallbackAvailable": true,
+        "alignedEligible": false,
+        "opaque": false,
+        "routePolicy": "canonical-only"
+      }
+    },
+    {
+      "edgeId": "chain-fallback-control-fallback",
+      "fromNodeId": "chain",
+      "fromPortId": "fallback",
+      "toNodeId": "control",
+      "toPortId": "fallback",
+      "contract": {
+        "canonicalType": {
+          "schemaName": "OCM.fbs",
+          "fileIdentifier": "$OCM",
+          "rootTypeName": "OCM",
+          "wireFormat": "flatbuffer"
+        },
+        "alignedType": null,
+        "canonicalFallbackAvailable": true,
+        "alignedEligible": false,
+        "opaque": false,
+        "routePolicy": "canonical-only"
+      }
+    },
+    {
+      "edgeId": "chain-decision-control-chain_status",
+      "fromNodeId": "chain",
+      "fromPortId": "decision",
+      "toNodeId": "control",
+      "toPortId": "chain_status",
+      "contract": {
+        "canonicalType": {
+          "schemaName": "QRP.fbs",
+          "fileIdentifier": "$QRP",
+          "rootTypeName": "QRP",
+          "wireFormat": "flatbuffer"
+        },
+        "alignedType": null,
+        "canonicalFallbackAvailable": true,
+        "alignedEligible": false,
+        "opaque": false,
+        "routePolicy": "canonical-only"
+      }
+    },
+    {
+      "edgeId": "fallback-fallback-control-fallback",
+      "fromNodeId": "fallback",
+      "fromPortId": "fallback",
+      "toNodeId": "control",
+      "toPortId": "fallback",
+      "contract": {
+        "canonicalType": {
+          "schemaName": "OCM.fbs",
+          "fileIdentifier": "$OCM",
+          "rootTypeName": "OCM",
+          "wireFormat": "flatbuffer"
+        },
+        "alignedType": null,
+        "canonicalFallbackAvailable": true,
+        "alignedEligible": false,
+        "opaque": false,
+        "routePolicy": "canonical-only"
+      }
+    },
+    {
+      "edgeId": "fallback-decision-control-chain_status",
+      "fromNodeId": "fallback",
+      "fromPortId": "decision",
+      "toNodeId": "control",
+      "toPortId": "chain_status",
+      "contract": {
+        "canonicalType": {
+          "schemaName": "QRP.fbs",
+          "fileIdentifier": "$QRP",
+          "rootTypeName": "QRP",
+          "wireFormat": "flatbuffer"
+        },
+        "alignedType": null,
+        "canonicalFallbackAvailable": true,
+        "alignedEligible": false,
+        "opaque": false,
+        "routePolicy": "canonical-only"
+      }
+    },
+    {
+      "edgeId": "chain-elements-control-candidate",
+      "fromNodeId": "chain",
+      "fromPortId": "elements",
+      "toNodeId": "control",
+      "toPortId": "candidate",
+      "contract": {
+        "canonicalType": {
+          "schemaName": "OCM.fbs",
+          "fileIdentifier": "$OCM",
+          "rootTypeName": "OCM",
+          "wireFormat": "flatbuffer"
+        },
+        "alignedType": null,
+        "canonicalFallbackAvailable": true,
+        "alignedEligible": false,
+        "opaque": false,
+        "routePolicy": "canonical-only"
+      }
+    },
+    {
+      "edgeId": "control-annotate_orbit-annotation-ocm",
+      "fromNodeId": "control",
+      "fromPortId": "annotate_orbit",
+      "toNodeId": "annotation",
+      "toPortId": "ocm",
+      "contract": {
+        "canonicalType": {
+          "schemaName": "OCM.fbs",
+          "fileIdentifier": "$OCM",
+          "rootTypeName": "OCM",
+          "wireFormat": "flatbuffer"
+        },
+        "alignedType": null,
+        "canonicalFallbackAvailable": true,
+        "alignedEligible": false,
+        "opaque": false,
+        "routePolicy": "canonical-only"
+      }
+    },
+    {
+      "edgeId": "control-annotate_seed-annotation-elements",
+      "fromNodeId": "control",
+      "fromPortId": "annotate_seed",
+      "toNodeId": "annotation",
+      "toPortId": "elements",
+      "contract": {
+        "canonicalType": {
+          "schemaName": "OMM.fbs",
+          "fileIdentifier": "$OMM",
+          "rootTypeName": "OMM",
+          "wireFormat": "flatbuffer"
+        },
+        "alignedType": null,
+        "canonicalFallbackAvailable": true,
+        "alignedEligible": false,
+        "opaque": false,
+        "routePolicy": "canonical-only"
+      }
+    },
+    {
+      "edgeId": "annotation-ocm-control-annotated",
+      "fromNodeId": "annotation",
+      "fromPortId": "ocm",
+      "toNodeId": "control",
+      "toPortId": "annotated",
+      "contract": {
+        "canonicalType": {
+          "schemaName": "OCM.fbs",
+          "fileIdentifier": "$OCM",
+          "schemaVersion": null,
+          "schemaHash": [],
+          "acceptsAnyFlatbuffer": false,
+          "wireFormat": "flatbuffer",
+          "rootTypeName": "OCM",
+          "fixedStringLength": 0,
+          "byteLength": 0,
+          "requiredAlignment": 0
+        },
+        "alignedType": null,
+        "canonicalFallbackAvailable": true,
+        "alignedEligible": false,
+        "opaque": false,
+        "routePolicy": "canonical-only"
+      }
+    },
+    {
+      "edgeId": "control-recipe-composer-recipe",
+      "fromNodeId": "control",
+      "fromPortId": "recipe",
+      "toNodeId": "composer",
+      "toPortId": "recipe",
+      "contract": {
+        "canonicalType": {
+          "schemaName": "XMT.fbs",
+          "fileIdentifier": "$XMT",
+          "rootTypeName": "XMT",
+          "wireFormat": "flatbuffer"
+        },
+        "alignedType": null,
+        "canonicalFallbackAvailable": true,
+        "alignedEligible": false,
+        "opaque": false,
+        "routePolicy": "canonical-only"
+      }
+    },
+    {
+      "edgeId": "control-catalog-composer-catalog",
+      "fromNodeId": "control",
+      "fromPortId": "catalog",
+      "toNodeId": "composer",
+      "toPortId": "catalog",
+      "contract": {
+        "canonicalType": {
+          "schemaName": "CAT.fbs",
+          "fileIdentifier": "$CAT",
+          "rootTypeName": "CAT",
+          "wireFormat": "flatbuffer"
+        },
+        "alignedType": null,
+        "canonicalFallbackAvailable": true,
+        "alignedEligible": false,
+        "opaque": false,
+        "routePolicy": "canonical-only"
+      }
+    },
+    {
+      "edgeId": "control-selected-composer-ocm_products",
+      "fromNodeId": "control",
+      "fromPortId": "selected",
+      "toNodeId": "composer",
+      "toPortId": "ocm_products",
+      "contract": {
+        "canonicalType": {
+          "schemaName": "OCM.fbs",
+          "fileIdentifier": "$OCM",
+          "rootTypeName": "OCM",
+          "wireFormat": "flatbuffer"
+        },
+        "alignedType": null,
+        "canonicalFallbackAvailable": true,
+        "alignedEligible": false,
+        "opaque": false,
+        "routePolicy": "canonical-only"
+      }
+    },
+    {
+      "edgeId": "control-selection-composer-decision",
+      "fromNodeId": "control",
+      "fromPortId": "selection",
+      "toNodeId": "composer",
+      "toPortId": "decision",
+      "contract": {
+        "canonicalType": {
+          "schemaName": "QRP.fbs",
+          "fileIdentifier": "$QRP",
+          "rootTypeName": "QRP",
+          "wireFormat": "flatbuffer"
+        },
+        "alignedType": null,
+        "canonicalFallbackAvailable": true,
+        "alignedEligible": false,
+        "opaque": false,
+        "routePolicy": "canonical-only"
+      }
+    },
+    {
+      "edgeId": "composer-catalog-control-replacement",
+      "fromNodeId": "composer",
+      "fromPortId": "catalog",
+      "toNodeId": "control",
+      "toPortId": "replacement",
+      "contract": {
+        "canonicalType": {
+          "schemaName": "CAT.fbs",
+          "fileIdentifier": "$CAT",
+          "rootTypeName": "CAT",
+          "wireFormat": "flatbuffer"
+        },
+        "alignedType": null,
+        "canonicalFallbackAvailable": true,
+        "alignedEligible": false,
+        "opaque": false,
+        "routePolicy": "canonical-only"
+      }
+    },
+    {
+      "edgeId": "control-meta-ingest-meta",
+      "fromNodeId": "control",
+      "fromPortId": "meta",
+      "toNodeId": "ingest",
+      "toPortId": "meta",
+      "contract": {
+        "canonicalType": {
+          "schemaName": "IngestRequest.fbs",
+          "fileIdentifier": "INGQ",
+          "rootTypeName": "IngestRequest",
+          "wireFormat": "flatbuffer"
+        },
+        "alignedType": null,
+        "canonicalFallbackAvailable": true,
+        "alignedEligible": false,
+        "opaque": false,
+        "routePolicy": "canonical-only"
+      }
+    },
+    {
+      "edgeId": "control-product_records-ingest-ocm_records",
+      "fromNodeId": "control",
+      "fromPortId": "product_records",
+      "toNodeId": "ingest",
+      "toPortId": "ocm_records",
+      "contract": {
+        "canonicalType": {
+          "schemaName": "OCM.fbs",
+          "fileIdentifier": "$OCM",
+          "rootTypeName": "OCM",
+          "wireFormat": "flatbuffer"
+        },
+        "alignedType": null,
+        "canonicalFallbackAvailable": true,
+        "alignedEligible": false,
+        "opaque": false,
+        "routePolicy": "canonical-only"
+      }
+    },
+    {
+      "edgeId": "control-index_records-ingest-cat_records",
+      "fromNodeId": "control",
+      "fromPortId": "index_records",
+      "toNodeId": "ingest",
+      "toPortId": "cat_records",
+      "contract": {
+        "canonicalType": {
+          "schemaName": "CAT.fbs",
+          "fileIdentifier": "$CAT",
+          "rootTypeName": "CAT",
+          "wireFormat": "flatbuffer"
+        },
+        "alignedType": null,
+        "canonicalFallbackAvailable": true,
+        "alignedEligible": false,
+        "opaque": false,
+        "routePolicy": "canonical-only"
+      }
+    },
+    {
+      "edgeId": "ingest-result-control-stored",
+      "fromNodeId": "ingest",
+      "fromPortId": "result",
+      "toNodeId": "control",
+      "toPortId": "stored",
+      "contract": {
+        "canonicalType": {
+          "schemaName": "IngestResult.fbs",
+          "fileIdentifier": "INGR",
+          "rootTypeName": "IngestResult",
+          "wireFormat": "flatbuffer"
+        },
+        "alignedType": null,
+        "canonicalFallbackAvailable": true,
+        "alignedEligible": false,
+        "opaque": false,
+        "routePolicy": "canonical-only"
+      }
+    },
+    {
+      "edgeId": "control-notice-egress-notice",
+      "fromNodeId": "control",
+      "fromPortId": "notice",
+      "toNodeId": "egress",
+      "toPortId": "notice",
+      "contract": {
+        "canonicalType": {
+          "schemaName": "FlowNotice.fbs",
+          "fileIdentifier": "FNTC",
+          "rootTypeName": "FlowNotice",
+          "wireFormat": "flatbuffer"
+        },
+        "alignedType": null,
+        "canonicalFallbackAvailable": true,
+        "alignedEligible": false,
+        "opaque": false,
+        "routePolicy": "canonical-only"
+      }
+    },
+    {
+      "edgeId": "composer-decision-control-compose_status",
+      "fromNodeId": "composer",
+      "fromPortId": "decision",
+      "toNodeId": "control",
+      "toPortId": "compose_status",
+      "contract": {
+        "canonicalType": {
+          "schemaName": "QRP.fbs",
+          "fileIdentifier": "$QRP",
+          "rootTypeName": "QRP",
+          "wireFormat": "flatbuffer"
+        },
+        "alignedType": null,
+        "canonicalFallbackAvailable": true,
+        "alignedEligible": false,
+        "opaque": false,
+        "routePolicy": "canonical-only"
+      }
+    },
+    {
+      "edgeId": "annotation-decision-control-annotation_status",
+      "fromNodeId": "annotation",
+      "fromPortId": "decision",
+      "toNodeId": "control",
+      "toPortId": "annotation_status",
+      "contract": {
+        "canonicalType": {
+          "schemaName": "QRP.fbs",
+          "fileIdentifier": "$QRP",
+          "schemaVersion": null,
+          "schemaHash": [],
+          "acceptsAnyFlatbuffer": false,
+          "wireFormat": "flatbuffer",
+          "rootTypeName": "QRP",
+          "fixedStringLength": 0,
+          "byteLength": 0,
+          "requiredAlignment": 0
+        },
+        "alignedType": null,
+        "canonicalFallbackAvailable": true,
+        "alignedEligible": false,
+        "opaque": false,
+        "routePolicy": "canonical-only"
+      }
+    },
+    {
+      "edgeId": "control-state-records-ingest-nev-records",
+      "fromNodeId": "control",
+      "fromPortId": "state_records",
+      "toNodeId": "ingest",
+      "toPortId": "nev_records",
+      "contract": {
+        "canonicalType": {
+          "schemaName": "NEV.fbs",
+          "fileIdentifier": "$NEV",
+          "rootTypeName": "NEV",
+          "wireFormat": "flatbuffer"
+        },
+        "alignedType": null,
+        "canonicalFallbackAvailable": true,
+        "alignedEligible": false,
+        "opaque": false,
+        "routePolicy": "canonical-only"
+      }
+    }
+  ],
+  "flowTriggers": [
+    {
+      "triggerId": "refresh",
+      "kind": "timer",
+      "source": "host-cron",
+      "defaultIntervalMs": 600000,
+      "httpPath": null
+    }
+  ],
+  "flowTriggerBindings": [
+    {
+      "triggerId": "refresh",
+      "targetNodeId": "control",
+      "targetPortId": "tick"
+    }
+  ],
+  "abiVersion": 1
+}

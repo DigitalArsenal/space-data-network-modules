@@ -173,6 +173,33 @@ bool state_at(const ElementSet& anchor, double age, double r[3], double v[3], St
   }
   return true;
 }
+// Shared selection keeps the annotation and object product on the same population model.
+std::string read_population_model(sp::Model* model, Options* options, bool* has_model) {
+  std::string error;
+  Json chosen;
+  const auto select_model = [&](const ERMT& e) -> std::string {
+    if (!e.MODEL || e.MODEL->FORM != ermModelForm::ElementSetModel) return "models requires the MODEL arm, form ElementSetModel.";
+    if (chosen.is_null() || (!chosen.value("pooled", false) && e.MODEL->POOLED)) chosen = ermb::model_out(*e.MODEL);
+    return {};
+  };
+  bool models_supplied = false;
+  error = records("models", select_model, &models_supplied);
+  if (!error.empty()) return error;
+  if (!models_supplied) {
+    const auto embedded = ermb::read_erm(kDefaultModelErm, kDefaultModelErmSize);
+    if (!embedded) return ermb::last_error;
+    error = select_model(*embedded);
+    if (!error.empty()) return error;
+  }
+  *has_model = !chosen.is_null();
+  default_options(options);
+  if (*has_model) {
+    error = sp::read_model(chosen, model);
+    if (!error.empty()) return error;
+    *options = model->sm.options;
+  }
+  return {};
+}
 }  // namespace objectcov
 
 extern "C" int object_covariance() {
@@ -187,30 +214,11 @@ extern "C" int object_covariance() {
   bool product = false;
   error = product_recipe(config, &recipe, &product);
   if (!error.empty()) return fail("invalid-config", error);
-  Json chosen;
-  const auto select_model = [&](const ERMT& e) -> std::string {
-    if (!e.MODEL || e.MODEL->FORM != ermModelForm::ElementSetModel) return "models requires the MODEL arm, form ElementSetModel.";
-    if (chosen.is_null() || (!chosen.value("pooled", false) && e.MODEL->POOLED)) chosen = ermb::model_out(*e.MODEL);
-    return {};
-  };
-  bool models_supplied = false;
-  error = records("models", select_model, &models_supplied);
-  if (!error.empty()) return fail("invalid-models", error);
-  if (!models_supplied) {
-    const auto embedded = ermb::read_erm(kDefaultModelErm, kDefaultModelErmSize);
-    if (!embedded) return fail("invalid-models", ermb::last_error);
-    error = select_model(*embedded);
-    if (!error.empty()) return fail("invalid-models", error);
-  }
   sp::Model model;
-  const bool has_model = !chosen.is_null();
   Options options;
-  default_options(&options);
-  if (has_model) {
-    error = sp::read_model(chosen, &model);
-    if (!error.empty()) return fail("invalid-models", error);
-    options = model.sm.options;
-  }
+  bool has_model = false;
+  error = read_population_model(&model, &options, &has_model);
+  if (!error.empty()) return fail("invalid-models", error);
   Json requests = Json::array();
   error = records("request", [&](const ERMT& e) -> std::string {
     if (!e.CALIBRATED_COVARIANCES) return "request requires the CALIBRATED_COVARIANCES arm.";

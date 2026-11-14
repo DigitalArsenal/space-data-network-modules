@@ -74,11 +74,11 @@ async function flatcWith({ read, version, order }, from, createFlatc) {
 }
 
 // roots: the families the module uses; from: the module's own URL (where its package is found).
-export async function generateSdsHeaders(roots, from, createFlatc) {
+export async function generateSdsHeaders(roots, from, createFlatc, reflectTypes = false) {
   const closure = schemaClosure(roots, from);
   const gen = await flatcWith(closure, from, createFlatc);
   const headers = closure.order.map((family) =>
-    gen(family, ["--cpp", "--cpp-std", "c++17", "--gen-object-api", "--preserve-case", "--no-warnings"])
+    gen(family, ["--cpp", "--cpp-std", "c++17", "--gen-object-api", "--preserve-case", "--no-warnings", ...(reflectTypes ? ["--reflect-types"] : [])])
       .replaceAll("FLATBUFFERS_GENERATED_MAIN_H_", `FLATBUFFERS_GENERATED_${family}_MAIN_H_`)
       .replace(/^#include "main_generated\.h"\n/gm, ""));
   const body = headers.join("\n").replaceAll('#include "flatbuffers/flatbuffers.h"\n', "");

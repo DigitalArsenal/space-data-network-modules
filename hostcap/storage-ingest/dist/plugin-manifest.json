@@ -601,6 +601,27 @@
           "maxStreams": 1,
           "required": false,
           "description": "The record batch when the IngestRequest's SCHEMA is DCL.fbs. EXACTLY ONE *_records port carries a frame per invocation, and it must be the SCHEMA's."
+        },
+        {
+          "portId": "nev_records",
+          "acceptedTypeSets": [
+            {
+              "setId": "nev_records-typed",
+              "allowedTypes": [
+                {
+                  "schemaName": "NEV.fbs",
+                  "fileIdentifier": "$NEV",
+                  "rootTypeName": "NEV",
+                  "wireFormat": "flatbuffer"
+                }
+              ],
+              "description": "Size-prefixed $NEV FlatBuffer record stream (the parsers' *_records convention), passed to the host verbatim."
+            }
+          ],
+          "minStreams": 0,
+          "maxStreams": 1,
+          "required": false,
+          "description": "The record batch when the IngestRequest's SCHEMA is NEV.fbs. EXACTLY ONE *_records port carries a frame per invocation, and it must be the SCHEMA's."
         }
       ],
       "outputPorts": [

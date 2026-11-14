@@ -33,6 +33,7 @@
 
 #include <algorithm>
 #include <cstdint>
+#include <cmath>
 #include <memory>
 #include <cstdio>
 #include <cstring>
@@ -663,6 +664,76 @@ int sandbox_query(void) {
         return 400;
     }
     return surface_frame ? serve_surface(frame, request, ctx) : serve_query(frame, request, ctx);
+}
+
+// One complete durable store page under the existing storage_query grant.
+int index_page(void) {
+    char batch_message[384];
+    if (find_batched_input_port(batch_message, sizeof(batch_message))) {
+        plugin_set_error("batched-input-frames", batch_message);
+        return 400;
+    }
+    const plugin_input_frame_t* frame = frame_for("query");
+    if (!frame || !frame->payload) {
+        plugin_set_error("missing-request-frame", "index_page takes one QRP Request on query.");
+        return 400;
+    }
+    flatbuffers::Verifier verifier(frame->payload, frame->payload_length);
+    if (!VerifyQRPBuffer(verifier) || GetQRP(frame->payload)->KIND() != qrpKind_Request) {
+        plugin_set_error("invalid-request-frame", "index_page takes a QRP Request.");
+        return 400;
+    }
+    flatbuffers::FlatBufferBuilder configured;
+    plugin_input_frame_t effective = *frame;
+    if (const auto* config = frame_for("config")) {
+        flatbuffers::Verifier check(config->payload, config->payload_length);
+        if (!sdn::runtime::VerifyModuleConfigBuffer(check)) {
+            plugin_set_error("invalid-config", "config must be a ModuleConfig."); return 400;
+        }
+        auto request = std::unique_ptr<QRPT>(GetQRP(frame->payload)->UnPack());
+        const auto* entries = sdn::runtime::GetModuleConfig(config->payload)->ENTRIES();
+        if (entries) for (const auto* entry : *entries) {
+            const std::string key = entry->KEY() ? entry->KEY()->str() : "";
+            const double value = entry->NUMBER_VALUE();
+            if (entry->KIND() != sdn::runtime::configValueKind_Number || !std::isfinite(value) || std::floor(value) != value ||
+                (key != "limit" && key != "max_bytes") || value < (key == "limit" ? 1 : 12) || value > (key == "limit" ? 1000 : 8388608)) {
+                plugin_set_error("invalid-config", "config accepts bounded numeric limit and max_bytes."); return 400;
+            }
+            if (key == "limit") request->LIMIT = uint32_t(value); else request->MAX_BYTES = uint64_t(value);
+        }
+        FinishQRPBuffer(configured, QRP::Pack(configured, request.get()));
+        effective.payload = configured.GetBufferPointer(); effective.payload_length = configured.GetSize(); frame = &effective;
+    }
+    const QRP& request = *GetQRP(frame->payload);
+    QrpContext ctx;
+    ctx.representation = request.REPRESENTATION();
+    const auto response = sdm_piv::call("storage.index_page", {
+        sdm_piv::raw("request", frame->payload, frame->payload_length)});
+    if (!response.ok()) return refuse(ctx, "host-failed", response.error_message());
+    const auto stream = response.raw("stream");
+    if (stream.size() < 12) return refuse(ctx, "host-failed", "missing durable page stream");
+    const auto* data = reinterpret_cast<const uint8_t*>(stream.data());
+    const uint32_t size = read_u32le(data);
+    if (size > stream.size() - 4) return refuse(ctx, "host-failed", "truncated durable page header");
+    flatbuffers::Verifier header_verifier(data, size + 4);
+    if (!VerifySizePrefixedQRPBuffer(header_verifier) || GetSizePrefixedQRP(data)->KIND() != qrpKind_Page)
+        return refuse(ctx, "host-failed", "invalid durable page header");
+    const auto* header=GetSizePrefixedQRP(data);
+    const uint64_t byte_limit=request.MAX_BYTES()?request.MAX_BYTES():8388608;
+    const uint32_t row_limit=request.LIMIT()?request.LIMIT():1000;
+    if(stream.size()>byte_limit||stream.size()>8388608||header->RECORD_COUNT()>row_limit)
+        return refuse(ctx,"host-failed","durable page exceeds requested limits");
+    size_t offset=size_t(size)+4;uint32_t count=0;
+    while(offset<stream.size()){
+        if(stream.size()-offset<4)return refuse(ctx,"host-failed","truncated durable record prefix");
+        const size_t length=size_t(read_u32le(data+offset))+4;
+        if(length<12||length>stream.size()-offset)return refuse(ctx,"host-failed","invalid durable record length");
+        offset+=length;++count;
+    }
+    if(count!=header->RECORD_COUNT())return refuse(ctx,"host-failed","durable page count mismatch");
+    if (push_decision_verbatim(frame) != 0) return 500;
+    return plugin_push_output_ex("page", "QRP.fbs", QRPIdentifier(), PLUGIN_PAYLOAD_WIRE_FORMAT_FLATBUFFER,
+                                 "QRP", 0, 0, data, stream.size()) < 0 ? 500 : 0;
 }
 
 }  // extern "C"

@@ -27,7 +27,8 @@
     "EPM",
     "CDM",
     "MNV",
-    "ERM"
+    "ERM",
+    "QRP"
   ],
   "erfaSourceFiles": 248,
   "axisEngine": "foundation/frames/src/axis_engine.hpp",

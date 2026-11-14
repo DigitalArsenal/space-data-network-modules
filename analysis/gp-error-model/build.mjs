@@ -30,7 +30,7 @@ const defaultModelSource = `static const unsigned char kDefaultModelErm[] = {\n$
 const framesSrc = path.resolve(root, '../../foundation/frames/src');
 const sgp4Dir = path.resolve(root, '../../foundation/sgp4-str3');
 const jsonHeader = path.resolve(root, '../../propagator/sgp4/src/cpp/include/nlohmann/json.hpp');
-const { header, version, families } = await generateSdsHeaders(['OMM', 'OEM', 'OCM', 'CDM', 'PRW', 'MNV', 'ERM'], import.meta.url);
+const { header, version, families } = await generateSdsHeaders(['OMM', 'OEM', 'OCM', 'CDM', 'PRW', 'MNV', 'ERM', 'QRP'], import.meta.url);
 const erfa = await composeErfaTranslationUnit();
 const bodyModels = await fs.readFile(path.join(framesSrc, 'iau_body_models.hpp'), 'utf8');
 const axisEngine = (await fs.readFile(path.join(framesSrc, 'axis_engine.hpp'), 'utf8'))
@@ -45,11 +45,12 @@ for (const part of ['sgp4_core.inc', 'model.inc']) {
   sgp4 = sgp4.replace(line, () => text);
 }
 const json = await fs.readFile(jsonHeader, 'utf8');
+const catalogEpoch = await fs.readFile(path.resolve(root, '../../common/catalog_epoch.hpp'), 'utf8');
 const sha256 = await fs.readFile(path.resolve(root, '../../files/orbit-products/src/sha256.hpp'), 'utf8');
 // The module's sources in dependency order (one translation unit), and the
 // Lambert kernel analysis/lambert-izzo and analysis/maneuver compile.
 const bridge = await fs.readFile(path.join(root, 'src', 'erm_bridge.cpp'), 'utf8');
-const sources = await Promise.all(['gp_error_model.cpp', 'common_epoch.cpp', 'state_transition.cpp', 'covariance_realism.cpp', 'source_products.cpp', 'object_covariance.cpp', 'source_covariance.cpp', 'fit_elements.cpp']
+const sources = await Promise.all(['gp_error_model.cpp', 'common_epoch.cpp', 'state_transition.cpp', 'covariance_realism.cpp', 'source_products.cpp', 'object_covariance.cpp', 'annotate_population.cpp', 'source_covariance.cpp', 'fit_elements.cpp']
   .map(async (f) => (f === 'object_covariance.cpp' ? defaultModelSource + '\n\n' : '') + await fs.readFile(path.join(root, 'src', f), 'utf8')));
 const lambert = await fs.readFile(path.resolve(root, '../lambert-izzo/include/lambert_izzo/solver.hpp'), 'utf8');
 const manifest = JSON.parse(await fs.readFile(path.join(root, 'plugin-manifest.json'), 'utf8'));
@@ -61,7 +62,7 @@ const result = await compileModuleFromSource({
     // The SGP4 base has internal linkage: the flow compiler links this module's object with others that compile their
     // own copy (analysis/epoch-state, analysis/maneuver-detection). The standard headers it includes come first,
     // outside the namespace.
-    '#include <cmath>\n#include <cstdint>\nnamespace {', sgp4, '}  // namespace', lambert, sha256, bridge, ...sources].join('\n\n'),
+    '#include <cmath>\n#include <cstdint>\nnamespace {', sgp4, '}  // namespace', lambert, sha256, catalogEpoch, bridge, ...sources].join('\n\n'),
   language: 'c++',
   outputPath,
   threadModel: 'wasi-sequential',

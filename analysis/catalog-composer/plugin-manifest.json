@@ -1,7 +1,7 @@
 {
   "pluginId": "com.digitalarsenal.analysis.catalog-composer",
   "name": "Catalog Editor",
-  "version": "0.6.0",
+  "version": "0.7.0",
   "description": "Compose immutable CAT snapshots with explicit source precedence, identifier conflict review and per-object orbital-state source selection; integrate the composed catalog with every source's products: identity links tested on trajectories, the product chosen by measured error, its covariance and label, merged maneuvers. Recipes, requests and reports are SDS $XMT (Catalog Cross-Match).",
   "pluginFamily": "analysis",
   "capabilities": [],
@@ -659,6 +659,138 @@
         }
       ],
       "maxBatch": 10,
+      "drainPolicy": "single-shot"
+    },
+    {
+      "methodId": "replace_products",
+      "displayName": "Replace the complete selected product list",
+      "inputPorts": [
+        {
+          "portId": "recipe",
+          "acceptedTypeSets": [
+            {
+              "setId": "xmt-integrate-recipe",
+              "allowedTypes": [
+                {
+                  "schemaName": "XMT.fbs",
+                  "fileIdentifier": "$XMT",
+                  "rootTypeName": "XMT",
+                  "wireFormat": "flatbuffer"
+                }
+              ],
+              "description": "One size-prefixed $XMT with INTEGRATE_RECIPE set."
+            }
+          ],
+          "minStreams": 1,
+          "maxStreams": 1,
+          "required": true,
+          "description": "One size-prefixed $XMT with INTEGRATE_RECIPE set."
+        },
+        {
+          "portId": "catalog",
+          "acceptedTypeSets": [
+            {
+              "setId": "catalog-v1",
+              "allowedTypes": [
+                {
+                  "schemaName": "CAT.fbs",
+                  "fileIdentifier": "$CAT",
+                  "rootTypeName": "CAT",
+                  "wireFormat": "flatbuffer"
+                }
+              ],
+              "description": "The composed catalog: canonical size-prefixed CAT records, each object once (the output of compose, or one snapshot)."
+            }
+          ],
+          "minStreams": 1,
+          "maxStreams": 1,
+          "required": true,
+          "description": "The composed catalog: canonical size-prefixed CAT records, each object once (the output of compose, or one snapshot)."
+        },
+        {
+          "portId": "ocm_products",
+          "acceptedTypeSets": [
+            {
+              "setId": "ocm-products-v1",
+              "allowedTypes": [
+                {
+                  "schemaName": "OCM.fbs",
+                  "fileIdentifier": "$OCM",
+                  "rootTypeName": "OCM",
+                  "wireFormat": "flatbuffer"
+                }
+              ],
+              "description": "Every source's states and covariance with the covariance label, and its $OCM element sets (MEAN_ELEMENTS; the product is MEAN_ELEMENTS.MEAN_ELEMENT_THEORY: sgp4xp, ap; the epoch MEAN_ELEMENTS.EPOCH; theory UNSPECIFIED refused mean-element-theory-unspecified), canonical size-prefixed OCM records, each naming its source in PROVENANCE.SOURCE_ID."
+            }
+          ],
+          "minStreams": 0,
+          "maxStreams": 1,
+          "required": false,
+          "description": "Every source's states and covariance with the covariance label, and its $OCM element sets (MEAN_ELEMENTS; the product is MEAN_ELEMENTS.MEAN_ELEMENT_THEORY: sgp4xp, ap; the epoch MEAN_ELEMENTS.EPOCH; theory UNSPECIFIED refused mean-element-theory-unspecified), canonical size-prefixed OCM records, each naming its source in PROVENANCE.SOURCE_ID."
+        },
+        {
+          "portId": "decision",
+          "minStreams": 0,
+          "maxStreams": 1,
+          "required": false,
+          "acceptedTypeSets": [
+            {
+              "setId": "qrp",
+              "allowedTypes": [
+                {
+                  "schemaName": "QRP.fbs",
+                  "fileIdentifier": "$QRP",
+                  "rootTypeName": "QRP",
+                  "wireFormat": "flatbuffer"
+                }
+              ]
+            }
+          ]
+        }
+      ],
+      "outputPorts": [
+        {
+          "portId": "catalog",
+          "acceptedTypeSets": [
+            {
+              "setId": "catalog-out-v1",
+              "allowedTypes": [
+                {
+                  "schemaName": "CAT.fbs",
+                  "fileIdentifier": "$CAT",
+                  "rootTypeName": "CAT",
+                  "wireFormat": "flatbuffer"
+                }
+              ],
+              "description": "The input objects in order; MANEUVERABLE is set where the maneuver history shows a maneuver; PRODUCTS names every selected product (KIND Sgp4Elements, Sgp4XpElements or ApElements by the set's theory, StateCovariance for an $OMM set's paired state; RECORD_CID, SOURCE_ID, EPOCH as the record writes it, SELECTION_REASON the xmtSelectionReason), PRODUCTS_AS_OF asOf. An object with neither keeps its original bytes."
+            }
+          ],
+          "minStreams": 0,
+          "maxStreams": 1,
+          "required": false,
+          "description": "The input objects in order; MANEUVERABLE is set where the maneuver history shows a maneuver; PRODUCTS names every selected product (KIND Sgp4Elements, Sgp4XpElements or ApElements by the set's theory, StateCovariance for an $OMM set's paired state; RECORD_CID, SOURCE_ID, EPOCH as the record writes it, SELECTION_REASON the xmtSelectionReason), PRODUCTS_AS_OF asOf. An object with neither keeps its original bytes."
+        },
+        {
+          "portId": "decision",
+          "minStreams": 0,
+          "maxStreams": 1,
+          "required": false,
+          "acceptedTypeSets": [
+            {
+              "setId": "qrp",
+              "allowedTypes": [
+                {
+                  "schemaName": "QRP.fbs",
+                  "fileIdentifier": "$QRP",
+                  "rootTypeName": "QRP",
+                  "wireFormat": "flatbuffer"
+                }
+              ]
+            }
+          ]
+        }
+      ],
+      "maxBatch": 1,
       "drainPolicy": "single-shot"
     }
   ],

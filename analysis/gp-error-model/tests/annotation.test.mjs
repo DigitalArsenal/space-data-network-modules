@@ -1,0 +1,135 @@
+import assert from 'node:assert/strict';
+import fs from 'node:fs';
+import test from 'node:test';
+import * as fb from 'flatbuffers';
+import * as O from 'spacedatastandards.org/lib/js/OCM/main.js';
+import * as E from 'spacedatastandards.org/lib/js/ERM/main.js';
+import * as P from 'spacedatastandards.org/lib/js/PCF/main.js';
+import * as Q from 'spacedatastandards.org/lib/js/QRP/main.js';
+import { OMM } from 'spacedatastandards.org/lib/js/OMM/OMM.js';
+import { OEM } from 'spacedatastandards.org/lib/js/OEM/OEM.js';
+import { createBrowserModuleHarness } from 'space-data-module-sdk/host/browser-module';
+import { createStandaloneHarness } from 'space-data-module-sdk/testing/isomorphic';
+import { frame, ommBytes, flightPcf, fitPcf, weather, checkPcf } from '../../../flows/catalog-builder/tests/fixtures.mjs';
+const bytes = url => fs.readFileSync(new URL(url, import.meta.url));
+const pack = (r, code) => { const b = new fb.Builder(8192); b.finishSizePrefixed(r.pack(b), '$'+code); return b.asUint8Array().slice(); };
+const decode = b => O.OCM.getSizePrefixedRootAsOCM(new fb.ByteBuffer(b));
+const seed = OMM.getRootAsOMM(new fb.ByteBuffer(ommBytes)).unpack();
+const seedBytes = pack(seed,'OMM');
+const model = E.ERM.getSizePrefixedRootAsERM(new fb.ByteBuffer(bytes('../data/e14-s3-kc.erm'))).unpack();
+const ages = model.MODEL.STRATA_SETTINGS.AGE_BINS.map(b=>(b.MIN_DAYS+b.MAX_DAYS)/2);
+let h, ap, products;
+test.before(async()=>{
+  h=await createBrowserModuleHarness({wasmSource:bytes('../dist/isomorphic/module.wasm'),manifest:JSON.parse(bytes('../plugin-manifest.json')),surface:'direct',hostOptions:{config:{'object.source':{id:'synthetic',kind:'element-set',originator:'synthetic',provider:'synthetic',lineage:'synthetic',licence:{class:'reproducible',id:'synthetic'}}}}});
+  const chain=await createStandaloneHarness('browser',new URL('../../../flows/catalog-builder/dist/isomorphic/module.wasm',import.meta.url).pathname,{surface:'direct',enableBrowserWasiThreads:false});
+  try {
+    const r=await chain.invoke({methodId:'run_chain',inputs:[frame('omm','OMM',ommBytes),frame('flight_config','PCF',flightPcf),frame('fit_config','PCF',fitPcf),frame('weather','SPW',weather)]});
+    assert.equal(r.statusCode,0,r.errorMessage);
+    const repeat=await chain.invoke({methodId:'run_chain',inputs:[frame('omm','OMM',ommBytes),frame('flight_config','PCF',flightPcf),frame('fit_config','PCF',fitPcf),frame('weather','SPW',weather)]});assert.equal(repeat.statusCode,0);assert.deepEqual(repeat.outputs.map(f=>Buffer.from(f.payload)),r.outputs.map(f=>Buffer.from(f.payload)),'chain output is deterministic');
+    products=['elements','fallback'].map(port=>{const raw=r.outputs.find(f=>f.portId===port)?.payload;assert.ok(raw,port);const framed=Buffer.alloc(raw.length+16);Buffer.from(raw).copy(framed,16);framed.writeUInt32LE(framed.length-4,0);framed.writeUInt32LE(Buffer.from(raw).readUInt32LE(0)+12,4);framed.write('$OCM',8);return framed;});
+  } finally {chain.destroy();}
+  ap=await createStandaloneHarness('browser',process.env.SDNAP_WASM || new URL('../../../propagator/sdn-ap/dist/isomorphic/module.wasm',import.meta.url).pathname,{surface:'direct',enableBrowserWasiThreads:false});
+});
+test.after(()=>{h?.destroy();ap?.destroy();});
+const annotate=async (ocm, elements=seedBytes, extra=[])=>h.invoke({methodId:'annotate_population',inputs:[frame('ocm','OCM',ocm),frame('elements','OMM',elements),...extra]});
+const accepted=async (ocm, elements=seedBytes)=>{const r=await annotate(ocm,elements);assert.equal(r.statusCode,0,r.errorMessage);return r.outputs.find(f=>f.portId==='ocm').payload;};
+const fly=async record=>{const r=await ap.invoke({methodId:'propagate',inputs:[frame('ocm','OCM',record.subarray(4)),frame('configuration','PCF',checkPcf)]});assert.equal(r.statusCode,0,r.errorMessage);return r.outputs.find(f=>f.portId==='ephemeris').payload;};
+
+test('annotation retains the entire original buffer and every original root reference',async()=>{
+  for(const original of products){
+    const annotated=await accepted(original);assert.deepEqual(Buffer.from(await accepted(original)),Buffer.from(annotated),'annotation is deterministic');const before=decode(original), after=decode(annotated);
+    assert.ok(annotated.length < original.length + 6000, 'bounded annotation overhead');
+    const start=Buffer.from(annotated).indexOf(Buffer.from(original));assert.ok(start>=0,'all original byte ranges retained verbatim');
+    const a=before.unpack(), b=after.unpack();
+    for(const key of ['COVARIANCE_BLOCKS','COV_REALISM']){delete a[key];delete b[key];}
+    assert.deepEqual(b,a,'all other fields retained, including posterior and propagation block');
+    // Independently follow every original pointer field: the new root must reference
+    // the original copied table/vector/string, not a reconstructed equivalent.
+    const scalar=new Set([8,12,14,42,46,54,56,76]);
+    const replaced=new Set([46,64,68]);
+    const v=before.bb_pos-before.bb.readInt32(before.bb_pos),n=before.bb.readUint16(v);
+    for(let slot=4;slot<n;slot+=2){
+      if(scalar.has(slot)||replaced.has(slot))continue;
+      const x=before.bb.__offset(before.bb_pos,slot);if(!x)continue;
+      const y=after.bb.__offset(after.bb_pos,slot);assert.ok(y);
+      assert.equal(after.bb.__indirect(after.bb_pos+y),start+before.bb.__indirect(before.bb_pos+x),'original pointer slot '+slot);
+    }
+  }
+});
+
+test('AP states and formal covariance rows remain bit identical at ten epochs',async()=>{
+  const original=products[0], annotated=await accepted(original);
+  const before=await fly(original),after=await fly(annotated);
+  assert.deepEqual(Buffer.from(after),Buffer.from(before),'entire OEM response is byte identical');
+  const o=OEM.getRootAsOEM(new fb.ByteBuffer(before)).unpack();
+  assert.equal(o.EPHEMERIS_DATA_BLOCK.reduce((n,b)=>n+b.COVARIANCE_MATRIX_LINES.length,0),10);
+  const labels=decode(annotated).unpack().COV_REALISM;
+  assert.ok(labels.some(l=>/Formal fit posterior/.test(l.EVIDENCE)));
+  assert.ok(labels.every(l=>l.CALIBRATION!==O.covarianceCalibration.Calibrated));
+});
+
+test('SGP4 fallback propagation remains byte identical after annotation',async()=>{
+  const original=products[1];
+  assert.deepEqual(Buffer.from(await fly(await accepted(original))),Buffer.from(await fly(original)));
+});
+
+test('seven symmetric matrices use seed epoch and model midpoints and agree with the established population method',async()=>{
+  assert.equal(ages.length,7);
+  const request=Object.assign(new E.ERMT(),{CALIBRATED_COVARIANCES:Object.assign(new E.ERMCalibratedCovariancesT(),{OBJECTS:ages.map(age=>Object.assign(new E.ERMCalibrationObjectT(),{ID:'synthetic',SET_NORAD_CAT_ID:seed.NORAD_CAT_ID,SET_EPOCH:seed.EPOCH,AGE_DAYS:age}))})});
+  const control=await h.invoke({methodId:'object_covariance',inputs:[frame('elements','OMM',seedBytes),frame('request','ERM',pack(request,'ERM'))]});
+  assert.equal(control.statusCode,0,control.errorMessage);
+  const c=decode(control.outputs.find(f=>f.portId==='ocm').payload).unpack();
+  for(const original of products){
+    const blocks=decode(await accepted(original)).unpack().COVARIANCE_BLOCKS;assert.equal(blocks.length,7);
+    for(let i=0;i<7;i++){
+      const b=blocks[i], [epoch,...values]=b.LINES[0].split(' '), matrix=values.map(Number);
+      assert.equal(matrix.length,21);assert.equal(b.COV_ORDERING,O.covarianceOrdering.LTM);
+      assert.equal(b.COV_REF_FRAME,'GCRF');assert.equal(b.COV_BASIS_ID,model.MODEL.ID);
+      assert.equal(Date.parse(epoch.endsWith('Z')?epoch:epoch+'Z')-Date.parse(seed.EPOCH+'Z'),ages[i]*86400000);
+      assert.equal(b.COV_REALISM[0].AGE_DAYS,ages[i]);assert.equal(b.COV_REALISM[0].CALIBRATION,O.covarianceCalibration.Uncalibrated);
+      // Control: established population model, GCRF km/km/s, at seed UTC + age.
+      // 1e-13 relative tolerance covers only its SI conversion and the decimal round trip.
+      for(let row=0,k=0;row<6;row++)for(let col=0;col<=row;col++,k++){
+        const expected=c.COVARIANCE_DATA[i*21+k];assert.ok(Math.abs(matrix[k]-expected)<=1e-13*Math.max(1e-30,Math.abs(expected)));
+      }
+    }
+  }
+});
+
+test('uncovered regime carries the reason and model identity with no fabricated block',async()=>{
+  const uncovered=Object.assign(OMM.getRootAsOMM(new fb.ByteBuffer(ommBytes)).unpack(),{ECCENTRICITY:0.001,MEAN_MOTION:0.1});
+  const raw=O.OCM.getSizePrefixedRootAsOCM(new fb.ByteBuffer(products[1])).unpack();
+  const annotated=decode(await accepted(pack(raw,'OCM'),pack(uncovered,'OMM'))).unpack();
+  assert.equal(annotated.COVARIANCE_BLOCKS.length,0);
+  assert.ok(annotated.COV_REALISM.some(l=>/no population covariance \(OUTSIDE/.test(l.EVIDENCE)&&l.MODEL_ID===model.MODEL.ID));
+});
+
+test('malformed, mismatched, duplicate and repeated annotation inputs are refused',async()=>{
+  for(const original of [products[0].subarray(0,20),Buffer.concat([products[0],products[0]])])assert.notEqual((await annotate(original)).statusCode,0);
+  const other=Object.assign(OMM.getRootAsOMM(new fb.ByteBuffer(ommBytes)).unpack(),{NORAD_CAT_ID:999998});
+  assert.equal((await annotate(products[0],pack(other,'OMM'))).errorCode,'seed-mismatch');
+  const outcome=await h.invoke({methodId:'annotate_population_flow',inputs:[frame('ocm','OCM',products[0]),frame('elements','OMM',pack(other,'OMM'))]});assert.equal(outcome.statusCode,0);assert.equal(outcome.outputs.length,1);assert.equal(outcome.outputs[0].portId,'decision');assert.equal(Q.QRP.getRootAsQRP(new fb.ByteBuffer(outcome.outputs[0].payload)).ERROR_CODE(),'seed-mismatch');
+  const wrongEpoch={...seed,EPOCH:'2026-01-01T00:00:00'};for(const product of products)assert.equal((await annotate(product,pack(Object.assign(OMM.getRootAsOMM(new fb.ByteBuffer(ommBytes)).unpack(),wrongEpoch),'OMM'))).errorCode,'seed-epoch-mismatch');
+  assert.notEqual((await annotate(products[0],seedBytes,[frame('ocm','OCM',products[0])])).statusCode,0);
+  assert.equal((await annotate(await accepted(products[0]))).errorCode,'already-annotated');
+});
+
+test('population axes use independently propagated seed state rather than the AP product state',async()=>{
+  // Closed-form J P J^T in GCRF, km and km/s, at the first model age midpoint.
+  // The independent SGP4 flight supplies the seed state. Relative matrix-scale
+  // tolerance 1e-8 covers propagation/frame rounding and decimal serialization.
+  const annotated=decode(await accepted(products[0])).unpack(),block=annotated.COVARIANCE_BLOCKS[0];
+  const epoch=new Date(Date.parse(seed.EPOCH+'Z')+ages[0]*86400000).toISOString();
+  const pcf=Object.assign(new P.PCFT(),{THEORY:P.pcfTheory.SGP4,OUTPUT:Object.assign(new P.PCFOutputT(),{FRAME:P.pcfOutputFrame.GCRF,EPOCHS:[epoch]})});
+  const flight=await ap.invoke({methodId:'propagate',inputs:[frame('ocm','OCM',products[1].subarray(4)),frame('configuration','PCF',pack(pcf,'PCF'))]});assert.equal(flight.statusCode,0,flight.errorMessage);
+  const state=OEM.getRootAsOEM(new fb.ByteBuffer(flight.outputs.find(f=>f.portId==='ephemeris').payload)).unpack().EPHEMERIS_DATA_BLOCK[0].EPHEMERIS_DATA_LINES[0];
+  const normalize=a=>{const n=Math.hypot(...a);return a.map(x=>x/n);},cross=(a,b)=>[a[1]*b[2]-a[2]*b[1],a[2]*b[0]-a[0]*b[2],a[0]*b[1]-a[1]*b[0]];
+  const radial=normalize([state.X,state.Y,state.Z]),normal=normalize(cross(radial,[state.X_DOT,state.Y_DOT,state.Z_DOT])),axes=[radial,cross(normal,radial),normal];
+  const stratum=model.MODEL.STRATA.find(s=>s.REGIME===block.COV_REALISM[0].REGIME&&s.AGE_INDEX===0);assert.ok(stratum);
+  const factor=model.MODEL.STRATUM_FACTORS.find(f=>f.REGIME_INDEX===stratum.REGIME_INDEX&&f.AGE_INDEX===0)?.FACTOR??1;
+  const covariance=Array.from({length:6},()=>Array(6).fill(0));for(let row=0,k=0;row<6;row++)for(let col=0;col<=row;col++,k++)covariance[row][col]=covariance[col][row]=stratum.COVARIANCE[k]*factor;
+  const actual=block.LINES[0].split(' ').slice(1).map(Number),scale=Math.max(...actual.map(Math.abs));
+  for(let row=0,k=0;row<6;row++)for(let col=0;col<=row;col++,k++){let expected=0;for(let a=0;a<3;a++)for(let b=0;b<3;b++)expected+=axes[a][row%3]*covariance[a+3*Math.floor(row/3)][b+3*Math.floor(col/3)]*axes[b][col%3];assert.ok(Math.abs(actual[k]-expected)<=1e-8*scale,`${k}: independent seed-state rotation`);}
+  const changed=decode(products[0]).unpack();changed.MEAN_ELEMENTS.INCLINATION+=20;changed.MEAN_ELEMENTS.MEAN_ANOMALY+=40;
+  assert.deepEqual(decode(await accepted(pack(changed,'OCM'))).unpack().COVARIANCE_BLOCKS,annotated.COVARIANCE_BLOCKS,'changing AP elements cannot change a seed-population matrix');
+});
