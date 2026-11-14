@@ -5,13 +5,13 @@
 // 120 times over three days, in the epoch store (load_epochs, sdnap_epochs_set_at):
 // - a cold cache (no grid built yet), set by set in time order: the reference, every component of every state a number;
 // - the same instance again (a warm cache: no grid built again), all 600 (set, time) pairs shuffled: bit for bit;
-// - a fresh instance at the minimum bound (sdnap_wide_grid_budget): the sets loaded one at a time, time-major, a grid built at
-//   every load: bit for bit, with idle payload reuse at the minimum budget;
+// - a fresh instance at the minimum bound (sdnap_wide_grid_budget): the sets loaded one at a time, time-major,
+//   bit for bit, with idle payload reuse across loads;
 // - the default bound keeps idle grids (192 MiB).
-// The bytes and the order: a grid's held bytes are its allocated bytes (5,069,464 at degree 12 on 128 anomalies, 169,044 at
+// The bytes and the order: a grid's held bytes are its allocated bytes (5,069,496 at degree 12 on 128 anomalies, 169,076 at
 // degree 2), and sdnap_wide_grid_cache reports the same held bytes as sdnap_wide_grid_budget; at a bound of 34
 // grids, the idle grid freed is the least recently used, not the oldest built (the first set's grid, built first, is used
-// again after the second's; a third set then frees the second's, and the first's is still held).
+// again after the second's; the 35th set frees the second's, and the first's is still held).
 // The pool's threads: 2,050 rows of the class 0 set at five inclinations (five grid keys; 410 mean anomalies each, shuffled)
 // with AP's terms selected (a test build that adds the selector), sdnap_propagate_soa at 20 instants on 1 thread, on 8 (five
 // 512-row chunks; the pool's statistics count a threaded batch at every instant, the pool alive) and on 8 at the minimum bound:
