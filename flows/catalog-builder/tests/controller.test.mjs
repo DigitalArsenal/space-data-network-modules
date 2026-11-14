@@ -86,7 +86,7 @@ try{
  records('SPW.fbs','synthetic','weather').push(pack(badWeather,'SPW'));
  records('OCM.fbs','synthetic-node','catalog-products').push(pack(new C.CATT(),'CAT'));
  records('OMM.fbs','synthetic','primary').push(...ids.map(id=>seed(id,.4)));
- const poisoned=await tick(now+6*86400000+3000);assert.equal(poisoned.indexes,2);assert.match(poisoned.notice.reason,/invalid=5/);assert.equal(poisoned.notice.kind,'Skipped');
+ const poisoned=await tick(now+6*86400000+3000);assert.equal(poisoned.indexes,2);assert.match(poisoned.notice.reason,/invalid=5/);assert.equal(poisoned.notice.kind,'skipped');
  // An ingestion failure between two healthy identifiers cannot starve the last.
  const three=[999996,999997,999998];
  store.set(key('CAT.fbs','synthetic','identities'),three.map(id=>pack(Object.assign(new C.CATT(),{NORAD_CAT_ID:id,OBJECT_NAME:'SYNTHETIC'}),'CAT')));

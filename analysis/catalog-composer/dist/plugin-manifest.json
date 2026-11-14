@@ -769,6 +769,25 @@
           "maxStreams": 1,
           "required": false,
           "description": "The input objects in order; MANEUVERABLE is set where the maneuver history shows a maneuver; PRODUCTS names every selected product (KIND Sgp4Elements, Sgp4XpElements or ApElements by the set's theory, StateCovariance for an $OMM set's paired state; RECORD_CID, SOURCE_ID, EPOCH as the record writes it, SELECTION_REASON the xmtSelectionReason), PRODUCTS_AS_OF asOf. An object with neither keeps its original bytes."
+        },
+        {
+          "portId": "decision",
+          "minStreams": 0,
+          "maxStreams": 1,
+          "required": false,
+          "acceptedTypeSets": [
+            {
+              "setId": "qrp",
+              "allowedTypes": [
+                {
+                  "schemaName": "QRP.fbs",
+                  "fileIdentifier": "$QRP",
+                  "rootTypeName": "QRP",
+                  "wireFormat": "flatbuffer"
+                }
+              ]
+            }
+          ]
         }
       ],
       "maxBatch": 1,
