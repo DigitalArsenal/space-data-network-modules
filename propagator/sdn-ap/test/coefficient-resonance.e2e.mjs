@@ -45,13 +45,14 @@ for(let j=1;j<=6;j++)for(let m=1;m<=70;m++)if(gcd(m,j)===1){
 }
 assert(roots.some(r=>r.m===14&&r.j===1));assert(roots.some(r=>r.m===15&&r.j===1));
 async function open(file){const h=await createStandaloneHarness('browser',file,{surface:'direct',maxThreads:1,enableBrowserWasiThreads:false}),x=h.instance.exports,p=x.sdnap_alloc(112);return {x,close:()=>h.close?.(),init(n,e,b){assert.equal(x.sdnap_test_res_init(n,e,b),0);},st(t){const status=x.sdnap_test_res_state(t,p);const v=Array.from(new Float64Array(h.memory.buffer,p,14));if(status!==0)console.log(JSON.stringify({refusedBuild:file.includes('-exact')?'exact':'R',timeMinutes:t,status}));assert.equal(status,0);assert(v.every(Number.isFinite));return v;}};}
-const a=await open(candidate),b=await open(exact);let states=0,maxExactM=0,maxResidualJumpM=0,crossings=0;
+const a=await open(candidate),b=await open(exact);let states=0,maxExactM=0,maxResidualJumpM=0,crossings=0;const groupedSeen=new Set(),resonantSeen=new Set();
 for(const degree of [31,70])for(const root of roots){
  a.x.sdnap_test_res_degree(degree);b.x.sdnap_test_res_degree(degree);
  console.log(JSON.stringify({degree,testingRoot:root}));
  let prior;
  for(const dn of [-1e-9,0,1e-9]){
   a.init(root.n*(1+dn),root.e,0);b.init(root.n*(1+dn),root.e,0);const va=a.st(0),vb=b.st(0);assert.equal(va[7],4);if(!wide){assert.equal(va[9],0);assert(va[8]>0);}
+  if(va[10])groupedSeen.add(degree);if(va[11]>0)resonantSeen.add(degree);
   const residual=va.slice(0,3).map((v,k)=>1000*(v-vb[k]));maxExactM=Math.max(maxExactM,Math.hypot(...residual));if(prior)maxResidualJumpM=Math.max(maxResidualJumpM,Math.hypot(...residual.map((v,k)=>v-prior[k])));prior=residual;states++;
  }
  // The q=0 member also decays through its commensurability over five days.
@@ -68,10 +69,11 @@ for(const degree of [31,70])for(const root of roots){
     }
    }
    before=after;previousTime=t;
-   const residual=va.slice(0,3).map((v,k)=>1000*(v-vb[k]));maxExactM=Math.max(maxExactM,Math.hypot(...residual));if(prior)maxResidualJumpM=Math.max(maxResidualJumpM,Math.hypot(...residual.map((v,k)=>v-prior[k])));prior=residual;states++;
+   if(va[10])groupedSeen.add(degree);if(va[11]>0)resonantSeen.add(degree);
+  const residual=va.slice(0,3).map((v,k)=>1000*(v-vb[k]));maxExactM=Math.max(maxExactM,Math.hypot(...residual));if(prior)maxResidualJumpM=Math.max(maxResidualJumpM,Math.hypot(...residual.map((v,k)=>v-prior[k])));prior=residual;states++;
   }
   assert(crossed,`order ${root.m}:${root.j} did not cross`);crossings++;
  }
  console.log(JSON.stringify({degree,order:[root.m,root.j,root.w],states,maxExactM,maxResidualJumpM,crossings}));
 }
-await a.close();await b.close();assert(crossings>0);assert(maxExactM<1);assert(maxResidualJumpM<1);console.log(JSON.stringify({roots:roots.length,states,maxExactM,maxResidualJumpM,crossings}));process.exit(0);
+await a.close();await b.close();if(!wide)for(const degree of [31,70]){assert(groupedSeen.has(degree));assert(resonantSeen.has(degree));}assert(crossings>0);assert(maxExactM<1);assert(maxResidualJumpM<1);console.log(JSON.stringify({roots:roots.length,states,maxExactM,maxResidualJumpM,crossings,groupedCaps:[...groupedSeen],resonantCaps:[...resonantSeen]}));process.exit(0);
