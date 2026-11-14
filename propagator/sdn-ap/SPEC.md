@@ -271,13 +271,9 @@ set holds no caches and flies on the thread's.
   refusal code -3, and so does a time the bank cannot reach.
 - `sdnap_epochs_at` (and the other `sdnap_epochs_*` readers) with a covariance asked: a bank that cannot be built, or a moved
   set's flight that fails, gives status 0 and the state without its covariance.
-- `ingest_omm`, refused `out-of-memory`: by then the old row store is dropped (the new store's build begins by freeing it).
-  When the new store's arrays could be had, it is installed; a row whose set failed to initialize for want of memory holds
-  the theory's refusal. Its $OCM outputs are discarded with the refusal.
-- `load_epochs`, refused once its build has begun (a record, a failed allocation, series-forces-differ): the old snapshot is gone
-  and the store is empty. A `load_epochs` refused before its build begins (a frame of a wrong type, a bad $PCF) leaves the old
-  snapshot as it was. A record's carried forecast is a counted block (its copy, when it is kept) and counted arrays, refused
-  `out-of-memory`. The forecast check that flies a set
+- `ingest_omm`, refused `out-of-memory`: the previous row store is preserved; prepared outputs are discarded.
+- `load_epochs` and the staged-load methods preserve the resident snapshot on every refusal. A carried forecast is
+  held in counted blocks and arrays, refused `out-of-memory` when allocation fails. The forecast check that flies a set
   at the carried span's ends (`carried::build`) is reached only by `fit`; there a set that cannot be initialized writes "the
   theory does not reach it", and the fit then answers `out-of-memory`.
 
@@ -1748,10 +1744,9 @@ slow may still be building, flying or replacing its series' slots. So the store'
 store is replaced:
 - `sdnap_epochs_at` answers -20 with every status 9, `sdnap_epochs_set_at` and `sdnap_drag_orbit_check` answer 9, and
   the store's byte count (`sdnap_epochs_stats`, the eighth value) reads NaN;
-- `load_epochs` and `load_epochs_open` refuse "pool-dead" while a pool thread is active, before they free anything:
-  the store stays as it is, and no load is open (a part or a close answers "load-not-open"). `load_epochs_open`
-  refuses so before it reads its $PCF, so a bad $PCF there also answers "pool-dead"; `load_epochs` reads its inputs
-  first and answers their refusals as before. A thread that trapped never stops being active.
+- `load_epochs`, `load_epochs_open` and `load_epochs_close` refuse "pool-dead" while a pool thread is active,
+  before freeing stores or pending loads. Open and single-call load check this before reading their inputs, so bad
+  input also answers "pool-dead" in that state. A thread that trapped remains active.
 - Once no pool thread is active, `load_epochs`, or `load_epochs_open` and the parts and the close, replace the store.
   The pool is not used again: the new store's calls run on the calling thread.
 - The other readers of the store (`sdnap_epochs_count`, `_series`, `_select`, `_source_at`) read only its entries and
@@ -3070,10 +3065,9 @@ not stored. A record's theory record (SGP4 Sat or SGP4XP integrator) is made whe
 of one set holds one slot, and a series of more than one holds two (the second is allocated with the series, counted,
 and a load that cannot allocate it is refused `out-of-memory`); of those, the two sets last used hold a theory record
 at a time. Two series that carry equal weather share one copy of it: equal means every row, node and node value the
-same in every bit, so which of two series is kept never depends on their order. A `load_epochs` refused once its build has
-begun (a record, a failed allocation, series-forces-differ) leaves no snapshot: the store is empty and its arrays are freed. One
-refused before its build begins (a frame of a wrong type, a bad $PCF) leaves the store as it was. A load that builds while a counted
-allocation failed answers `out-of-memory` with the store empty (through 0.6.56 the built store stayed in place).
+same in every bit, so which of two series is kept never depends on their order. Loads build a separate snapshot and
+publish it only after validation and counted allocation checks succeed. Every refusal preserves the previous snapshot
+and its frame cells. A successful publication frees the previous snapshot and closes its frame allocation.
 
 **14.1.1 Load in parts.** A host that cannot stage the whole catalog in the module's memory takes it in parts with three methods:
 `load_epochs_open` (the optional $PCF EPOCH_STORE, read once), `load_epochs_part` (the 'ocm' frames of one part, framed as for
@@ -3084,24 +3078,11 @@ allocation failed answers `out-of-memory` with the store empty (through 0.6.56 t
   What is decided at a part: the theory filter and the skip of a set not centered on the Earth (counted, not held). What waits for
   the close: the aging and the cap (they need the newest epoch of the whole load), the same-epoch replacement and series-forces-differ
   (it compares every record of a series). So a record the close later drops is held until the close, a forecast record whole.
-- **Status.** A non-zero status of any of the three methods means the load is closed and the store is empty, except `load-not-open`,
-  which changes nothing (a part or a close with no load open; a loaded store stays), and `pool-dead`, which leaves the store in
-  place:
-  - an open drops the load in progress and empties the store, whether or not its configuration is accepted (a refused open
-    leaves no load open and no store);
-  - except after a threaded batch over the store taken for dead (SPEC 9), while a pool thread is still active. That thread may
-    still be reading or writing the store, so the open frees nothing and refuses `pool-dead`, before it reads its $PCF (a bad $PCF
-    in that open is reported as `pool-dead`). The store stays as the dead batch left it: `sdnap_epochs_count` answers its count,
-    the eighth statistic of `sdnap_epochs_stats` is NaN, `sdnap_epochs_at` answers -20 with every status 9, and
-    `sdnap_epochs_set_at` and `sdnap_drag_orbit_check` answer 9. No load is open, so a part or a close answers `load-not-open`.
-    Once no pool thread is active, an open empties the store and the three calls load as usual;
-  - a part refused for any reason (a type, a frame, a record, `out-of-memory`) drops the load and empties the store;
-  - a close always ends the load, accepted or refused (series-forces-differ, `out-of-memory`, `missing-ocm` for a close with no
-    part), and a refused close leaves the store empty.
-
-  `load_epochs` abandons a load in progress, accepted or refused. With no load open, a `load_epochs` refused before its build begins
-  (a wrong frame type, a bad $PCF, `pool-dead`) leaves the store as it was, as it always did, where a refused open empties it (the
-  open's contract is the empty store; `pool-dead` excepted, above).
+- **Status.** A refused open, part or close drops the pending load and preserves the resident snapshot. `load-not-open`
+  changes nothing. `pool-dead` refuses open, close and single-call replacement while a pool thread is active, without
+  freeing either store. An accepted open replaces any pending load and leaves the resident snapshot readable. An
+  accepted close publishes its complete snapshot. A close with no part refuses `missing-ocm`.
+  `load_epochs` abandons a pending load and publishes only on success; an active pool prevents that abandonment.
 - **The first failure.** The reported failure is the first one met in input order: within a part as `load_epochs` reports it
   (every frame's type is checked before any record is decoded, so within one part a wrong type is reported before an earlier
   record's decode refusal), across parts the earlier part's. Two cases differ from `load_epochs` on the whole list: (1) a record that
@@ -3110,28 +3091,20 @@ allocation failed answers `out-of-memory` with the store empty (through 0.6.56 t
   series-forces-differ and the refusals of the install come at the close. An allocation that fails in a counted site (SPEC 1.6),
   including the copy of a forecast and the arrays of a track, refuses by name `out-of-memory`; what SPEC 1.6 lists as not counted
   (the strings and vectors the decode reads a record into) still traps.
-- **A difference from 0.6.56.** A load (`load_epochs` included) that builds while a counted allocation failed now answers `out-of-memory`
-  with the store empty; through 0.6.56 the built store stayed in place.
-- **State of the store.** From the open to the close the store is empty and no state is served: the open empties it and a part
-  adds nothing to it. The `sdnap_epochs_*` exports answer as for a store that holds nothing, and not uniformly: `sdnap_epochs_count`
-  0; `sdnap_epochs_stats` zero counts and, in the eighth statistic, the bytes the open load holds (below); `sdnap_epochs_series`,
-  `_select` and `_set_at` -1 (no such series); `sdnap_epochs_at` and `_source_at` -1 for any request of one series or more and 0 for
-  a request of none; `sdnap_drag_orbit_check` -4 (ORBPRO_PROP_BAD_INPUT). A host reads no state between the open and the close.
-- **One load at a time.** There is one load per instance, with no handle: a part or a close acts on the load open, whoever opened it,
-  and an open from any caller drops the load in progress. A host serializes one load per instance. No export, the statistics
-  included, may run on another thread while any of the three methods or `load_epochs` runs: the open frees a loaded store, the
-  install writes the resident store in place with no guard (as `load_epochs` never had), and the statistics walk the open load. One
-  pool entry reads and writes this store: `sdnap_epochs_at` without a covariance plane runs its series on the pool's threads (SPEC
-  9). It returns only once every chunk is done, so no pool thread touches the store while a load call runs. The exception is a
-  batch taken for dead, whose slow thread may still be in its chunk: `load_epochs` and `load_epochs_open` then refuse `pool-dead`
-  while a pool thread is active, before they free anything.
+- **State of the store.** Between open and close, native epoch exports and plugin calls retain the previously selected
+  resident data. Statistics report resident counts and combined resident/pending bytes. Successful close selects records
+  for plugin calls; native row ingestion preserves the plugin selection (section 20.1).
+- **One load at a time.** There is one pending load per instance. The host serializes load, refill and read calls on one
+  owning thread. Publication swaps prepared arrays after validation and releases the old snapshot. The module refuses
+  replacement while a pool thread is active, including a row batch whose thread was taken for dead.
 - **Memory.** Nothing of a part's bytes is kept after the call: a host stages every part in one buffer, allocated once and reused
   (the module reads a part's frames in place and has copied what it keeps before the call returns). What is held between parts is the
   decoded records (identity, elements, forces and covariance, the weather interned once, and, for a record that carries a forecast,
   the whole record's bytes copied out of the part's, as one counted allocation) and the arrays that index them. They are counted in
   the eighth statistic of `sdnap_epochs_stats` (the bytes held), so a host sees what a load in progress holds. The sort and the
   install happen at the close, as in `load_epochs`, so the decoded records of every part are held until then, and at the close the
-  decoded records and the installed store are resident together: that is the high-water. Measured on sdn-ap 0.6.57 (32-bit WebAssembly
+  decoded records, prepared snapshot and previous resident snapshot coexist. Peak replacement memory includes all three.
+  The following initial-load figures have no previous resident snapshot. Measured on sdn-ap 0.6.57 (32-bit WebAssembly
   with threads, 2 MiB initial memory, the host's staging buffer reused), 100,000 AP records, each the stored fitted 500 km record at
   the angles of a seeded mix (85 % low near-circular, 5 % medium orbit, 5 % geosynchronous, 5 % eccentric): in parts of 1,000 the
   instance (including that high-water, since WebAssembly memory keeps its high-water size) is 150,470,656 bytes (143.5 MiB), of which
@@ -6311,8 +6284,8 @@ tables `drag::table()` makes, the caches the first `xp_init` on a thread makes, 
   made; 4 no window of 3 minutes holds the tolerance there (19.3). The planes of an object not served are NaN. A pure read:
   it evaluates polynomials, allocates nothing, never flies AP and never falls back silently. On 3 and 4 the host asks AP's own
   entry for that object and time: on 3 it may refuse, or answer for the minutes of the window before the refusal; on 4 it
-  answers. Returns 0, -1 (bad argument), -4 (a load replaced the store since open: every status is 1 and a refill reads the
-  store again) or -5 (not open).
+  answers. Returns 0, -1 (bad argument), -4 (the store generation differs: every status is 1) or -5 (not open).
+  Catalog loading releases the frame allocation (section 20); the host opens a fresh budget after loading.
 - `sdnap_frames_refill(now_whole, now_frac, ahead_seconds, max_rows, priority, priority_count, result)`: builds the cell
   that `now` needs for each object that has none (the objects of `priority`, in that order, then the others in index
   order), then the cell that `now + ahead_seconds` needs (`ahead` is clamped to 48 minutes, the base window), and stops
@@ -6636,3 +6609,198 @@ What a host that draws frames from a running clock needs, and what it gets.
 - Seidelmann, P. K., ed. (1992). Explanatory Supplement to the Astronomical Almanac.
 - US Space Force Astrodynamics Standards: release notes 7.7-9.9, JIRA summaries 8.2-9.9, Tle and Sgp4Prop
   interface documents (9.9 package); release notes v9.1.1.0 C Sgp4Prop WebAssembly.
+
+## 20. Record entities through the propagator ABI
+
+**Tradeoffs.** Releasing direct slots makes repeated all-SGP4XP catalog calls about 10.1 times as expensive in CPU
+as retaining those slots in the measured cases below. This policy bounds memory and pays initialization on each frame;
+it does not provide cheap repeated stock-catalog frames. An AP entity without a covering frame cell is hidden: its position and velocity are NaN and its
+VALID flag is clear. Unsupported AP series, including multiple-set and wide-branch series, have no display state through
+these calls. Their direct paths remain available. AP singleton and struct-batch states use the frame approximation of
+section 19, including its existing position and velocity bounds. SGP4 and SGP4XP records use their own exact epoch
+propagation without AP cells or AP caches. Each direct display read releases its entity slots before reading another
+entity, bounding transient direct storage to at most two initialized sets. Repeated frames pay initialization again.
+Loading a catalog releases the previous frame allocation and all its cells;
+the host opens and refills a new budget. One owning thread serializes load, refill, reads, paths and replacement, so a
+refill can delay a display update. Direct path requests allocate theory caches temporarily and release the path entity's
+caches on completion. These changes add no concurrent-reader guarantee or implicit refill.
+
+Direct-record memory measurements use unsigned 32-bit Wasm builds and synthetic 500 km SGP4XP records, no covariance,
+one state per record at one hour, and no frame cells. `sizeof(XpSat)` is 5,864 bytes. Initial term-table allocation is
+0 bytes for the low circular and eccentric low cases, 1,404 bytes for the medium-orbit case and 1,308 bytes for the
+geosynchronous case. These table figures come from `xp_bytes` immediately after initialization, before flight caches.
+The previous plugin implementation (051c2178) retained 5,864 bytes per low-orbit record; the bounded reader retains 0.
+Both builds served every entity in these measurements.
+
+| Synthetic records | Resident record store, bytes | Previous post-read Wasm memory, bytes | Bounded post-read Wasm memory, bytes |
+|---:|---:|---:|---:|
+| 33,000 | 8,976,000 | 207,618,048 | 23,068,672 |
+| 100,000 | 27,200,000 | 622,788,608 | 60,751,872 |
+
+Wasm memory includes ingestion and output staging high-water; it excludes host memory and artifact bytes. These
+initial-load cases have no previous resident catalog. Transactional reload also retains the previous catalog while
+preparing its replacement. Native epoch calls can retain direct caches independently of the plugin display readers.
+
+Paired CPU measurements compare the same `plugin_propagate_all_positions` call on identical synthetic low-orbit
+SGP4XP records at one hour: control 051c2178 retains direct slots; bounded reader c39de890 releases each entity's slots.
+Both sides serve all records with bit-identical output. After an untimed warm call, each measurement block makes eight
+complete calls. Eight A B B A rounds per catalog produce the following per-round B/A ratios. Loading is outside the
+measured blocks. Both middle-half spreads are below 5% of their medians. No AP cells or covariance are involved.
+
+| Synthetic SGP4XP records | Median bounded/control CPU | Middle half | Load start (1/5/15 min) | Load end (1/5/15 min) |
+|---:|---:|---|---|---|
+| 33,000 | 10.165542 | 10.097354–10.351680 | 7.51, 15.70, 19.01 | 33.58, 22.44, 21.27 |
+| 100,000 | 10.103588 | 9.985053–10.133622 | 19.73, 21.55, 21.11 | 34.28, 21.51, 20.71 |
+
+**20.1 Source and indices.** The row and record stores coexist. Plugin calls select rows after a successful
+`plugin_init_omm` (including count 0, which selects empty rows), or records after a successful `load_epochs` or
+`load_epochs_close`. `load_epochs_open` and parts stage the replacement while the previous source stays readable.
+Every refused `load_epochs*` or `plugin_init_omm` preserves the active source and its states. A successful record load
+releases the previous record snapshot and frames, preserving rows. A successful `plugin_init_omm` preserves records,
+frames and any open load; its 88-byte record interpretation and numerical propagation are unchanged.
+`ingest_omm` and `sdnap_init_elements` replace native rows without changing the plugin selection: with records selected,
+plugin calls continue answering records and the native row exports answer the new rows. With rows selected, they answer
+the new rows. Pending and resident catalogs coexist during replacement, increasing peak memory by the pending catalog.
+
+A record entity is one epoch series, identified by the existing identity tuple in section 14. Multiple retained epochs
+share one entity and the epoch API's selection/blending rules. Plugin indices follow the first accepted input occurrence
+of each surviving series, across arbitrary part boundaries. Duplicate replacement, aging and set caps do not reorder a
+surviving series. Filtered series have no index. Raw `sdnap_epochs_*` and `sdnap_frames_*` indices retain their sorted
+series order. A reordered catalog holds a four-byte map entry per entity, included in epoch-store byte accounting.
+A catalog whose accepted input order already equals series order needs no map allocation. The load reuses consumed
+sort positions to track first input occurrences. Frame
+refill priorities use raw series indices, not plugin indices.
+
+**20.2 State and catalog calls.** All dates below are UTC Julian dates. Output pointers reference caller-owned module
+memory; the caller allocates the complete output size, refreshes its views after memory growth, and frees its buffers.
+
+```c
+int32_t plugin_entity_count(void);
+int32_t plugin_propagate(double jd, uint32_t entity, OrbProStateVector* out);
+int32_t plugin_propagate_batch(double jd, OrbProStateVector* out, uint32_t count);
+int32_t plugin_propagate_all_positions(double jd, double* out, uint32_t max);
+```
+
+A state occupies 64 bytes: epoch at byte 0, position at 8 (three doubles, ECEF meters), velocity at 32 (three doubles,
+ECEF meters/second), frame 3 at byte 56, zero padding at 57–59, and flags at 60 (VALID bit 0). Every processed record slot
+has the requested epoch and frame, including a missing slot. A successful singleton returns 0. Structural errors are -1
+(no initialized entities), -2 (index/count outside the source), -3 (null output), and -4 (nonfinite date). AP missing,
+unsupported or position-only cells return -8 for a full state; AP refusal/builder failure and direct theory failure
+return -6. A failed epoch thread pool also yields -6 without reading its caches.
+
+In record mode, the struct batch returns 0 after filling all requested slots, even when some slots are invalid. Its
+structural errors are negative. In row mode it retains the first propagation error, as the original ABI does. AP struct
+calls require `sdnap_frames_open` flags 0, which stores velocities. No zero velocity is substituted for an absent one.
+
+The catalog call writes `min(entity_count,max)` interleaved x/y/z triples and returns that count, including missing
+entities. Three NaNs occupy each failed entity's slot; output order is never compressed. Empty sources and max 0 return
+0 without writing. Nonempty calls reject a null output with -3 or a nonfinite date with -4. Position-only cells are valid
+for this positions-only call. The row source uses its existing evaluator and also writes NaN for failed positions.
+Neither a singleton, a struct batch, nor a catalog call constructs AP cells or falls back to exact AP automatically.
+
+**20.3 Paths and metadata.**
+
+```c
+int32_t plugin_propagate_path(uint32_t entity, double start_jd,
+                              double step_days, uint32_t count, double* out);
+double get_orbital_period(uint32_t entity); // minutes
+double get_eccentricity(uint32_t entity);
+```
+
+A path samples `start_jd + i*step_days`, writes one ECEF-meter triple per sample and returns count. Zero and negative
+steps are accepted. The cap is 1,000,000 samples (24,000,000 output bytes); counts that overflow 32-bit output
+arithmetic are refused. Every sample time is checked for finiteness before any output write. Count 0 returns 0 without accessing the source or output. Otherwise null output is -3, empty source
+-1, invalid entity -2, nonfinite grid/endpoint or count above INT32_MAX -4, and a failed epoch thread pool -6. Individual
+failed samples are NaN triples. Record paths use the direct epoch evaluator, including selection, blends and carried
+forecast precedence; they do not use frame cells. On return, only that entity's direct slots are released; its frame
+cells remain intact. Row paths use the row evaluator.
+
+Record sampling hints come from the newest retained set: period is 1440 divided by mean motion in revolutions/day,
+eccentricity is the mean-element value. Row hints use the initialized mean motion (recovered mean motion for SGP4) and
+epoch eccentricity. Missing period is 0 and missing eccentricity is NaN. These are sampling hints, not an assertion of
+exact periodicity under perturbations.
+
+**20.4 Replacement and ownership.** Stream method `replace_epoch` accepts exactly one `ocm` record using the same
+binary invoke and size-prefixed framing as `load_epochs`. A closed, nonempty record source is required. The complete
+series identity and theory must already exist, and the target must hold exactly one set. Preparation validates the
+record, retains any carried forecast and interns its atmosphere before committing. The plugin index and raw series
+index are preserved. Commit releases only the target's direct slots, covariance and two frame cells; other entities'
+cells and caches remain usable. The target's frame eligibility and epoch are refreshed, and a refill sweep restarts.
+There is no global-generation invalidation. Replacement does not reapply snapshot aging/capping or change ingestion
+counts. Old weather with no remaining reference is released.
+
+Success is stream status 0. Refusals use status 3 with `records-not-loaded`, `replace-one-record`,
+`replace-identity-missing`, `replace-multiple-sets`, `pool-dead`, an existing record-validation error, or `out-of-memory`.
+Every refusal preserves the old record and cells. There is no append or identity-changing update in this method.
+
+`plugin_destroy` releases both stores, an open load, the map and frames. Caller-owned output allocations remain the
+caller's responsibility. The host quiesces its calls before destruction. If a failed epoch batch still has an active
+thread, destruction is a no-op and OMM initialization is refused, preventing a free while that thread holds a reference.
+
+The owning thread can publish two host buffers with atomic generation/timestamp metadata and acknowledgment before
+reuse. That protocol belongs to the host. These exports require serialized calls on the owning thread and provide no
+concurrent-read publication gate. A previous-time buffer is not relabeled as the requested time.
+
+`test/plugin-records.e2e.mjs` checks mixed synthetic sources, input order, holes, layouts, direct paths, metadata,
+replacement and lifecycle. `SDNAP_CONTROL_WASM` adds byte comparisons with an unchanged artifact. The test builds `test/lib/plugin-diagnostic.mjs` by default; an explicit
+`SDNAP_WASM` must contain all of its probes or the test fails naming the required build. Those probes implement
+allocation refusal, dead/active pool state, direct slot bytes and initialized table bytes. They are absent from production
+artifacts. Replacement-refusal, source-preservation and cache-release assertions always run. The test is an ABI comparison, not an independent
+physics calibration.
+
+
+### Native row initialization at the memory limit
+
+Before `plugin_init_omm` selects rows, `sdnap_init_elements` and `ingest_omm` release the preceding native rows before allocating the
+replacement, matching the native store's memory lifetime. A failed store allocation leaves those native rows empty.
+The positive count includes sets whose initialization is refused; `sdnap_init_error` and each propagation status
+identify them. Record selection remains intact when native rows change.
+
+After explicit plugin OMM selection, replacement rows are prepared alongside the old rows so a refused store allocation
+preserves the active plugin source. Plugin OMM initialization always preserves the previous rows on refusal; stream
+ingestion does so after explicit plugin OMM selection, including when an individual set allocation fails. This transactional lifetime holds both stores during preparation.
+Every answered native row uses the newly supplied set and its requested time.
+
+`test/memory-limit.e2e.mjs` compares every answered state bit for bit against an instance with the default maximum,
+including replacement of SGP4 rows by AP test rows with two pool threads at 128 MiB.
+
+Unsigned wasm32 builds preserve the native memory-limit figures of main 0.6.60 (6eeff4b6): 3,268 answered row states
+and 704 refusals across two instants at 128 MiB, and 2,473 stock-record answers at 80 MiB. Every answered state is
+bit-identical to its reference. The memory-limit assertions and numerical tolerances are unchanged.
+
+The first one-byte host allocation is at address 1,199,520, compared with main's 1,201,808: 2,288 fewer bytes before
+the heap. Concise epoch-load manifest descriptions retain their contract and reference the detailed SPEC rules.
+The epoch-store map owns only a pointer; its length comes from the series count, and its counted allocation occurs
+only for nonidentity record order. The native Store, Entry, Series, Slot and propagation-record sizes are unchanged;
+the thread-local initialization segment remains 343,956 bytes.
+
+### Shared lookup initialization
+
+Instance initialization performs the time, atmosphere, gravity, and half-conversion
+fills before exports or pool threads run. This adds startup work; its elapsed cost
+is unmeasured. The tables keep their original storage, contents, and per-state
+lookup expressions. AP thread preparation also prepares the time table.
+
+The time library publishes its leap-entry count before its pointer. A concurrent
+reader can capture a null pointer with a nonzero count. A deterministic test holds
+the initializer in that gap; other probes hold the atmosphere and gravity table
+fills open so that overlapping writers are observable. `node test/shared-tables.e2e.mjs`
+fails on 0.6.60 sources and passes with instance preparation. The test hook preserves
+every original instruction in the time conversion.
+
+On the committed 0.6.60 artifact, forcing one interrupted-reader capture and then
+completing the pointer publication changes a synthetic geosynchronous flight by
+at most 0.09061098147164132 m over five days at 300-second spacing. This conditional
+control is not an occurrence rate or a public pooled-path reproduction. The
+published row-store ingest selects SGP4 or SGP4XP, without AP terms; AP row-store
+tests need a diagnostic selection hook. Epoch batches prepare the time table on
+the calling thread before parallel initialization. Frames use one host thread and
+exclude concurrent pool batches. An isolated single-threaded host has no competing
+initializer. Hosts calling time-using exports concurrently require the instance
+initialization barrier.
+
+Seventeen synthetic AP fixtures, 24,497 states/statuses through five days, are
+bit-identical before and after preparation. A corrupted eight-hour body node stays
+cached through a five-day scan; a node 256 slots away replaces it, after which its
+re-evaluation agrees with the reference. The six-node interpolation window and
+integrated mean-state history can carry its effect beyond its immediate interval.

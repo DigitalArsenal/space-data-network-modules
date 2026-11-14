@@ -95,6 +95,7 @@ static int ingest_omm_call(void) {
       return 3;
     }
   }
+  if (mem::refuse_if_out_of_memory()) return 3;
   if (store_init(rows.data(), static_cast<uint32_t>(rows.size())) < 0) {
     plugin_set_error("out-of-memory", "No memory for the element set.");
     return 3;

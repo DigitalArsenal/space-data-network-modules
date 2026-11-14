@@ -143,7 +143,7 @@
     {
       "methodId": "load_epochs",
       "displayName": "Load the epoch store",
-      "description": "Replaces the resident epoch store with the snapshot on 'ocm' under the optional $PCF EPOCH_STORE table. SPEC 14, on $OCM: per series (NORAD_CAT_ID, INTERNATIONAL_DESIGNATOR, MEAN_ELEMENT_THEORY, HEADER.ORIGINATOR) the sets of the last CACHE_DAYS before the newest MEAN_ELEMENTS.EPOCH of the load, at most MAX_SETS_PER_OBJECT (the newest), of THEORIES (SGP4, SGP4XP, AP); sets not centered on the Earth are counted and not stored. Each set flies its own record's forces, SPACE_WEATHER rows and density-correction nodes (identical row series and node vectors held once, by content); two sets of one series whose forces differ (ATMOSPHERIC_MODEL, WEATHER_SOURCE, DENSITY_CORRECTION, the two gravity caps; rows and nodes are data) are refused (series-forces-differ). Read through the exports sdnap_epochs_count, _stats, _series, _select, _at and _set_at (selection by SELECTION, the handover blend by BLEND_WINDOW_SECONDS and BLEND_SHAPE; a set asked for past its rows gives the status 90). An AP set whose epoch floor is at its writer's theory state (written before 0.6.39, SPEC 12.4) is kept without its covariance. Refused by name: missing-ocm, invalid-ocm, omm-not-flown, spw-not-flown, dcl-not-flown, grid-not-flown, unsupported-center, mean-elements-missing, mean-element-theory-unspecified, theory-not-flown:<name>, elements-other-theory, orb-averaging-mismatch, frame-pairing-invalid, weather-source-unspecified, atmosphere-weather-mismatch, atmosphere-unsupported, solid-tides-unsupported, gravity-model-mismatch, parameter-repeated:ECOM2_Y0, parameter-invalid:ECOM2_Y0, parameter-not-modeled:<name>, radiation-model-superseded, radiation-model-mismatch, weather-rows-missing, weather-rows-unselected, weather-rows-invalid:<day>, weather-rows-short:<day>, density-correction-missing, density-correction-unselected, invalid-density-correction, density-correction-atmosphere-mismatch, density-correction-cid-missing, cov-parameter-kind-unspecified, cov-propagation-invariant, invalid-covariance, series-forces-differ, configuration-refused, invalid-configuration, pool-dead (SPEC 9), out-of-memory (an allocation failed, SPEC 1.6).",
+      "description": "Prepares the 'ocm' snapshot using optional $PCF EPOCH_STORE filtering, retention, selection and blending (SPEC 14). Each series retains its records' forces, shared weather and density corrections. Success publishes the snapshot, selects plugin records and closes prior frames; native rows remain. Refusal preserves resident data. Record, configuration, pool and allocation refusals are defined in SPEC 14 and 20.",
       "inputPorts": [
         {
           "portId": "configuration",
@@ -195,7 +195,7 @@
     {
       "methodId": "load_epochs_open",
       "displayName": "Open a load of the epoch store in parts",
-      "description": "Starts a load in parts (SPEC 14.1.1): drops any load in progress, empties the store, reads the optional $PCF EPOCH_STORE. A non-zero status of the three methods closes the load and empties the store, except load-not-open and pool-dead (no change, SPEC 9). Refused by name: pool-dead, configuration-refused, invalid-configuration, out-of-memory.",
+      "description": "Starts a pending load with optional $PCF EPOCH_STORE, replacing any pending load. Refusal preserves resident rows, records and cells (SPEC 14.1.1).",
       "inputPorts": [
         {
           "portId": "configuration",
@@ -257,8 +257,39 @@
     {
       "methodId": "load_epochs_close",
       "displayName": "Close a load of the epoch store",
-      "description": "Closes the open load: sort and install, as load_epochs does (SPEC 14.1.1). The load is closed either way and a refusal empties the store, except load-not-open (no change). Refused by name: load-not-open, missing-ocm, series-forces-differ, out-of-memory.",
+      "description": "Publishes the pending snapshot and selects plugin records; closes prior frames and preserves rows. Refusal preserves resident data (SPEC 14.1.1).",
       "inputPorts": [],
+      "outputPorts": [],
+      "maxBatch": 65535,
+      "drainPolicy": "drain-to-empty"
+    },
+    {
+      "methodId": "replace_epoch",
+      "displayName": "Replace one catalog record",
+      "description": "Replaces one record of a closed catalog by its existing series identity and theory. The series must hold one set. The plugin index and every other entity remain unchanged. Only the replaced entity loses its direct caches and frame cells. Every refusal preserves the old record. Refusals include records-not-loaded, replace-one-record, replace-identity-missing, replace-multiple-sets, pool-dead, record validation errors and out-of-memory.",
+      "inputPorts": [
+        {
+          "portId": "ocm",
+          "displayName": "ocm",
+          "minStreams": 1,
+          "maxStreams": 1,
+          "required": true,
+          "description": "Exactly one size-prefixed $OCM record in one required stream, matching an existing single-set series identity and theory.",
+          "acceptedTypeSets": [
+            {
+              "setId": "sds-ocm-element-sets",
+              "allowedTypes": [
+                {
+                  "schemaName": "OCM.fbs",
+                  "fileIdentifier": "$OCM",
+                  "rootTypeName": "OCM"
+                }
+              ],
+              "description": "Ratified SDS $OCM element sets; the module decodes the FlatBuffer itself."
+            }
+          ]
+        }
+      ],
       "outputPorts": [],
       "maxBatch": 65535,
       "drainPolicy": "drain-to-empty"
