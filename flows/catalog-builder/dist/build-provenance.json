@@ -1,8 +1,8 @@
 {
   "spacedatastandards": "1.279.0",
   "spaceDataModuleSDK": "0.9.14",
-  "propagatorVersion": "0.6.58",
-  "propagatorSourceSHA256": "da1076a64ce07469185ea0cec1de045ec565eab084b20dfda6696fbb6f37ed82",
+  "propagatorVersion": "0.6.60",
+  "propagatorSourceSHA256": "e9bbb7bb9c77c832302788de1956b0c3b6fa521d4875b029e433d90830b7a756",
   "threadModel": "emscripten-pthreads",
   "unsigned": true
 }
