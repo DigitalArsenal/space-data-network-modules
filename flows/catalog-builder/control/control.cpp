@@ -125,7 +125,7 @@ void trim_state(){
    if(victim==attempts.end())victim=std::min_element(attempts.begin(),attempts.end(),[](const auto& a,const auto& b){return a.second.sequence<b.second.sequence;});
    diagnostics.add("warning: oldest protected recovery entry evicted at attempt bound","bounds");
   }
-  if(poison!=poisons.end()){if(scan_at>=scans.size())record_removal(poison->first);poisons.erase(poison);}else {if(scan_at>=scans.size())record_removal("catalog-object/"+std::to_string(victim->first));retained-=victim->second.read_bytes;dirty_attempts.erase(victim->first);attempts.erase(victim);}
+  if(poison!=poisons.end()){if(scan_at>=scans.size()||scans[scan_at].schema!="NEV")record_removal(poison->first);poisons.erase(poison);}else {if(scan_at>=scans.size()||scans[scan_at].schema!="NEV")record_removal("catalog-object/"+std::to_string(victim->first));retained-=victim->second.read_bytes;dirty_attempts.erase(victim->first);attempts.erase(victim);}
   ++diagnostics.evicted;state_evicted=true;
  }
 }
