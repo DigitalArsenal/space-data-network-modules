@@ -13,6 +13,7 @@
 #include <cmath>
 #include <cstring>
 #include <cstdio>
+#include <cstdlib>
 #include <ctime>
 #include <chrono>
 #include <algorithm>
@@ -132,7 +133,7 @@ bool retain(const uint8_t* p,size_t n) {
    unsigned id=0;char tail=0;if(std::sscanf(subject.c_str(),"catalog-object/%u%c",&id,&tail)!=1||!id)return false;if(id%cfg.partitions!=cfg.partition)continue;
    const auto detail=text(e->DETAIL());const auto first=detail.find("input="),last=detail.find(';',first),seq_at=detail.find("sequence=");
    if(first==std::string::npos||last==std::string::npos||e->TIME_MS()<=0)return false;
-   uint64_t seq=0;if(seq_at!=std::string::npos){try{seq=std::stoull(detail.substr(seq_at+9));}catch(...){return false;}}state_sequence=std::max(state_sequence,seq);
+   uint64_t seq=0;if(seq_at!=std::string::npos){char* end=nullptr;seq=std::strtoull(detail.c_str()+seq_at+9,&end,10);if(end==detail.c_str()+seq_at+9||*end!=';')return false;}state_sequence=std::max(state_sequence,seq);
    auto old=attempts.find(id);
    if(old==attempts.end()||seq>old->second.sequence||(seq==old->second.sequence&&e->TIME_MS()>old->second.time)){
     if(old==attempts.end()&&poisons.size()+attempts.size()>=state_limit){state_complete=false;continue;}
