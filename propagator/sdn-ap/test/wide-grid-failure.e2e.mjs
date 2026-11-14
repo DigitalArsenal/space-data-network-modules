@@ -31,7 +31,8 @@ try{
  const frame=await h.frame(rs.slice(0,3));assert.equal(frame.statusCode,3);assert.equal(frame.errorCode,'out-of-memory');
  const blocks=frame.outputs.filter(o=>o.portId==='ephemeris').flatMap(o=>OEM.getRootAsOEM(new flatbuffers.ByteBuffer(o.payload)).unpack().EPHEMERIS_DATA_BLOCK);
  assert.equal(blocks.length,3);assert.match(String(blocks[0].COMMENT),/status=refused/);assert.match(String(blocks[0].COMMENT),/out-of-memory/);
- for(const b of blocks.slice(1))assert.match(String(b.COMMENT),/status=ok/);
+ assert.equal(blocks[0].EPHEMERIS_DATA_LINES.length,0);
+ for(const b of blocks.slice(1)){assert.equal(b.COMMENT,null);assert.equal(b.EPHEMERIS_DATA_LINES.length,1);}
  h.x.sdnap_test_grid_fail(0);assert.equal((await h.frame(rs.slice(0,3))).statusCode,0);
 }finally{await h.close();}
 console.log(JSON.stringify({complete:true,cases,framedContinuation:true}));
