@@ -73,6 +73,11 @@ try{
  const unchanged=await tick(now+1000);assert.equal(unchanged.fits+unchanged.products+unchanged.indexes,0);
  const metadata=OMM.getSizePrefixedRootAsOMM(new fb.ByteBuffer(seed(ids[0]))).unpack();metadata.OBJECT_NAME='SYNTHETIC METADATA';records('OMM.fbs','synthetic','primary').push(pack(metadata,'OMM'));
  assert.equal((await tick(now+1100)).fits,0,'metadata-only seed reissue does not refit');
+ const weatherRows=records('SPW.fbs','synthetic','weather');const usedDay=weatherRows.find(b=>SPW.getSizePrefixedRootAsSPW(new fb.ByteBuffer(b)).DATE()===obj.EPOCH.slice(0,10));
+ const unused=SPW.getSizePrefixedRootAsSPW(new fb.ByteBuffer(usedDay)).unpack();unused.F107_ADJ=(Number.isFinite(unused.F107_ADJ)?unused.F107_ADJ:100)+1;weatherRows.push(pack(unused,'SPW'));assert.equal((await tick(now+1110)).fits,0,'unused weather fields do not refit');
+ unused.F107_OBS+=1;weatherRows.push(pack(unused,'SPW'));assert.equal((await tick(now+1120)).fits,2,'overlapping weather driver revisions refit');
+ weatherRows.splice(-2);await tick(now+1130);
+
  const renamed=C.CAT.getSizePrefixedRootAsCAT(new fb.ByteBuffer(records('CAT.fbs','synthetic','identities')[0])).unpack();renamed.OBJECT_NAME='SYNTHETIC RENAMED';renamed.OBJECT_ID='SYNTHETIC-DESIGNATOR';records('CAT.fbs','synthetic','identities').push(pack(renamed,'CAT'));
  await tick(now+1200);assert.equal(current().get(ids[0]).OBJECT_NAME,renamed.OBJECT_NAME);assert.equal(current().get(ids[0]).OBJECT_ID,renamed.OBJECT_ID);
  records('CAT.fbs','synthetic','identities').pop();await tick(now+1300);
@@ -131,6 +136,8 @@ try{
  records('OMM.fbs','synthetic','primary').push(seed(served,.8));await tick(now+200);assert.equal(Date.parse(current().get(waiting).PRODUCTS_AS_OF),now+200,'oldest unserved selection precedes another change to the recently served object');
  cfg['catalog.batch_size']=4;
 
+ cfg['catalog.max_records']=3;control.destroy();control=await createControl();const bounded=await tick(now+300);assert.match(bounded.notice.reason,/catalog.max_records=3/);assert.ok(bounded.indexes<=1,'bounded resident subset still makes progress without removals');delete cfg['catalog.max_records'];
+ cfg['catalog.max_bytes']=512*1024*1024;control.destroy();control=await createControl();await assert.rejects(()=>tick(now+400));delete cfg['catalog.max_bytes'];
  cfg['catalog.max_removal_fraction']=.25;store.set(key('OMM.fbs','synthetic','primary'),[]);control.destroy();control=await createControl();
  const guarded=await tick(now+1000);assert.equal(guarded.indexes,0);assert.match(guarded.notice.reason,/mass-removal guard/);
  cfg['catalog.invocation_budget_ms']=1000;control.destroy();control=await createControl();const budget=await tick(now+2000);assert.equal(budget.fits+budget.fallbacks,0);assert.equal(budget.notice.kind,'skipped');

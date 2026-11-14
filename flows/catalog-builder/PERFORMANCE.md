@@ -6,7 +6,7 @@ A complete 2,000-object first-build measurement is unavailable. The larger-catal
 
 ## Controlled measurements
 
-The machine has 28 CPUs and 256 GiB of memory. Inputs are synthetic near-circular orbits with 37 repeating phases and common weather. Every selected product uses exact W, compact seven-block annotation and native durable product/index writes. Module source is at `8a23f553dc5580ed727d1238dacf57edba6bd9ad`, built with SDK 0.9.14 and standards 1.279.0. The host supports complete indexed reads, per-service execution budgets and interruptible AOT.
+Inputs are synthetic near-circular orbits with 37 repeating phases and common weather. Every selected product uses exact W, compact seven-block annotation and native durable product/index writes. The benchmark uses SDK 0.9.14, standards 1.279.0, repacked fit inputs, retained instances and complete product scans. It does not measure the raw-fit preservation, selected-batch lookup, deadline reserve or instance-release configuration. The host supports complete indexed reads, per-service execution budgets and interruptible AOT.
 
 Each comparison contains eight A–B–B–A rounds with independent stores and a primed runtime. Trigger intervals include complete scans, fitting, covariance and product/index writes. Input preparation, instantiation, prewarming and shutdown are excluded. Whole-process RSS includes setup. The two-instance comparison uses the default compiled program in separate instances; the four-service comparison uses distinct compiled IDs registered with the node plugin manager. Both use the same numerical guest objects.
 
@@ -27,23 +27,10 @@ The two larger-catalog columns are arithmetic, excluding scan growth, harder fit
 
 ## Batch and scheduled capacity
 
-A single service completed 1,024 products and indexes within its ten-minute execution budget. Its guest used 7,405,568 bytes against the configured 268,435,456-byte limit; whole-process peak RSS was 627,539,968 bytes. A 1,280-object request reached the deadline after 1,195 complete product/index pairs. Thus 1,024 is the largest fully completed tested batch, with limited deadline headroom. The configurable ceiling of 4,096 does not guarantee completion.
+A single service completed 1,024 products and indexes within its ten-minute execution budget. Its guest used 7,405,568 bytes against the configured 268,435,456-byte limit; whole-process peak RSS was 627,539,968 bytes. A 1,280-object request reached the deadline after 1,195 complete product/index pairs. Thus 1,024 is the largest fully completed tested batch, with limited deadline headroom. The controller ceiling is 1,024; its deadline reserve can stop a batch sooner.
 
 At 128 changes per ten-minute tick, each service admits 18,432 changes per day. Two services admit 36,864, four admit 73,728 and eight admit 147,456. Thus default-batch schedule arithmetic needs two services for 33,000 daily changes and eight for 100,000. Eight-service processing capacity is unmeasured. These counts also require the timer and retrieval-debounce settings in the README.
 
 A single service with batch 256 admits 36,864 changes per day. Two services with batch 512 each admit 147,456 with two concurrent fitting threads. These settings cover 33,000 and 100,000 respectively in scheduling arithmetic; concurrent 512-object batches and full-size scan memory are not directly measured. At two services with batch 512, an initial 33,000-object build requires 33 ten-minute slots, about 5.5 hours of slots. At eight services with batch 512 it requires nine slots, about 90 minutes, also arithmetic.
 
-Each partition scans the complete source store. The default 200,000-record bound is too small for 100,000 current objects with a seed, identity, selection and product each. Weather and retained history add further rows. Appropriate scan/memory limits and bounded retention are prerequisites for the projected daily rates. The integrated publication host also limits a store to 100,000 journal entries and 200,000 indexed retained records. Separate product/index transactions exceed that entry limit for an initial 100,000-object build. A 33,000-object build consumes about 66,000 entries before further history. Service partitions share those limits; larger or sustained publication requires separate stores and a supported drain/retirement procedure. The projections establish neither full-catalog publication capacity nor the throughput of durable retention.
-
-## Refit avoidance screen
-
-A constructed publication-day sample contains 1,000 metadata refreshes, 500 tiny same-epoch phase corrections and 500 larger corrections. Stored AP versus updated SGP4 forecasts at 289 epochs across the following 24 hours have maximum position differences of approximately 1,063.46 m, 1,063.58 m and 13,082.99 m. None meet a conservative 10 m screen. At the existing 10 km fit acceptance ceiling, 1,500 would be candidates; that ceiling is not an all-time forecast bound. The mixture does not estimate the rate for newly re-epoched daily sets. Reuse is not enabled and contributes no assumed throughput savings. Existing old-span and excluded-class updates retain the ingestion-only fallback.
-
-## Loads
-
-Start/end one-, five- and fifteen-minute load averages for each completed timing slice:
-
-- 2v1, end: 4.44 5.04 5.24.
-- 2v1, start: 5.58 5.21 5.27.
-- 4v1, end: 5.78 4.79 4.98.
-- 4v1, start: 6.22 6.37 5.86.
+The controller pages live seed/identity/index sources and retains only its partition. Product recovery uses a batch lookup. Memory bounds, the deadline reserve, instance replacement and durable publication costs can lower the arithmetic rates. The benchmark does not establish full-catalog publication capacity or sustained daily throughput.

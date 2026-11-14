@@ -1,92 +1,136 @@
 # Catalog reconciliation flow
 
-The timer flow reads configured OMM sources, CAT identities, SPW weather, and
-its durable CAT/OCM outputs through `index_page`. It selects one product per
-object, stores the product before replacing the index entry, and clears the
-product list with an as-of time when an object leaves the current sources.
-The default timer interval is ten minutes. The node supplies automatic
-publication; reliable changed-batch delivery and compact daily snapshots
-require the host behavior described in [publication requirements](PUBLICATION.md).
+Population annotation increases record size: two synthetic stored AP products
+average 9,592 bytes against 4,536 bytes of raw fit output. Fitting costs CPU,
+and durable publication adds retained SDS bytes and synchronous writes.
+[Throughput measurements](PERFORMANCE.md) describe a benchmark configuration;
+they do not establish sustained capacity with publication retention.
 
-The chain adapter calls the unchanged `sdn-ap` ingestion, propagation, and
-fit methods. Recipe W samples GCRF states from seed epoch minus 2.5 days to
-plus 5 days at 300-second spacing. The fit uses the full usable interval,
-NRLMSISE00 with supplied weather, maximum gravity degree 20, a 30-day weather
-horizon, and maximum tesseral degree 31 only at eccentricity at most 0.048.
-Acceptance requires 2,161 fit states, the exact requested interval, and the
-configured limits on the fit's own RMS and maximum errors. These limits are
-selection policy, not an accuracy certification.
+The ten-minute timer reads configured OMM, CAT identity and SPW sources through
+`index_page`, chooses one product per object, stores that product, and replaces
+its CAT selection. The node provides publication under the behavior in
+[publication requirements](PUBLICATION.md). The flow fetches no provider data.
 
-Earlier configured seed sources have priority. Within a source, the newest
-epoch wins; equal-epoch corrections use durable arrival order. The selected
-seed bytes, relevant weather bytes, and recipe/acceptance settings form the
-input fingerprint. Unchanged selections are skipped. An expired fit becomes
-an ingestion-only SGP4 product; the controller does not move the fit window.
-A refused fit is retried only after its input fingerprint changes. Objects
-outside the configured AP class receive SGP4 products with an explanation in
-the header comment and index selection reason.
+## Selection and recovery
 
-`gp-error-model:annotate_population` adds seven independently timestamped
-population covariance blocks, at the seed epoch plus each model-bin midpoint.
-They are symmetric 6-by-6 GCRF matrices encoded in lower-triangular text rows,
-labeled uncalibrated and identified by the
-model. The AP formal posterior and its propagation flag remain unchanged.
-The consumer selects the closest age block; `sdn-ap` does not propagate these
-added blocks. Unsupported population-model cases have an explicit explanation
-and no population blocks.
+Earlier configured seed sources have priority. Within each source, the newest
+epoch wins and an equal-epoch correction takes the later arrival. Work is ordered
+by durable selection time, with unserved objects first. Repeated changes to a
+recently served object do not precede an older unserved selection.
 
-The committed CAT selection is the recovery checkpoint. An interrupted object
-is recomputed from its unchanged inputs; an exact product found in storage is
-reused. Product batch identifiers contain content hashes; index identifiers add
-`:complete` to declare each single-object replacement a completed generation.
-Whole-list
-replacement prevents a previous theory from surviving as a second selection.
-Tombstones remain available to consumers. The page cursor bounds a sequence
-head under append ingestion; it does not protect against concurrent deletion.
-A failed or nonadvancing complete read stops reconciliation without committing
-that partial sweep. The subsequent tick starts its reads again.
+The numerical seed fields read by ingestion, weather drivers read by fitting,
+recipe/acceptance settings and latest identity form the change signature.
+Element metadata alone does not cause a refit. Identity changes cause a fresh
+composition and recomputation. Weather revisions affect objects whose carried
+weather interval includes the revised date; changes outside that interval and
+to unused weather fields cause no refit. A revision inside many overlapping
+intervals can require a catalog-wide refit. No forecast-distance reuse rule is
+applied.
+
+Recipe W calls the unchanged `sdn-ap` ingestion, propagation and fit methods.
+The SGP4 flight samples GCRF states from seed epoch minus 2.5 days to plus
+5 days at 300-second spacing. The fit uses NRLMSISE00, supplied weather, gravity
+degree 20, a 30-day weather horizon from its epoch, and tesseral degree 31 at
+eccentricity at most 0.048. Acceptance requires 2,161 states, the exact interval,
+and configured RMS/maximum error limits. These are selection limits, not an
+accuracy certification. Weather rows span the day before the flight starts
+through the fit epoch plus 30 days, inclusive.
+
+Expired, future or excluded seeds use ingestion-only SGP4. Future seeds are
+reconsidered when their epoch arrives. Missing/invalid weather and physically
+refused fits wait for input changes; other fit refusals carry a ten-minute
+retry time. A failed object advances to the following object. Per-instance
+failure backoff grows from one to 128 minutes and resets with the instance;
+committed fallback retry times survive in the selection reason.
+
+Malformed records are counted and skipped. Notices contain bounded source/hash
+examples and object-failure reasons/retry times. `FlowNotice.KIND` is `Info`
+for a successful changed tick, `Unchanged` for a successful unchanged tick,
+`Skipped` for partial/deferred work, and `Missing` for failed work without a
+successful update. Transport corruption or a failed page query stops the scan.
+Incomplete sources suppress removals. Composer and annotation refusals return
+typed outcomes to the controller.
+
+A matching committed selection avoids any OCM read. After recomputation,
+recovery checks only the deterministic product batch, reusing identical stored
+bytes after interruption. Products precede index writes; terminal index batch
+identifiers end in `:complete`. Each replacement is a complete generation.
+The host must preserve referenced products and expose its live index through
+complete pages. The controller does not scan retained OCM history or depend
+on publication-journal internals. Seed/identity/index paging remains proportional
+to those live sources; selection compaction occurs in memory.
+
+## Consumer rules and covariance
+
+Read `CATProduct.KIND` before flying a selected record. `ApElements` and
+`Sgp4Elements` distinguish fitted AP and SGP4 fallback products. The stable
+`old-span fallback` selection-reason prefix identifies an expired seed.
+`CATProduct.STALE` means retirement by a maneuver in the standard; time expiry
+does not set it. CAT has no typed enum for a fallback's time-expiry reason.
+
+A nonempty `PRODUCTS_AS_OF` with zero products is a removal, whether the empty
+vector is present or omitted by a reader's repack. No index row means unprocessed,
+not removed. Removal reasons are retained in the tick notice; CAT has no field
+for a reason on an empty selection. More than the configured share of active
+selections cannot be removed in a tick without an explicit setting increase.
+
+The fit's entire original byte buffer is preserved without unpack/repack.
+Annotation preserves its primary covariance, calibration and propagation inputs.
+Seven independent blocks contain the SGP4 seed population model, rotated from
+RTN using the seed's SGP4 state at each age midpoint, even when attached to AP.
+They do not model the AP fit's error. Block IDs starting `population/` and
+CVR rules `SourceModel`/`PooledModel` identify these priors; `EMPIRICAL` is the
+standard's most specific applicable block basis. Each block is uncalibrated.
+A consumer chooses the closest age block; `sdn-ap` does not propagate these
+blocks. Unsupported/nonfinite cases carry labeled absence. The seed epoch
+must match ingestion or the exact-W fit interval within one millisecond, which
+covers element-epoch rounding. `COV_UNITS` lists diagonal standard-deviation
+units, `km km km km/s km/s km/s`; matrix entries therefore have units km²,
+km²/s and km²/s². [Encoding details](COMPACTNESS.md).
 
 ## Configuration and bounds
 
-The service configuration supplies `catalog.provider` as the publishing node's
-own provider identifier. It also supplies `catalog.identity_provider`,
+Supply `catalog.provider`, `catalog.identity_provider`,
 `catalog.identity_source`, `catalog.weather_provider`, `catalog.weather_source`,
-and parallel string arrays `catalog.seed_providers` and `catalog.seed_sources`.
-At most 16 ordered seed sources are accepted.
+and parallel arrays `catalog.seed_providers` and `catalog.seed_sources` (1–16).
 
 | Setting | Default | Bound or meaning |
 | --- | --- | --- |
-| `catalog.page_size` | 512 | 1–1,000 records per storage page |
-| `catalog.partition_count` | 1 | 1–8 services; disjoint object-number modulo partitions |
-| `catalog.partition_index` | 0 | Zero-based partition, less than the count |
-| `catalog.batch_size` | 128 | 1–4096 changed objects per tick; the execution budget remains binding |
-| `catalog.max_records` | 200,000 | 1–2,000,000 scanned records |
-| `catalog.max_bytes` | 134,217,728 | 1 KiB–512 MiB of accounted scan data |
-| `catalog.recipe_revision` | `W/1` | Included in the input fingerprint |
+| `catalog.page_size` | 512 | 1–1,000 records; at most 10,000 pages per source |
+| `catalog.partition_count` | 1 | 1–8 disjoint object-number modulo partitions |
+| `catalog.partition_index` | 0 | Less than partition count |
+| `catalog.batch_size` | 128 | 1–1,024 successful changes per invocation |
+| `catalog.max_records` | 400,000 | 1–500,000 resident records in this partition |
+| `catalog.max_bytes` | 67,108,864 | 1 KiB–96 MiB accounted resident data |
+| `catalog.invocation_budget_ms` | 540,000 | 1,000–540,000; below host timeout |
+| `catalog.object_allowance_ms` | 2,000 | 2,000–60,000; minimum reserve per object |
+| `catalog.max_removal_fraction` | 0.25 | 0–1; explicit permission for larger removals |
+| `catalog.recipe_revision` | `W/1` | Signature input |
 | `catalog.validity_margin_seconds` | 0 | Nonnegative expiry margin |
 | `catalog.nonresonant_max_e` | 0.05 | Configurable downward |
 | `catalog.resonant_max_e` | 0.3 | Configurable downward |
-| `catalog.max_fit_rms_km` | 2 | Positive finite acceptance limit |
-| `catalog.max_fit_error_km` | 10 | Positive finite acceptance limit |
+| `catalog.max_fit_rms_km` | 2 | Positive finite acceptance bound |
+| `catalog.max_fit_error_km` | 10 | Positive finite acceptance bound |
 
-The conservative resonance classifier uses mean motion in radians per minute:
-greater than 0.0035003818 and at most 0.015751718. It is a stand-in for the
-module's documented per-frame class. Every sweep also has a 10,000-page bound.
-Scan accounting includes historical input/index bytes and 128 bytes per product
-identifier; it is not a measurement of total resident memory. The service's
-memory and execution budgets apply independently.
+The resonance rule uses mean motion greater than 0.0035003818 and at most
+0.015751718 radians/minute. Resident accounting includes bytes plus 256 bytes
+per retained entry and replaces superseded entries. Other partitions' records
+are validated but not retained. A bounded partial scan reports read count and
+settings, processes retained work, and suppresses removals. Increase a binding
+setting within its bounds or add partitions. Accounting is not total heap use;
+configure at least 4,096 memory pages (256 MiB). Full-catalog heap use is unmeasured.
 
-Complete scans become more expensive as retained history grows, even when no
-fit changes. Each tick processes objects in catalog-number order and skips
-committed matches. The 128-object default therefore limits a ten-minute timer
-to 128 changed objects per invocation, even if numerical execution has spare
-capacity. Repeated failures on an early object stop progress on later objects.
-The two storage sources are `catalog-products` (OCM) and `catalog-index` (CAT).
+Monotonic budget checks run between pages and before each object. The reserve
+is the larger of the configured allowance and twice the longest observed object
+duration. It is not a guarantee against a single slow or blocked operation.
+Configure `execution_timeout: 10m` with the 540-second controller budget and
+`release_after_run: true` so an interrupted instance is discarded. A host must
+replace a poisoned invocation before reuse; keeping an interrupted instance
+is unsupported. Instance replacement also adds instantiation/priming costs.
 
-## Build and verification
+## Build and validation
 
-Build the unsigned `propagator/sdn-ap` package to prepare its generated C++
-translation unit, then run these commands from this directory:
+Build the unsigned `sdn-ap` generated translation unit, then from this directory:
 
 ```sh
 SDM_MODULE_UNSIGNED_BUILD=1 node build.mjs
@@ -94,53 +138,21 @@ SDM_MODULE_UNSIGNED_BUILD=1 node build-flow.mjs
 node --test tests/controller.test.mjs tests/sdk_compat.test.mjs
 ```
 
-`CATALOG_BUILD_DIR` selects an alternate chain output directory;
-`CATALOG_FLOW_BUILD_DIR` selects the complete flow output directory, whose
-default is `dist/flow`. `CATALOG_CONTROLLER_DIR`, `CATALOG_CHAIN_WASM`, and
-`SDNAP_WASM` select alternate test artifacts. The deployed runtime bundle is
-`dist/flow/runtime`. Native execution requires a runtime with interruptible
-threaded AOT and the node's `index_page` storage capability. The service exposes
-`execution_timeout`; its invocation budget must cover the configured batch.
+`CATALOG_BUILD_DIR` selects chain output; `CATALOG_FLOW_BUILD_DIR` selects
+flow output (`dist/flow` by default). `CATALOG_CONTROLLER_DIR`,
+`CATALOG_CHAIN_WASM` and `SDNAP_WASM` select test artifacts. The runtime bundle
+is `dist/flow/runtime`. Build distinct registered partition program IDs with
+`CATALOG_FLOW_PARTITIONS=8`. Configure matching partition counts and unique
+indexes, a shared provider, empty `exclusive_group`, `intervals.refresh: 10m`
+and `retrieval_interval: 1m`. Reference installed program IDs in service
+configuration; the default three-hour debounce does not provide ten-minute
+capacity. Failure backoff remains active.
 
-Synthetic tests cover direct-call equality, refusal, source precedence,
-equal-epoch correction, recovery after product storage, weather changes,
-expiry fallback, tombstones, and selection-map convergence. They do not
-establish production orbit accuracy or remote publication/trust behavior.
-
-## Earlier two-object measurement
-
-Sixteen ABBA rounds compared a primed native reconciliation tick with storage
-against the unchanged exact-W chain in Node, using the same two synthetic
-objects. The median native time was 0.459 seconds per object. The median
-per-round native/control ratio was 1.108; its middle-half range was
-1.094–1.147 (4.73% of the median). The comparison includes different execution
-backends and the controller's extra work; it does not isolate one overhead.
-The two timing slices had starting/ending system loads of 2.84/4.44 and
-4.87/5.91, respectively, using the one-minute averages.
-
-The measured small-catalog rate projects to 4.21 hours of processing for
-33,000 objects, excluding growth in scan costs. It is not a full-catalog
-measurement. The default 128-object batch requires 258 ten-minute invocations
-for that first build, approximately 43 hours of scheduled slots. A
-256-object setting requires 129 invocations, approximately 21.5 hours.
-A native 256-object synthetic test completed within the ten-minute invocation
-budget, producing 256 stored products and 256 selections. Guest linear memory
-at its endpoint was 99 pages (6,488,064 bytes), excluding host and storage
-memory. The rate projection does not raise the controller's batch limit.
-These measurements exclude durable publication retention; the retained-entry
-and history limits in [publication requirements](PUBLICATION.md) also constrain
-initial builds and sustained updates.
-
-## Partitioned services
-
-Each partition scans the complete configured sources and changes only objects whose object number modulo `catalog.partition_count` equals `catalog.partition_index`. Services share one output provider and use distinct partition indexes. This also partitions expiry and removals. Increasing the batch ceiling does not guarantee completion within the host execution budget.
-
-[Covariance size accounting and compression](COMPACTNESS.md) describe the compact annotation. A 1,024-object native batch completed within a ten-minute invocation budget with 113 guest pages (7,405,568 bytes) and 627,539,968 bytes of whole-process peak RSS. A 1,280-object request reached the deadline after 1,195 complete selections. The largest fully completed tested batch is 1,024; the configured ceiling of 4,096 does not establish a safe batch at every load.
-
-Complete scans count every source record, including those owned by other partitions. A 100,000-object catalog with one seed, identity, selection and product per object exceeds the default 200,000-record scan bound even before weather or retained history. Operators must size the scan and memory limits for the entire retained source population. The 2,000-object throughput sample does not establish memory use at 100,000 objects.
-
-The node registers services by flow program ID and rejects duplicate IDs. Build distinct partition programs with `CATALOG_FLOW_PARTITIONS=8` and `CATALOG_FLOW_BUILD_DIR=build/catalog` when invoking `build-flow.mjs`; the resulting `build/catalog/partitions/0` through `7` bundles have distinct program IDs. Configure one service per bundle, with the same `catalog.partition_count`, distinct `catalog.partition_index` values, the shared catalog provider and source settings, and a suitable `execution_timeout`. Leave `exclusive_group` empty to allow parallel execution and `release_after_run` false to retain primed instances. Partition count and indexes must cover the catalog exactly once.
-
-For ten-minute scheduling, install the partition bundles and reference their program IDs in `flows.services[].flow`. Set `intervals.refresh: 10m` and `retrieval_interval: 1m` for each service. The node's default retrieval debounce is three hours; its per-service override matches the configured flow reference to the program ID, so a filesystem-path reference does not receive that override. Failure backoff remains active. Numerical throughput alone does not establish daily capacity without the matching schedule and debounce settings.
-
-[Controlled throughput and scheduling arithmetic](PERFORMANCE.md) record completed measurements, the unmeasured larger build, CPU/memory costs and scan limits.
+Synthetic compiled tests cover poisoned records, isolated failures, composer
+refusal, clock rollback, source precedence, changed-only updates, identity
+refresh, fairness, future/expired fallbacks, removals, deadline reserve,
+recovery, determinism and stored-product equality to raw fit fields/states/formal
+covariance. Covariance rotation also has an independent exact signed-axis case.
+The paged connector validates frame lengths/counts and byte/row limits; the
+host contract has `TestStorageIndexPageCompleteSnapshots` coverage. Signing,
+trust and signed-out reads are excluded.

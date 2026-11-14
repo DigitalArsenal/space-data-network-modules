@@ -1,11 +1,11 @@
 # Catalog publication requirements
 
-Compact annotated products average 9,858 bytes against a 5,088-byte fit record
-in the synthetic sample. Durable publication adds a synchronous retained SDS
-copy before storage commits. Retained writes serialize, disk usage grows with
-history, and automatic journal reclamation is absent. Snapshot selection and
-export also consume bounded memory. The numerical throughput measurements do
-not include this retention path or publication costs.
+Two synthetic stored products average 9,592 bytes against 4,536 bytes of raw
+fit output. Durable publication adds a synchronous retained SDS copy before
+storage commits. Retained writes serialize, and snapshot selection/export also
+consume bounded memory. Numerical throughput measurements exclude this path.
+Pending and referenced bytes must survive reclamation; host retention capacity
+and reclamation behavior require independent verification.
 
 ## Producer and host contract
 
@@ -79,8 +79,11 @@ a completed index selection.
 
 ## Verified behavior
 
-Unsigned synthetic tests exercise the compiled native controller and actual SDS
-exports with inert signing and transport boundaries:
+Unsigned synthetic export fixtures use repacked fitted products, an all-product
+scan controller and a host without automatic journal reclamation. They exercise
+the publication contract with inert signing and transport boundaries. The
+raw-fit-preserving controller has separate native first-build and browser
+recovery coverage. Export-fixture counts below describe their tested encoding:
 
 - First build, unchanged tick, equal-epoch correction, refused fit, weather
   recovery, old-span fallback, and removal pass. A SIGKILL after product storage
@@ -110,16 +113,16 @@ a consistent completed-generation export, not separate source replacement.
 
 ## Capacity and excluded behavior
 
-The tested host bounds retained state at 100,000 journal entries and 200,000
+The export-fixture host bounds retained state at 100,000 journal entries and 200,000
 indexed retained records, with 4,096 pending batches per source. It also bounds
 reference metadata at 128 MiB, selections at 100,000 records, shard-index metadata
-at 64 MiB, and individual payloads at 16 MiB. Completed history consumes these
+at 64 MiB, and individual payloads at 16 MiB. In that configuration, completed history consumes these
 limits. Each changed object normally adds a product and an index transaction;
 a first build of 100,000 objects therefore exceeds the journal-entry bound in
 one store. The 33,000-object first build consumes about 66,000 entries before
 further history. Compute/schedule arithmetic is not a sustained publication-rate
-guarantee. Separate stores and a supported drain/retirement procedure are
-prerequisites for larger or long-running catalogs.
+guarantee. Larger or long-running catalogs require verified reclamation or separate stores
+and a supported drain/retirement procedure.
 
 Reclamation requires completed changed-batch publication and preservation of
 all retained-generation references. Retain-all completion policy retires no
