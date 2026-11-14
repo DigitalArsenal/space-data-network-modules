@@ -1,212 +1,173 @@
-/// Grids held by exact key: each counted, freed when its last holder drops it, the kGridIdle most recently dropped kept until other
-/// grids are built (a grid a fit built is freed at once).
-struct GridSlot {
-  WideGrid* g;
-  int cls, refs;
-  uint32_t stamp;  // when it last became idle
-  bool transient;  // built inside a fit: freed when its last holder drops it, never kept idle
-};
-/// Idle grids kept: a catalog refresh finds its objects' grids; the least recently used goes first. kGridSlots bounds every grid
-/// held. SPEC 16.11 (stack #497): the cache is also bounded by bytes, live and idle together (kGridCacheBytes by default,
-/// sdnap_wide_grid_budget sets it): an idle grid is freed while the cache's bytes, with the grid about to be built, exceed the
-/// bound; a grid in use is never freed. A grid at the tesseral cap (12 above the switch) on 128 anomalies is at most
-/// kGridMaxBytes. The bound changes which grids are kept, never a grid's bytes: a grid is a pure function of its key.
-constexpr int kGridIdle = 128, kGridSlots = 256;
-constexpr size_t kGridCacheBytes = static_cast<size_t>(512) << 20;
-static_assert(kGridMaxBytes * 64 <= kGridCacheBytes, "the cache's default bound holds at least 64 of the largest grids");
+// Exact keys outlive their payloads. All ownership and LRU changes hold the cache
+// lock; a pin protects a published payload while a caller reads it.
+constexpr size_t kGridCacheBytes = size_t(192) << 20;
+constexpr size_t kGridMinimumBytes = 34 * kGridMaxBytes;
+constexpr unsigned kGridBuckets = 2048;
 struct GridCache {
   int32_t word;
-  int count;
-  uint32_t clock;
-  size_t bytes;                     // the held grids' allocated bytes (WideGrid::alloc_bytes), live and idle
-  size_t budget = kGridCacheBytes;  // the bound on them (sdnap_wide_grid_budget, under the lock)
-  GridSlot slot[kGridSlots];
+  WideGrid* bucket[kGridBuckets];
+  WideGrid* oldest;
+  WideGrid* newest;
+  size_t bytes, count, descriptors;
+  size_t budget = kGridCacheBytes;
 };
-/// Frees the least recently used idle grid while more than `keep` are idle or the held bytes with `extra` more exceed the
-/// budget (the cache's lock held).
-inline void evict_idle(struct GridCache& c, int keep, size_t extra = 0);
-inline GridCache& grid_cache() {
-  static GridCache c{};
-  return c;
-}
-inline void cache_lock(int32_t* w) {
+inline GridCache& grid_cache() { static GridCache c{}; return c; }
+inline void cache_lock(int32_t* word) {
   int32_t expected = 0;
-  while (!__atomic_compare_exchange_n(w, &expected, 1, false, __ATOMIC_ACQUIRE, __ATOMIC_RELAXED)) expected = 0;
+  while (!__atomic_compare_exchange_n(word, &expected, 1, false, __ATOMIC_ACQUIRE, __ATOMIC_RELAXED)) expected = 0;
 }
-inline void cache_unlock(int32_t* w) { __atomic_store_n(w, 0, __ATOMIC_RELEASE); }
-inline void free_grid(WideGrid* g) {
+inline void cache_unlock(int32_t* word) { __atomic_store_n(word, 0, __ATOMIC_RELEASE); }
+inline unsigned grid_hash(int degree, int cls, double n, double e, double i) {
+  uint64_t h = unsigned(degree * 3 + cls);
+  for (double x : {n, e, i}) {
+    uint64_t bits;
+    std::memcpy(&bits, &x, sizeof bits);
+    h ^= bits + UINT64_C(0x9e3779b97f4a7c15) + (h << 6) + (h >> 2);
+  }
+  h ^= h >> 33; h *= UINT64_C(0xff51afd7ed558ccd); h ^= h >> 33;
+  return unsigned(h) & (kGridBuckets - 1);
+}
+inline bool grid_same(double a, double b) { return std::memcmp(&a, &b, sizeof a) == 0; }
+inline void grid_unlink(GridCache& c, WideGrid* g) {
+  if (g->older) g->older->newer = g->newer; else c.oldest = g->newer;
+  if (g->newer) g->newer->older = g->older; else c.newest = g->older;
+  g->older = g->newer = nullptr;
+}
+inline void grid_touch(GridCache& c, WideGrid* g) {
+  g->older = c.newest;
+  if (c.newest) c.newest->newer = g; else c.oldest = g;
+  c.newest = g;
+}
+inline void grid_delete(GridCache& c, WideGrid* g) {
+  WideGrid** at = &c.bucket[grid_hash(g->degree, g->cls, g->n, g->e, g->i)];
+  while (*at != g) at = &(*at)->link;
+  *at = g->link; --c.descriptors; std::free(g);
+}
+inline void grid_evict(GridCache& c, WideGrid* g) {
+  grid_unlink(c, g);
+  c.bytes -= wide_grid_bytes_bound(g->degree); --c.count;
   wide_grid_release(*g);
-  std::free(g);
+  if (!g->refs) grid_delete(c, g);
 }
-
-/// The fit's scope (SPEC 16.11): while a FitGridScope lives on a thread, a grid built by a set initialized there (a fit's nominal,
-/// trial steps and copies, all made on the fit's calling thread; the pool's threads serve batch flights only) is freed when its last
-/// holder drops it, never kept idle. Nesting counts; the guard clears on every exit from its scope.
+inline bool grid_room(GridCache& c, size_t extra) {
+  while (extra > c.budget || c.bytes > c.budget - extra) {
+    WideGrid* g = c.oldest;
+    while (g && (g->pins || g->building)) g = g->newer;
+    if (!g) return false;
+    grid_evict(c, g);
+  }
+  return true;
+}
 inline thread_local int32_t g_fit_grid_depth = 0;
-inline int32_t& fit_grid_depth() {
-  return g_fit_grid_depth;
-}
+inline int32_t& fit_grid_depth() { return g_fit_grid_depth; }
 struct FitGridScope {
-  FitGridScope() { ++fit_grid_depth(); }
-  ~FitGridScope() { --fit_grid_depth(); }
-  FitGridScope(const FitGridScope&) = delete;
-  FitGridScope& operator=(const FitGridScope&) = delete;
+  FitGridScope() { ++g_fit_grid_depth; }
+  ~FitGridScope() { --g_fit_grid_depth; }
 };
-inline bool fit_grids_now() { return fit_grid_depth() > 0; }
-
-/// Grid lookups since the last reset: [0] by sets outside a fit, [1] by a fit's sets (SPEC 16.11; read by sdnap_wide_grid_stats).
-inline int64_t* grid_counts() {
-  static int64_t counts[3] = {0, 0, 0};  // [2] the grids built since the instance began
-  return counts;
-}
-
-struct GridCache;
-inline GridCache& grid_cache();
-inline void cache_contents(double& slots, double& bytes);
-
-/// SPEC 16.11: out[0] the grids the cache holds, out[1] their bytes and out[2] the grids built since the instance began.
-extern "C" __attribute__((export_name("sdnap_wide_grid_cache"))) int32_t sdnap_wide_grid_cache(double* out) {
-  cache_contents(out[0], out[1]);
-  out[2] = static_cast<double>(__atomic_load_n(&grid_counts()[2], __ATOMIC_RELAXED));
-  return 0;
-}
-
-/// SPEC 16.11: out[0] the grid lookups by sets outside a fit and out[1] those by a fit's sets since the last reset; reset != 0
-/// zeroes them after reading.
-extern "C" __attribute__((export_name("sdnap_wide_grid_stats"))) int32_t sdnap_wide_grid_stats(int32_t reset, double* out) {
-  int64_t* c = grid_counts();
-  out[0] = static_cast<double>(__atomic_load_n(&c[0], __ATOMIC_RELAXED));
-  out[1] = static_cast<double>(__atomic_load_n(&c[1], __ATOMIC_RELAXED));
-  if (reset != 0) {
-    __atomic_store_n(&c[0], 0, __ATOMIC_RELAXED);
-    __atomic_store_n(&c[1], 0, __ATOMIC_RELAXED);
-  }
-  return 0;
-}
-
-/// The grid keyed by (degree, class, n, e, i), bitwise: a live or idle one with that key, else a new one; nullptr out of memory. A
-/// grid is a pure function of its key, so a hit and a rebuild give the same bytes. `transient` (a fit's set): a grid it builds is
-/// freed when its last holder drops it, never kept idle.
+inline bool fit_grids_now() { return g_fit_grid_depth > 0; }
+inline int64_t* grid_counts() { static int64_t n[3]{}; return n; }
 inline WideGrid* wide_grid_acquire(int degree, int cls, double n, double e, double inc, bool transient = false) {
-  __atomic_add_fetch(transient ? &grid_counts()[1] : &grid_counts()[0], 1, __ATOMIC_RELAXED);
-  GridCache& c = grid_cache();
-  cache_lock(&c.word);
-  for (int k = 0; k < c.count; ++k) {
-    const WideGrid& g = *c.slot[k].g;
-    if (g.degree == degree && c.slot[k].cls == cls && n == g.n && e == g.e && inc == g.i) {
-      ++c.slot[k].refs;
-      WideGrid* hit = c.slot[k].g;
-      cache_unlock(&c.word);
-      return hit;
+  __atomic_add_fetch(&grid_counts()[transient ? 1 : 0], 1, __ATOMIC_RELAXED);
+  if (degree < 2 || degree > kSpCap) { sdnap::mem::note_failure(1); return nullptr; }
+  auto& c = grid_cache(); cache_lock(&c.word);
+  const unsigned bucket = grid_hash(degree, cls, n, e, inc);
+  for (auto* g = c.bucket[bucket]; g; g = g->link)
+    if (g->degree == degree && g->cls == cls && grid_same(n,g->n) && grid_same(e,g->e) && grid_same(inc,g->i)) {
+      ++g->refs; cache_unlock(&c.word); return g;
     }
+  auto* g = static_cast<WideGrid*>(sdnap::mem::calloc(1, sizeof(WideGrid)));
+  if (g) {
+    g->degree = degree; g->cls = cls; g->n = n; g->e = e; g->i = inc;
+    g->a = std::pow(kKe / n, kX2o3); g->refs = 1; g->transient = transient;
+    g->link = c.bucket[bucket]; c.bucket[bucket] = g; ++c.descriptors;
   }
-  // a build: the least recently used idle grid goes first beyond kGridIdle - 1, and while the held bytes with this grid's
-  // largest size exceed the budget, so a worker holds a bounded number and the instance a bounded size
-  evict_idle(c, kGridIdle - 1, wide_grid_bytes_bound(degree));
-  cache_unlock(&c.word);
-  WideGrid* g = static_cast<WideGrid*>(sdnap::mem::calloc(1, sizeof(WideGrid)));
-  if (g == nullptr) return nullptr;
-  if (!wide_grid_build(degree, cls, n, e, inc, *g)) { std::free(g); return nullptr; }
-  __atomic_add_fetch(&grid_counts()[2], 1, __ATOMIC_RELAXED);
-  cache_lock(&c.word);
-  if (c.count < kGridSlots) {
-    c.slot[c.count++] = GridSlot{g, cls, 1, 0, transient};
-    c.bytes += g->alloc_bytes;
-    cache_unlock(&c.word);
-    return g;
-  }
-  cache_unlock(&c.word);
-  free_grid(g);
-  return nullptr;
+  cache_unlock(&c.word); return g;
 }
-
-/// SPEC 16.11: the cache's byte bound. bytes of 1 or more sets it (whole bytes, at most the address space: SIZE_MAX); a smaller
-/// value only reads. out[0] the bound, out[1] the held bytes, out[2] the grids held, out[3] those idle (held by no set).
-extern "C" __attribute__((export_name("sdnap_wide_grid_budget"))) int32_t sdnap_wide_grid_budget(double bytes, double* out) {
-  GridCache& c = grid_cache();
-  cache_lock(&c.word);
-  if (bytes >= 1.0) {
-    constexpr double kMax = static_cast<double>(SIZE_MAX);
-    c.budget = bytes >= kMax ? SIZE_MAX : static_cast<size_t>(bytes);
-    evict_idle(c, kGridIdle);
-  }
-  if (out != nullptr) {
-    int idle = 0;
-    for (int k = 0; k < c.count; ++k) idle += c.slot[k].refs == 0 ? 1 : 0;
-    out[0] = static_cast<double>(c.budget);
-    out[1] = static_cast<double>(c.bytes);
-    out[2] = static_cast<double>(c.count);
-    out[3] = static_cast<double>(idle);
+inline void wide_grid_ref(WideGrid* g) {
+  if (!g) return;
+  auto& c = grid_cache(); cache_lock(&c.word); ++g->refs; cache_unlock(&c.word);
+}
+inline void wide_grid_drop(WideGrid* g) {
+  if (!g) return;
+  auto& c = grid_cache(); cache_lock(&c.word);
+  if (--g->refs == 0 && !g->pins) {
+    if (!g->v) grid_delete(c, g);
+    else if (g->transient) grid_evict(c, g);
   }
   cache_unlock(&c.word);
+}
+inline bool grid_pin(WideGrid* g) {
+  if (!g) return true;
+  auto& c = grid_cache();
+  for (;;) {
+    cache_lock(&c.word);
+    if (g->building) { cache_unlock(&c.word); continue; }
+    if (g->v) {
+      ++g->pins; grid_unlink(c, g); grid_touch(c, g); cache_unlock(&c.word); return true;
+    }
+    const size_t bytes = wide_grid_bytes_bound(g->degree);
+    if (!grid_room(c, bytes)) { cache_unlock(&c.word); sdnap::mem::note_failure(bytes); return false; }
+    g->pins = 1; g->building = true; c.bytes += bytes; ++c.count;
+    grid_touch(c, g); cache_unlock(&c.word);
+    WideGrid data{};
+    const bool ok = wide_grid_build(g->degree, g->cls, g->n, g->e, g->i, data);
+    cache_lock(&c.word); g->building = false;
+    if (ok) {
+      g->count = data.count; g->m = data.m; g->w = data.w; g->v = data.v; g->dv = data.dv;
+      g->alloc_bytes = data.alloc_bytes;
+      __atomic_add_fetch(&grid_counts()[2], 1, __ATOMIC_RELAXED);
+    } else {
+      g->pins = 0; grid_unlink(c, g); c.bytes -= bytes; --c.count;
+    }
+    cache_unlock(&c.word); return ok;
+  }
+}
+inline void grid_unpin(WideGrid* g) {
+  if (!g) return;
+  auto& c = grid_cache(); cache_lock(&c.word); --g->pins;
+  if (!g->refs && !g->pins && g->transient) grid_evict(c, g);
+  cache_unlock(&c.word);
+}
+struct GridPin {
+  WideGrid* g;
+  bool ok;
+  explicit GridPin(const WideGrid* p) : g(const_cast<WideGrid*>(p)), ok(grid_pin(g)) {}
+  ~GridPin() { if (ok) grid_unpin(g); }
+  GridPin(const GridPin&) = delete;
+  GridPin& operator=(const GridPin&) = delete;
+};
+inline double wide_grid_share(const WideGrid* g) {
+  if (!g) return 0;
+  auto& c = grid_cache(); cache_lock(&c.word);
+  const double bytes = (g->v ? wide_grid_bytes_bound(g->degree) : sizeof(WideGrid)) / double(std::max(g->refs, 1));
+  cache_unlock(&c.word); return bytes;
+}
+inline void cache_contents(double& slots, double& bytes) {
+  auto& c = grid_cache(); cache_lock(&c.word); slots = c.count; bytes = c.bytes; cache_unlock(&c.word);
+}
+extern "C" __attribute__((export_name("sdnap_wide_grid_cache"))) int32_t sdnap_wide_grid_cache(double* out) {
+  cache_contents(out[0], out[1]); out[2] = __atomic_load_n(&grid_counts()[2], __ATOMIC_RELAXED); return 0;
+}
+extern "C" __attribute__((export_name("sdnap_wide_grid_stats"))) int32_t sdnap_wide_grid_stats(int32_t reset, double* out) {
+  for (int i = 0; i < 2; ++i) out[i] = reset ? __atomic_exchange_n(&grid_counts()[i], 0, __ATOMIC_RELAXED) : __atomic_load_n(&grid_counts()[i], __ATOMIC_RELAXED);
   return 0;
 }
-
-/// Adds a holder to a grid already held.
-/// A held grid's bytes shared among its holders (a grid of one exact key serves every set that asks for it).
-inline double wide_grid_share(const WideGrid* g) {
-  if (g == nullptr) return 0.0;
-  GridCache& c = grid_cache();
-  cache_lock(&c.word);
-  int refs = 1;
-  for (int k = 0; k < c.count; ++k)
-    if (c.slot[k].g == g) { refs = c.slot[k].refs > 0 ? c.slot[k].refs : 1; break; }
-  cache_unlock(&c.word);
-  return static_cast<double>(sizeof(WideGrid) + wide_grid_bytes(*g)) / refs;
-}
-
-inline void wide_grid_ref(WideGrid* g) {
-  GridCache& c = grid_cache();
-  cache_lock(&c.word);
-  for (int k = 0; k < c.count; ++k)
-    if (c.slot[k].g == g) { ++c.slot[k].refs; break; }
-  cache_unlock(&c.word);
-}
-
-/// Drops a holder; the last holder's grid stays idle until the next build.
-inline void wide_grid_drop(WideGrid* g) {
-  if (g == nullptr) return;
-  GridCache& c = grid_cache();
-  cache_lock(&c.word);
-  for (int k = 0; k < c.count; ++k)
-    if (c.slot[k].g == g) {
-      if (--c.slot[k].refs == 0) {
-        if (c.slot[k].transient) {  // built inside a fit: not kept idle
-          c.bytes -= c.slot[k].g->alloc_bytes;
-          free_grid(c.slot[k].g);
-          c.slot[k] = c.slot[--c.count];
-        } else {
-          c.slot[k].stamp = ++c.clock;
-          evict_idle(c, kGridIdle);
-        }
-      }
-      break;
+// The minimum holds two maximum-size payloads for each of 16 pool threads and
+// the caller. Covariance sigma sets read their grids sequentially within a row.
+// A rejected reduction preserves the previous budget and all pinned payloads.
+extern "C" __attribute__((export_name("sdnap_wide_grid_budget"))) int32_t sdnap_wide_grid_budget(double bytes, double* out) {
+  auto& c = grid_cache(); cache_lock(&c.word); int32_t rc = 0;
+  if (bytes >= 1.0) {
+    if (!std::isfinite(bytes) || bytes < kGridMinimumBytes || bytes > double(SIZE_MAX)) rc = -1;
+    else {
+      const size_t old = c.budget; c.budget = static_cast<size_t>(bytes);
+      if (!grid_room(c, 0)) { c.budget = old; rc = -1; }
     }
-  cache_unlock(&c.word);
-}
-
-inline void cache_contents(double& slots, double& bytes) {
-  GridCache& c = grid_cache();
-  cache_lock(&c.word);
-  slots = c.count;
-  bytes = 0.0;
-  bytes = static_cast<double>(c.bytes);  // the same count sdnap_wide_grid_budget reports: each grid's allocated bytes
-  cache_unlock(&c.word);
-}
-
-inline void evict_idle(GridCache& c, int keep, size_t extra) {
-  for (;;) {
-    int idle = 0, oldest = -1;
-    for (int k = 0; k < c.count; ++k)
-      if (c.slot[k].refs == 0) {
-        ++idle;
-        if (oldest < 0 || c.slot[k].stamp < c.slot[oldest].stamp) oldest = k;
-      }
-    if (oldest < 0 || (idle <= keep && c.bytes + extra <= c.budget)) return;
-    c.bytes -= c.slot[oldest].g->alloc_bytes;
-    free_grid(c.slot[oldest].g);
-    c.slot[oldest] = c.slot[--c.count];
   }
+  if (out) {
+    size_t idle = 0;
+    for (auto* g = c.oldest; g; g = g->newer) idle += !g->pins && !g->building;
+    out[0] = c.budget; out[1] = c.bytes; out[2] = c.count; out[3] = idle;
+  }
+  cache_unlock(&c.word); return rc;
 }
-
-

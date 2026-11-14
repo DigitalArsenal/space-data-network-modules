@@ -5552,6 +5552,9 @@ constexpr double kGridEvery = 48.0 * 60.0, kGridBlend = 0.2;
 /// elements lie this close to theirs (the covariance's sigma sets); otherwise it takes its own.
 constexpr double kShareE = 3e-4, kShareI = 1e-4, kShareA = 1e-4;
 struct WideGrid {
+  WideGrid *link, *older, *newer;
+  int cls, refs, pins;
+  bool building, transient;
   int degree;         // the families' highest degree
   int count;          // (m, w) families
   double n, e, i, a;  // the mean elements it was built at
@@ -5703,6 +5706,21 @@ inline int wide_families(int degree, int cls, double n, double e, double inc, in
   double (*gr)[2][NE] = reinterpret_cast<double (*)[2][NE]>(ws);           // g', g, g_e, g_i, g_a
   double (*D)[2][NE] = reinterpret_cast<double (*)[2][NE]>(ws + 5 * 2 * NE);  // their transforms and H[H[g]]
   double (*X)[NE] = reinterpret_cast<double (*)[NE]>(ws + 10 * 2 * NE);
+
+  if(degree<2||degree>kSpCap){std::free(ws);sdnap::mem::note_failure(1);return -1;}
+  const size_t powerN=(degree+2)*NE,rotationN=(2*degree+1)*NE*2,amplitudeN=degree+1;
+  const size_t width=2*(degree+64)+1,phaseN=(2*degree+1)*width*NE*2,jmN=width*NE*2;
+  const size_t flags=(2*degree+1)*width+width;
+  struct ReuseBlock{void* p;~ReuseBlock(){std::free(p);}} reuse{sdnap::mem::malloc((powerN+rotationN+amplitudeN+phaseN+jmN)*sizeof(double)+flags)};
+  if(!reuse.p){std::free(ws);return -1;}
+  double* powers=static_cast<double*>(reuse.p),*rotation=powers+powerN,*amplitude=rotation+rotationN;
+ 
+  for(int l=0;l<=degree+1;++l)for(int q=0;q<NE;++q)powers[l*NE+q]=std::pow(ar[q],l);
+  for(int l=2;l<=degree;++l)amplitude[l]=kMu*std::pow(1.0/a,l+1);
+  for(int w=-degree;w<=degree;++w)for(int q=0;q<NE;++q){const double ang=w*fwang[q];const int k=((w+degree)*NE+q)*2;rotation[k]=std::cos(ang);rotation[k+1]=std::sin(ang);}
+  const int jcap=degree+64,jwidth=2*jcap+1;
+  double* phase=amplitude+amplitudeN,*jm=phase+phaseN;
+  auto* phaseReady=reinterpret_cast<unsigned char*>(jm+jmN);auto* jmReady=phaseReady+(2*degree+1)*jwidth;std::memset(phaseReady,0,flags);
   int count = 0;
   for (int m = 1; m <= degree; ++m)
     for (int w = -degree; w <= degree; ++w) {
@@ -5719,7 +5737,7 @@ inline int wide_families(int degree, int cls, double n, double e, double inc, in
       double Sr[72], Si[72], Fl[72], dFl[72];
       for (int l = l0; l <= degree; l += 2) {
         const bool odd = ((l - m) & 1) != 0;
-        const double A = kMu * std::pow(1.0 / a, l + 1);
+        const double A = amplitude[l];
         Sr[l] = A * (odd ? -kEgmS[l][m] : kEgmC[l][m]);
         Si[l] = A * (odd ? -kEgmC[l][m] : -kEgmS[l][m]);
         Fl[l] = f[l];
@@ -5727,7 +5745,7 @@ inline int wide_families(int degree, int cls, double n, double e, double inc, in
       }
       for (int q = 0; q < NE; ++q) {
         // the sums over l of (a/r)^(l+1) times the degree's coefficients, then e^{i w f} once
-        double p = std::pow(ar[q], l0 + 1);
+        double p = powers[(l0+1)*NE+q];
         const double ar2 = ar[q] * ar[q];
         double s0r = 0, s0i = 0, sir = 0, sii = 0, sar = 0, sai = 0, skr = 0, ski = 0;
         for (int l = l0; l <= degree; l += 2) {
@@ -5738,7 +5756,7 @@ inline int wide_families(int degree, int cls, double n, double e, double inc, in
           sar += -(l + 1) / a * Fl[l] * br; sai += -(l + 1) / a * Fl[l] * bi;  // g_a
           p *= ar2;
         }
-        const double ang = w * fwang[q], cw = std::cos(ang), sw = std::sin(ang);
+        const int rq=((w+degree)*NE+q)*2;const double cw=rotation[rq],sw=rotation[rq+1];
         const auto rot = [&](double xr, double xi, double& yr, double& yi) { yr = xr * cw - xi * sw; yi = xr * sw + xi * cw; };
         double gR, gI, kR, kI;
         rot(s0r, s0i, gR, gI);
@@ -5762,7 +5780,7 @@ inline int wide_families(int degree, int cls, double n, double e, double inc, in
         const int p = (l - w) / 2;
         const double F = f[l], dF = (fp[l] - fmn[l]) / (2.0 * h);
         const bool odd = ((l - m) & 1) != 0;
-        const double A = kMu * std::pow(1.0 / a, l + 1);
+        const double A = amplitude[l];
         const double Sr = A * (odd ? -kEgmS[l][m] : kEgmC[l][m]), Si = A * (odd ? -kEgmC[l][m] : -kEgmS[l][m]);
         const int jlo = static_cast<int>(std::floor(nu - kShallowBand * n / mdot)) - 1, jhi = static_cast<int>(std::ceil(nu + kShallowBand * n / mdot)) + 1;
         for (int j = -(degree + 64); j <= degree + 64; ++j) {
@@ -5770,10 +5788,13 @@ inline int wide_families(int degree, int cls, double n, double e, double inc, in
                                             std::fabs(w * wdot + j * mdot + m * (node_rate - kOmegaE)), n);
           if (out_ == 0.0) continue;
           // G and dG/de at fixed M by the trapezoid on the E nodes (dM = (1 - e cos E) dE; spectral for these periodic integrands)
+          const int pj=(w+degree)*jwidth+j+jcap,mj=j+jcap;
+          if(!phaseReady[pj]){for(int k=0;k<NE;++k){const double ph=w*fwang[k]-j*M[k];phase[(pj*NE+k)*2]=std::cos(ph);phase[(pj*NE+k)*2+1]=std::sin(ph);}phaseReady[pj]=1;}
+          if(!jmReady[mj]){for(int k=0;k<NE;++k){jm[(mj*NE+k)*2]=std::cos(j*M[k]);jm[(mj*NE+k)*2+1]=std::sin(j*M[k]);}jmReady[mj]=1;}
           double G = 0.0, dG = 0.0;
           for (int k = 0; k < NE; ++k) {
-            const double ph = w * fwang[k] - j * M[k], cp = std::cos(ph), sp = std::sin(ph);
-            const double ak = std::pow(ar[k], l);  // (a/r)^(l+1) (1 - e cos E)
+            const double cp=phase[(pj*NE+k)*2],sp=phase[(pj*NE+k)*2+1];
+            const double ak = powers[l*NE+k];  // (a/r)^(l+1) (1 - e cos E)
             G += ak * cp;
             dG += ak * ((l + 1) * ar[k] * cf[k] * cp - w * sf[k] * (2.0 + e * cf[k]) / (eta * eta) * sp);
           }
@@ -5784,7 +5805,7 @@ inline int wide_families(int degree, int cls, double n, double e, double inc, in
           const double Z[5][2] = {{-j * Fo * G * Si, j * Fo * G * Sr}, {Fo * G * Sr, Fo * G * Si}, {Fo * dG * Sr, Fo * dG * Si},
                                   {dFo * G * Sr, dFo * G * Si}, {-(l + 1) / a * Fo * G * Sr, -(l + 1) / a * Fo * G * Si}};
           for (int k = 0; k < NE; ++k) {
-            const double cj = std::cos(j * M[k]), sj = std::sin(j * M[k]);
+            const double cj=jm[(mj*NE+k)*2],sj=jm[(mj*NE+k)*2+1];
             for (int z = 0; z < 5; ++z) { gr[z][0][k] -= Z[z][0] * cj - Z[z][1] * sj; gr[z][1][k] -= Z[z][0] * sj + Z[z][1] * cj; }
           }
         }
@@ -5856,7 +5877,7 @@ struct BuildScratch {
   double* sn;
 };
 inline BuildScratch& build_scratch() {
-  static BuildScratch s{};
+  static thread_local BuildScratch s{};
   return s;
 }
 

@@ -5238,6 +5238,8 @@ inline int32_t output_impl(const RateContext& ctx, double t, const double* ym, d
           tess::sp_six(ctx.sp, ctx.sp_count, t, km, ym[kN], etam, agm.si, agm.ci, ctx.theta_g0, six_sp);
         }
         if (ctx.wide != nullptr) {
+          tess::GridPin pin0(ctx.wide), pin1(ctx.wide_next);
+          if (!pin0.ok || !pin1.ok) return kPropRefused;
           if (ctx.wide_next != nullptr && ctx.wide_blend > 0.0) {
             tess::wide_six(*ctx.wide, t, km, ctx.theta_g0, six_sp, Ewarm, dsix_sp, 1.0 - ctx.wide_blend, ctx.wide_a);
             tess::wide_six(*ctx.wide_next, t, km, ctx.theta_g0, six_sp, Ewarm, dsix_sp, 1.0 - (1.0 - ctx.wide_blend), ctx.wide_a);
@@ -5285,6 +5287,8 @@ inline int32_t output_impl(const RateContext& ctx, double t, const double* ym, d
         else if (has_sp_custom)
           tess::sp_six(ctx.sp, ctx.sp_count, t, km, ym[kN], etam, agm.si, agm.ci, ctx.theta_g0, six);
         if (ctx.wide != nullptr) {
+          tess::GridPin pin0(ctx.wide), pin1(ctx.wide_next);
+          if (!pin0.ok || !pin1.ok) return kPropRefused;
           if (ctx.wide_next != nullptr && ctx.wide_blend > 0.0) {
             tess::wide_six(*ctx.wide, t, km, ctx.theta_g0, six, Ewarm, nullptr, 1.0 - ctx.wide_blend, ctx.wide_a);
             tess::wide_six(*ctx.wide_next, t, km, ctx.theta_g0, six, Ewarm, nullptr, ctx.wide_blend, ctx.wide_a);
@@ -5320,6 +5324,8 @@ inline int32_t output_impl(const RateContext& ctx, double t, const double* ym, d
       else if (has_sp_custom)
         tess::sp_six(ctx.sp, ctx.sp_count, t, km, ym[kN], etam, agm.si, agm.ci, ctx.theta_g0, six);
       if (ctx.wide != nullptr) {
+          tess::GridPin pin0(ctx.wide), pin1(ctx.wide_next);
+          if (!pin0.ok || !pin1.ok) return kPropRefused;
         if (ctx.wide_next != nullptr && ctx.wide_blend > 0.0) {
           tess::wide_six(*ctx.wide, t, km, ctx.theta_g0, six, Ewarm, nullptr, 1.0 - ctx.wide_blend, ctx.wide_a);
           tess::wide_six(*ctx.wide_next, t, km, ctx.theta_g0, six, Ewarm, nullptr, ctx.wide_blend, ctx.wide_a);
@@ -6303,6 +6309,8 @@ inline int census_rows(const XpSat& s, int cap, double n, double e, double inc, 
   const int table_cap = low_table ? tess::kFastCap : tess::kSpCap;
   const int table_degree = cap > table_cap ? table_cap : cap;
   const tess::WideGrid* grid = c.wide;
+  tess::GridPin pin(grid);
+  if (!pin.ok) return -1;
   double F[72], dF[72], G[72][25], dG[72][25], amp[72];
   amp[0] = kMu / a;
   for (int l = 1; l <= 70; ++l) amp[l] = amp[l - 1] / a;  // mu / a^(l+1)

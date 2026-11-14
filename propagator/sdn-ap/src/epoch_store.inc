@@ -1454,6 +1454,7 @@ inline bool wide_series(const Store& st, const Series& s) {
 inline size_t series_reserve(Store& st, const pool::Job& j) {
   uint64_t retained = 0;
   size_t ap_sets = 0;
+  bool wide = false;
   int degree = 0;
   const double t = minutes_of(j.jd_whole, j.jd_frac), jd[2] = {j.jd_whole, j.jd_frac};
   for (uint32_t i = 0; i < j.count; ++i) {  // the batch's slice of the call
@@ -1464,6 +1465,7 @@ inline size_t series_reserve(Store& st, const pool::Job& j) {
     for (int32_t k : indices) {
       if (k < 0) continue;
       const Entry& en = st.entries[s.first + static_cast<uint32_t>(k)];
+      wide = wide || ((en.branch >> 16) & 0xffu) != 0;
       const bool ap = en.row.theory == kTheorySgp4Xp && (en.forces.tesseral > 0 || en.forces.zonal > 0);
       if (ap) { ++ap_sets; degree = std::max(degree, en.forces.tesseral); }
       bool held = false;
@@ -1483,7 +1485,7 @@ inline size_t series_reserve(Store& st, const pool::Job& j) {
       (xpt::keep_sp_raw() ? static_cast<uint64_t>(xpt::tess::sp_bound(degree, false, extra)) * sizeof(xpt::tess::SpCoef) : 0);
   const uint64_t bytes = retained + (ap_sets ? std::min<uint64_t>(ap_sets * (128ull << 10), room + (1u << 20)) +
       (j.threads + 1) * (table + sizeof(xpt::tess::SpTermsScratch)) : 0) + (8u << 20);
-  return static_cast<size_t>(std::min<uint64_t>(bytes, 1ull << 30));  // a slice's: far under 2^31 (sbrk's increment)
+  return static_cast<size_t>(std::min<uint64_t>(bytes + (wide ? (j.threads + 1) * (24ull << 20) + xpt::tess::kGridCacheBytes : 0), 1ull << 30));  // a slice's: far under 2^31 (sbrk's increment)
 }
 }  // namespace epochs
 
@@ -1541,7 +1543,7 @@ int32_t sdnap_epochs_at(double jd_whole, double jd_frac, uint32_t first, uint32_
     return 0;
   }
   for (uint32_t k = 0; k < count; ++k) {
-    serial[k] = sdnap::epochs::wide_series(st, st.series[first + k]);
+    serial[k] = 0;
     if (serial[k]) sdnap::epochs::write_series(st, jd_whole, jd_frac, first, count, frame, out, status, nullptr, k);
   }
   // Constant tables and ERFA's leap-second globals are initialized before any concurrent set build.
