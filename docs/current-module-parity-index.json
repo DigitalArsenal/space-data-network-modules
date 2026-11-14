@@ -1,5 +1,5 @@
 {
-  "generatedAt": "2026-11-14T08:04:36.192Z",
+  "generatedAt": "2026-11-14T19:17:41.977Z",
   "moduleCount": 160,
   "parityScopeModuleCount": 60,
   "isomorphicWasmCount": 154,
@@ -7502,7 +7502,7 @@
       "pluginId": "com.spacedatanetwork.sdn-ap-propagator",
       "name": "SDN-AP Propagator",
       "pluginFamily": "propagator",
-      "version": "0.6.60",
+      "version": "0.6.61",
       "methodIds": [
         "export_omm",
         "fit",
@@ -7513,7 +7513,8 @@
         "load_epochs_part",
         "maneuver",
         "propagate",
-        "propagate_epochs"
+        "propagate_epochs",
+        "replace_epoch"
       ],
       "runtimeTargets": [
         "browser",
@@ -7528,7 +7529,7 @@
       ],
       "cxxSourceFileCount": 1,
       "cSourceFileCount": 0,
-      "testFileCount": 251,
+      "testFileCount": 255,
       "parityScope": true,
       "action": "review-before-parity-use",
       "sourceFiles": [
@@ -7561,6 +7562,7 @@
         "test/decay-fit.e2e.mjs",
         "test/decay-wide.e2e.mjs",
         "test/decay.e2e.mjs",
+        "test/diagnostic-isolation.e2e.mjs",
         "test/docs-version.e2e.mjs",
         "test/drag-cost.mjs",
         "test/drag-high-eccentricity.e2e.mjs",
@@ -7671,6 +7673,7 @@
         "test/lib/oem-distance.mjs",
         "test/lib/oracle.mjs",
         "test/lib/pcf.mjs",
+        "test/lib/plugin-diagnostic.mjs",
         "test/lib/record.mjs",
         "test/lib/regime-windows.mjs",
         "test/lib/scratch.mjs",
@@ -7701,6 +7704,7 @@
         "test/output-frames.mjs",
         "test/perigee-drag-continuity.e2e.mjs",
         "test/perigee-kepler-branch.e2e.mjs",
+        "test/plugin-records.e2e.mjs",
         "test/pool-end.e2e.mjs",
         "test/pool-growth.e2e.mjs",
         "test/pool-stack.e2e.mjs",
@@ -7734,6 +7738,7 @@
         "test/rigor/vallado.mjs",
         "test/run-suite.mjs",
         "test/set-caches.e2e.mjs",
+        "test/shared-tables.e2e.mjs",
         "test/slow-band-every-class.e2e.mjs",
         "test/slow-set-band-centers.e2e.mjs",
         "test/slow-set-partition.e2e.mjs",

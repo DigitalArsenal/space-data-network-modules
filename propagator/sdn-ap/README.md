@@ -1,6 +1,6 @@
 # sdn-ap-propagator
 
-Version 0.6.60 (dist 4015f02d).
+Version 0.6.61 (dist 2b09343c).
 
 General-perturbations propagation of whole catalogs in one isomorphic WASM module (browser and WasmEdge), with two
 theories and AP, an advanced propagator that builds on the entire history of astrodynamics ($PCF FORCES selects its drag
