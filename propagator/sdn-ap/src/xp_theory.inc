@@ -6571,6 +6571,13 @@ inline CachePool& cache_pool() {
 }
 inline thread_local XpSat* g_flown_set = nullptr;  ///< the set whose caches this thread holds (SetScope), or nullptr
 
+/// SetScope already owns and restores the held set; derivative access shares that identity.
+inline tess::MdailyDerivatives* tess::set_mdaily_derivatives() {
+  const XpSat* s = g_flown_set;
+  if (s == nullptr || !continuity_derivatives(s->ctx.continuity_form)) return nullptr;
+  return &reinterpret_cast<SetCachesWithDerivatives*>(s->caches)->derivatives;
+}
+
 inline uint64_t sp_cache_bytes(const tess::SpEvalCache* c) { return c != nullptr ? sizeof(tess::SpEvalCache) + c->mem_bytes : 0; }
 
 /// Under the pool's lock: frees s's caches (it holds them; the caller holds its cache_lock or owns it).
@@ -6766,14 +6773,12 @@ inline void pool_release(XpSat& s) {
 struct SetScope {
   ActiveBracket* ab = g_active_bracket_set;
   tess::MdailyEvalCache* md = tess::g_mdaily_set_cache;
-  tess::MdailyDerivatives* md_derivatives = tess::g_mdaily_set_derivatives;
   tess::SpSetSlot* sp = tess::g_sp_set_slot;
   XpSat* flown = g_flown_set;
   XpSat* held = nullptr;
   explicit SetScope(XpSat& s) {
     g_active_bracket_set = nullptr;
     tess::g_mdaily_set_cache = nullptr;
-    tess::g_mdaily_set_derivatives = nullptr;
     tess::g_sp_set_slot = nullptr;
     g_flown_set = nullptr;
     if (!s.pooled || s.ctx.is_cov_sigma != 0 || !try_lock(&s.cache_lock)) return;
@@ -6788,15 +6793,12 @@ struct SetScope {
     __atomic_store_n(&c->stamp, __atomic_load_n(&cache_pool().clock, __ATOMIC_RELAXED), __ATOMIC_RELAXED);
     g_active_bracket_set = &c->ab;
     tess::g_mdaily_set_cache = &c->md;
-    if (tess::continuity_derivatives(s.ctx.continuity_form))
-      tess::g_mdaily_set_derivatives = &reinterpret_cast<SetCachesWithDerivatives*>(c)->derivatives;
     tess::g_sp_set_slot = &c->sp;
     g_flown_set = &s;
   }
   ~SetScope() {
     g_active_bracket_set = ab;
     tess::g_mdaily_set_cache = md;
-    tess::g_mdaily_set_derivatives = md_derivatives;
     tess::g_sp_set_slot = sp;
     g_flown_set = flown;
     if (held != nullptr) unlock(&held->cache_lock);
