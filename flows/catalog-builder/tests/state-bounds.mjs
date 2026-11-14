@@ -53,15 +53,15 @@ export async function verifyStateBounds(){
   assert.fail('State bound test exceeded its operation cap');
  }
  try{
-  const first=await tick(now);assert.equal(first.fits,4096);assert.equal(latest(state).length,4096);
+  const first=await tick(now);assert.equal(first.fits,4097);assert.equal(latest(state).length,4096);
   console.log('STATE_BOUND_CONTROL '+JSON.stringify({objects:4097,dispatched:first.fits,writes:first.writes,maxRows:first.maxRows,retainedRows:state.length,snapshots:first.snapshots}));
   // Reconstruct the pre-compaction history, including the latest failure after the old read bound.
-  const legacy=history.slice(),expected=latest(legacy);state=legacy;history=[];cfg['catalog.page_size']=1;
+  const legacy=history.slice(0,12288),expected=latest(legacy);state=legacy;history=[];seeds.pop();identities.pop();cfg['catalog.page_size']=1;
   control.destroy();control=await create();
   const recovered=await tick(now+1000);
   assert.equal(recovered.fits,0);assert.equal(state.length,1);assert.deepEqual(latest(state),expected,'compaction preserves every latest failure, including events beyond the old read threshold');
   assert.ok(first.maxRows<=4097,'single-marker appends compact at the entry bound');assert.ok(first.snapshots>=2);
-  assert.match(recovered.notice.reason,/deferred=4097/);assert.notEqual(recovered.notice.kind,'unchanged');
+  assert.match(recovered.notice.reason,/deferred=4096/);assert.notEqual(recovered.notice.kind,'unchanged');
   console.log('PASS state marker compaction '+JSON.stringify({legacyRows:legacy.length,recoveredEntries:expected.length,recoveredRows:state.length,maxRows:first.maxRows}));
  }finally{control.destroy();}
 }

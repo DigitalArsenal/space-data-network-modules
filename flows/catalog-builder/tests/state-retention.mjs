@@ -1,5 +1,7 @@
 import fs from 'node:fs';
 import {createHash} from 'node:crypto';
+import {CID} from 'multiformats/cid';
+import * as digest from 'multiformats/hashes/digest';
 import {fileURLToPath} from 'node:url';
 import assert from 'node:assert/strict';
 import * as fb from 'flatbuffers';
@@ -30,26 +32,28 @@ export async function verifyStateRetention(mode){
  let fallback;
  try{const r=await chain.invoke({methodId:'ingest_seed',inputs:[frame('omm','OMM',ommBytes)]});assert.equal(r.statusCode,0,r.errorMessage);fallback=OCM.getRootAsOCM(new fb.ByteBuffer(r.outputs.find(f=>f.portId==='fallback').payload)).unpack();}finally{chain.destroy();}
  const create=()=>createBrowserModuleHarness({wasmSource:fs.readFileSync(dir+'/dist/isomorphic/module.wasm'),manifest:JSON.parse(fs.readFileSync(dir+'/plugin-manifest.json')),surface:'direct',hostOptions:{config:cfg}});
- let control=await create();let state=[],history=[];let failing=mode==='final';
+ let control=await create();let state=[],history=[];const index=new Map(),journal=new Set(),fitCounts=new Map();let failing=mode==='final';const newcomer=2999999;
  const composer=await createBrowserModuleHarness({wasmSource:fs.readFileSync(repo+'/analysis/catalog-composer/dist/isomorphic/module.wasm'),manifest:JSON.parse(fs.readFileSync(repo+'/analysis/catalog-composer/plugin-manifest.json')),surface:'direct'});
  const sha=b=>createHash('sha256').update(b).digest('hex');
  const latest=rows=>{const events=new Map();for(const row of rows)for(const e of N.NEV.getSizePrefixedRootAsNEV(new fb.ByteBuffer(row)).unpack().EVENTS){const old=events.get(e.SUBJECT);if(!old||Number(e.DETAIL.match(/sequence=(\d+);/)[1])>Number(old.DETAIL.match(/sequence=(\d+);/)[1]))events.set(e.SUBJECT,e);}return [...events.values()].sort((a,b)=>a.SUBJECT.localeCompare(b.SUBJECT));};
- async function tick(time){
+ async function tick(time,kill=false){
   const counts={indexes:0,fits:0,writes:0,snapshots:0,maxRows:state.length};
   let r=await control.invoke({methodId:'advance',inputs:[frame('tick','TimerTick',encodeTimerTick({triggerId:'refresh',firedMs:time}))]});
   for(let step=0;step<50000;step++){
    assert.equal(r.statusCode,0,r.errorMessage);const out=Object.fromEntries(r.outputs.map(f=>[f.portId,f]));let inputs;
    if(out.notice){counts.notice=decodeFlowNotice(out.notice.payload);return counts;}
-   if(out.query){const q=Q.QRP.getRootAsQRP(new fb.ByteBuffer(out.query.payload)).unpack();const rows=q.SCHEMA_NAME==='NEV.fbs'?state:q.SCHEMA_NAME==='OMM.fbs'?seeds:q.SOURCE_NAME==='identities'?identities:[];
+   if(out.query){const q=Q.QRP.getRootAsQRP(new fb.ByteBuffer(out.query.payload)).unpack();const rows=q.SCHEMA_NAME==='NEV.fbs'?state:q.SCHEMA_NAME==='OMM.fbs'?seeds:q.SOURCE_NAME==='identities'?identities:q.SOURCE_NAME==='catalog-index'?[...index.values()]:[];
     const offset=Number(q.CURSOR||0),page=rows.slice(offset,offset+q.LIMIT),end=offset+page.length;
-    const header=Object.assign(new Q.QRPT(),{KIND:Q.qrpKind.Page,STATUS:Q.qrpStatus.Ok,SCHEMA_NAME:q.SCHEMA_NAME,PROVIDER_ID:q.PROVIDER_ID,SOURCE_NAME:q.SOURCE_NAME,RECORD_COUNT:page.length,TOTAL_COUNT:BigInt(rows.length),NEXT_CURSOR:end<rows.length?String(end):null});
+    const header=Object.assign(new Q.QRPT(),{KIND:Q.qrpKind.Page,STATUS:Q.qrpStatus.Ok,SCHEMA_NAME:q.SCHEMA_NAME,PROVIDER_ID:q.PROVIDER_ID,SOURCE_NAME:q.SOURCE_NAME,BATCH_ID:q.BATCH_ID,RECORD_COUNT:page.length,TOTAL_COUNT:BigInt(rows.length),NEXT_CURSOR:end<rows.length?String(end):null});
     inputs=[frame('page','QRP',Buffer.concat([pack(header,'QRP'),...page]))];
-   }else if(out.seed){++counts.fits;const id=O.OMM.getRootAsOMM(new fb.ByteBuffer(out.seed.payload)).NORAD_CAT_ID();fallback.METADATA.NORAD_CAT_ID=id;
+   }else if(out.seed){++counts.fits;const id=O.OMM.getRootAsOMM(new fb.ByteBuffer(out.seed.payload)).NORAD_CAT_ID();fallback.METADATA.NORAD_CAT_ID=id;fitCounts.set(id,(fitCounts.get(id)||0)+1);
     inputs=[frame('fallback','OCM',pack(fallback,'OCM',false)),frame('chain_status','QRP',pack(Object.assign(new Q.QRPT(),{KIND:Q.qrpKind.Error,STATUS:Q.qrpStatus.Error,ERROR_CODE:'outside-ap-class'}),'QRP',false))];
-   }else if(out.annotate_orbit){if(!failing){inputs=[frame('annotated','OCM',out.annotate_orbit.payload)];}else inputs=[frame('annotation_status','QRP',pack(Object.assign(new Q.QRPT(),{KIND:Q.qrpKind.Error,STATUS:Q.qrpStatus.Error,ERROR_CODE:'invalid-models'}),'QRP',false))];
+   }else if(out.annotate_orbit){if(!failing||OCM.getSizePrefixedRootAsOCM(new fb.ByteBuffer(out.annotate_orbit.payload)).METADATA().NORAD_CAT_ID()===newcomer){inputs=[frame('annotated','OCM',out.annotate_orbit.payload)];}else inputs=[frame('annotation_status','QRP',pack(Object.assign(new Q.QRPT(),{KIND:Q.qrpKind.Error,STATUS:Q.qrpStatus.Error,ERROR_CODE:'invalid-models'}),'QRP',false))];
    }else if(out.recipe){const result=await composer.invoke({methodId:'replace_products',inputs:[out.recipe,out.catalog,{...out.selection,portId:'decision'},...(out.selected?[{...out.selected,portId:'ocm_products'}]:[])]});assert.equal(result.statusCode,0,result.errorMessage);inputs=result.outputs.map(f=>({...f,portId:f.portId==='decision'?'compose_status':'replacement'}));
-   }else if(out.product_records||out.index_records){const m=decodeIngestRequest(out.meta.payload),rows=split(Buffer.from((out.product_records??out.index_records).payload));if(out.index_records)counts.indexes+=rows.length;inputs=[frame('stored','IngestResult',encodeIngestResult({schema:m.schema,...m.tags,inserted:rows.length,reconciledDuplicates:0}))];
-   }else if(out.state_records){const m=decodeIngestRequest(out.meta.payload),rows=split(Buffer.from(out.state_records.payload));assert.equal(m.schema,'NEV.fbs');++counts.writes;history.push(...rows);
+   }else if(out.product_records||out.index_records){const m=decodeIngestRequest(out.meta.payload),rows=split(Buffer.from((out.product_records??out.index_records).payload));
+    if(out.product_records){for(const row of rows)journal.add(CID.createV1(0x55,digest.create(0x12,createHash('sha256').update(row).digest())).toString());if(kill){journal.clear();return counts;}}
+    if(out.index_records){for(const row of rows){const cat=C.CAT.getSizePrefixedRootAsCAT(new fb.ByteBuffer(row)).unpack();for(const product of cat.PRODUCTS)assert.ok(journal.has(product.RECORD_CID),'terminal generation references a re-sent product');index.set(cat.NORAD_CAT_ID,row);}counts.indexes+=rows.length;}
+    inputs=[frame('stored','IngestResult',encodeIngestResult({schema:m.schema,...m.tags,inserted:rows.length,reconciledDuplicates:0}))];   }else if(out.state_records){const m=decodeIngestRequest(out.meta.payload),rows=split(Buffer.from(out.state_records.payload));assert.equal(m.schema,'NEV.fbs');++counts.writes;history.push(...rows);
     if(m.reconcile==='current'){++counts.snapshots;state=rows;}else{assert.equal(m.reconcile,'none');state.push(...rows);}counts.maxRows=Math.max(counts.maxRows,state.length);
     inputs=[frame('stored','IngestResult',encodeIngestResult({schema:m.schema,...m.tags,inserted:rows.length,reconciledDuplicates:0}))];
    }else assert.fail('Unexpected controller output: '+Object.keys(out));
@@ -57,25 +61,46 @@ export async function verifyStateRetention(mode){
   }
   assert.fail('State bound test exceeded its operation cap');
  }
+ const events=()=>state.flatMap(b=>N.NEV.getSizePrefixedRootAsNEV(new fb.ByteBuffer(b)).unpack().EVENTS);
+ const snapshot=entries=>{const log=new N.NEVT();log.NODE_ID='synthetic-node';log.GENERATED_AT_MS=BigInt(now);log.EVENTS=entries;state=[pack(log,'NEV')];};
+ const poisonEntries=count=>Array.from({length:count},(_,i)=>Object.assign(new N.NEVEventT(),{TIME_MS:BigInt(now),KIND:N.nevEventKind.Warning,SUBJECT:'catalog-invalid/'+sha(Buffer.from('removed defect '+i))+'/'+sha(Buffer.from('OMM/synthetic/primary')),COUNT:3n,DETAIL:'OMM/synthetic/primary; sequence='+(10000+i)+';'}));
  try{
+  let oldest,prepared;
   if(mode==='final'){
    const first=await tick(now);assert.equal(first.fits,4096);assert.equal(latest(state).length,4096);
-   assert.ok(latest(state).every(e=>e.DETAIL.startsWith('final ')));
-   const id=2999999;seeds.unshift(pack(Object.assign(new O.OMMT(),seed,{NORAD_CAT_ID:id}),'OMM'));identities.unshift(pack(Object.assign(new C.CATT(),{NORAD_CAT_ID:id,OBJECT_NAME:'SYNTHETIC'}),'CAT'));failing=false;
+   const all=latest(state);assert.ok(all.every(e=>e.DETAIL.startsWith('final ')));
+   // Put the oldest final failure last in work order, so its single retry is observable.
+   all.forEach((e,i)=>e.DETAIL=e.DETAIL.replace(/sequence=\d+;/,'sequence='+(4096-i)+';'));snapshot(all);
+   seeds.unshift(pack(Object.assign(new O.OMMT(),seed,{NORAD_CAT_ID:newcomer}),'OMM'));identities.unshift(pack(Object.assign(new C.CATT(),{NORAD_CAT_ID:newcomer,OBJECT_NAME:'SYNTHETIC'}),'CAT'));
+  }else if(mode==='prepared'){
+   await tick(now,true);prepared=events();assert.equal(prepared.length,1);assert.match(prepared[0].DETAIL,/product-batch=catalog-[a-f0-9]{64}; prepared-generation;/);
+   const entries=poisonEntries(4095);oldest=entries[0].SUBJECT;snapshot([...prepared,...entries]);
+   seeds.unshift(pack(Object.assign(new O.OMMT(),seed,{NORAD_CAT_ID:newcomer}),'OMM'));identities.unshift(pack(Object.assign(new C.CATT(),{NORAD_CAT_ID:newcomer,OBJECT_NAME:'SYNTHETIC'}),'CAT'));
   }else{
-   const log=new N.NEVT();log.NODE_ID='synthetic-node';log.GENERATED_AT_MS=BigInt(now);
-   for(let i=0;i<4096;i++){
-    const source='OMM/synthetic/primary';const subject=mode==='poison'?'catalog-invalid/'+sha(Buffer.from('removed defect '+i))+'/'+sha(Buffer.from(source)):'catalog-object/'+(4000000+i);
-    log.EVENTS.push(Object.assign(new N.NEVEventT(),{TIME_MS:BigInt(now),KIND:N.nevEventKind.Warning,SUBJECT:subject,COUNT:3n,DETAIL:mode==='poison'?source:'retry input=absent; sequence=1;'}));
-   }
-   state=[pack(log,'NEV')];
+   const all=poisonEntries(4096);oldest=all[0].SUBJECT;
+   if(mode==='absent')all.forEach((e,i)=>{e.SUBJECT='catalog-object/'+(4000000+i);e.DETAIL='retry input=absent; sequence='+(i+1)+';';});
+   snapshot(all);
   }
-  const runs=[];
+  const runs=[];history=[];
   for(let i=0;i<3;i++){control.destroy();control=await create();runs.push(await tick(now+1000+i));}
-  console.log('RETENTION_CONTROL '+JSON.stringify({mode,runs:runs.map(r=>({fits:r.fits,indexes:r.indexes,kind:r.notice.kind,reason:r.notice.reason}))}));
-  assert.ok(runs.some(r=>r.indexes>0),mode+' retention admits a new object over three runs');
-  const events=state.flatMap(b=>N.NEV.getSizePrefixedRootAsNEV(new fb.ByteBuffer(b)).unpack().EVENTS);
-  if(mode==='final')assert.equal(events.filter(e=>e.DETAIL.startsWith('final ')).length,4096,'unchanged final failures remain deferred');
-  else assert.equal(events.length,0,'compaction frees every absent entry');
+  console.log('RETENTION_FIFO '+JSON.stringify({mode,runs:runs.map(r=>({fits:r.fits,indexes:r.indexes,kind:r.notice.kind,reason:r.notice.reason}))}));
+  assert.ok(runs[0].indexes>0,'new object builds on the first run at capacity');
+  if(mode==='absent')assert.equal(events().length,0,'complete compaction frees absent entries');
+  else {
+   assert.equal(runs[0].notice.kind,'info');assert.match(runs[0].notice.reason,/evicted=[1-9]/);
+   assert.ok(events().length<=4096);
+   if(mode==='final'){
+    assert.equal(runs[0].fits,2,'new object and the evicted final failure are fitted');assert.equal(fitCounts.get(3004095),2,'evicted final failure is fitted exactly once more');
+    assert.ok(events().some(e=>e.SUBJECT==='catalog-object/3004095'&&e.DETAIL.startsWith('final ')),'evicted final failure is recorded again');
+   }else {
+    assert.ok(!events().some(e=>e.SUBJECT===oldest),'oldest unprotected event is evicted');
+    if(mode==='prepared'){
+     assert.equal(runs[0].indexes,2,'recovery generation completes with every object');
+     const firstSnapshot=N.NEV.getSizePrefixedRootAsNEV(new fb.ByteBuffer(history[0])).unpack().EVENTS;
+     assert.ok(firstSnapshot.some(e=>e.SUBJECT===prepared[0].SUBJECT&&e.DETAIL.includes(prepared[0].DETAIL.match(/product-batch=[^;]+;/)[0])),'old prepared recovery reference survives eviction');
+     assert.equal(events().filter(e=>e.SUBJECT.startsWith('catalog-invalid/')).length,4094,'only one older poison was evicted');
+    }else assert.equal(events().length,4095,'one old poison is evicted for one new object');
+   }
+  }
  }finally{control.destroy();composer.destroy();}
 }

@@ -249,12 +249,12 @@ try{
  const capacityRuns=[];
  for(let i=0;i<3;i++){control.destroy();control=await createControl();capacityRuns.push(await tick(now+1200001+i));}
  console.log('CAPACITY_CONTROL '+JSON.stringify(capacityRuns.map(r=>({fits:r.fits,indexes:r.indexes,kind:r.notice.kind,reason:r.notice.reason}))));
- assert.equal(capacityRuns[0].fits,2,'capacity skips unbuilt objects and reaches due retry fits');
- assert.equal(capacityRuns[0].indexes,2);assert.match(capacityRuns[0].notice.reason,/deferred=1/);assert.notEqual(capacityRuns[0].notice.kind,'unchanged');
- assert.equal(capacityRuns[1].fits,1,'freed attempts admit the deferred new object');assert.equal(capacityRuns[1].indexes,1);
+ assert.equal(capacityRuns[0].fits,2,'full state admits new objects and reaches due retry fits');
+ assert.equal(capacityRuns[0].indexes,2);assert.doesNotMatch(capacityRuns[0].notice.reason,/capacity reached/);assert.notEqual(capacityRuns[0].notice.kind,'unchanged');
+ assert.equal(capacityRuns[1].fits,1,'remaining retry selection is reached after the bounded batch');assert.equal(capacityRuns[1].indexes,1);
  assert.equal(capacityRuns[2].fits,0);assert.equal(current().size,3);
- assert.equal(N.NEV.getSizePrefixedRootAsNEV(new fb.ByteBuffer(capacityRows[0])).eventsLength(),4094);
- console.log('PASS capacity retries free entries and resume new selections');
+ assert.equal(N.NEV.getSizePrefixedRootAsNEV(new fb.ByteBuffer(capacityRows[0])).eventsLength(),0,'inactive phantom entries are pruned at compaction');
+ console.log('PASS FIFO admission builds new selections and prunes phantom entries');
  cfg['catalog.page_size']=1;
  await reset();records('CAT.fbs','synthetic-node','catalog-index').push(pack(new C.CATT(),'CAT'));
  for(let i=0;i<3;i++){control.destroy();control=await createControl();const observation=await tick(now+i*1000);assert.equal(observation.indexes,i===2?2:0);}
@@ -299,4 +299,4 @@ import {verifyStateBounds} from './state-bounds.mjs';
 test('state marker appends and oversized recovery reads compact without losing failures',verifyStateBounds);
 
 import {verifyStateRetention} from './state-retention.mjs';
-for(const mode of ['absent','poison','final'])test('state retention '+mode,()=>verifyStateRetention(mode));
+for(const mode of ['absent','poison','final','prepared'])test('state retention '+mode,()=>verifyStateRetention(mode));
