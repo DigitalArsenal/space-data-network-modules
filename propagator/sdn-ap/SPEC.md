@@ -6655,7 +6655,7 @@ measured blocks. Both middle-half spreads are below 5% of their medians. No AP c
 **20.1 Source and indices.** The row and record stores coexist. Plugin calls select rows after a successful
 `plugin_init_omm` (including count 0, which selects empty rows), or records after a successful `load_epochs` or
 `load_epochs_close`. `load_epochs_open` and parts stage the replacement while the previous source stays readable.
-Every refused load or refused `plugin_init_omm` preserves the active source and its states. A successful record load
+Every refused `load_epochs*` or `plugin_init_omm` preserves the active source and its states. A successful record load
 releases the previous record snapshot and frames, preserving rows. A successful `plugin_init_omm` preserves records,
 frames and any open load; its 88-byte record interpretation and numerical propagation are unchanged.
 `ingest_omm` and `sdnap_init_elements` replace native rows without changing the plugin selection: with records selected,
@@ -6763,6 +6763,16 @@ Every answered native row uses the newly supplied set and its requested time.
 
 `test/memory-limit.e2e.mjs` compares every answered state bit for bit against an instance with the default maximum,
 including replacement of SGP4 rows by AP test rows with two pool threads at 128 MiB.
+
+Unsigned wasm32 builds preserve the native memory-limit figures of main 0.6.60 (6eeff4b6): 3,268 answered row states
+and 704 refusals across two instants at 128 MiB, and 2,473 stock-record answers at 80 MiB. Every answered state is
+bit-identical to its reference. The memory-limit assertions and numerical tolerances are unchanged.
+
+The first one-byte host allocation is at address 1,199,520, compared with main's 1,201,808: 2,288 fewer bytes before
+the heap. Concise epoch-load manifest descriptions retain their contract and reference the detailed SPEC rules.
+The epoch-store map owns only a pointer; its length comes from the series count, and its counted allocation occurs
+only for nonidentity record order. The native Store, Entry, Series, Slot and propagation-record sizes are unchanged;
+the thread-local initialization segment remains 343,956 bytes.
 
 ### Shared lookup initialization
 
