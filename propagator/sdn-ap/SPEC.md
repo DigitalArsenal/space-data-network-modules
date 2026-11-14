@@ -6423,7 +6423,7 @@ pass W4 (18.5, #394).
 
 ### U control cost by orbit class
 
-The candidate forced-U build was compared with the committed 0.6.59 binary in paired ABBA rounds. Ratios are candidate/control propagation time, with the median and quartiles computed from the per-round ratios. Each quartet returned identical state/status digests. Each case met the 5% interquartile-spread limit; measurements used separate shared timing slots.
+The build before the derivative-pointer refactor, forced to U, was compared with the committed 0.6.59 binary in paired ABBA rounds. Ratios are candidate/control propagation time, with the median and quartiles computed from the per-round ratios. Each quartet returned identical state/status digests. Each case met the 5% interquartile-spread limit; measurements used separate shared timing slots.
 
 | Synthetic orbit class | Series | Rounds | Median ratio | Q1 | Q3 |
 |---|---:|---:|---:|---:|---:|
@@ -6445,3 +6445,15 @@ The forced-U non-AP cell measured a 2.64% median slowdown, with both quartiles a
 | 10000 | 20 | 1.016801 | 1.000626 | 1.051224 | yes |
 
 The 10,000-series production/default comparison qualifies after 20 rounds and measures a 1.68% median cost increase, with its Q1 just above 1.0 and spread close to the acceptance limit. The result supports a production non-AP cost but does not identify its cause. The rejected 1,000-series spread is a diagnostic observation, not a qualified performance result.
+
+### Non-AP derivative-pointer control
+
+The propagation scope saved, cleared, and restored an optional derivative-cache pointer even for sets without AP gravity. Resolving derivative rows from the existing held-set identity removes that redundant scope state; only corrected forms request the rows. No numerical expression, cache size, lock, or form-selection threshold changes.
+
+For the same 1,000 synthetic non-AP series and 200 instants after warmup, the released binary executes 3,735,852,295 WASM instructions and the earlier candidate executes 3,738,252,295. The difference is exactly 12 instructions per state, all in the propagation wrapper. The corrected binary executes 3,735,852,295; state/status digests match. Counts include original executed opcodes except structural else/end delimiters, and exclude instrumentation. These counts identify the added work; they do not assign a wall-time percentage to it.
+
+The corrected production binary against released 0.6.59, with 10,000 non-AP series and 200 instants, measures median ratio 1.001523, middle-half range [0.990083, 1.003838], over 8 paired ABBA rounds. The middle-half range includes 1.0. All quartet state/status digests match. The earlier measurements above retain their original build attribution.
+
+Exact comparison before and after the pointer refactor preserves all 24,497 sampled states/statuses in 17 coefficient classes through 120 h. The state-purity and allocation-fallback checks pass, as does serial and repeated 4/8/15-thread cache poisoning.
+
+A focused four-thread sigma diagnostic has intermittent one-ULP differences in an explicit cell-key case: 2 of 400 comparisons before the derivative-pointer refactor and 5 of 400 after it, with the same component deltas and a maximum position difference of 1.364243e-9 m. Five complete repeats per build passed 360 comparisons each, but those passes do not establish universal bit stability. The zero-bit assertion is unchanged; the diagnostic cause and production reachability are unresolved.
