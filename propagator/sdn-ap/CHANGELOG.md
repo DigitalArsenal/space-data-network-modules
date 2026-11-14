@@ -1,5 +1,17 @@
 # Changelog
 
+## Unreleased — Bounded wide-grid payloads
+
+Steady passes over more wide sets than the cache holds rebuild payloads. Parallel construction also adds per-thread buffers and allocator reserve. For 1,000 distinct synthetic wide sets at the 192 MiB default budget, the median first / steady pass costs were 26.150 / 25.157 s on one total computation thread, 6.765 / 6.576 s on four, and 2.169 / 2.108 s on fifteen. Observed peak linear memory in these paired runs was 321,978,368, 814,809,088, and 1,290,272,768 bytes respectively. Resident grid accounting was bounded by 201,326,592 bytes; the observed full cache held 197,710,344 bytes. These are 1,000 wide sets, with no additional non-wide records.
+
+Each comparison has eight ABBA rounds. Four / one thread first-pass and steady-pass ratios are 0.2589 and 0.2614, with middle halves [0.2580, 0.2621] and [0.2609, 0.2623]. Fifteen / four ratios are 0.3188 and 0.3181, with middle halves [0.3173, 0.3222] and [0.3173, 0.3210]. All middle-half widths are below 5% of their medians. Loading and pool startup are excluded. The separate four-thread control in the second comparison measured 6.819 / 6.626 s; no unpaired fifteen / one ratio is asserted. `test/wide-grid-cost.mjs` records the raw rounds, loads, memory and state digests.
+
+Exact-key descriptors retain set ownership while payloads are evicted when unpinned. The host can adjust the budget down to 172,362,864 bytes, enough for two largest grids on each of 16 pool threads and the caller. Resource failures are counted and retryable. Wide series use pool dispatch, and exact powers and phase reuse use bounded checked storage. This replaces the 256-retained-grid limit that could refuse catalog objects according to request order.
+
+`propagate_epochs` attempts every object after a propagation refusal and emits per-object OEM status, including partial results on allocation failure. A method-level failure therefore requires inspecting each emitted block. Other methods retain their no-output allocation-failure contract. The frame-cell API's eligibility is unchanged.
+
+The 10,000-record regression matches isolated 0.6.60 states in fixed-record ascending, descending and shuffled request order on 1, 4 and 15 total threads. Minimum-budget blending is checked through 17 threads, covariance matches the control, and allocation failures and fully pinned-budget shortages recover on retry. No approximation budget is spent.
+
 ## 0.6.60 — The frame path: a frame of every object from Chebyshev cells of AP's own states
 
 What gets worse: the module is 25,582 bytes larger (1,909,995 against 1,884,413) and an instance that never opens frames holds 576 bytes more static data. The 80 MiB store of
