@@ -1964,6 +1964,7 @@ inline void sp_split16_f32(double x, float& hi, float& lo) {
   sc.ci_res = ci;
 }
 
+template <bool kZeroHarmonic = false>
 [[gnu::noinline]] inline void sp_six_fallback(const SpEvalCache& sc, const SpCombCoef* F, int count, double a0, double e0,
                                               double a, double e, double n, double eta, double sin_i, double ci,
                                               double ia, double sb, double cb, double su1, double cu1,
@@ -2001,6 +2002,12 @@ inline void sp_split16_f32(double x, float& hi, float& lo) {
     const double cwjq = qv == 0 ? c0 : (qv > 0 ? c0 * cM1 - s0 * sM1 : c0 * cM1 + s0 * sM1);
     const double swjq = qv == 0 ? s0 : (qv > 0 ? s0 * cM1 + c0 * sM1 : s0 * cM1 - c0 * sM1);
     const double cp = cwjq * cm[m] - swjq * sm[m], sp = swjq * cm[m] + cwjq * sm[m];
+    if constexpr (kZeroHarmonic) {
+      // A discarded harmonic is zero even at exact commensurability.
+      if (f.uc0 == 0 && f.us0 == 0 && f.dc0 == 0 && f.ds0 == 0 && f.dca == 0 && f.dsa == 0 &&
+          f.ec0 == 0 && f.es0 == 0 && f.eca == 0 && f.esa == 0 && f.ic0 == 0 && f.is0 == 0 &&
+          f.ica == 0 && f.isa == 0 && f.ice == 0 && f.ise == 0) continue;
+    }
     const double inv_p = 1.0 / (w * wdot + m * beta_dot + j * mdot);
     const double uc = (f.uc0 + (-f.dc0 - 0.5 * f.dca * da) * da + (f.ec0 + f.eca * da) * de) * inv_p;
     const double us = (f.us0 + (-f.ds0 - 0.5 * f.dsa * da) * da + (f.es0 + f.esa * da) * de) * inv_p;
@@ -2133,6 +2140,7 @@ inline bool sp_matches(const SpEvalCache& sc, const SpCombCoef* F, int count, ui
   return slot->cache != nullptr ? slot->cache : &th;
 }
 
+template <bool kZeroHarmonic = false>
 [[gnu::noinline]] inline bool sp_init_or_fallback(
     SpEvalCache& sc, const SpCombCoef* F, int count, uint32_t tag, double a0, double e0, double t,
     const Kepler& kp, double a, double e, double n, double eta, double sin_i, double ci, double ia, double ci_build,
@@ -2150,13 +2158,14 @@ inline bool sp_matches(const SpEvalCache& sc, const SpCombCoef* F, int count, ui
     else fm::sincos(kp.argp + kp.m, su1, cu1);
     if (sM1_in != nullptr && cM1_in != nullptr) { sM1 = *sM1_in; cM1 = *cM1_in; }
     else fm::sincos(kp.m, sM1, cM1);
-    sp_six_fallback(sc, F, count, a0, e0, a, e, n, eta, sin_i, ci, ia, sb, cb, su1, cu1, sM1, cM1,
+    sp_six_fallback<kZeroHarmonic>(sc, F, count, a0, e0, a, e, n, eta, sin_i, ci, ia, sb, cb, su1, cu1, sM1, cM1,
                     six, dsix_dlam, d2six_dlam2);
     return false;
   }
   return true;
 }
 
+template <bool kZeroHarmonic = false>
 [[gnu::noinline]] inline bool sp_init_or_fallback_val(
     SpEvalCache& sc, const SpCombCoef* F, int count, uint32_t tag, double a0, double e0, double t,
     double a, double e, double n, double eta, double sin_i, double ci, double ia, double ci_build,
@@ -2166,7 +2175,7 @@ inline bool sp_matches(const SpEvalCache& sc, const SpCombCoef* F, int count, ui
     sp_rebuild_cache(sc, F, count, tag, a0, e0, ci_build);
   }
   if (!sc.grouped_ok || t == 0.0) {
-    sp_six_fallback(sc, F, count, a0, e0, a, e, n, eta, sin_i, ci, ia, sb, cb, su1, cu1, sM1, cM1,
+    sp_six_fallback<kZeroHarmonic>(sc, F, count, a0, e0, a, e, n, eta, sin_i, ci, ia, sb, cb, su1, cu1, sM1, cM1,
                     six, nullptr, nullptr);
     return false;
   }
