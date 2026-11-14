@@ -1,8 +1,7 @@
 #!/usr/bin/env node
 // Synthetic commensurabilities in the R band. J2 angle-rate roots in rad/min;
 // UTC JD 2461206.5, TEME meters. A state-exact coefficient control removes orbital
-// motion from the continuity residual. At a commensurability the exact control
-// omits a harmonic whose sixteen coefficients are all zero, its analytic limit. Bounds: 1 m distance and residual jump,
+// motion from the continuity residual. Bounds: 1 m distance and residual jump,
 // the coefficient approximation budget, not independent numerical orbit truth.
 import assert from 'node:assert/strict';
 import {createStandaloneHarness} from 'space-data-module-sdk/testing/isomorphic';
@@ -23,7 +22,7 @@ SDNAP_EXPORT("sdnap_test_res_state") int sdnap_test_res_state(double t,double* o
  out[6]=mean_at(*test_res_sat,t,y)?y[kN]:0;out[7]=test_res_sat->ctx.continuity_form;return rc;
 }
 `;
-const candidate=process.env.COEFFICIENT_RESONANCE_WASM??buildDiagnostic('coefficient-resonance',extra),exact=process.env.COEFFICIENT_RESONANCE_EXACT??buildDiagnostic('coefficient-resonance-exact',extra,s=>s,{'tesseral.inc':s=>'#define SDNAP_CONTINUITY_RULE 0\n'+s.replaceAll('sp_six_fallback<kZeroHarmonic>(sc,','sp_six_fallback<true>(sc,'),'coefficient_evaluation.inc':exactCoefficients});
+const candidate=process.env.COEFFICIENT_RESONANCE_WASM??buildDiagnostic('coefficient-resonance',extra),exact=process.env.COEFFICIENT_RESONANCE_EXACT??buildDiagnostic('coefficient-resonance-exact',extra,s=>s,{'tesseral.inc':s=>'#define SDNAP_CONTINUITY_RULE 0\n'+s,'coefficient_evaluation.inc':exactCoefficients});
 const ke=.074366859954178854,re=6378.1363,j2=.0010826266835531513,omega=.00437526908801129966,ci=Math.cos(55*Math.PI/180);
 const rate=(n,e,m,j,w)=>{const a=(ke/n)**(2/3),eta=Math.sqrt(1-e*e),p=a*eta*eta,z=1.5*j2/(p*p);return w*.5*z*n*(5*ci*ci-1)+j*(n+.5*z*n*eta*(3*ci*ci-1))+m*(-z*n*ci-omega);};
 const gcd=(a,b)=>b?gcd(b,a%b):a;

@@ -1221,7 +1221,7 @@ res = pe || kra != sc.kr_a || krc != sc.kr_c || kre != sc.kr_e;
   SpEvalCache* scp = (slot != nullptr && slot->cache != nullptr) ? slot->cache : &sp_thread_cache();
   if (__builtin_expect(t == 0.0 || !sp_matches(*scp, F, count, tag, a0, e0), 0)) {
     SpEvalCache& th = sp_thread_cache();
-    if (!sp_init_or_fallback<(SDNAP_COEFFICIENT_FORM == 4)>(th, F, count, tag, a0, e0, t, kp, a, e, n, eta, sin_i, ci, ia, ci_build,
+    if (!sp_init_or_fallback(th, F, count, tag, a0, e0, t, kp, a, e, n, eta, sin_i, ci, ia, ci_build,
                              theta_g0, sb_in, cb_in, su1_in, cu1_in, sM1_in, cM1_in, six, dsix_dlam, d2six_dlam2)) {
       return;
     }
@@ -1319,7 +1319,7 @@ res = pe || kra != sc.kr_a || krc != sc.kr_c || kre != sc.kr_e;
   SpEvalCache* scp = (slot != nullptr && slot->cache != nullptr) ? slot->cache : &sp_thread_cache();
   if (__builtin_expect(t == 0.0 || !sp_matches(*scp, F, count, tag, a0, e0), 0)) {
     SpEvalCache& th = sp_thread_cache();
-    if (!sp_init_or_fallback_val<(SDNAP_COEFFICIENT_FORM == 4)>(th, F, count, tag, a0, e0, t, a, e, n, eta, sin_i, ci, ia, ci_build,
+    if (!sp_init_or_fallback_val(th, F, count, tag, a0, e0, t, a, e, n, eta, sin_i, ci, ia, ci_build,
                                  sb, cb, su1, cu1, sM1, cM1, six)) {
       return;
     }
