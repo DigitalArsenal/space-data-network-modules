@@ -38,7 +38,7 @@ struct Source {std::string schema,provider,name;};
 struct Seed {Bytes data;int64_t epoch=0;size_t rank=0;};
 struct Settings {
  std::string provider,identity_provider,identity_source,weather_provider,weather_source,recipe;
- size_t page=512,batch=128,max_records=200000,max_bytes=128*1024*1024;
+ size_t page=512,batch=128,partitions=1,partition=0,max_records=200000,max_bytes=128*1024*1024;
  double margin=0,nonres_e=.05,res_e=.3,max_rms=2,max_error=10;
  std::vector<Source> seeds;
 } cfg;
@@ -74,7 +74,7 @@ bool configure() {
  if(sources.empty()||sources.size()!=providers.size()||sources.size()>16||cfg.provider.empty()||cfg.identity_provider.empty()||cfg.identity_source.empty()||cfg.weather_provider.empty()||cfg.weather_source.empty())return false;
  cfg.seeds.clear();for(size_t i=0;i<sources.size();++i){if(sources[i].empty()||providers[i].empty())return false;cfg.seeds.push_back({"OMM",std::string(providers[i]),std::string(sources[i])});}
  auto bound=[&](const char* key,size_t& value,size_t low,size_t high){const double v=c.number(key,value);if(!std::isfinite(v)||v<low||v>high||std::floor(v)!=v)return false;value=size_t(v);return true;};
- if(!bound("catalog.page_size",cfg.page,1,1000)||!bound("catalog.batch_size",cfg.batch,1,256)||!bound("catalog.max_records",cfg.max_records,1,2000000)||!bound("catalog.max_bytes",cfg.max_bytes,1024,512*1024*1024))return false;
+ if(!bound("catalog.page_size",cfg.page,1,1000)||!bound("catalog.batch_size",cfg.batch,1,4096)||!bound("catalog.partition_count",cfg.partitions,1,8)||!bound("catalog.partition_index",cfg.partition,0,cfg.partitions-1)||!bound("catalog.max_records",cfg.max_records,1,2000000)||!bound("catalog.max_bytes",cfg.max_bytes,1024,512*1024*1024))return false;
  cfg.margin=c.number("catalog.validity_margin_seconds",0);cfg.nonres_e=c.number("catalog.nonresonant_max_e",.05);cfg.res_e=c.number("catalog.resonant_max_e",.3);cfg.max_rms=c.number("catalog.max_fit_rms_km",2);cfg.max_error=c.number("catalog.max_fit_error_km",10);
  return std::isfinite(cfg.margin)&&cfg.margin>=0&&cfg.nonres_e>=0&&cfg.nonres_e<=.05&&cfg.res_e>=0&&cfg.res_e<=.3&&std::isfinite(cfg.max_rms)&&cfg.max_rms>0&&std::isfinite(cfg.max_error)&&cfg.max_error>0;
 }
@@ -140,7 +140,7 @@ int ingest(const Bytes& data,bool is_index) {
 }
 int next_object() {
  for(;at<work.size()&&done<cfg.batch;++at){
-  const auto id=work[at];chosen.clear();signature.clear();reason.clear();object_weather.clear();const auto s=seeds.find(id);const auto identity=identities.find(id);const auto old=index.find(id);
+  const auto id=work[at];if(id%cfg.partitions!=cfg.partition)continue;chosen.clear();signature.clear();reason.clear();object_weather.clear();const auto s=seeds.find(id);const auto identity=identities.find(id);const auto old=index.find(id);
   const bool removed=identity==identities.end()||s==seeds.end()||(GetSizePrefixedCAT(identity->second.data())->DECAY_DATE()&&!text(GetSizePrefixedCAT(identity->second.data())->DECAY_DATE()).empty()&&text(GetSizePrefixedCAT(identity->second.data())->DECAY_DATE())<=iso(now).substr(0,10));
   const auto* previous=old==index.end()?nullptr:GetSizePrefixedCAT(old->second.data());
   if(removed){if(!previous||!previous->PRODUCTS()||!previous->PRODUCTS()->size())continue;reason="object removed from the configured current sources";return compose();}

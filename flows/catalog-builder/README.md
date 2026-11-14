@@ -54,7 +54,9 @@ At most 16 ordered seed sources are accepted.
 | Setting | Default | Bound or meaning |
 | --- | --- | --- |
 | `catalog.page_size` | 512 | 1–1,000 records per storage page |
-| `catalog.batch_size` | 128 | 1–256 changed objects per tick |
+| `catalog.partition_count` | 1 | 1–8 services; disjoint object-number modulo partitions |
+| `catalog.partition_index` | 0 | Zero-based partition, less than the count |
+| `catalog.batch_size` | 128 | 1–4096 changed objects per tick; the execution budget remains binding |
 | `catalog.max_records` | 200,000 | 1–2,000,000 scanned records |
 | `catalog.max_bytes` | 134,217,728 | 1 KiB–512 MiB of accounted scan data |
 | `catalog.recipe_revision` | `W/1` | Included in the input fingerprint |
@@ -122,3 +124,5 @@ A native 256-object synthetic test completed within the ten-minute invocation
 budget, producing 256 stored products and 256 selections. Guest linear memory
 at its endpoint was 99 pages (6,488,064 bytes), excluding host and storage
 memory. The rate projection does not raise the controller's batch limit.
+
+Each partition scans the complete configured sources and changes only objects whose object number modulo `catalog.partition_count` equals `catalog.partition_index`. Services share one output provider and use distinct partition indexes. This also partitions expiry and removals. Increasing the batch ceiling does not guarantee completion within the host execution budget.
