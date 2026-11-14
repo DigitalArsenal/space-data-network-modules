@@ -56,7 +56,7 @@ test('refused fit emits a named outcome and SGP4 fallback, with no partial AP ou
     const good = await h.invoke({methodId: 'run_chain', inputs: inputs(true)});
     assert.equal(good.statusCode, 0, good.errorMessage);
     assert.equal(outcome(good).KIND, qrpKind.Page, outcome(good).MESSAGE);
-    assert.equal(outcome(good).ERROR_CODE, '');
+    assert.equal(outcome(good).ERROR_CODE ?? '', '');
   } finally { h.destroy(); }
 });
 
