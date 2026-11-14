@@ -292,7 +292,7 @@ int flush_generation(){
 int stage_selection(const Bytes& record){
  flatbuffers::Verifier v(record.data(),record.size());
  if(!VerifySizePrefixedCATBuffer(v)||GetSizePrefixedCAT(record.data())->NORAD_CAT_ID()!=work[at])return fail_object("Invalid composed selection.",true);
- const auto product=(metadata_only||chosen_stored)?Bytes{}:chosen;
+ const auto product=metadata_only?Bytes{}:chosen;
  if(record.size()>index_batch_bytes||product.size()>product_batch_bytes)return fail_object("Object exceeds generation record bound.",true);
  size_t index_bytes=record.size();for(const auto& item:staged)index_bytes+=item.record.size();
  if(index_bytes>index_batch_bytes||staged_bytes+record.size()+product.size()>generation_bytes){++diagnostics.deferred;diagnostics.add("generation byte bound reached","bounds");return finish();}
