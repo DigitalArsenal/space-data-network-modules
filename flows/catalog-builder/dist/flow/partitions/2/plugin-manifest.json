@@ -138,6 +138,12 @@
   ],
   "schemasUsed": [
     {
+      "schemaName": "ModuleConfig.fbs",
+      "fileIdentifier": "MCFG",
+      "rootTypeName": "ModuleConfig",
+      "wireFormat": "flatbuffer"
+    },
+    {
       "schemaName": "OMM.fbs",
       "fileIdentifier": "$OMM",
       "rootTypeName": "OMM"
