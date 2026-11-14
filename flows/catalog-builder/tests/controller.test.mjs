@@ -294,3 +294,6 @@ try{
 }catch(e){evidence.failure=e.stack;throw e;}finally{control.destroy();chain.destroy();gp.destroy();composer.destroy();ap.destroy();}
 
 });
+
+import {verifyStateBounds} from './state-bounds.mjs';
+test('state marker appends and oversized recovery reads compact without losing failures',verifyStateBounds);
