@@ -9,7 +9,7 @@ and `OBJECT_ID`) and `ground` (at a `$SIT` site by `SITE_ID`).
 **Unknown is absent.** A positive quantity with no source is 0, a signed one NaN, an enum `UNSPECIFIED`, a table absent. No
 value is guessed, copied from a sibling sensor or taken from a standard's band edges; a computed value says so in `NOTES`.
 
-All parsing, joining and record construction run in C++/WASM. The host HTTP connector moves request/response bytes. The module
+All parsing, joining and record construction run in C++/WASM. The host HTTP connector moves request/response bytes; `storage.query` supplies the existing CAT identities. The module
 has no network imports. Configuration is a typed FlatBuffer message (`ModuleConfig`) through `plugin.getConfig`:
 `producer_peer_id` (String, required). The roster is compiled in (`src/roster.hpp`), like `deep-space-spacecraft`'s.
 
@@ -17,7 +17,7 @@ has no network imports. Configuration is a typed FlatBuffer message (`ModuleConf
 
 | Method | In | Out |
 | --- | --- | --- |
-| `plan_sources` | `tick` (TICK) | `request` (HREQ x 62): the SATCAT, the OSCAR satellite documents and instrument pages of the roster, the MediaWiki extracts of the ground pages, each once |
+| `plan_sources` | `tick` (TICK) | `request` (HREQ x 61): the OSCAR satellite documents and instrument pages of the roster, the MediaWiki extracts of the ground pages, each once |
 | `build_sensors` | `response` (HRSP, any order, matched to the roster by URL) | `space_records`, `ground_records` (size-prefixed `$SNR` streams), `space_meta`, `ground_meta` (IngestRequest, SCHEMA `SNR.fbs`, RECONCILE Current, SOURCE_PEER, license, share-alike), `provenance` (one `$PVN` per source system), `notice` (an Info `sensor-counts` and, when anything was refused, one Missing `refused` with every reason) |
 
 `flow.mjs`: timer (weekly) -> `plan_sources` -> `hostcap/http-request` -> `build_sensors` -> `hostcap/storage-ingest` (port
@@ -33,7 +33,7 @@ client on 2026-11-05.
 | Source | What it gives | Access | License / terms | Decision |
 | --- | --- | --- | --- | --- |
 | **WMO OSCAR/Space** (`space.oscar.wmo.int`) | Satellites and the instruments each carries, with status and launch date (JSON API `/api/v1/satellites/<slug>`); per-instrument channel tables (central wavelength or frequency, bandwidth or interval) and descriptive fields (HTML `/instruments/view/<slug>`, class `frequencytable`); 1,063 satellites, 1,251 instruments. No NORAD or COSPAR ids, no frequency API. | JSON + HTML, no key, `robots.txt` absent. 62 requests a run, weekly. | "All information available on these pages may be used and redistributed freely, however, any publication using this information should acknowledge WMO." (`/pages/disclaimer`) | **Published** (`PVN` Reproducible), WMO acknowledged in every record's `ATTRIBUTION`. The core source: every imager, radiometer, altimeter and SAR record. |
-| **CelesTrak SATCAT** (`celestrak.org/pub/satcat.csv`) | `NORAD_CAT_ID`, `OBJECT_ID`, name, type, launch and decay dates of every catalogued object: the authoritative join | CSV, one request a week (the 3-hour rule). Some addresses are refused by CelesTrak; the fixture was fetched through Tor | Public; redistributed with citation (the stack's CelesTrak authorization) | **Used for the join**, never republished beyond `NORAD_CAT_ID`/`OBJECT_ID`. The join is checked: the row exists and its launch date is within a day of OSCAR's (time zones; Sentinel-2C is 2024-09-05 in the SATCAT and 04 Sep 2024 in OSCAR). A constellation is the payloads named `ICEYE-`, `CAPELLA-`, `UMBRA-` still in orbit. |
+| **CelesTrak SATCAT** (`celestrak.org/pub/satcat.csv`) | `NORAD_CAT_ID`, `OBJECT_ID`, name, type, launch and decay dates of every catalogued object: the authoritative join | Existing `CAT.fbs` records from this producer's `celestrak-satcat-csv` lane; no SATCAT HTTP request | Public; redistributed with citation (the stack's CelesTrak authorization) | **Used for the join**, never republished beyond `NORAD_CAT_ID`/`OBJECT_ID`. The join is checked: the row exists and its launch date is within a day of OSCAR's (time zones; Sentinel-2C is 2024-09-05 in the SATCAT and 04 Sep 2024 in OSCAR). A constellation is the payloads named `ICEYE-`, `CAPELLA-`, `UMBRA-` still in orbit. |
 | **Wikipedia** (MediaWiki API, `prop=extracts|revisions`) | Plain text of the pages of the AN/FPS-85, PARCS, Millstone Hill (MISA), ALTAIR, GLOBUS and the Maui complex, with revision id and timestamp; they cite the fact sheets below | JSON API, no key, one request per page | CC BY-SA 4.0 | **Published** (`PVN` ShareAlike, lane `ground` flagged share-alike), the revision named in `ATTRIBUTION` and `SOURCE_URL`. Only quoted facts (see "Facts"). |
 | Government fact sheets: `spaceforce.mil`, `af.mil`, `smdc.army.mil` (Eglin, Cavalier, Kwajalein), Space Force Delta fact sheets | The authoritative ground-radar facts | Fetched: HTTP 403 or no answer for automated clients; no machine-readable export | US Government works (17 U.S.C. 105), unrestricted | **Not reachable.** The same facts reach us through Wikipedia, which cites them. When a fact sheet is reachable it replaces the Wikipedia quote. |
 | MIT Haystack / Lincoln Laboratory (Millstone Hill, ALTAIR) | Radar parameters | Fetched `haystack.mit.edu`: pages name the radar and give no frequency or power | MIT copyright | **Not used**: no number to read. Millstone and ALTAIR therefore carry the band designation only. |
@@ -105,11 +105,12 @@ reads every OSCAR channel table with its own code and requires the module's band
 (Sentinel-1C), an imager (MODIS on Terra, 36 bands) and a radar (AN/FPS-85) field by field; requires every number of a ground record
 to appear in a quote of its `NOTES`; and checks that a stale quote, a SATCAT launch date that disagrees with OSCAR, a failed OSCAR
 page and a missing SATCAT each stop exactly the values that depend on them. `tests/composed-flow.e2e.test.mjs` compiles `flow.mjs` with the
-SDK and runs it through the real HTTP and ingest guests with only the host boundary substituted: the stored bytes equal the standalone
-streams. `node tests/record-cassette.mjs` re-records (OSCAR and Wikipedia live; the SATCAT from `SATCAT_FILE`).
+SDK and runs it through the real HTTP and ingest guests with only the host boundary substituted, including stored CAT identity frames, multiple discovery pages, and an unrelated catalog larger than the node's query cap. Both SNR streams and their ingest metadata equal the original CSV-identity outputs byte for byte. `node tests/record-cassette.mjs` re-records (OSCAR and Wikipedia live; the SATCAT from `SATCAT_FILE`).
 
 ## Install on a node
 
 The node needs the module and the flow (`flow.mjs`, program `com.digitalarsenal.flows.sensor-definitions-ingest`), `hostcap/storage-ingest` 0.6.1
-(port `snr_records`), the capability approvals of the module and storage-ingest, node `producer_peer_id` configuration, and an SDN
+(port `snr_records`), exact-hash `http`, `storage_query`, and `storage_ingest` capability approvals for the compiled flow, node `producer_peer_id` configuration, and an SDN
 node that stores `$SNR` at SDS 1.279.0 (the node's embedded catalog still carries the earlier `$SNR`).
+
+Identity discovery uses parameterized `storage.query_sandboxed` pages of 32 NORAD numbers, then exact-NORAD `storage.query` reads with source tags. The node caps each identity read at 1,000 records; reaching that cap fails the run. Discovery is bounded at 250,000 identities and rejects non-increasing or malformed pages. Only the local `producer_peer_id` and `celestrak-satcat-csv` source are accepted; malformed or conflicting stored identities fail the run. The source CAT records retain their existing provenance; the emitted SATCAT provenance counts the stored bytes read.

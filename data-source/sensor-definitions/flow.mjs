@@ -18,7 +18,7 @@ export function sensorDefinitionsFlow({ node, edge, http, storage, packageDir })
     flow: {
       programId: "com.digitalarsenal.flows.sensor-definitions-ingest",
       name: "Real-world sensor definitions ($SNR)", version: "0.1.1", engineLinkage: "bridge",
-      description: "Typed TimerTick, HTTP and ingest contracts read the WMO OSCAR/Space instrument channel tables and satellite listings, the CelesTrak SATCAT and the ground-sensor pages of the roster into $SNR sensor definitions, one record per sensor on a platform, each value with its source, retrieval time, method and license. Two lanes: space (satellite payloads joined by NORAD_CAT_ID) and ground (sensors at a $SIT site).",
+      description: "Typed TimerTick, HTTP and ingest contracts read the WMO OSCAR/Space instrument channel tables and satellite listings, the locally stored CelesTrak CAT identities and the ground-sensor pages of the roster into $SNR sensor definitions, one record per sensor on a platform, each value with its source, retrieval time, method and license. Two lanes: space (satellite payloads joined by NORAD_CAT_ID) and ground (sensors at a $SIT site).",
       nodes, edges,
       triggers: [{ triggerId: "weekly", kind: "timer", source: "host-cron", defaultIntervalMs: 604800000,
         description: "Refresh the sensor definitions weekly: OSCAR and the pages change slowly." }],

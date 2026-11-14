@@ -2,10 +2,27 @@
   "pluginId": "com.digitalarsenal.data-source.sensor-definitions",
   "name": "Real-world sensor definitions",
   "version": "0.1.1",
-  "description": "Publishes real-world sensors as SDS $SNR sensor definitions, one record per sensor on a platform, each value read from a named public source and carrying its own provenance: the WMO OSCAR/Space instrument channel tables and satellite listings (Earth-observation and weather imagers, radiometers, sounders and SARs of satellites in the CelesTrak SATCAT, joined by NORAD_CAT_ID), and quoted facts about ground space-surveillance sensors. A value with no source is absent, never guessed. plan_sources turns a timer tick into the HTTP requests; build_sensors reads the responses in C++/WASM. The host executes HTTP requests.",
+  "description": "Publishes real-world sensors as SDS $SNR sensor definitions, one record per sensor on a platform, each value read from a named public source and carrying its own provenance: the WMO OSCAR/Space instrument channel tables and satellite listings (Earth-observation and weather imagers, radiometers, sounders and SARs of satellites in the locally stored CelesTrak CAT identities, joined by NORAD_CAT_ID), and quoted facts about ground space-surveillance sensors. A value with no source is absent, never guessed. plan_sources turns a timer tick into the HTTP requests; build_sensors reads the responses in C++/WASM. The host executes HTTP requests.",
   "pluginFamily": "data_source",
-  "capabilities": [],
-  "externalInterfaces": [],
+  "capabilities": [
+    "storage_query"
+  ],
+  "externalInterfaces": [
+    {
+      "interfaceId": "stored-satcat",
+      "kind": "host-service",
+      "direction": "bidirectional",
+      "capability": "storage_query",
+      "resource": "sdn://storage/CAT.fbs",
+      "description": "Discover roster NORAD identities through parameterized storage.query_sandboxed pages, then read each local producer CAT identity and source tags through storage.query; no SATCAT HTTP request.",
+      "properties": {
+        "hostOps": [
+          "storage.query_sandboxed",
+          "storage.query"
+        ]
+      }
+    }
+  ],
   "invokeSurfaces": [
     "direct",
     "command"
@@ -16,7 +33,7 @@
   ],
   "sequentialJustification": {
     "kind": "pure-transform",
-    "detail": "Bounded deterministic planning of public GETs, parsing of the responses and construction of sensor records; no threads, no network imports, no hostcalls."
+    "detail": "Serial source planning, bounded host storage queries for existing CAT identities, and deterministic sensor record construction; the host owns I/O."
   },
   "schemasUsed": [
     {
@@ -65,6 +82,12 @@
       "schemaName": "PVN.fbs",
       "fileIdentifier": "$PVN",
       "rootTypeName": "PVN",
+      "wireFormat": "flatbuffer"
+    },
+    {
+      "schemaName": "CAT.fbs",
+      "fileIdentifier": "$CAT",
+      "rootTypeName": "CAT",
       "wireFormat": "flatbuffer"
     }
   ],
@@ -133,7 +156,7 @@
           "minStreams": 1,
           "maxStreams": 300,
           "required": true,
-          "description": "Plain GETs: the OSCAR satellite and instrument documents of the roster, the CelesTrak SATCAT, and the MediaWiki extracts of the ground-sensor pages, each once, in roster order."
+          "description": "Public GETs for WMO OSCAR and ground roster documents, each once, with an identifying User-Agent. SATCAT identities come from stored CAT records."
         }
       ],
       "maxBatch": 1,

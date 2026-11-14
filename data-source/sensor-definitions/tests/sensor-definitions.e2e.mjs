@@ -44,7 +44,7 @@ const planned = await plan(host);
 check(planned.result.statusCode === 0, `plan_sources: ${planned.result.errorCode} ${planned.result.errorMessage}`);
 const urls = planned.urls;
 check(new Set(urls).size === urls.length, 'a URL is planned twice');
-check(urls[0] === 'https://celestrak.org/pub/satcat.csv', 'the SATCAT is planned first');
+check(!urls.some(u => u.includes('celestrak.org')), 'SATCAT identity is read from stored CAT records, with no second CelesTrak request');
 const instrumentSlugs = new Set(platforms.flatMap((p) => p.instruments));
 check(urls.filter((u) => u.startsWith(`${OSCAR}api/v1/satellites/`)).length === platforms.length, 'one OSCAR satellite document per platform');
 check(urls.filter((u) => u.startsWith(`${OSCAR}instruments/view/`)).length === instrumentSlugs.size, 'one OSCAR page per instrument');

@@ -1,7 +1,7 @@
 // data-source/sensor-definitions: real-world sensors as SDS $SNR sensor definitions.
 //
 //   plan_sources   a timer tick -> the HTTP GETs of the roster (src/roster.hpp): the WMO OSCAR satellite documents and
-//                  instrument pages, the CelesTrak SATCAT, the MediaWiki extracts of the ground-sensor pages
+//                  instrument pages and the MediaWiki extracts of the ground-sensor pages
 //   build_sensors  the HttpResponse (HRSP) of every request -> one $SNR per sensor on a platform (lane space: satellite
 //                  payloads; lane ground: ground sensors), one $PVN per source system, FlowNotice reports
 //
@@ -33,6 +33,7 @@
 #include <vector>
 
 namespace R = sdn::runtime;
+namespace A = sdn::runtime::Aligned;
 namespace T = sensortext;
 using Json = nlohmann::json;
 
@@ -100,29 +101,106 @@ struct SatRow {
   int norad = 0;
 };
 
-bool read_satcat(const std::string& csv, const std::set<int>& wanted, const std::vector<std::string>& prefixes, std::map<int, SatRow>* rows, std::string* error) {
-  size_t pos = 0;
-  std::vector<std::string> row;
-  if (!T::csv_row(csv, &pos, &row)) return *error = "the SATCAT is empty", false;
-  std::map<std::string, size_t> col;
-  for (size_t i = 0; i < row.size(); ++i) col[row[i]] = i;
-  for (const char* need : {"OBJECT_NAME", "OBJECT_ID", "NORAD_CAT_ID", "OBJECT_TYPE", "OPS_STATUS_CODE", "LAUNCH_DATE", "DECAY_DATE"}) {
-    if (!col.count(need)) return *error = std::string("the SATCAT has no column ") + need, false;
+// Discover only roster identities through the SDK's sandboxed, parameterized SQL
+// surface (as hostcap/flatsql-query does), then read each identity with source tags.
+// storage.query is capped at 1,000 rows by the node: an unfiltered catalog read
+// would silently omit identities. Each discovery page and exact lookup is bounded.
+bool discover_satcat(const std::set<int>& wanted, const std::vector<std::string>& prefixes,
+                     std::set<int>* ids, std::string* error) {
+  constexpr size_t page_size = 32;
+  int cursor = 0;
+  for (;;) {
+    sdm_piv::SqlValues values;
+    values.i64(cursor);
+    std::string sql = "SELECT DISTINCT NORAD_CAT_ID FROM CAT WHERE NORAD_CAT_ID > ? AND (NORAD_CAT_ID IN (";
+    bool first = true;
+    for (int id : wanted) { if (!first) sql += ","; first = false; sql += "?"; values.i64(id); }
+    sql += ")";
+    for (const auto& prefix : prefixes) { sql += " OR OBJECT_NAME LIKE ?"; values.str(prefix + "%"); }
+    sql += ") ORDER BY NORAD_CAT_ID LIMIT 32";
+    A::SandboxQueryParams params{};
+    params.WANT = A::sandboxWant_Rows;
+    params.DELIVER = A::deliverMode_Inline;
+    const auto response = sdm_piv::call("storage.query_sandboxed", "SandboxQueryParams", params,
+                                       {sdm_piv::raw("sql", sql), values.frame()});
+    if (!response.ok()) { *error = response.error_code() + ": " + response.error_message(); return false; }
+    const auto* result = response.result<A::SandboxQueryResult>("SandboxQueryResult");
+    std::vector<sdm_piv::SqlValue> cells;
+    const auto [columns, column_count] = response.list<A::TextValue>("columns", "TextValue");
+    if (!result || result->KIND != A::sandboxWant_Rows || !sdm_piv::read_sql_values(response.raw("cells"), cells) ||
+        result->ROWS != cells.size() || cells.size() > page_size ||
+        (!cells.empty() && (result->COLUMNS != 1 || column_count != 1 || columns[0].VALUE.str() != "NORAD_CAT_ID"))) {
+      *error = "malformed stored CAT identity discovery page"; return false;
+    }
+    for (const auto& cell : cells) {
+      const int64_t id = cell.as_i64();
+      if (cell.tag != sdm_piv::kSqlI64 || cell.payload.size() != 8 || id <= cursor || id > 2147483647) {
+        *error = "CAT identity discovery is not a strictly increasing NORAD page"; return false;
+      }
+      cursor = static_cast<int>(id);
+      ids->insert(cursor);
+    }
+    if (ids->size() >= 250000) { *error = "stored CAT identity discovery exceeds its catalog bound"; return false; }
+    if (cells.size() < page_size) return true;
   }
-  while (T::csv_row(csv, &pos, &row)) {
-    if (row.size() < col.size()) continue;
+}
+
+bool read_satcat(const std::string& peer, const std::set<int>& wanted, const std::vector<std::string>& prefixes,
+                 std::map<int, SatRow>* rows, uint64_t* retrieved_ms, uint64_t* bytes, std::string* error) {
+  constexpr uint32_t limit = 1000;
+  std::set<int> ids;
+  if (!discover_satcat(wanted, prefixes, &ids, error)) return false;
+  std::map<int, int64_t> newest;
+  for (int id : ids) {
+  A::StorageQueryParams params{};
+  sdm_piv::put(params.SCHEMA, "CAT.fbs");
+  params.set_has_SCHEMA(true);
+  params.LIMIT = limit;
+  params.NORAD_CAT_ID = static_cast<uint32_t>(id);
+  const auto response = sdm_piv::call("storage.query", "StorageQueryParams", params);
+  if (!response.ok()) { *error = response.error_code() + ": " + response.error_message(); return false; }
+  const auto [meta, count] = response.list<A::StoredRecordMeta>("records_meta");
+  if (count >= limit) { *error = "CAT identity lookup reached its record limit; refusing incomplete source identities"; return false; }
+  const std::string_view raw = response.raw("records");
+  size_t at = 0;
+  for (size_t i = 0; i < count; ++i) {
+    if (at + 4 > raw.size()) { *error = "CAT record stream has a truncated length"; return false; }
+    const uint32_t length = flatbuffers::ReadScalar<uint32_t>(reinterpret_cast<const uint8_t*>(raw.data() + at));
+    at += 4;
+    if (length > raw.size() - at || length != meta[i].LENGTH) { *error = "CAT record stream disagrees with its metadata"; return false; }
+    const uint8_t* data = reinterpret_cast<const uint8_t*>(raw.data() + at);
+    at += length;
+    if (meta[i].SOURCE_NAME.str() != "celestrak-satcat-csv" || meta[i].PRODUCER_PEER_ID.str() != peer) continue;
+    size_t size = length;
+    if (size >= 12 && std::memcmp(data + 8, "$CAT", 4) == 0 && flatbuffers::ReadScalar<uint32_t>(data) == size - 4) { data += 4; size -= 4; }
+    flatbuffers::Verifier verifier(data, size);
+    if (!VerifyCATBuffer(verifier)) { *error = "stored SATCAT row is not a valid CAT record"; return false; }
+    const auto* cat = GetCAT(data);
     SatRow r;
-    r.name = row[col["OBJECT_NAME"]];
-    r.norad = std::atoi(row[col["NORAD_CAT_ID"]].c_str());
+    r.norad = static_cast<int>(cat->NORAD_CAT_ID());
+    r.name = cat->OBJECT_NAME() ? cat->OBJECT_NAME()->str() : std::string();
+    if (r.norad != id) { *error = "CAT identity lookup returned the wrong NORAD number"; return false; }
     bool keep = wanted.count(r.norad) > 0;
-    for (const auto& p : prefixes) if (r.name.compare(0, p.size(), p) == 0) keep = true;
+    for (const auto& prefix : prefixes) if (r.name.compare(0, prefix.size(), prefix) == 0) keep = true;
+    *retrieved_ms = std::max(*retrieved_ms, static_cast<uint64_t>(std::max<int64_t>(0, meta[i].TIMESTAMP_MS)));
+    *bytes += length;
     if (!keep || r.norad <= 0) continue;
-    r.object_id = row[col["OBJECT_ID"]];
-    r.type = row[col["OBJECT_TYPE"]];
-    r.ops = row[col["OPS_STATUS_CODE"]];
-    r.launch = row[col["LAUNCH_DATE"]];
-    r.decay = row[col["DECAY_DATE"]];
-    (*rows)[r.norad] = r;
+    r.object_id = cat->OBJECT_ID() ? cat->OBJECT_ID()->str() : std::string();
+    r.type = cat->OBJECT_TYPE() == spaceObjectClass::PAYLOAD ? "PAY" : "OTHER";
+    r.launch = cat->LAUNCH_DATE() ? cat->LAUNCH_DATE()->str() : std::string();
+    r.decay = cat->DECAY_DATE() ? cat->DECAY_DATE()->str() : std::string();
+    const auto old = rows->find(r.norad);
+    if (old != rows->end() && newest[r.norad] == meta[i].TIMESTAMP_MS &&
+        (old->second.name != r.name || old->second.object_id != r.object_id || old->second.type != r.type ||
+         old->second.launch != r.launch || old->second.decay != r.decay)) {
+      *error = "conflicting stored SATCAT identities for NORAD " + std::to_string(r.norad); return false;
+    }
+    if (old == rows->end() || newest[r.norad] < meta[i].TIMESTAMP_MS) {
+      newest[r.norad] = meta[i].TIMESTAMP_MS;
+      (*rows)[r.norad] = std::move(r);
+    }
+  }
+  if (at != raw.size()) { *error = "CAT record stream has unaccounted bytes"; return false; }
   }
   return true;
 }
@@ -602,7 +680,7 @@ extern "C" int plan_sources(void) {
   if (ticks.size() != 1 || !ticks[0]->payload) return fail("missing-tick", "plan_sources requires one TimerTick on 'tick'.");
   flatbuffers::Verifier verifier(ticks[0]->payload, ticks[0]->payload_length);
   if (!R::VerifyTimerTickBuffer(verifier)) return fail("invalid-tick", "The tick frame is not a TimerTick (TICK).");
-  std::vector<std::string> urls = {kSatcatUrl};
+  std::vector<std::string> urls;
   std::set<std::string> seen(urls.begin(), urls.end());
   auto want = [&](const std::string& u) { if (seen.insert(u).second) urls.push_back(u); };
   for (const auto& p : roster::kPlatforms) want(oscar_satellite_url(p.oscar));
@@ -613,8 +691,9 @@ extern "C" int plan_sources(void) {
     R::HttpRequestT request;
     request.METHOD = "GET";
     request.URL = url;
-    request.TIMEOUT_MS = url == kSatcatUrl ? 180000 : 60000;
-    request.MAX_BYTES = url == kSatcatUrl ? kMaxBody : 8u * 1024u * 1024u;
+    request.TIMEOUT_MS = 60000;
+    request.MAX_BYTES = 8u * 1024u * 1024u;
+    sdn_source_http::identify(request);
     flatbuffers::FlatBufferBuilder b(512 + url.size());
     R::FinishHttpRequestBuffer(b, R::HttpRequest::Pack(b, &request));
     if (push("request", "HttpRequest.fbs", "HREQ", "HttpRequest", b.GetBufferPointer(), b.GetSize()) < 0) return fail("output-failed", "A request could not be written.");
@@ -663,11 +742,11 @@ extern "C" int build_sensors(void) {
   std::vector<std::string> prefixes;
   for (const auto& p : roster::kPlatforms) { if (p.norad) wanted.insert(p.norad); if (p.prefix) prefixes.push_back(p.prefix); }
   std::map<int, SatRow> satcat;
-  const Doc* satcat_doc = doc(kSatcatUrl, "SATCAT");
-  if (satcat_doc) {
-    std::string error;
-    if (!read_satcat(satcat_doc->body, wanted, prefixes, &satcat, &error)) { missing.push_back("SATCAT unreadable: " + error); satcat_doc = nullptr; }
-  }
+  uint64_t satcat_retrieved_ms = 0, satcat_bytes = 0;
+  std::string satcat_error;
+  if (!read_satcat(peer, wanted, prefixes, &satcat, &satcat_retrieved_ms, &satcat_bytes, &satcat_error))
+    return fail("stored-satcat-failed", satcat_error);
+  if (satcat.empty()) missing.push_back("No stored CAT identities from this producer's celestrak-satcat-csv lane");
 
   Lane space, ground;
   std::map<std::string, std::unique_ptr<Page>> pages;  // by instrument slug; nullptr: unreadable
@@ -701,7 +780,7 @@ extern "C" int build_sensors(void) {
 
   for (const auto& platform : roster::kPlatforms) {
     const Doc* sat_doc = doc(oscar_satellite_url(platform.oscar), "OSCAR satellite");
-    if (!sat_doc || !satcat_doc) { ++refused_platforms; continue; }
+    if (!sat_doc || satcat.empty()) { ++refused_platforms; continue; }
     const Json sj = Json::parse(sat_doc->body, nullptr, false);
     if (sj.is_discarded() || !sj.contains("satellite") || !sj["satellite"].is_array() || sj["satellite"].size() != 1) {
       missing.push_back(std::string("OSCAR satellite ") + platform.oscar + " is not a satellite document");
@@ -841,7 +920,7 @@ extern "C" int build_sensors(void) {
                        push_meta("ground_meta", "ground", ground, peer, kWikiLicense, "https://creativecommons.org/licenses/by-sa/4.0/", true, "Wikipedia contributors, Wikipedia, the free encyclopedia (CC BY-SA 4.0)", "https://en.wikipedia.org/") < 0))
     return fail("output-failed", "The ground lane could not be written.");
   if (space.count && (push_pvn("wmo-oscar-space", "WMO", "https://space.oscar.wmo.int/", pvnLicenseClass::Reproducible, "wmo-oscar-space-disclaimer", oscar_version, oscar_latest, oscar_bytes) < 0 ||
-                      push_pvn("celestrak-satcat", "CelesTrak", kSatcatUrl, pvnLicenseClass::Reproducible, "celestrak-satcat", "", satcat_doc ? satcat_doc->retrieved_ms : 0, satcat_doc ? satcat_doc->body.size() : 0) < 0))
+                      push_pvn("celestrak-satcat", "CelesTrak", kSatcatUrl, pvnLicenseClass::Reproducible, "celestrak-satcat", "", satcat_retrieved_ms, satcat_bytes) < 0))
     return fail("output-failed", "A provenance record could not be written.");
   if (ground.count && push_pvn("wikipedia-extracts", "Wikipedia contributors", "https://en.wikipedia.org/", pvnLicenseClass::ShareAlike, "CC-BY-SA-4.0", wiki_version, wiki_latest, wiki_bytes) < 0)
     return fail("output-failed", "A provenance record could not be written.");

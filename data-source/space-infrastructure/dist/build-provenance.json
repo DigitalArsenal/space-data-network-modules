@@ -1,5 +1,5 @@
 {
-  "spacedatastandards": "1.279.0",
+  "spacedatastandards": "1.278.0",
   "sdsFamilies": [
     "IDM",
     "PVN",
@@ -12,7 +12,8 @@
     "SNR"
   ],
   "commonHeaders": [
-    "civil_time.hpp"
+    "civil_time.hpp",
+    "public_source_http.hpp"
   ],
   "sources": [
     "../../files/orbit-products/src/sha256.hpp",
@@ -21,5 +22,5 @@
     "src/space_infrastructure.cpp"
   ],
   "threadModel": "wasi-sequential",
-  "wasmSha256": "9d64c4ea7281c40e2414cfd126d0bb82dabcf4d8b0e03595c3cdb1bce753388f"
+  "wasmSha256": "6c97c580d399a62e72575da52705263b8abe13c5c540726d2bdf0fd1f90b612d"
 }

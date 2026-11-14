@@ -19,7 +19,7 @@ await buildSourceModule({
   compileModuleFromSource,
   createFlatc,
   families: ["SIT", "SNR", "PVN"],
-  common: ["civil_time.hpp"],
+  common: ["civil_time.hpp", "public_source_http.hpp"],
   sources: ["../../files/orbit-products/src/sha256.hpp", "src/roster_data.hpp", "src/text.hpp", "src/space_infrastructure.cpp"],
   allowUndefinedImports: true, // plugin.getConfig through the typed $PIV bridge,
   // THREAD MODEL: wasi-sequential, declared, never inferred (scripts/lib/thread-model.mjs): the guest never spawns a thread.
