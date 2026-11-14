@@ -105,7 +105,7 @@ equal-epoch correction, recovery after product storage, weather changes,
 expiry fallback, tombstones, and selection-map convergence. They do not
 establish production orbit accuracy or remote publication/trust behavior.
 
-## Development measurements
+## Earlier two-object measurement
 
 Sixteen ABBA rounds compared a primed native reconciliation tick with storage
 against the unchanged exact-W chain in Node, using the same two synthetic
@@ -126,6 +126,8 @@ budget, producing 256 stored products and 256 selections. Guest linear memory
 at its endpoint was 99 pages (6,488,064 bytes), excluding host and storage
 memory. The rate projection does not raise the controller's batch limit.
 
+## Partitioned services
+
 Each partition scans the complete configured sources and changes only objects whose object number modulo `catalog.partition_count` equals `catalog.partition_index`. Services share one output provider and use distinct partition indexes. This also partitions expiry and removals. Increasing the batch ceiling does not guarantee completion within the host execution budget.
 
 [Covariance size accounting and compression](COMPACTNESS.md) describe the compact annotation. A 1,024-object native batch completed within a ten-minute invocation budget with 113 guest pages (7,405,568 bytes) and 627,539,968 bytes of whole-process peak RSS. A 1,280-object request reached the deadline after 1,195 complete selections. The largest fully completed tested batch is 1,024; the configured ceiling of 4,096 does not establish a safe batch at every load.
@@ -135,3 +137,5 @@ Complete scans count every source record, including those owned by other partiti
 The node registers services by flow program ID and rejects duplicate IDs. Build distinct partition programs with `CATALOG_FLOW_PARTITIONS=8` and `CATALOG_FLOW_BUILD_DIR=build/catalog` when invoking `build-flow.mjs`; the resulting `build/catalog/partitions/0` through `7` bundles have distinct program IDs. Configure one service per bundle, with the same `catalog.partition_count`, distinct `catalog.partition_index` values, the shared catalog provider and source settings, and a suitable `execution_timeout`. Leave `exclusive_group` empty to allow parallel execution and `release_after_run` false to retain primed instances. Partition count and indexes must cover the catalog exactly once.
 
 For ten-minute scheduling, install the partition bundles and reference their program IDs in `flows.services[].flow`. Set `intervals.refresh: 10m` and `retrieval_interval: 1m` for each service. The node's default retrieval debounce is three hours; its per-service override matches the configured flow reference to the program ID, so a filesystem-path reference does not receive that override. Failure backoff remains active. Numerical throughput alone does not establish daily capacity without the matching schedule and debounce settings.
+
+[Controlled throughput and scheduling arithmetic](PERFORMANCE.md) record completed measurements, the unmeasured larger build, CPU/memory costs and scan limits.
