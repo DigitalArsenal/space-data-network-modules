@@ -28,6 +28,11 @@ test('adapter artifact satisfies the SDK contract', async () => {
   const manifest = JSON.parse(fs.readFileSync(path.join(root, 'plugin-manifest.json')));
   const report = await validateArtifactWithStandards({manifest, wasmPath: candidate, standardsRoot});
   assert.equal(report.ok, true, JSON.stringify(report.issues));
+  const provenance = JSON.parse(fs.readFileSync(path.join(root, 'dist/build-provenance.json')));
+  const propagator = JSON.parse(fs.readFileSync(path.resolve(root, '../../propagator/sdn-ap/plugin-manifest.json')));
+  assert.equal(provenance.propagatorVersion, propagator.version, 'bundle provenance identifies the in-tree propagator');
+  assert.match(provenance.propagatorSourceSHA256, /^[0-9a-f]{64}$/);
+
 });
 
 // Synthetic orbit, UTC epochs, GCRF flight in km and km/s. These are serialization
