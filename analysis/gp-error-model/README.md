@@ -750,3 +750,35 @@ independently, and the formal covariance times the recipe's factor.
 `tests/e14VerdictUncalibrated.e2e.mjs` checks that a LEO-H set in E14's
 passing cell at 0.25 days is Uncalibrated on `object_covariance`'s POPULATION
 path and on `attach_covariance` rule 3, with 0.10.0's matrices bit for bit.
+
+### Population annotation of an existing orbit
+
+`annotate_population` takes one size-prefixed `$OCM` on `ocm`, its seed `$OMM`
+on `elements`, and optional `$ERM` population models on `models`. Without a
+model input it uses the embedded E14 S3-KC model, as `object_covariance` does.
+The seven-bin model produces seven independently timestamped covariance blocks:
+each timestamp is the seed epoch plus that bin's midpoint. The embedded model's
+midpoints are 0.125, 0.5, 1.125, 2, 3.25, 5, and 7 days.
+
+Each block contains a full row-major Cartesian 6 by 6 matrix in GCRF, with
+position in kilometers and velocity in kilometers per second. Its realism
+label identifies the model, regime, and seed age and states that the covariance
+is uncalibrated for the object. A screening consumer selects the block nearest
+in age. `sdn-ap` does not propagate these population blocks.
+
+The primary covariance and its propagation metadata retain the fit's formal
+posterior at the fitted record's epoch, in the original parameter layout. A
+separate realism label describes that formal covariance without applying a
+realism factor. The original buffer is retained verbatim; a new root references
+its existing tables, strings, and vectors while adding the annotations. This
+increases record size by the seven matrices, their labels, and the new root.
+The annotation changes no elements, forces, weather, fit statistics, provenance,
+or primary covariance values.
+
+SGP4 fallback records receive the same blocks. An uncovered regime, absent
+population cell, or refused seed propagation produces no population block and
+an uncalibrated realism label naming the reason and model. A catalog selector
+copies that reason into its selection text. No covariance is fabricated.
+Repeated annotation of an already annotated record is refused; callers pass
+the original fitted or fallback record. Malformed streams, mismatched object
+identities, oversized records, and models without seven bins are refused.
