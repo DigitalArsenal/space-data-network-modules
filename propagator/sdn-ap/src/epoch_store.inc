@@ -628,6 +628,7 @@ inline int build(Store& st, const Config& cfg) {
 
 /// The code a set's state takes when its rows do not hold a day the request flies it through (Store::short_day).
 constexpr int32_t kRowsShort = 90;
+constexpr int32_t kResourcesRetry = 91;
 
 /// 0, or kRowsShort with st.short_day the first missing day: set k of series s flown from its epoch to t (minutes from
 /// J2000) reads the rows of every UTC day between, and the day before the first.
@@ -1146,7 +1147,8 @@ static int load_epochs_close_call(void) {
 static int propagate_epochs_call(void);
 extern "C" int propagate_epochs(void) {
   sdnap::mem::CallMark call_mark;
-  return sdnap::mem::finish(propagate_epochs_call());
+  const int rc = propagate_epochs_call();
+  return rc != 0 ? rc : (sdnap::mem::refuse_if_out_of_memory() ? 3 : 0);
 }
 static int propagate_epochs_call(void) {
   using namespace sdnap;
@@ -1165,6 +1167,14 @@ static int propagate_epochs_call(void) {
   const std::vector<oem::Grid> grids = {oem::output_grid()};
   size_t budget = pcf::options().maximum_states;
   char text[48], start[48], stop[48], why[200];
+  // Preserve the first refusal while subsequent series produce independent blocks.
+  char first_error[96] = {}, first_why[200] = {};
+  auto remember_error = [&](const char* name, const char* detail) {
+    if (!first_error[0]) {
+      std::snprintf(first_error, sizeof first_error, "%s", name);
+      std::snprintf(first_why, sizeof first_why, "%s", detail);
+    }
+  };
   for (epochs::Series& s : st.series) {
     flatbuffers::FlatBufferBuilder fbb(1 << 16);
     std::vector<flatbuffers::Offset<ephemerisDataBlock>> blocks;
@@ -1191,6 +1201,16 @@ static int propagate_epochs_call(void) {
       // SPEC 16.25 (stack #564): the epochs past an AP set's decay crossing are refused by name, those before it answered
       std::vector<double> kw, kf;
       size_t past_n = 0;
+      size_t refused = 0;
+      // Bounded refusal detail; no allocation per failed epoch.
+      char statuses[1024] = {};
+      size_t status_count = 0, status_used = 0;
+      auto add_status = [&](size_t index, int32_t code, const char* name) {
+        if (status_count++ >= 8) return;
+        const int n = std::snprintf(statuses + status_used, sizeof statuses - status_used,
+            "%s%zu:%d:%s", status_used ? "," : "", index, static_cast<int>(code), name);
+        if (n > 0) status_used += std::min(static_cast<size_t>(n), sizeof statuses - status_used - 1);
+      };
       double cross_jd[2] = {0.0, 0.0};
       bool cross_back = false;
       for (size_t k = 0; k < tw.size(); ++k) {
@@ -1198,6 +1218,7 @@ static int propagate_epochs_call(void) {
         bool have_p = false;
         const double jd[2] = {tw[k], tf[k]};
         epochs::g_decay_seen = false;
+        const uint32_t failure_mark = mem::failures();
         const int32_t e = epochs::at(st, s, epochs::minutes_of(tw[k], tf[k]), r, v, P, have_p, jd, ub);
         if (e == kPropDecayed && epochs::g_decay_seen) {
           if (past_n == 0) {  // the first epoch past a crossing names it (the epochs ascend)
@@ -1208,21 +1229,30 @@ static int propagate_epochs_call(void) {
           ++past_n;
           continue;
         }
+        if (e != kPropOk) {
+          ++refused;
+          char name[96] = "propagation-failed";
+          oem::iso_text(tw[k], tf[k], 0.0, text, sizeof text);
+          std::snprintf(why, sizeof why, "NORAD %u does not propagate to %s (code %d).", s.norad, text, static_cast<int>(e));
+          if (e == epochs::kRowsShort) {
+            char day[16];
+            atm::date_of_mjd(st.short_day, day, sizeof day);
+            std::snprintf(name, sizeof name, "weather-rows-short:%s", day);
+            std::snprintf(why, sizeof why, "A set's SPACE_WEATHER rows do not reach a day the request flies it through.");
+          } else if (mem::failures() != failure_mark) {
+            std::snprintf(name, sizeof name, "out-of-memory");
+            std::snprintf(why, sizeof why,
+                "An allocation failed (%u since the call began, the largest %llu bytes): the module's memory is exhausted.",
+                mem::failures() - mem::g_call_mark, static_cast<unsigned long long>(__atomic_load_n(&mem::g_largest_failed, __ATOMIC_RELAXED)));
+          }
+          remember_error(name, why);
+          add_status(k, e, name);
+          continue;
+        }
         kw.push_back(tw[k]);
         kf.push_back(tf[k]);
         if (ub[0] == ub[0] && (unblended.empty() || unblended.back().first != ub[0])) unblended.emplace_back(ub[0], ub[1]);
         oem::iso_text(tw[k], tf[k], 0.0, text, sizeof text);
-        if (e == epochs::kRowsShort) {
-          char day[16];
-          atm::date_of_mjd(st.short_day, day, sizeof day);
-          return atm::fail_day("weather-rows-short", day, "A set's SPACE_WEATHER rows do not reach a day the request flies it through.");
-        }
-        if (e != kPropOk) {
-          if (mem::refuse_if_out_of_memory()) return 3;
-          std::snprintf(why, sizeof why, "NORAD %u does not propagate to %s (code %d).", s.norad, text, static_cast<int>(e));
-          plugin_set_error("propagation-failed", why);
-          return 3;
-        }
         double axes[3][3] = {{1, 0, 0}, {0, 1, 0}, {0, 0, 1}};
         if (g.axes != oem::Axes::Teme) {
           double m[3][3];
@@ -1260,16 +1290,18 @@ static int propagate_epochs_call(void) {
       char cross_text[48] = {};
       if (past_n > 0) {
         oem::iso_text(cross_jd[0], cross_jd[1], 0.0, cross_text, sizeof cross_text);
-        if (kw.empty()) {
+        if (kw.empty() && refused == 0) {
           char name[80];
           std::snprintf(name, sizeof name, "decayed:%s", cross_text);
           std::snprintf(why, sizeof why, "NORAD %u decays at %s (SPEC 16.25): every requested epoch is past it.", s.norad, cross_text);
-          plugin_set_error(name, why);
-          return 3;
+          remember_error(name, why);
+          refused = past_n;
+          add_status(0, kPropDecayed, name);
         }
-        tw = kw;
-        tf = kf;
       }
+      // A refused series has a status block with no state or covariance lines.
+      if (refused) { lines.clear(); cov_lines.clear(); }
+      if (!kw.empty()) { tw = kw; tf = kf; }
       oem::iso_text(tw.front(), tf.front(), 0.0, start, sizeof start);
       oem::iso_text(tw.back(), tf.back(), 0.0, stop, sizeof stop);
       std::string comment;
@@ -1297,7 +1329,7 @@ static int propagate_epochs_call(void) {
       // SPEC 18.8: one block per series; a series with a set carrying a forecast or a hand-over set states every state's
       // source in the block's COMMENT (carried::sources_comment), then, after ". ", the switches not blended (14.3);
       // any other series writes 14.3's text alone, or none
-      if (epochs::any_labeled(st, s)) {
+      if (!refused && epochs::any_labeled(st, s)) {
         std::vector<uint8_t> src(tw.size());
         for (size_t k = 0; k < tw.size(); ++k) src[k] = static_cast<uint8_t>(epochs::source_at(st, s, tw[k], tf[k]));
         comment = comment.empty() ? carried::sources_comment(src, tw, tf) : carried::sources_comment(src, tw, tf) + ". " + comment;
@@ -1316,9 +1348,18 @@ static int propagate_epochs_call(void) {
         std::snprintf(note, sizeof note, "decayed:%s; %zu epochs after it refused", cross_text, past_n);
         comment = comment.empty() ? std::string(note) : comment + ". " + note;
       }
-      blocks.push_back(CreateephemerisDataBlockDirect(fbb, comment.empty() ? nullptr : comment.c_str(), object, "EARTH", frame, nullptr, cov_frame, timingStandard_UTC, start,
+      char* refused_comment = nullptr;
+      if (refused) {
+        const size_t size = comment.size() + sizeof statuses + 128;
+        refused_comment = static_cast<char*>(mem::malloc(size));
+        if (!refused_comment) { mem::refuse_if_out_of_memory(); return 3; }
+        std::snprintf(refused_comment, size, "%s%sstatus=refused; refused=%zu; request-status=%s%s",
+            comment.c_str(), comment.empty() ? "" : ". ", refused, statuses, status_count > 8 ? "; detail-truncated" : "");
+      }
+      blocks.push_back(CreateephemerisDataBlockDirect(fbb, refused_comment ? refused_comment : comment.empty() ? nullptr : comment.c_str(), object, "EARTH", frame, nullptr, cov_frame, timingStandard_UTC, start,
                                                       limit_start, limit_stop,
                                                       stop, nullptr, 0, g.explicit_times ? 0.0 : g.step, 6, nullptr, &lines, with_cov ? &cov_lines : nullptr));
+      std::free(refused_comment);
     }
     const auto root = CreateOEMDirect(fbb, nullptr, 3.0, nullptr, s.originator.empty() ? "SDN" : s.originator.c_str(), &blocks);
     FinishOEMBuffer(fbb, root);
@@ -1326,6 +1367,10 @@ static int propagate_epochs_call(void) {
       plugin_set_error("output-failed", "The $OEM could not be emitted.");
       return 3;
     }
+  }
+  if (first_error[0]) {
+    plugin_set_error(first_error, first_why);
+    return 3;
   }
   return 0;
 }
@@ -1430,8 +1475,10 @@ inline void write_series(Store& st, double jd_whole, double jd_frac, uint32_t fi
     double r[3], v[3], P[36];
     bool have_p = false;
     const double jd[2] = {jd_whole, jd_frac};
+    const uint32_t resource_mark = sdnap::mem::thread_failures();
     const int32_t e = sdnap::epochs::at(st, st.series[first + k], t, r, v, cov != nullptr ? P : nullptr, have_p, jd);
-    if (status != nullptr) status[k] = e;
+    const int32_t row_status = e != sdnap::kPropOk && sdnap::mem::thread_failures() != resource_mark ? kResourcesRetry : e;
+    if (status != nullptr) status[k] = row_status;
     double ro[3] = {r[0], r[1], r[2]}, vo[3] = {v[0], v[1], v[2]};
     if (e == sdnap::kPropOk && frame == 3) sdnap::teme_to_ecef_m(theta, r, v, ro, vo);
     for (int c = 0; c < 3; ++c) {
@@ -1442,28 +1489,22 @@ inline void write_series(Store& st, double jd_whole, double jd_frac, uint32_t fi
       for (int q = 0; q < 36; ++q) cov[36 * k + q] = e == sdnap::kPropOk && have_p ? P[q] : std::numeric_limits<double>::quiet_NaN();
 }
 
-/// A series containing a wide set stays serial for its entire flight: output-time node changes acquire grids too.
-inline bool wide_series(const Store& st, const Series& s) {
-  for (uint32_t k = 0; k < s.count; ++k)
-    if (((st.entries[s.first + k].branch >> 16) & 0xffu) != 0) return true;  // the packed branch's wide_tess byte (load)
-  return false;
-}
-
 /// Reserve retained sets, cache-pool room and each thread's largest table build before forbidding growth. The retained
 /// allowance is 64 KiB per selected cold XP/AP set; SGP4 reserves its satellite and deep-space checkpoints; larger tables use the same allocation-refusal and serial retry as rows.
 inline size_t series_reserve(Store& st, const pool::Job& j) {
   uint64_t retained = 0;
   size_t ap_sets = 0;
+  bool wide = false;
   int degree = 0;
   const double t = minutes_of(j.jd_whole, j.jd_frac), jd[2] = {j.jd_whole, j.jd_frac};
   for (uint32_t i = 0; i < j.count; ++i) {  // the batch's slice of the call
-    if (j.serial_series[j.slice + i]) continue;
     const Series& s = st.series[j.first + j.slice + i];
     const auto selected = choose(st, s, t, jd);
     const int32_t indices[2] = {static_cast<int32_t>(selected.a), selected.b};
     for (int32_t k : indices) {
       if (k < 0) continue;
       const Entry& en = st.entries[s.first + static_cast<uint32_t>(k)];
+      wide = wide || ((en.branch >> 16) & 0xffu) != 0;
       const bool ap = en.row.theory == kTheorySgp4Xp && (en.forces.tesseral > 0 || en.forces.zonal > 0);
       if (ap) { ++ap_sets; degree = std::max(degree, en.forces.tesseral); }
       bool held = false;
@@ -1483,7 +1524,7 @@ inline size_t series_reserve(Store& st, const pool::Job& j) {
       (xpt::keep_sp_raw() ? static_cast<uint64_t>(xpt::tess::sp_bound(degree, false, extra)) * sizeof(xpt::tess::SpCoef) : 0);
   const uint64_t bytes = retained + (ap_sets ? std::min<uint64_t>(ap_sets * (128ull << 10), room + (1u << 20)) +
       (j.threads + 1) * (table + sizeof(xpt::tess::SpTermsScratch)) : 0) + (8u << 20);
-  return static_cast<size_t>(std::min<uint64_t>(bytes, 1ull << 30));  // a slice's: far under 2^31 (sbrk's increment)
+  return static_cast<size_t>(std::min<uint64_t>(bytes + (wide ? (j.threads + 1) * (24ull << 20) + xpt::tess::grid_cache().budget : 0), 1ull << 30));  // a slice's: far under 2^31 (sbrk's increment)
 }
 }  // namespace epochs
 
@@ -1524,25 +1565,17 @@ int32_t sdnap_epochs_at(double jd_whole, double jd_frac, uint32_t first, uint32_
       sdnap::epochs::write_series(st, jd_whole, jd_frac, first, count, frame, out, status, cov, k);
     return 0;
   }
-  // the call's flags (one byte a series) and one slice's deferred rows, through the counted allocator; none to be had: the
+  // One slice's deferred rows, through the counted allocator; none to be had: the
   // call runs on the calling thread
-  static uint8_t* serial = nullptr;
   static uint32_t* deferred = nullptr;
-  static uint32_t serial_cap = 0, deferred_cap = 0;
+  static uint32_t deferred_cap = 0;
   const uint32_t slice_max = sdnap::pool::epoch_slice();
-  if (count > serial_cap) {
-    if (uint8_t* s = static_cast<uint8_t*>(sdnap::mem::realloc(serial, count))) { serial = s; serial_cap = count; }
-  }
   if (slice_max > deferred_cap) {
     if (uint32_t* d = static_cast<uint32_t*>(sdnap::mem::realloc(deferred, sizeof(uint32_t) * slice_max))) { deferred = d; deferred_cap = slice_max; }
   }
-  if (count > serial_cap || slice_max > deferred_cap) {
+  if (slice_max > deferred_cap) {
     for (uint32_t k = 0; k < count; ++k) sdnap::epochs::write_series(st, jd_whole, jd_frac, first, count, frame, out, status, nullptr, k);
     return 0;
-  }
-  for (uint32_t k = 0; k < count; ++k) {
-    serial[k] = sdnap::epochs::wide_series(st, st.series[first + k]);
-    if (serial[k]) sdnap::epochs::write_series(st, jd_whole, jd_frac, first, count, frame, out, status, nullptr, k);
   }
   // Constant tables and ERFA's leap-second globals are initialized before any concurrent set build.
   (void)sdnap::drag::table();
@@ -1551,7 +1584,6 @@ int32_t sdnap_epochs_at(double jd_whole, double jd_frac, uint32_t first, uint32_
   (void)sdnap::frames::utc_to_tt(jd_whole, jd_frac, tt1, tt2);
   j.kind = sdnap::pool::kJobEpochs;
   j.epochs = &st;
-  j.serial_series = serial;
   j.jd_whole = jd_whole; j.jd_frac = jd_frac;
   j.first = first; j.stride = count; j.frame = frame;
   j.out = out; j.status = status; j.deferred = deferred;
@@ -1586,7 +1618,7 @@ int32_t sdnap_epochs_at(double jd_whole, double jd_frac, uint32_t first, uint32_
     }
     if (!batch) {
       for (uint32_t k = a; k < a + len; ++k)
-        if (!serial[k]) sdnap::epochs::write_series(st, jd_whole, jd_frac, first, count, frame, out, status, nullptr, k);
+        sdnap::epochs::write_series(st, jd_whole, jd_frac, first, count, frame, out, status, nullptr, k);
       __atomic_add_fetch(&sdnap::xpt::batch_stats().slices_serial, 1, __ATOMIC_RELAXED);
       a += len;
       continue;
@@ -1628,5 +1660,7 @@ int32_t sdnap_epochs_set_at(uint32_t i, uint32_t k, double jd_whole, double jd_f
   if (st.pool_dead != 0) return sdnap::pool::kRowPoolDead;  // after a dead batch over the store (Store::pool_dead)
   bool have_p = false;
   const double jd[2] = {jd_whole, jd_frac};
-  return sdnap::epochs::state_of(st, st.series[i], k, sdnap::epochs::minutes_of(jd_whole, jd_frac), out, out + 3, nullptr, have_p, jd);
+  const uint32_t resource_mark = sdnap::mem::thread_failures();
+  const int32_t rc = sdnap::epochs::state_of(st, st.series[i], k, sdnap::epochs::minutes_of(jd_whole, jd_frac), out, out + 3, nullptr, have_p, jd);
+  return rc != sdnap::kPropOk && sdnap::mem::thread_failures() != resource_mark ? sdnap::epochs::kResourcesRetry : rc;
 }

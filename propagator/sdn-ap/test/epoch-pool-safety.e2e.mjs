@@ -35,11 +35,12 @@ import { configuration } from "./lib/pcf.mjs";
 ensureBuilt();
 const SERIES = 256, ROUNDS = 45, DAY = 86400000, EPOCH = Date.parse("2026-06-15T00:00:00Z"), MU = 398600.4418, RE = 6378.137;
 const iso = (ms) => new Date(ms).toISOString().replace("Z", "");
+const widePool = process.env.SDNAP_TEST_WIDE_POOL === "1";
 const n500 = (Math.sqrt(MU / (RE + 500) ** 3) * 86400) / (2 * Math.PI);
 const rows = rowsThrough(Array.from({ length: 12 }, (_, k) => ({ DATE: iso(EPOCH + (k - 3) * DAY).slice(0, 10), F107_OBS: 70, F107_OBS_CENTER81: 72, AP_AVG: 4 })));
 const prefixed = (u) => { const b = Buffer.alloc(4 + u.length); b.writeUInt32LE(u.length, 0); Buffer.from(u).copy(b, 4); return b; };
-const SNAPSHOT = Buffer.concat(Array.from({ length: SERIES }, (_, k) => [0, 1, 2].map((s) => prefixed(seedOcm({ epoch: iso(EPOCH + s * DAY / 2), n: n500,
-  e: 0.001, i: 40 + (k % 50), raan: (7.3 * k) % 360, argp: 90, ma: (11.1 * k + 30 * s) % 360, bterm: 0.004, agom: 0.01, norad: 70000 + k,
+const SNAPSHOT = Buffer.concat(Array.from({ length: SERIES }, (_, k) => [0, 1, 2].map((s) => prefixed(seedOcm({ epoch: iso(EPOCH + s * DAY / 2), n: widePool && k < 32 ? 2.26 + k * 1e-5 : n500,
+  e: widePool && k < 32 ? 0.65 : 0.001, i: 40 + (k % 50), raan: (7.3 * k) % 360, argp: 90, ma: (11.1 * k + 30 * s) % 360, bterm: 0.004, agom: 0.01, norad: 70000 + k,
   msis: true, records: true, rows, tesseral: 31, zonal: 20 })))).flat());
 // two instants in turn, at the switch between sets 0 and 1 and at the one between 1 and 2 (split Julian dates of June 15 2026
 // 0h plus a fraction of a day): with a 12-hour blend window every batch flies set 1 again (a set asking for room again may
@@ -81,7 +82,7 @@ void sdnap_test_safety(uint32_t spin, uint32_t budget_mb, uint32_t hold, double 
   out[4] = sdnap::pool::load(&sdnap::pool::job().active);
 }`;
 const once = (text, from, to) => { assert.equal(text.split(from).length, 2, `the seam's anchor ${JSON.stringify(from)} is not unique`); return text.replace(from, to); };
-const testBuild = buildDiagnostic("epoch-pool-safety", SEAMS,
+const testBuild = buildDiagnostic(widePool ? "wide-pool-safety" : "epoch-pool-safety", SEAMS,
   (t) => once(once(t, "inline bool pool_reclaim_locked(",
     "inline void (*g_test_reclaim_hook)(XpSat&) = nullptr;\ninline XpSat* g_test_reclaim_target = nullptr;\ninline uint32_t g_test_late = 0;\ninline bool pool_reclaim_locked("),
     "    p.reclaimed += 1;\n", "    p.reclaimed += 1;\n    if (g_test_reclaim_hook != nullptr) g_test_reclaim_hook(*v);\n"),

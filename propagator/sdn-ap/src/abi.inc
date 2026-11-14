@@ -99,7 +99,6 @@ void run_chunk(const Job& j, int32_t chunk) {
   for (uint32_t i = begin; i < end; ++i) {
     xpt::g_alloc_refused = 0;
     if (j.kind == kJobEpochs) {
-      if (j.serial_series[j.slice + i]) continue;
       run_epoch_row(j, i);
     } else {
       run_row(j, i);
@@ -608,7 +607,7 @@ int32_t sdnap_slow_terms(const double* in, double* rows, int32_t max_rows) {
 /// cut (m); every tesseral term of the embedded field at or above the cut, and radiation pressure's one row (l -1, m 0; SPEC
 /// 16.22), with the carriers a set of these elements builds
 /// (xpt::census_rows: rows of 10 doubles, l, m, p, q, psi-dot / n, the code, the rates' weight, all carriers' weight, the size
-/// in m, the term's period in days), at most max_rows. Returns the count of all rows, or -1 for elements it refuses. A diagnostic: no flight reads it.
+/// in m, the term's period in days), at most max_rows. Returns the count of all rows, -1 for invalid elements or -2 for retryable resource shortage. A diagnostic: no flight reads it.
 SDNAP_EXPORT("sdnap_field_census")
 int32_t sdnap_field_census(const double* in, double* rows, int32_t max_rows) {
   using namespace sdnap::xpt;

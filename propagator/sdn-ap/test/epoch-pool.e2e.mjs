@@ -180,7 +180,7 @@ if (process.argv.includes('--case')) {
     const v = Array.from(new Float64Array(h.memory.buffer, counts, 17 * 8));
     const sum = (k, from = 0) => v.reduce((a, c, q) => a + (q % 8 === k && q >= 8 * from ? c : 0), 0);
     // totals over every thread, the same on the pool's threads alone (not the calling thread), and the pool threads with rows
-    seams = { rows: sum(0), widePrePass: sum(1), replaced: sum(2), msisLow: sum(3), msisHigh: sum(4), sgp4: sum(5), xp: sum(6), ap: sum(7),
+    seams = { rows: sum(0), wideRows: sum(1), replaced: sum(2), msisLow: sum(3), msisHigh: sum(4), sgp4: sum(5), xp: sum(6), ap: sum(7),
       poolRows: sum(0, 1), poolReplaced: sum(2, 1), poolMsisLow: sum(3, 1), poolMsisHigh: sum(4, 1),
       lanes: Array.from({ length: 16 }, (_, t) => v[8 * (t + 1)]).filter((n) => n > 0).length };
   }
@@ -282,14 +282,14 @@ void sdnap_test_epoch_drop(uint32_t k) {
 }
 `;
 const once = (text, from, to) => { assert.equal(text.split(from).length, 2, `the seam's anchor ${JSON.stringify(from)} is not unique`); return text.replace(from, to); };
-// counters, per thread: 0 rows of a batch, 1 the wide pre-pass, 2 slots replaced, 3 and 4 NRLMSISE-00 evaluations at or
+// counters, per thread: 0 rows of a batch, 1 wide rows dispatched, 2 slots replaced, 3 and 4 NRLMSISE-00 evaluations at or
 // under 325 km and over it (over it also each lane of the batched high-altitude evaluation), 5 6 7 states flown per family
 const declare = 'void sdnap_test_count(int k);\n';
 const diagnostic = arg('--diagnostic', null) ?? buildDiagnostic(arg('--diagnostic-name', 'epoch-pool-poison'), extra, (s) => s, {
   'epoch_store.inc': (t) => once(once(once(once(once('void sdnap_test_deferred(uint32_t k);\n' + declare + t,
     '    std::sort(deferred, deferred + n);\n', '    std::sort(deferred, deferred + n);\n    for (int32_t q = 0; q < n; ++q) sdnap_test_deferred(a + deferred[q]);\n'),
     '  const uint32_t next = s.next;\n', '  const uint32_t next = s.next;\n  sdnap_test_count(0);\n'),
-    '    if (serial[k]) sdnap::epochs::write_series(', '    if (serial[k]) sdnap_test_count(1);\n    if (serial[k]) sdnap::epochs::write_series('),
+    '  const uint32_t k = j.slice + i;  //', '  if ((j.epochs->entries[j.epochs->series[j.first + j.slice + i].first].branch >> 16) & 0xffu) sdnap_test_count(1);\n  const uint32_t k = j.slice + i;  //'),
     '  s.next = s.slots.second ? s.next ^ 1u : 0u;\n  release(q);\n', '  s.next = s.slots.second ? s.next ^ 1u : 0u;\n  if (q.index >= 0) sdnap_test_count(2);\n  release(q);\n'),
     '  const int32_t e = sdnap::epochs::at(st, st.series[first + k], t, r, v, cov != nullptr ? P : nullptr, have_p, jd);\n',
     '  const int32_t e = sdnap::epochs::at(st, st.series[first + k], t, r, v, cov != nullptr ? P : nullptr, have_p, jd);\n' +
@@ -353,10 +353,11 @@ console.log(JSON.stringify({ deferredStates }));
 for (const r of [...seamed.filter((q) => q.threads > 0), sliced.r, deferred.r]) {
   const s = r.seams;
   assert.equal(r.good, 3 * count, `${r.label}: ${r.good} of ${3 * count} states answered`);
-  assert.ok(s.widePrePass >= 3 * wide && s.replaced >= count - wide, `${r.label}: wide pre-pass ${s.widePrePass}, slots replaced ${s.replaced}`);
+  assert.ok(s.wideRows >= 3 * wide, `${r.label}: wide sets participate in the ordinary batch`);
+  assert.ok(s.replaced >= count - wide, `${r.label}: slots replaced ${s.replaced}`);
   assert.ok(s.msisLow > 0 && s.msisHigh > 0, `${r.label}: NRLMSISE-00 at or under 325 km ${s.msisLow}, over it ${s.msisHigh}`);
   assert.ok(s.sgp4 > 0 && s.xp > 0 && s.ap > 0, `${r.label}: states of each family: SGP4 ${s.sgp4}, SGP4XP ${s.xp}, AP ${s.ap}`);
-  assert.ok(4 * s.poolRows >= 3 * (count - wide), `${r.label}: rows on pool threads ${s.poolRows} of ${3 * (count - wide)}`);
+  assert.ok(4 * s.poolRows >= 3 * count, `${r.label}: rows on pool threads ${s.poolRows} of ${3 * count}`);
   assert.ok(4 * s.poolReplaced >= count - wide, `${r.label}: slots replaced on pool threads ${s.poolReplaced} of ${s.replaced}`);
   assert.ok(4 * s.poolMsisLow >= s.msisLow && 4 * s.poolMsisHigh >= s.msisHigh,
     `${r.label}: NRLMSISE-00 on pool threads ${s.poolMsisLow} of ${s.msisLow} at or under 325 km, ${s.poolMsisHigh} of ${s.msisHigh} over`);

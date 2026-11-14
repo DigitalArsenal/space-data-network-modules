@@ -56,8 +56,7 @@ The output map and the terms above e 0.3 retain their definitions.
   waited forever. On a loaded machine that happened in AP batches of a test build, never in the shipped build with
   SGP4XP rows (0 of 40 processes).
 - The epoch store's state-only `sdnap_epochs_at` initializes and flies series on the pool in chunks of 16. Each series'
-  two slots belong to one thread during the batch. A series holding a wide set (AP above e 0.05 in no resonance class,
-  above e 0.3 in one) stays serial in series order, including its flight; requests for covariance stay serial.
+  two slots belong to one thread during the batch. Wide sets use the same pool dispatch. Requests for covariance stay serial.
   Initialization storage and cache room are reserved before the batch, and any series stopped by refused growth is
   retried serially. The thread-count and poisoned-storage test is
   `test/epoch-pool.e2e.mjs`.
@@ -87,9 +86,22 @@ The output map and the terms above e 0.3 retain their definitions.
   included); `sdnap_fit` then gives status -1 and leaves its row as it came. At its memory limit the module refuses a
   state, never aborts (`test/memory-limit.e2e.mjs`): a thread's caches are made before its first state, and a state on a
   thread that cannot make them answers the theory's refusal code.
-  `sdnap_wide_grid_budget(bytes, out)` sets the grid cache's byte bound (512 MiB by default; live and idle grids, each at
-  its allocated bytes, the least recently used idle grid freed first) when bytes is 1 or more (1 keeps no idle grid), and
-  writes the bound, the bytes held, the grids held and those idle. The bound decides which grids are kept, never a state.
+  `sdnap_wide_grid_budget(bytes, out)` sets a strict payload residency budget, 192 MiB by default.
+  The minimum is 172,362,864 bytes: two largest payloads for each of 16 pool threads and the caller.
+  Values below 1 read without changing it; positive updates below the minimum apply the minimum.
+  The applied budget is returned in out[0]; values above SIZE_MAX return -1.
+  The four output doubles are the budget, resident bytes, payload count and unpinned payload count.
+  Exact-key descriptors remain attached to sets; unpinned payloads are evicted in least-recently-used order.
+  A miss rebuilds identical coefficients. Allocation or capacity refusal is counted and retryable.
+  The budget includes a descriptor per resident payload; additional retained descriptors use 96 bytes each.
+  Each construction thread also retains two 3,686,400-byte buffers and uses at most 8,216,562 bytes
+  for exact arithmetic reuse. Epoch tables, ordinary caches, stacks and allocator reserve are additional.
+  `propagate_epochs` preserves per-object OEM outputs after a propagation refusal, including allocation
+  refusal. Successful output retains its COMMENT grammar and decay-crossing behavior. A refused
+  object has an empty block with a status=refused note, total refusal count and at most eight
+  request indices, codes and named reasons. The method retains the first failing object's named
+  error and status 3, and attempts later objects. State-only epoch exports report retryable
+  resource shortage as row status 91. Other methods retain the no-output allocation-refusal contract.
 - Covariance (SPEC 12; `test/covariance.e2e.mjs`): `fit` writes, for its SGP4XP sets, the fit's covariance at its epoch
   as COVARIANCE (TEME, 21 values) with USER_DEFINED_SDNAP_COV_x rows (the BTERM and AGOM parameters' covariances, the
   theory floor, the process noise); `sdnap_covariance_at(omm, length, minutes, count, out)` gives, per time, the TEME
@@ -624,9 +636,11 @@ and the count read 122 KB. Its nominal is the record's own set, so the store's c
 bit where both hold the same time (`test/store-covariance.e2e.mjs`). Through 0.6.55 the nominal was rebuilt from the
 parameter vector, and the store's covariance could differ from `propagate`'s by more than the matrix's largest element.
 
-Above e 0.048 with tesseral terms, each set holds a grid of its tesseral families of about 4.9 MB (with 0.6.14's slopes),
-and a node grid while it is flown: 10 MB a set flown when every set has its own elements (4.8 MB when 100 sets share one
-epoch grid). One process holds at most 256 such grids, so beyond them states are refused (stack #424).
+A wide AP set uses exact-key grid descriptors and a shared bounded payload cache. With AP gravity selected, the wide flag requires
+eccentricity above 0.05 in resonance class 0, or above 0.3 in a resonance class. Grid payloads are
+constructed only when the tesseral degree is at least 2.
+A degree-12 payload occupies 5,069,496 accounting bytes. Holding more sets than fit in the payload budget
+causes reconstruction on subsequent requests; it does not impose a catalog-size refusal threshold.
 
 AP's cost against SGP4-XP's and SGP4's by request pattern, measured on 2026-11-10 with `test/kernel-patterns.mjs`:
 
@@ -688,7 +702,7 @@ entries; a first fill takes about 1.2 ms an object on one thread, 120 s for 100,
 the eccentric sets above e 0.03, which cost 11 ms a row); wide sets (e above 0.05 in the zero-revolution class, above 0.3 in the resonance classes, with tesseral
 terms), series of several sets, sets with a forecast or a hand-over and SGP4 sets are answered by AP's entries (47 % of the
 stored synthetic set is served; 92.1 % of a public catalog's objects have eccentricity at or under 0.05); at 100,000 objects the
-cells take 84 MB and the instance about 270 MB in all, while no wide object is flown in it (a wide set holds about 10 MB); the
+cells take 84 MB and the instance about 270 MB in all, while no wide object is flown in it; wide-grid payloads share a separate 192 MiB default cache, and retained initialized propagators add memory outside that bound. The
 host runs its own refill loop (SPEC 19.1) and calls the frames from one thread, never during a pool batch.
 
 A frame of every object at one instant from short Chebyshev cells of AP's own states: 0.26 times the cost of SGP4 through
@@ -986,3 +1000,8 @@ the fall-back had returned Sentinel-3A 2025-10-15 to 0.087 km at day 3 (0.4.17: 
 0.4.11 the median day-3 change is -85 % on HY-2C, -92 % on HY-2D, -73 % on Jason-3, -48 % on SWOT, -35 % on SARAL and
 +1.4 % on CryoSat-2 (stack #470). A 0.5 m/s step after the arc leaves the fit bit for bit; one inside it leaves a fit
 RMS of 28 km and BTERM undetermined (`test/drag-prior-fallback.e2e.mjs`).
+
+Shared time, atmosphere, gravity, and half-conversion tables are prepared during
+instance initialization. Startup does additional work; per-state lookup paths
+and values are unchanged. See SPEC's shared lookup initialization section for the
+held-initializer regression, conditional flight effect, and entry-path exposure.
