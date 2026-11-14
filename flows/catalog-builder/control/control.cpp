@@ -44,7 +44,7 @@ struct Settings {
  double max_removal_fraction=.25,margin=0,nonres_e=.05,res_e=.3,max_rms=2,max_error=10;
  std::vector<Source> seeds;
 } cfg;
-enum class Phase {Idle,Scan,Lookup,Chain,Annotate,ProductStored,Compose,IndexStored};
+enum class Phase {Idle,Scan,Lookup,AttemptStored,FailureStored,Chain,Annotate,ProductStored,Compose,IndexStored};
 Phase phase=Phase::Idle;
 std::vector<Source> scans;size_t scan_at=0,pages=0,seen=0,retained=0,done=0,at=0;
 std::string cursor,signature,reason,pending_batch,pending_schema;
@@ -58,7 +58,11 @@ std::vector<uint32_t> work;
 Bytes pending,chosen,object_weather;
 bool run_fit=false,complete_scan=true,capacity_limited=false;
 struct Retry {unsigned attempts=0;int64_t after=0;std::string reason;};
-std::map<uint32_t,Retry> retries;
+struct Attempt {Bytes data;std::string signature;unsigned count=0;int64_t time=0;bool final=false;};
+std::map<uint32_t,Attempt> attempts;
+bool transient_refusal(const std::string& code);
+int save_attempt(bool final=false,const std::string& failure="");
+int start_chain();
 struct Diagnostics {
  size_t invalid=0,failed=0,deferred=0;std::vector<std::string> examples;
  void add(const std::string& value){if(examples.size()<16)examples.push_back(value);}
@@ -66,12 +70,10 @@ struct Diagnostics {
 } diagnostics;
 bool budget_left(){return std::chrono::duration<double,std::milli>(Clock::now()-tick_start).count()+allowance<cfg.budget_ms;}
 int next_object();
-int fail_object(const std::string& message){
+int fail_object(const std::string& message,bool final=false){
  if(at>=work.size())return 1;
- const auto id=work[at];auto& retry=retries[id];retry.attempts=std::min(retry.attempts+1,8u);
- retry.after=now+std::min<int64_t>(86400000,60000LL*(1LL<<(retry.attempts-1)));retry.reason=message;
- ++diagnostics.failed;diagnostics.add("object="+std::to_string(id)+" reason="+message+" retry="+iso(retry.after));
- ++at;return next_object();
+ ++diagnostics.failed;diagnostics.add("object="+std::to_string(work[at])+" reason="+message+"; durable failure recorded");
+ return save_attempt(final,message);
 }
 int push(const char* port,const char* code,const Bytes& data) {
  const std::string schema=std::string(code)+".fbs",id=(std::strlen(code)==3?"$":"")+std::string(code);
@@ -108,9 +110,16 @@ int query() {
 // take precedence, independent of their relative ingestion order.
 bool retain(const uint8_t* p,size_t n) {
  const auto& scan=scans[scan_at];Bytes data(p,p+n);++seen;
- auto room=[&](size_t old_size){const size_t cost=old_size?old_size+256:0;return retained-cost+n+256<=cfg.max_bytes&&(old_size||seeds.size()+identities.size()+index.size()+weather.size()<cfg.max_records);};
+ auto room=[&](size_t old_size){const size_t cost=old_size?old_size+256:0;return retained-cost+n+256<=cfg.max_bytes&&(old_size||seeds.size()+identities.size()+index.size()+weather.size()+attempts.size()<cfg.max_records);};
  auto account=[&](size_t old_size){retained=retained-(old_size?old_size+256:0)+n+256;};
- if(scan.schema=="OMM") {
+ if(scan.schema=="NEV") {
+  flatbuffers::Verifier v(p,n);if(!VerifySizePrefixedNEVBuffer(v))return false;const auto* log=GetSizePrefixedNEV(p);
+  if(!log->EVENTS()||log->EVENTS()->size()!=1||text(log->NODE_ID())!=cfg.provider)return false;const auto* e=log->EVENTS()->Get(0);
+  unsigned id=0;char tail=0;const auto subject=text(e->SUBJECT());if(std::sscanf(subject.c_str(),"catalog-object/%u%c",&id,&tail)!=1||!id)return false;if(id%cfg.partitions!=cfg.partition)return true;
+  const auto detail=text(e->DETAIL());const auto first=detail.find("input="),last=detail.find(';',first);if(first==std::string::npos||last==std::string::npos||e->TIME_MS()<=0)return false;
+  auto old=attempts.find(id);if(old==attempts.end()||e->TIME_MS()>=old->second.time){const auto size=old==attempts.end()?0:old->second.data.size();if(!room(size)){complete_scan=false;capacity_limited=true;return true;}account(size);
+   attempts[id]={std::move(data),detail.substr(first+6,last-first-6),unsigned(std::min<uint64_t>(e->COUNT(),8)),e->TIME_MS(),detail.rfind("final ",0)==0};}
+ } else if(scan.schema=="OMM") {
   flatbuffers::Verifier v(p,n);if(!VerifySizePrefixedOMMBuffer(v))return false;const auto* o=GetSizePrefixedOMM(p);const auto epoch=instant(text(o->EPOCH()));const auto id=o->NORAD_CAT_ID();if(!id||epoch<0)return false;if(id%cfg.partitions!=cfg.partition)return true;
   auto found=seeds.find(id);if(found==seeds.end()||scan_at<found->second.rank||(scan_at==found->second.rank&&epoch>=found->second.epoch)){
    const auto old_size=found==seeds.end()?0:found->second.data.size();if(!room(old_size)){complete_scan=false;capacity_limited=true;return true;}account(old_size);seeds[id]={std::move(data),epoch,scan_at};}
@@ -178,6 +187,20 @@ int ingest(const Bytes& data,bool is_index) {
  if(plugin_push_output_ex("meta","IngestRequest.fbs","INGQ",PLUGIN_PAYLOAD_WIRE_FORMAT_FLATBUFFER,"IngestRequest",0,0,b.GetBufferPointer(),b.GetSize())<0||push(is_index?"index_records":"product_records",pending_schema.c_str(),data))return stop("Cannot queue storage input.");
  phase=is_index?Phase::IndexStored:Phase::ProductStored;return 0;
 }
+// Operational events record dispatched attempts, not committed orbit progress.
+int save_attempt(bool final,const std::string& failure) {
+ const auto id=work[at];const auto old=attempts.find(id);const bool starting=failure.empty();
+ const unsigned count=old!=attempts.end()&&old->second.signature==signature?std::min(old->second.count+(starting?1:0),8u):1;
+ NEVT log;log.NODE_ID=cfg.provider;log.GENERATED_AT_MS=now;
+ auto e=std::make_unique<NEVEventT>();e->TIME_MS=now;e->KIND=starting?nevEventKind::Other:nevEventKind::Failure;
+ e->SUBJECT="catalog-object/"+std::to_string(id);e->COUNT=count;e->DETAIL=(final?"final ":starting?"in progress ":"retry ")+std::string("input=")+signature+"; "+failure;
+ log.EVENTS.push_back(std::move(e));flatbuffers::FlatBufferBuilder b;FinishSizePrefixedNEVBuffer(b,NEV::Pack(b,&log));
+ pending.assign(b.GetBufferPointer(),b.GetBufferPointer()+b.GetSize());pending_schema="NEV";pending_batch="catalog-attempt-"+digest(pending);
+ R::IngestRequestT request;request.SCHEMA="NEV.fbs";request.RECONCILE=R::reconcileMode_Duplicates;request.TAGS=std::make_unique<R::SourceTagsT>();request.TAGS->PROVIDER_ID=cfg.provider;request.TAGS->SOURCE_NAME="catalog-attempts";request.TAGS->BATCH_ID=pending_batch;request.TAGS->CONTENT_KEY_ID="public";
+ b.Clear();R::FinishIngestRequestBuffer(b,R::IngestRequest::Pack(b,&request));
+ if(plugin_push_output_ex("meta","IngestRequest.fbs","INGQ",PLUGIN_PAYLOAD_WIRE_FORMAT_FLATBUFFER,"IngestRequest",0,0,b.GetBufferPointer(),b.GetSize())<0||push("state_records","NEV",pending))return stop("Cannot persist attempt; no object dispatched.");
+ phase=starting?Phase::AttemptStored:Phase::FailureStored;return 0;
+}
 // Match the numerical fields and ingestion guards read by ingest_omm.
 std::string fit_seed_signature(const OMM* o){
  OMMT n;n.NORAD_CAT_ID=o->NORAD_CAT_ID();n.EPOCH=text(o->EPOCH());n.CENTER_NAME=text(o->CENTER_NAME());n.MEAN_ELEMENT_THEORY=o->MEAN_ELEMENT_THEORY();
@@ -195,7 +218,7 @@ std::string weather_signature(){
 int next_object() {
  for(;at<work.size()&&done<cfg.batch;++at){
   if(!budget_left()){++diagnostics.deferred;return finish();}object_start=Clock::now();
-  const auto id=work[at];if(id%cfg.partitions!=cfg.partition)continue;const auto retry=retries.find(id);if(retry!=retries.end()&&now<retry->second.after){++diagnostics.deferred;continue;}chosen.clear();signature.clear();reason.clear();object_weather.clear();const auto s=seeds.find(id);const auto identity=identities.find(id);const auto old=index.find(id);
+  const auto id=work[at];if(id%cfg.partitions!=cfg.partition)continue;chosen.clear();signature.clear();reason.clear();object_weather.clear();const auto s=seeds.find(id);const auto identity=identities.find(id);const auto old=index.find(id);
   const bool removed=identity==identities.end()||s==seeds.end()||(GetSizePrefixedCAT(identity->second.data())->DECAY_DATE()&&!text(GetSizePrefixedCAT(identity->second.data())->DECAY_DATE()).empty()&&text(GetSizePrefixedCAT(identity->second.data())->DECAY_DATE())<=iso(now).substr(0,10));
   const auto* previous=old==index.end()?nullptr:GetSizePrefixedCAT(old->second.data());
   if(removed){if(!complete_scan)continue;if(!previous||!previous->PRODUCTS()||!previous->PRODUCTS()->size())continue;reason="object removed from the configured current sources";diagnostics.add("object="+std::to_string(id)+" removal: "+reason);return compose();}
@@ -212,14 +235,21 @@ int next_object() {
   if(previous&&previous->PRODUCTS()&&previous->PRODUCTS()->size()==1){const auto* p=previous->PRODUCTS()->Get(0);if(!text(p->RECORD_CID()).empty()&&text(p->SELECTION_REASON()).find("catalog-input="+signature+";")!=std::string::npos&&(!expired||p->KIND()!=catalogProductKind::ApElements)&&
    !(text(p->SELECTION_REASON()).find("future-seed")!=std::string::npos&&!future))continue;}
   reason=expired?"old-span fallback":future?"future-seed fallback":!eligible?"outside configured AP class":"accepted exact-W fit";run_fit=!expired&&!future&&eligible;
+  const auto attempt=attempts.find(id);
+  if(attempt!=attempts.end()&&attempt->second.signature==signature){const auto& a=attempt->second;const auto after=a.time+std::min<int64_t>(86400000,1200000LL*(1LL<<(std::max(1u,a.count)-1)));
+   if(a.final||now<after){++diagnostics.deferred;diagnostics.add(a.final?"unchanged final failure":"in-progress attempt deferred after instance interruption");continue;}}
+  return save_attempt();
+ }
+ return finish();
+}
+int start_chain() {
+ const auto& seed=seeds.at(work[at]);const auto s=seeds.find(work[at]);const auto* omm=GetSizePrefixedOMM(seed.data.data());
   if(!run_fit){phase=Phase::Chain;return push("fallback_seed","OMM",{s->second.data.begin()+4,s->second.data.end()});}
   PCFT flight;flight.THEORY=pcfTheory::SGP4;flight.OUTPUT=std::make_unique<PCFOutputT>();flight.OUTPUT->FRAME=pcfOutputFrame::GCRF;flight.OUTPUT->START_TIME=iso(s->second.epoch-216000000);flight.OUTPUT->STOP_TIME=iso(s->second.epoch+432000000);flight.OUTPUT->STEP_SECONDS=300;
   flatbuffers::FlatBufferBuilder b;FinishPCFBuffer(b,PCF::Pack(b,&flight));if(push("flight_config","PCF",{b.GetBufferPointer(),b.GetBufferPointer()+b.GetSize()}))return stop("Cannot queue flight policy.");
   PCFT fit;fit.THEORY=pcfTheory::AP;fit.FORCES=std::make_unique<PCFForceModelT>();fit.FORCES->ATMOSPHERE_MODEL=pcfAtmosphereFamily::NRLMSISE00;fit.FORCES->WEATHER_SOURCE=pcfWeatherSource::RECORDS;fit.FORCES->HAS_MAXIMUM_DEGREE=true;fit.FORCES->MAXIMUM_DEGREE=20;
   if(omm->ECCENTRICITY()<=.048){fit.FORCES->HAS_MAXIMUM_TESSERAL_DEGREE=true;fit.FORCES->MAXIMUM_TESSERAL_DEGREE=31;}fit.FIT=std::make_unique<PCFFitPolicyT>();fit.FIT->WEATHER_HORIZON_DAYS=30;
   b.Clear();b.ForceDefaults(true);FinishPCFBuffer(b,PCF::Pack(b,&fit));if(push("fit_config","PCF",{b.GetBufferPointer(),b.GetBufferPointer()+b.GetSize()})||(!object_weather.empty()&&push("weather","SPW",object_weather))||push("seed","OMM",{s->second.data.begin()+4,s->second.data.end()}))return stop("Cannot queue exact-W inputs.");phase=Phase::Chain;return 0;
- }
- return finish();
 }
 // Only resource and delivery failures can change without a changed input.
 // Unknown codes fail closed as deterministic; recipe revision permits retry.
@@ -228,7 +258,7 @@ bool transient_refusal(const std::string& code) {
 }
 int chain() {
  const auto* fallback=input("fallback"),*candidate=input("candidate"),*decision=input("chain_status");if(phase!=Phase::Chain||!decision)return stop("Unexpected chain outcome.");
- flatbuffers::Verifier qv(decision->payload,decision->payload_length);if(!VerifyQRPBuffer(qv))return fail_object("Invalid chain outcome.");const auto* q=GetQRP(decision->payload);if(!fallback)return fail_object("chain: "+text(q->ERROR_CODE())+" "+text(q->MESSAGE()));
+ flatbuffers::Verifier qv(decision->payload,decision->payload_length);if(!VerifyQRPBuffer(qv))return fail_object("Invalid chain outcome.");const auto* q=GetQRP(decision->payload);if(!fallback)return fail_object("chain: "+text(q->ERROR_CODE())+" "+text(q->MESSAGE()),!transient_refusal(text(q->ERROR_CODE())));
  const auto& seed=seeds.at(work[at]);const plugin_input_frame_t* use=fallback;
  if(run_fit&&candidate&&q->STATUS()==qrpStatus::Ok){flatbuffers::Verifier v(candidate->payload,candidate->payload_length);if(!VerifyOCMBuffer(v))return fail_object("Invalid fit record.");const auto* o=GetOCM(candidate->payload);const auto* stats=o->ORBIT_DETERMINATION()?o->ORBIT_DETERMINATION()->FIT_STATISTICS():nullptr;
   if(stats&&stats->FIT_STATES()==2161&&std::isfinite(stats->FIT_RMS_KM())&&stats->FIT_RMS_KM()<=cfg.max_rms&&std::isfinite(stats->FIT_MAX_KM())&&stats->FIT_MAX_KM()<=cfg.max_error&&instant(text(stats->FIT_START()))==seed.epoch-216000000&&instant(text(stats->FIT_STOP()))==seed.epoch+432000000)use=candidate;else reason="fit-statistics refusal fallback";
@@ -252,7 +282,7 @@ int chain() {
 int advance() {
  if(input("tick")){
   if(!configure())return stop("Invalid catalog ModuleConfig.");const auto* f=input("tick");flatbuffers::Verifier v(f->payload,f->payload_length);if(!R::VerifyTimerTickBuffer(v))return stop("Invalid timer tick.");now=R::GetTimerTick(f->payload)->FIRED_MS();if(now<=0)return stop("Timer requires a positive UTC time.");
-  diagnostics=Diagnostics{};tick_start=Clock::now();allowance=cfg.allowance_ms;complete_scan=true;capacity_limited=false;seeds.clear();identities.clear();index.clear();weather.clear();products.clear();scans=cfg.seeds;scans.push_back({"CAT",cfg.identity_provider,cfg.identity_source});scans.push_back({"SPW",cfg.weather_provider,cfg.weather_source});scans.push_back({"CAT",cfg.provider,"catalog-index"});scan_at=pages=seen=retained=done=at=0;cursor.clear();return query();
+  diagnostics=Diagnostics{};tick_start=Clock::now();allowance=cfg.allowance_ms;complete_scan=true;capacity_limited=false;seeds.clear();identities.clear();index.clear();weather.clear();products.clear();attempts.clear();scans={{"NEV",cfg.provider,"catalog-attempts"}};scans.insert(scans.end(),cfg.seeds.begin(),cfg.seeds.end());scans.push_back({"CAT",cfg.identity_provider,cfg.identity_source});scans.push_back({"SPW",cfg.weather_provider,cfg.weather_source});scans.push_back({"CAT",cfg.provider,"catalog-index"});scan_at=pages=seen=retained=done=at=0;cursor.clear();return query();
  }
  if(const auto* f=input("query_status")){flatbuffers::Verifier v(f->payload,f->payload_length);if(!VerifyQRPBuffer(v)||GetQRP(f->payload)->KIND()==qrpKind::Error)return stop("Complete read failed; no partial sweep is committed.");}
  if(const auto* f=input("page")){
@@ -282,9 +312,14 @@ int advance() {
  if(const auto* f=input("replacement")){if(phase!=Phase::Compose)return stop("Unexpected index replacement.");return ingest(bytes(f),true);}
  if(const auto* f=input("stored")){
   flatbuffers::Verifier v(f->payload,f->payload_length);if(!R::VerifyIngestResultBuffer(v))return stop("Invalid storage acknowledgment.");const auto* r=R::GetIngestResult(f->payload);
+  if(phase==Phase::AttemptStored||phase==Phase::FailureStored){
+   if(!text(r->REFUSED()).empty()||text(r->SCHEMA())!="NEV.fbs"||text(r->PROVIDER_ID())!=cfg.provider||text(r->SOURCE_NAME())!="catalog-attempts"||text(r->BATCH_ID())!=pending_batch||r->INSERTED()>1)return stop("Attempt storage refused; object processing stopped.");
+   const auto* e=GetSizePrefixedNEV(pending.data())->EVENTS()->Get(0);attempts[work[at]]={pending,signature,unsigned(e->COUNT()),now,text(e->DETAIL()).rfind("final ",0)==0};
+   if(phase==Phase::AttemptStored)return start_chain();++at;return next_object();
+  }
   if((phase!=Phase::ProductStored&&phase!=Phase::IndexStored)||!text(r->REFUSED()).empty()||text(r->SCHEMA())!=pending_schema+".fbs"||text(r->PROVIDER_ID())!=cfg.provider||text(r->BATCH_ID())!=pending_batch||text(r->SOURCE_NAME())!=(phase==Phase::ProductStored?"catalog-products":"catalog-index")||r->INSERTED()>1)return fail_object("Storage refused or did not acknowledge the complete deterministic batch.");
   if(phase==Phase::ProductStored){products.insert(cid(chosen));return compose();}
-  allowance=std::max(allowance,2*std::chrono::duration<double,std::milli>(Clock::now()-object_start).count());index[work[at]]=pending;retries.erase(work[at]);++done;++at;return next_object();
+  allowance=std::max(allowance,2*std::chrono::duration<double,std::milli>(Clock::now()-object_start).count());index[work[at]]=pending;++done;++at;return next_object();
  }
  return stop("Incomplete controller response.");
 }

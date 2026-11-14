@@ -27,7 +27,7 @@ async function compile(folder,source,codes=[],inline=[]){
  return {...resolved,manifest,wasmPath:result.outputPath,guestLink:{objectBytes:result.guestLink.objectBytes,metadata:result.guestLink}};
 }
 const source=await read('files/orbit-products/src/sha256.hpp')+'\n'+await read('common/sds_cid.hpp')+'\n'+await read('flows/catalog-builder/control/control.cpp');
-const control=await compile('flows/catalog-builder/control',source,['OMM','OCM','SPW','PCF','CAT','XMT','QRP']);
+const control=await compile('flows/catalog-builder/control',source,['OMM','OCM','SPW','PCF','CAT','XMT','QRP','NEV']);
 if(process.argv.includes('--control-only'))process.exit(0);
 const dependencies=new Map([[control.manifest.pluginId,control]]);
 for(const folder of ['flows/catalog-builder','analysis/gp-error-model','analysis/catalog-composer'])for(const [id,entry]of await resolveFlowDependencies({depsPath:path.join(repo,folder)}))if(!dependencies.has(id))dependencies.set(id,entry);
