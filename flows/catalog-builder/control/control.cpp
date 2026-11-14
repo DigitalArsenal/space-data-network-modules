@@ -138,6 +138,9 @@ int page(const plugin_input_frame_t* f) {
  cursor.clear();pages=0;++scan_at;if(scan_at<scans.size())return query();
  work.clear();for(const auto& entry:identities)work.push_back(entry.first);for(const auto& entry:index)if(!identities.count(entry.first))work.push_back(entry.first);
  if(!complete_scan){++diagnostics.deferred;diagnostics.add("scan partial: read="+std::to_string(seen)+" retained-bytes="+std::to_string(retained)+" catalog.max_records="+std::to_string(cfg.max_records)+" catalog.max_bytes="+std::to_string(cfg.max_bytes)+"; raise the binding setting or partition the catalog; removals disabled");}
+ std::stable_sort(work.begin(),work.end(),[](uint32_t a,uint32_t b){
+  auto age=[](uint32_t id){const auto p=index.find(id);return p==index.end()?int64_t(0):instant(text(GetSizePrefixedCAT(p->second.data())->PRODUCTS_AS_OF()));};
+  return age(a)<age(b);});
  at=0;return next_object();
 }
 int compose() {
@@ -160,6 +163,20 @@ int ingest(const Bytes& data,bool is_index) {
  if(plugin_push_output_ex("meta","IngestRequest.fbs","INGQ",PLUGIN_PAYLOAD_WIRE_FORMAT_FLATBUFFER,"IngestRequest",0,0,b.GetBufferPointer(),b.GetSize())<0||push(is_index?"index_records":"product_records",pending_schema.c_str(),data))return stop("Cannot queue storage input.");
  phase=is_index?Phase::IndexStored:Phase::ProductStored;return 0;
 }
+// Match the numerical fields and ingestion guards read by ingest_omm.
+std::string fit_seed_signature(const OMM* o){
+ OMMT n;n.NORAD_CAT_ID=o->NORAD_CAT_ID();n.EPOCH=iso(instant(text(o->EPOCH())));n.CENTER_NAME=text(o->CENTER_NAME());n.MEAN_ELEMENT_THEORY=o->MEAN_ELEMENT_THEORY();
+ n.MEAN_MOTION=o->MEAN_MOTION();n.ECCENTRICITY=o->ECCENTRICITY();n.INCLINATION=o->INCLINATION();n.RA_OF_ASC_NODE=o->RA_OF_ASC_NODE();n.ARG_OF_PERICENTER=o->ARG_OF_PERICENTER();n.MEAN_ANOMALY=o->MEAN_ANOMALY();n.BSTAR=o->BSTAR();n.MEAN_MOTION_DOT=o->MEAN_MOTION_DOT();n.MEAN_MOTION_DDOT=o->MEAN_MOTION_DDOT();n.BTERM=o->BTERM();n.AGOM=o->AGOM();
+ const auto* t=reinterpret_cast<const flatbuffers::Table*>(o);
+ const std::string guards=std::to_string(t->CheckField(OMM::VT_BTERM))+"/"+std::to_string(t->CheckField(OMM::VT_AGOM))+"/"+std::to_string(o->USER_DEFINED_PARAMETERS()?o->USER_DEFINED_PARAMETERS()->size():0);
+ flatbuffers::FlatBufferBuilder b;FinishOMMBuffer(b,OMM::Pack(b,&n));return digest({b.GetBufferPointer(),b.GetBufferPointer()+b.GetSize()})+"/"+guards;
+}
+std::string weather_signature(){
+ Bytes relevant;
+ for(size_t at=0;at<object_weather.size();){const auto* w=GetSizePrefixedSPW(object_weather.data()+at);SPWT n;n.DATE=text(w->DATE());n.F107_OBS=w->F107_OBS();n.F107_OBS_CENTER81=w->F107_OBS_CENTER81();n.AP_AVG=w->AP_AVG();n.F107_DATA_TYPE=w->F107_DATA_TYPE();
+  flatbuffers::FlatBufferBuilder b;FinishSizePrefixedSPWBuffer(b,SPW::Pack(b,&n));relevant.insert(relevant.end(),b.GetBufferPointer(),b.GetBufferPointer()+b.GetSize());at+=size_t(flatbuffers::ReadScalar<uint32_t>(object_weather.data()+at))+4;}
+ return digest(relevant);
+}
 int next_object() {
  for(;at<work.size()&&done<cfg.batch;++at){
   const auto id=work[at];if(id%cfg.partitions!=cfg.partition)continue;const auto retry=retries.find(id);if(retry!=retries.end()&&now<retry->second.after){++diagnostics.deferred;continue;}chosen.clear();signature.clear();reason.clear();object_weather.clear();const auto s=seeds.find(id);const auto identity=identities.find(id);const auto old=index.find(id);
@@ -167,10 +184,10 @@ int next_object() {
   const auto* previous=old==index.end()?nullptr:GetSizePrefixedCAT(old->second.data());
   if(removed){if(!complete_scan)continue;if(!previous||!previous->PRODUCTS()||!previous->PRODUCTS()->size())continue;reason="object removed from the configured current sources";return compose();}
   const auto* omm=GetSizePrefixedOMM(s->second.data.data());
-  const auto low=iso(s->second.epoch-45LL*86400000).substr(0,10),high=iso(s->second.epoch+50LL*86400000).substr(0,10);
+  const auto low=iso(s->second.epoch-216000000-86400000).substr(0,10),high=iso(s->second.epoch-216000000+30LL*86400000).substr(0,10);
   for(auto i=weather.lower_bound(low);i!=weather.end()&&i->first<=high;++i)object_weather.insert(object_weather.end(),i->second.begin(),i->second.end());
   const std::string policy=cfg.recipe+"/"+std::to_string(cfg.nonres_e)+"/"+std::to_string(cfg.res_e)+"/"+std::to_string(cfg.max_rms)+"/"+std::to_string(cfg.max_error);
-  signature=digest(s->second.data)+"/"+digest(object_weather)+"/"+ephem::sha256_hex(reinterpret_cast<const uint8_t*>(policy.data()),policy.size());
+  signature=fit_seed_signature(omm)+"/"+weather_signature()+"/"+ephem::sha256_hex(reinterpret_cast<const uint8_t*>(policy.data()),policy.size());
   const double n=omm->MEAN_MOTION()*6.2831853071795864769/1440;
   const bool resonant=n>.0035003818&&n<=.015751718;
   const bool eligible=std::isfinite(omm->ECCENTRICITY())&&omm->ECCENTRICITY()>=0&&omm->ECCENTRICITY()<=(resonant?cfg.res_e:cfg.nonres_e);
