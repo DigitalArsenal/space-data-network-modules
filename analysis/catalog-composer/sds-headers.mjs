@@ -9,9 +9,9 @@ import { generateSdsHeaders as generate } from "../../scripts/lib/sds-cpp-header
 export const generateSdsHeaders = (roots, from) => generate(roots, from, createFlatc);
 
 // The $XMT JavaScript binding for the editor and the tests, bundled from the TypeScript of a standards tree (lib/ts).
-// The bundle names its sources relative to the module, wherever the process runs.
+// Whitespace minification omits generated comments containing source paths.
 export const bundleXmt = (standardsRoot, outfile) => build({
   stdin: { contents: "export * from './XMT/main.ts';", resolveDir: path.join(standardsRoot, "lib/ts"), sourcefile: "xmt-entry.ts", loader: "ts" },
-  bundle: true, format: "esm", platform: "neutral", target: "es2022", outfile, external: ["flatbuffers"], logLevel: "warning", preserveSymlinks: true,
+  bundle: true, minifyWhitespace: true, format: "esm", platform: "neutral", target: "es2022", outfile, external: ["flatbuffers"], logLevel: "warning", preserveSymlinks: true,
   absWorkingDir: path.dirname(fileURLToPath(import.meta.url)),
 });

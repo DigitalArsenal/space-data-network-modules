@@ -100,3 +100,24 @@ Synthetic tests cover direct-call equality, refusal, source precedence,
 equal-epoch correction, recovery after product storage, weather changes,
 expiry fallback, tombstones, and selection-map convergence. They do not
 establish production orbit accuracy or remote publication/trust behavior.
+
+## Development measurements
+
+Sixteen ABBA rounds compared a primed native reconciliation tick with storage
+against the unchanged exact-W chain in Node, using the same two synthetic
+objects. The median native time was 0.459 seconds per object. The median
+per-round native/control ratio was 1.108; its middle-half range was
+1.094–1.147 (4.73% of the median). The comparison includes different execution
+backends and the controller's extra work; it does not isolate one overhead.
+The two timing slices had starting/ending system loads of 2.84/4.44 and
+4.87/5.91, respectively, using the one-minute averages.
+
+The measured small-catalog rate projects to 4.21 hours of processing for
+33,000 objects, excluding growth in scan costs. It is not a full-catalog
+measurement. The default 128-object batch requires 258 ten-minute invocations
+for that first build, approximately 43 hours of scheduled slots. The maximum
+256-object setting requires 129 invocations, approximately 21.5 hours.
+A native 256-object synthetic test completed within the ten-minute invocation
+budget, producing 256 stored products and 256 selections. Guest linear memory
+at its endpoint was 99 pages (6,488,064 bytes), excluding host and storage
+memory. The rate projection does not raise the controller's batch limit.
