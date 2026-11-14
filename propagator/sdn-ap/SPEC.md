@@ -6573,7 +6573,9 @@ What a host that draws frames from a running clock needs, and what it gets.
 
 ## 20. Record entities through the propagator ABI
 
-**Tradeoffs.** An AP entity without a covering frame cell is hidden: its position and velocity are NaN and its
+**Tradeoffs.** Releasing direct slots makes repeated all-SGP4XP catalog calls about 10.1 times as expensive in CPU
+as retaining those slots in the measured cases below. This policy bounds memory and pays initialization on each frame;
+it does not provide cheap repeated stock-catalog frames. An AP entity without a covering frame cell is hidden: its position and velocity are NaN and its
 VALID flag is clear. Unsupported AP series, including multiple-set and wide-branch series, have no display state through
 these calls. Their direct paths remain available. AP singleton and struct-batch states use the frame approximation of
 section 19, including its existing position and velocity bounds. SGP4 and SGP4XP records use their own exact epoch
@@ -6599,6 +6601,17 @@ Both builds served every entity in these measurements.
 Wasm memory includes ingestion and output staging high-water; it excludes host memory and artifact bytes. These
 initial-load cases have no previous resident catalog. Transactional reload also retains the previous catalog while
 preparing its replacement. Native epoch calls can retain direct caches independently of the plugin display readers.
+
+Paired CPU measurements compare the same `plugin_propagate_all_positions` call on identical synthetic low-orbit
+SGP4XP records at one hour: control 051c2178 retains direct slots; bounded reader c39de890 releases each entity's slots.
+Both sides serve all records with bit-identical output. After an untimed warm call, each measurement block makes eight
+complete calls. Eight A B B A rounds per catalog produce the following per-round B/A ratios. Loading is outside the
+measured blocks. Both middle-half spreads are below 5% of their medians. No AP cells or covariance are involved.
+
+| Synthetic SGP4XP records | Median bounded/control CPU | Middle half | Load start (1/5/15 min) | Load end (1/5/15 min) |
+|---:|---:|---|---|---|
+| 33,000 | 10.165542 | 10.097354–10.351680 | 7.51, 15.70, 19.01 | 33.58, 22.44, 21.27 |
+| 100,000 | 10.103588 | 9.985053–10.133622 | 19.73, 21.55, 21.11 | 34.28, 21.51, 20.71 |
 
 **20.1 Source and indices.** The row and record stores coexist. Plugin calls select rows after a successful
 `plugin_init_omm` (including count 0, which selects empty rows), or records after a successful `load_epochs` or
