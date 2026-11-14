@@ -60,10 +60,11 @@ const iso = t => new Date(t).toISOString().replace('Z', '');
 const prefix = b => { const p = Buffer.alloc(b.length + 4); p.writeUInt32LE(b.length); Buffer.from(b).copy(p, 4); return p; };
 const root = path.join(scratchRoot, 'epoch-pool-results'); fs.mkdirSync(root, { recursive: true });
 const wide = Number(arg('--wide', 8));
+const seed = Number(arg('--seed', 314159));
 const covTemplate = ocmOf(fs.readFileSync(path.join(here, 'fixtures/ap-fit-0.6.42.ocm')));
 const INSTANTS = [0.25, 0.75, 1.25];  // days after June 15 2026 0h UTC
 function records() {
-  let state = 314159;
+  let state = seed;
   const rand = () => { state = (Math.imul(state, 1664525) + 1013904223) >>> 0; return state / 2 ** 32; };
   const rows = [80, 155].map(flux => rowsThrough(Array.from({ length: 8 }, (_, k) => ({
     DATE: iso(epoch + (k - 2) * day).slice(0, 10), F107_OBS: flux, F107_OBS_CENTER81: flux + 2, AP_AVG: flux === 80 ? 4 : 15,
@@ -132,6 +133,22 @@ if (process.argv.includes('--case')) {
   const all = [], deferredAt = [];
   const drop = process.argv.includes('--drop');
   const taken = x.sdnap_test_deferred_take ? x.sdnap_alloc(4 * 65536) : 0;
+  // A pool-sized group asked serially retains its resonant table across unrelated set builds.
+  // This order detects poisoned evaluation values whose table identity was left valid.
+  if (process.argv.includes('--serial-chunk')) {
+    assert.ok(count >= 96);
+    const chunks = [], codes = [];
+    for (const offset of INSTANTS) for (let k = 80; k < 96; ++k) {
+      assert.equal(x.sdnap_epochs_at(2461206.5, offset, k, 1, 0, out, status, 0), 0);
+      chunks.push(Buffer.from(new Uint8Array(h.memory.buffer, out, 48)), Buffer.from(new Uint8Array(h.memory.buffer, status, 4)));
+      codes.push(new Int32Array(h.memory.buffer, status, 1)[0]);
+    }
+    const bytes = Buffer.concat(chunks);
+    fs.writeFileSync(path.join(root, label + '.bin'), bytes);
+    console.log(JSON.stringify({ label, good: codes.filter(s => s === 0).length, refused: codes.filter(s => s !== 0).length,
+      digest: createHash('sha256').update(bytes).digest('hex') }));
+    process.exit(0);
+  }
   let good = 0, refused = 0;
   for (const offset of INSTANTS) {
     const w = 2461206.5, f = offset;
@@ -227,6 +244,9 @@ void sdnap_test_epoch_poison() {
   std::memset(&sp_build_scratch(), 0xff, sizeof(SpBuildScratch));
   std::memset(&g_sp_trig_scratch, 0xff, sizeof(g_sp_trig_scratch));
   auto& hc = half_day_eval_cache();
+  // Poisoned values cannot retain a valid key. A repeated table also reuses zero SIMD padding;
+  // invalidate its identity so every value and padded element is rebuilt before evaluation.
+  hc.table_id = 0;
   for (float* b : {hc.b0, hc.b1, hc.b2, hc.b3, hc.b4, hc.b5, hc.b6, hc.b7}) std::memset(b, 0xff, sizeof(hc.b0));
 }
 SDNAP_EXPORT("sdnap_test_epoch_mode")
@@ -280,15 +300,16 @@ const diagnostic = arg('--diagnostic', null) ?? buildDiagnostic('epoch-pool-pois
     '  if (h > 325.0) {\n    double c, s, stloc, ctloc, slong, clong;\n', '  sdnap_test_count(h > 325.0 ? 4 : 3);\n  if (h > 325.0) {\n    double c, s, stloc, ctloc, slong, clong;\n'),
     '  const double sec_hr = sec * (1.0 / 3600.0);\n', '  const double sec_hr = sec * (1.0 / 3600.0);\n  sdnap_test_count(h > 325.0 ? 4 : 3);\n'),
 });
+if (process.argv.includes('--build-only')) { console.log(diagnostic); process.exit(0); }
 const results = [];
 function run(label, file, threads, options = []) {
   const output = execFileSync(process.execPath, [fileURLToPath(import.meta.url), '--case', '--label', label, '--wasm', file,
-    '--threads', String(threads), '--count', String(count), '--wide', String(wide), ...options], { encoding: 'utf8', maxBuffer: 1 << 20 });
+    '--threads', String(threads), '--count', String(count), '--wide', String(wide), '--seed', String(seed), ...options], { encoding: 'utf8', maxBuffer: 1 << 20 });
   const r = JSON.parse(output.trim().split('\n').at(-1)); results.push(r); console.log(JSON.stringify(r));
   return { bytes: fs.readFileSync(path.join(root, label + '.bin')), r };
 }
 const reference = run('single', wasmPath, 0, ['--single']);
-if (count === 2048 && wide === 8) assert.equal(reference.r.digest, MAIN_DIGEST, `the reference against sdn-ap 0.6.59's (${MAIN_DIGEST})`);
+if (count === 2048 && wide === 8 && seed === 314159) assert.equal(reference.r.digest, MAIN_DIGEST, `the reference against sdn-ap 0.6.59's (${MAIN_DIGEST})`);
 // the shipped build's own statistics: rows run on pool threads ([14]) by at least two of them at 4 and 15 threads ([15]),
 // none without the pool, so a build that flew every row on the calling thread fails here
 const onPool = (c) => {
