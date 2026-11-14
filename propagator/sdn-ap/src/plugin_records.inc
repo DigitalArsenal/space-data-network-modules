@@ -16,7 +16,7 @@ void plugin_release() {
   plugin_rows_selected();
   store_free();
 }
-uint32_t plugin_record_count() { return static_cast<uint32_t>(epochs::resident().plugin_order.size()); }
+uint32_t plugin_record_count() { return static_cast<uint32_t>(epochs::resident().series.size()); }
 
 inline void plugin_invalid(double jd, OrbProStateVector* out) {
   orbpro_state_init(out);
@@ -53,7 +53,7 @@ inline int32_t plugin_record_read(const PluginTime& time, double jd, uint32_t in
   plugin_invalid(jd, out);
   auto& st = epochs::resident();
   if (st.pool_dead != 0) return ORBPRO_PROP_UNPHYSICAL;
-  const uint32_t raw = st.plugin_order[index];
+  const uint32_t raw = st.plugin_series_index(index);
   if (st.series[raw].met != meanElementSource_AP) {
     const int32_t rc = plugin_direct_state(raw, time.whole, time.frac, out);
     // Reclaim after this entity, bounding transient direct storage even for a complete catalog call.
@@ -130,7 +130,7 @@ int32_t plugin_propagate_path(uint32_t index, double start_jd, double step_days,
     if (!std::isfinite(start_jd + i * step_days)) return ORBPRO_PROP_BAD_INPUT;
   auto& st = epochs::resident();
   if (plugin_records && st.pool_dead != 0) return ORBPRO_PROP_UNPHYSICAL;
-  const uint32_t raw = plugin_records ? st.plugin_order[index] : 0;
+  const uint32_t raw = plugin_records ? st.plugin_series_index(index) : 0;
   for (uint32_t i = 0; i < count; ++i) {
     const double jd = start_jd + i * step_days;
     double whole, frac;
@@ -153,8 +153,8 @@ namespace sdnap {
 inline bool plugin_metadata(uint32_t index, double& period, double& eccentricity) {
   if (plugin_records) {
     auto& st = epochs::resident();
-    if (index >= st.plugin_order.size() || st.pool_dead != 0) return false;
-    const auto& s = st.series[st.plugin_order[index]];
+    if (index >= st.series.size() || st.pool_dead != 0) return false;
+    const auto& s = st.series[st.plugin_series_index(index)];
     const auto& row = st.entries[s.first + s.count - 1].row;
     period = row.mean_motion_rev_day > 0 ? 1440.0 / row.mean_motion_rev_day : 0;
     eccentricity = row.eccentricity;

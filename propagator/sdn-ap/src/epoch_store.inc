@@ -192,7 +192,8 @@ struct Store {
   Config cfg;
   Array<Entry> entries;
   Array<Series> series;
-  Array<uint32_t> plugin_order;  ///< plugin entity to raw series, in first accepted input order
+  Array<uint32_t> plugin_order;  ///< plugin entity to raw series; empty when accepted input order equals series order
+  uint32_t plugin_series_index(uint32_t index) const { return plugin_order.empty() ? index : plugin_order[index]; }
   Stats stats;
   Array<std::unique_ptr<atm::Atmosphere>> atmospheres;  ///< the distinct row series and node vectors of the load
   uint32_t generation = 0;                                    ///< counts the store's replacements (clear, install): the frames (SPEC 19) drop their cells when it changes
@@ -476,8 +477,8 @@ inline int close(Store& st, Build& b) {
   // of the same epoch replaces)
   // `order` the input positions sorted into series and epochs; `kept` the input positions of the kept sets in series order and `starts` where each
   // series' sets begin in `kept` (and one past the last): the entries and the series are sized from what is kept, not from what was read (SPEC 1.6).
-  Array<uint32_t> order, kept, starts, first_inputs;
-  if (!order.reserve(recs.size()) || !kept.reserve(recs.size()) || !starts.reserve(recs.size() + 1) || !first_inputs.reserve(recs.size())) {
+  Array<uint32_t> order, kept, starts;
+  if (!order.reserve(recs.size()) || !kept.reserve(recs.size()) || !starts.reserve(recs.size() + 1)) {
     b.free_covs();
     return mem::refuse_if_out_of_memory(), 3;
   }
@@ -544,7 +545,8 @@ inline int close(Store& st, Build& b) {
       starts.push_back(static_cast<uint32_t>(g0));
       uint32_t first_input = order[k];
       for (uint32_t q = k + 1; q < e; ++q) first_input = std::min(first_input, order[q]);
-      first_inputs.push_back(first_input);
+      // This group's sorted input positions are consumed; its first input fits in the consumed prefix.
+      order[starts.size() - 1] = first_input;
     }
     k = e;
   }
@@ -552,7 +554,11 @@ inline int close(Store& st, Build& b) {
   // Now what is kept is known: the entries and the series are allocated at exactly that size, so a capped or theory-filtered load holds nothing for
   // the records it dropped and the store's byte count is its capacity.
   Array<uint8_t> live;  // which of the load's atmospheres a kept set reads, marked as the entries are installed
-  bool room = st.plugin_order.reserve(first_inputs.size()) && st.entries.reserve(kept.size()) && st.series.reserve(starts.size() - 1) && live.reserve(st.atmospheres.size());
+  bool input_is_series_order = true;
+  for (size_t i = 1; i + 1 < starts.size(); ++i)
+    if (order[i - 1] > order[i]) input_is_series_order = false;
+  bool room = (input_is_series_order || st.plugin_order.reserve(starts.size() - 1)) &&
+      st.entries.reserve(kept.size()) && st.series.reserve(starts.size() - 1) && live.reserve(st.atmospheres.size());
   for (size_t k = 0; room && k < st.atmospheres.size(); ++k) live.push_back(0);
   if (!room) {
     b.free_covs();
@@ -616,9 +622,11 @@ inline int close(Store& st, Build& b) {
   for (size_t k = 0; k < st.atmospheres.size(); ++k)
     if (live[k]) { if (used != k) st.atmospheres[used] = std::move(st.atmospheres[k]); ++used; }
   while (st.atmospheres.size() > used) st.atmospheres.pop_back();
-  for (uint32_t i = 0; i < st.series.size(); ++i) st.plugin_order.push_back(i);
-  if (!st.plugin_order.empty()) std::sort(st.plugin_order.begin(), st.plugin_order.end(),
-      [&](uint32_t a, uint32_t b) { return first_inputs[a] < first_inputs[b]; });
+  if (!input_is_series_order) {
+    for (uint32_t i = 0; i < st.series.size(); ++i) st.plugin_order.push_back(i);
+    std::sort(st.plugin_order.begin(), st.plugin_order.end(),
+        [&](uint32_t a, uint32_t b) { return order[a] < order[b]; });
+  }
   st.stats.kept = static_cast<double>(st.entries.size());
   unwind.installed = true;
   ++st.generation;

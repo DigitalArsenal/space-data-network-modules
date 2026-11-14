@@ -6666,7 +6666,9 @@ A record entity is one epoch series, identified by the existing identity tuple i
 share one entity and the epoch API's selection/blending rules. Plugin indices follow the first accepted input occurrence
 of each surviving series, across arbitrary part boundaries. Duplicate replacement, aging and set caps do not reorder a
 surviving series. Filtered series have no index. Raw `sdnap_epochs_*` and `sdnap_frames_*` indices retain their sorted
-series order. The additional resident map costs four bytes per entity, included in epoch-store byte accounting. Frame
+series order. A reordered catalog holds a four-byte map entry per entity, included in epoch-store byte accounting.
+A catalog whose accepted input order already equals series order needs no map allocation. The load reuses consumed
+sort positions to track first input occurrences. Frame
 refill priorities use raw series indices, not plugin indices.
 
 **20.2 State and catalog calls.** All dates below are UTC Julian dates. Output pointers reference caller-owned module

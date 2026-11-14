@@ -10,8 +10,8 @@ SDNAP_EXPORT("sdnap_test_plugin_active") void sdnap_test_plugin_active(int n) {
 }
 SDNAP_EXPORT("sdnap_test_plugin_slot_bytes") double sdnap_test_plugin_slot_bytes(uint32_t index) {
   auto& st = sdnap::epochs::resident();
-  if (index >= st.plugin_order.size()) return -1;
-  const auto& s = st.series[st.plugin_order[index]];
+  if (index >= st.series.size()) return -1;
+  const auto& s = st.series[st.plugin_series_index(index)];
   double bytes = 0;
   for (const auto& q : s.slots) bytes += (q.xp ? sdnap::xpt::xp_bytes(*q.xp) : 0) +
     (q.sat ? sizeof(sdnap::Sat) : 0) + (q.nodes ? 32u * sdnap::kCheckpointNodes : 0);
@@ -19,8 +19,8 @@ SDNAP_EXPORT("sdnap_test_plugin_slot_bytes") double sdnap_test_plugin_slot_bytes
 }
 SDNAP_EXPORT("sdnap_test_plugin_init_tables") double sdnap_test_plugin_init_tables(uint32_t index) {
   auto& st = sdnap::epochs::resident();
-  if (index >= st.plugin_order.size()) return -1;
-  auto& s = st.series[st.plugin_order[index]];
+  if (index >= st.series.size()) return -1;
+  auto& s = st.series[st.plugin_series_index(index)];
   auto& slot = sdnap::epochs::slot_of(st, s, 0, false);
   return slot.xp ? sdnap::xpt::xp_bytes(*slot.xp) - sizeof(sdnap::xpt::XpSat) : 0;
 }`;
