@@ -45,7 +45,7 @@ struct Settings {
  double max_removal_fraction=.25,margin=0,nonres_e=.05,res_e=.3,max_rms=2,max_error=10;
  std::vector<Source> seeds;
 } cfg;
-enum class Phase {Idle,Scan,Lookup,AttemptStored,FailureStored,PoisonStored,SuccessStored,Chain,Annotate,ProductStored,Compose,IndexStored};
+enum class Phase {Idle,Scan,Lookup,AttemptStored,FailureStored,PoisonStored,SuccessStored,Chain,Annotate,ProductStored,Compose,GenerationPrepared,IndexStored};
 Phase phase=Phase::Idle;
 std::vector<Source> scans;size_t scan_at=0,pages=0,seen=0,retained=0,done=0,at=0;
 std::string cursor,signature,reason,pending_batch,pending_schema;
@@ -58,6 +58,18 @@ std::set<std::string> products;
 std::vector<uint32_t> work;
 std::set<uint32_t> dropped;
 Bytes pending,chosen,object_weather;
+// Selection construction and generation persistence have separate lifetimes.
+constexpr size_t product_batch_bytes=4*1024*1024,index_batch_bytes=4*1024*1024,generation_bytes=32*1024*1024;
+struct Selection {uint32_t id;Bytes product,record;bool retry;};
+struct ProductBatch {Bytes data;size_t count=0;std::vector<uint32_t> ids;};
+std::vector<Selection> staged;
+std::vector<ProductBatch> product_batches;
+Bytes generation_index;size_t staged_bytes=0,product_batch_at=0,pending_count=0;
+std::string lookup_batch,lookup_cursor,recovery_batch;
+bool chosen_stored=false;
+std::set<std::string> checked_batches;
+int flush_generation();
+int stage_selection(const Bytes& record);
 bool metadata_only=false,retry_fallback=false;Bytes fallback_annotation;
 bool compose_only=false,run_fit=false,complete_scan=true,capacity_limited=false,seed_complete=true,identity_complete=true,index_complete=true,weather_complete=true,removal_guard=false;
 struct Poison {unsigned count=0;std::string source;};
@@ -68,7 +80,7 @@ std::map<std::string,Poison> poisons;
 std::set<std::string> poison_seen;
 Bytes poison_updates;
 struct Retry {unsigned attempts=0;int64_t after=0;std::string reason;};
-struct Attempt {Bytes data;std::string signature;unsigned count=0;int64_t time=0;bool final=false;uint64_t sequence=0;};
+struct Attempt {Bytes data;std::string signature;unsigned count=0;int64_t time=0;bool final=false;uint64_t sequence=0;std::string product_batch;};
 std::map<uint32_t,Attempt> attempts;
 bool transient_refusal(const std::string& code);
 int save_attempt(bool final=false,const std::string& failure="");
@@ -97,7 +109,8 @@ int notice(const std::string& message,bool failed=false) {
  return plugin_push_output_ex("notice","FlowNotice.fbs","FNTC",PLUGIN_PAYLOAD_WIRE_FORMAT_FLATBUFFER,"FlowNotice",0,0,b.GetBufferPointer(),b.GetSize())<0?500:0;
 }
 int stop(const std::string& message) {phase=Phase::Idle;plugin_set_error("catalog-controller",message.c_str());notice(message,true);return 1;}
-int finish() {phase=Phase::Idle;return notice("Catalog reconciliation complete for the bounded selection batch.");}
+int finished() {phase=Phase::Idle;return notice("Catalog reconciliation complete for the bounded selection batch.");}
+int finish(){return staged.empty()?finished():flush_generation();}
 bool configure() {
  const auto c=sdm_piv::get_config();if(!c.ok())return false;
  cfg.provider=std::string(c.string("catalog.provider"));cfg.identity_provider=std::string(c.string("catalog.identity_provider"));cfg.identity_source=std::string(c.string("catalog.identity_source"));
@@ -141,7 +154,9 @@ bool retain(const uint8_t* p,size_t n) {
     Bytes one(b.GetBufferPointer(),b.GetBufferPointer()+b.GetSize());const auto size=old==attempts.end()?0:old->second.data.size();
     if(retained-(size?size+256:0)+one.size()+256>cfg.max_bytes){state_complete=false;continue;}
     retained=retained-(size?size+256:0)+one.size()+256;
-    attempts[id]={std::move(one),detail.substr(first+6,last-first-6),unsigned(std::min<uint64_t>(e->COUNT(),8)),e->TIME_MS(),detail.rfind("final ",0)==0,seq};
+    const auto batch_at=detail.find("product-batch="),batch_end=detail.find(';',batch_at);
+    const auto batch=batch_at==std::string::npos||batch_end==std::string::npos?std::string():detail.substr(batch_at+14,batch_end-batch_at-14);
+    attempts[id]={std::move(one),detail.substr(first+6,last-first-6),unsigned(std::min<uint64_t>(e->COUNT(),8)),e->TIME_MS(),detail.rfind("final ",0)==0,seq,batch};
    }
   }
  } else if(scan.schema=="OMM") {
@@ -223,10 +238,11 @@ int compose() {
  b.Clear();FinishQRPBuffer(b,QRP::Pack(b,&q));if(push("selection","QRP",{b.GetBufferPointer(),b.GetBufferPointer()+b.GetSize()}))return stop("Cannot queue selection reason.");
  if(!chosen.empty()&&push("selected","OCM",chosen))return stop("Cannot queue selected product.");phase=Phase::Compose;return 0;
 }
+size_t frame_count(const Bytes& data){size_t count=0;for(size_t off=0;off<data.size();++count){if(data.size()-off<4)return 0;const size_t n=size_t(flatbuffers::ReadScalar<uint32_t>(data.data()+off))+4;if(n>data.size()-off||n<12)return 0;off+=n;}return count;}
 int ingest(const Bytes& data,bool is_index) {
  pending=data;pending_schema=is_index?"CAT":"OCM";pending_batch="catalog-"+digest(data)+(is_index?":complete":"");
- // Each acknowledged replacement is one complete generation. Its product is
- // durable before this terminal index batch; removals need no product write.
+ // Only the terminal index batch declares this tick complete.
+ pending_count=frame_count(data);if(!pending_count)return stop("Invalid generation stream.");
  R::IngestRequestT request;request.SCHEMA=pending_schema+".fbs";request.RECONCILE=R::reconcileMode_Duplicates;request.TAGS=std::make_unique<R::SourceTagsT>();
  request.TAGS->PROVIDER_ID=cfg.provider;request.TAGS->SOURCE_NAME=is_index?"catalog-index":"catalog-products";request.TAGS->BATCH_ID=pending_batch;request.TAGS->CONTENT_KEY_ID="public";
  flatbuffers::FlatBufferBuilder b;R::FinishIngestRequestBuffer(b,R::IngestRequest::Pack(b,&request));
@@ -247,6 +263,46 @@ int persist_events(Phase after) {
  b.Clear();R::FinishIngestRequestBuffer(b,R::IngestRequest::Pack(b,&request));
  if(plugin_push_output_ex("meta","IngestRequest.fbs","INGQ",PLUGIN_PAYLOAD_WIRE_FORMAT_FLATBUFFER,"IngestRequest",0,0,b.GetBufferPointer(),b.GetSize())<0||push("state_records","NEV",pending))return stop("Cannot persist operational state.");phase=after;return 0;
 }
+int store_generation_part(){
+ if(product_batch_at<product_batches.size())return ingest(product_batches[product_batch_at].data,false);
+ return ingest(generation_index,true);
+}
+void mark_product_batch(uint32_t id,const std::string& batch){
+ auto& a=attempts.at(id);a.product_batch=batch;
+ auto log=std::unique_ptr<NEVT>(GetSizePrefixedNEV(a.data.data())->UnPack());
+ auto& detail=log->EVENTS[0]->DETAIL;const auto pos=detail.find(" product-batch=");if(pos!=std::string::npos)detail.erase(pos);
+ detail+=" product-batch="+batch+";";
+ // Preparation is newer than the dispatch snapshot, even at the same UTC time.
+ const auto seq=detail.find("sequence="),end=detail.find(';',seq);a.sequence=++state_sequence;
+ detail.replace(seq+9,end-seq-9,std::to_string(a.sequence));
+ flatbuffers::FlatBufferBuilder b;FinishSizePrefixedNEVBuffer(b,NEV::Pack(b,log.get()));a.data.assign(b.GetBufferPointer(),b.GetBufferPointer()+b.GetSize());
+}
+int flush_generation(){
+ product_batches.clear();generation_index.clear();product_batch_at=0;
+ for(const auto& item:staged){
+  generation_index.insert(generation_index.end(),item.record.begin(),item.record.end());
+  if(item.product.empty())continue;
+  if(product_batches.empty()||product_batches.back().data.size()+item.product.size()>product_batch_bytes||product_batches.back().count==1000)product_batches.emplace_back();
+  auto& batch=product_batches.back();batch.data.insert(batch.data.end(),item.product.begin(),item.product.end());++batch.count;batch.ids.push_back(item.id);
+ }
+ for(const auto& batch:product_batches){const auto name="catalog-"+digest(batch.data);for(auto id:batch.ids)mark_product_batch(id,name);}
+ // A crash at any product/index boundary preserves the batch lookup references.
+ return persist_events(Phase::GenerationPrepared);
+}
+int stage_selection(const Bytes& record){
+ flatbuffers::Verifier v(record.data(),record.size());
+ if(!VerifySizePrefixedCATBuffer(v)||GetSizePrefixedCAT(record.data())->NORAD_CAT_ID()!=work[at])return fail_object("Invalid composed selection.",true);
+ const auto product=(metadata_only||chosen_stored)?Bytes{}:chosen;
+ if(record.size()>index_batch_bytes||product.size()>product_batch_bytes)return fail_object("Object exceeds generation record bound.",true);
+ size_t index_bytes=record.size();for(const auto& item:staged)index_bytes+=item.record.size();
+ if(index_bytes>index_batch_bytes||staged_bytes+record.size()+product.size()>generation_bytes){++diagnostics.deferred;diagnostics.add("generation byte bound reached","bounds");return finish();}
+ staged.push_back({work[at],product,record,retry_fallback});staged_bytes+=record.size()+product.size();
+ allowance=std::max(allowance,2*std::chrono::duration<double,std::milli>(Clock::now()-object_start).count());storage_failures=0;++at;return next_object();
+}
+int lookup_product(){
+ QRPT q;q.KIND=qrpKind::Request;q.SCHEMA_NAME="OCM.fbs";q.PROVIDER_ID=cfg.provider;q.SOURCE_NAME="catalog-products";q.BATCH_ID=lookup_batch;q.CURSOR=lookup_cursor;q.LIMIT=1000;q.MAX_BYTES=8*1024*1024;
+ flatbuffers::FlatBufferBuilder b;FinishQRPBuffer(b,QRP::Pack(b,&q));phase=Phase::Lookup;return push("query","QRP",{b.GetBufferPointer(),b.GetBufferPointer()+b.GetSize()});
+}
 int complete_reads(){
  if(!state_complete)return stop("Operational state incomplete; retry the bounded source read.");
  bool pruned=false;
@@ -264,7 +320,10 @@ int save_attempt(bool final,const std::string& failure) {
  auto e=std::make_unique<NEVEventT>();e->TIME_MS=now;e->KIND=starting?nevEventKind::Other:nevEventKind::Failure;
  e->SUBJECT="catalog-object/"+std::to_string(id);e->COUNT=count;e->DETAIL=(final?"final ":starting?"in progress ":"retry ")+std::string("input=")+signature+"; sequence="+std::to_string(++state_sequence)+"; "+failure;
  log.EVENTS.push_back(std::move(e));flatbuffers::FlatBufferBuilder b;FinishSizePrefixedNEVBuffer(b,NEV::Pack(b,&log));
- attempts[id]={{b.GetBufferPointer(),b.GetBufferPointer()+b.GetSize()},signature,count,now,final,state_sequence};
+ const auto batch=old==attempts.end()?std::string():old->second.product_batch;
+ if(!batch.empty())log.EVENTS[0]->DETAIL+=" product-batch="+batch+";";
+ b.Clear();FinishSizePrefixedNEVBuffer(b,NEV::Pack(b,&log));
+ attempts[id]={{b.GetBufferPointer(),b.GetBufferPointer()+b.GetSize()},signature,count,now,final,state_sequence,batch};
  return persist_events(starting?Phase::AttemptStored:Phase::FailureStored);
 }
 // Match the numerical fields and ingestion guards read by ingest_omm.
@@ -288,9 +347,9 @@ bool attempt_deferred(){const auto id=work[at];
  return false;
 }
 int next_object() {
- for(;at<work.size()&&done<cfg.batch;++at){
+ for(;at<work.size()&&staged.size()<cfg.batch;++at){
   if(!budget_left()){++diagnostics.deferred;diagnostics.add("object elapsed budget reserve exhausted","bounds");return finish();}object_start=Clock::now();
-  const auto id=work[at];if(id%cfg.partitions!=cfg.partition)continue;compose_only=false;metadata_only=false;retry_fallback=false;chosen.clear();signature.clear();reason.clear();object_weather.clear();const auto s=seeds.find(id);const auto identity=identities.find(id);const auto old=index.find(id);
+  const auto id=work[at];if(id%cfg.partitions!=cfg.partition)continue;compose_only=false;metadata_only=false;retry_fallback=false;chosen_stored=false;recovery_batch=attempts.count(id)?attempts.at(id).product_batch:std::string();chosen.clear();signature.clear();reason.clear();object_weather.clear();const auto s=seeds.find(id);const auto identity=identities.find(id);const auto old=index.find(id);
   if(dropped.count(id)||(!index_complete&&old==index.end())||(capacity_limited&&(old==index.end()||s==seeds.end()||identity==identities.end()))){++diagnostics.deferred;continue;}
   const bool removed=identity==identities.end()||s==seeds.end()||decayed(identity->second);
   const auto* previous=old==index.end()?nullptr:GetSizePrefixedCAT(old->second.data());
@@ -325,7 +384,7 @@ int start_chain() {
  if(metadata_only){const auto id=work[at];auto fresh=std::unique_ptr<CATT>(GetSizePrefixedCAT(identities.at(id).data())->UnPack());auto old=std::unique_ptr<CATT>(GetSizePrefixedCAT(index.at(id).data())->UnPack());
   fresh->PRODUCTS=std::move(old->PRODUCTS);fresh->PRODUCTS_AS_OF=iso(now);
   for(auto& product:fresh->PRODUCTS){auto& r=product->SELECTION_REASON;const auto pos=r.find(" catalog-identity=");if(pos!=std::string::npos)r.erase(pos);r+=" catalog-identity="+digest(identities.at(id))+";";}
-  flatbuffers::FlatBufferBuilder b;FinishSizePrefixedCATBuffer(b,CAT::Pack(b,fresh.get()));return ingest({b.GetBufferPointer(),b.GetBufferPointer()+b.GetSize()},true);
+  flatbuffers::FlatBufferBuilder b;FinishSizePrefixedCATBuffer(b,CAT::Pack(b,fresh.get()));return stage_selection({b.GetBufferPointer(),b.GetBufferPointer()+b.GetSize()});
  }
  if(compose_only)return compose();
  const auto& seed=seeds.at(work[at]);const auto s=seeds.find(work[at]);const auto* omm=GetSizePrefixedOMM(seed.data.data());
@@ -369,7 +428,7 @@ int storage_failure(const std::string& message){if(++storage_failures>=3)return 
 int advance() {
  if(input("tick")){
   if(!configure())return stop("Invalid catalog ModuleConfig.");const auto* f=input("tick");flatbuffers::Verifier v(f->payload,f->payload_length);if(!R::VerifyTimerTickBuffer(v))return stop("Invalid timer tick.");now=R::GetTimerTick(f->payload)->FIRED_MS();if(now<=0)return stop("Timer requires a positive UTC time.");
-  diagnostics=Diagnostics{};state_complete=true;scan_exhausted=false;state_sequence=0;storage_failures=0;clock_reported=false;tick_start=Clock::now();allowance=cfg.allowance_ms;complete_scan=true;capacity_limited=false;seed_complete=identity_complete=index_complete=weather_complete=true;removal_guard=false;poisons.clear();poison_seen.clear();poison_updates.clear();dropped.clear();seeds.clear();identities.clear();index.clear();weather.clear();products.clear();attempts.clear();scans={{"NEV",cfg.provider,state_source()},{"CAT",cfg.provider,"catalog-index"}};scans.insert(scans.end(),cfg.seeds.begin(),cfg.seeds.end());scans.push_back({"CAT",cfg.identity_provider,cfg.identity_source});scans.push_back({"SPW",cfg.weather_provider,cfg.weather_source});scan_at=pages=seen=retained=done=at=0;cursor.clear();return query();
+  staged.clear();product_batches.clear();generation_index.clear();staged_bytes=product_batch_at=pending_count=0;checked_batches.clear();lookup_cursor.clear();fallback_annotation.clear();diagnostics=Diagnostics{};state_complete=true;scan_exhausted=false;state_sequence=0;storage_failures=0;clock_reported=false;tick_start=Clock::now();allowance=cfg.allowance_ms;complete_scan=true;capacity_limited=false;seed_complete=identity_complete=index_complete=weather_complete=true;removal_guard=false;poisons.clear();poison_seen.clear();poison_updates.clear();dropped.clear();seeds.clear();identities.clear();index.clear();weather.clear();products.clear();attempts.clear();scans={{"NEV",cfg.provider,state_source()},{"CAT",cfg.provider,"catalog-index"}};scans.insert(scans.end(),cfg.seeds.begin(),cfg.seeds.end());scans.push_back({"CAT",cfg.identity_provider,cfg.identity_source});scans.push_back({"SPW",cfg.weather_provider,cfg.weather_source});scan_at=pages=seen=retained=done=at=0;cursor.clear();return query();
  }
  if(const auto* f=input("query_status")){flatbuffers::Verifier v(f->payload,f->payload_length);if(!VerifyQRPBuffer(v)||GetQRP(f->payload)->KIND()==qrpKind::Error){if(phase==Phase::Lookup)return storage_failure("Product lookup host failure.");return stop("Complete read failed; no partial sweep is committed.");}}
  if(const auto* f=input("page")){
@@ -377,9 +436,11 @@ int advance() {
   if(f->payload_length<12)return fail_object("Truncated product lookup.");const auto n=size_t(flatbuffers::ReadScalar<uint32_t>(f->payload))+4;
   if(n>f->payload_length)return fail_object("Truncated product lookup header.");flatbuffers::Verifier v(f->payload,n);
   if(!VerifySizePrefixedQRPBuffer(v))return fail_object("Invalid product lookup.");const auto* q=GetSizePrefixedQRP(f->payload);
-  if(q->STATUS()!=qrpStatus::Ok||q->KIND()!=qrpKind::Page||text(q->BATCH_ID())!="catalog-"+digest(chosen)||text(q->PROVIDER_ID())!=cfg.provider||text(q->SOURCE_NAME())!="catalog-products"||text(q->SCHEMA_NAME())!="OCM.fbs"||!text(q->NEXT_CURSOR()).empty())return fail_object("Product lookup did not acknowledge its batch.");
-  if(q->RECORD_COUNT()==1&&f->payload_length-n==chosen.size()&&std::memcmp(f->payload+n,chosen.data(),chosen.size())==0){products.insert(cid(chosen));return compose();}
-  if(q->RECORD_COUNT()==0&&n==f->payload_length)return ingest(chosen,false);return fail_object("Product lookup content mismatch.");
+  if(q->STATUS()!=qrpStatus::Ok||q->KIND()!=qrpKind::Page||text(q->BATCH_ID())!=lookup_batch||text(q->PROVIDER_ID())!=cfg.provider||text(q->SOURCE_NAME())!="catalog-products"||text(q->SCHEMA_NAME())!="OCM.fbs")return fail_object("Product lookup did not acknowledge its batch.");
+  size_t off=n,count=0;while(off<f->payload_length){if(f->payload_length-off<4)return fail_object("Truncated product lookup record.");const auto len=size_t(flatbuffers::ReadScalar<uint32_t>(f->payload+off))+4;if(len>f->payload_length-off)return fail_object("Truncated product lookup record.");flatbuffers::Verifier ov(f->payload+off,len);if(!VerifySizePrefixedOCMBuffer(ov))return fail_object("Invalid product lookup record.");products.insert(cid(Bytes(f->payload+off,f->payload+off+len)));off+=len;++count;}
+  if(count!=q->RECORD_COUNT())return fail_object("Product lookup count mismatch.");
+  const auto next=text(q->NEXT_CURSOR());if(!next.empty()){if(!count||next==lookup_cursor)return fail_object("Product lookup did not advance.");lookup_cursor=next;return lookup_product();}
+  checked_batches.insert(lookup_batch);chosen_stored=products.count(cid(chosen));return compose();
  }
  if(input("query_status"))return 0;
  if(input("chain_status"))return chain();
@@ -387,28 +448,29 @@ int advance() {
   if(phase!=Phase::Annotate)return stop("Unexpected annotation outcome.");flatbuffers::Verifier v(f->payload,f->payload_length);if(!VerifyQRPBuffer(v))return fail_object("Invalid annotation outcome.",true);const auto* q=GetQRP(f->payload);return fail_object("annotation: "+text(q->ERROR_CODE())+" "+text(q->MESSAGE()),!transient_refusal(text(q->ERROR_CODE())));
  }
  if(const auto* f=input("annotated")){
-  if(phase!=Phase::Annotate)return stop("Unexpected annotation.");flatbuffers::Verifier v(f->payload,f->payload_length);if(!VerifySizePrefixedOCMBuffer(v))return fail_object("Invalid annotation.",true);chosen=bytes(f);const auto* o=GetSizePrefixedOCM(chosen.data());if(o->COV_REALISM())for(const auto* l:*o->COV_REALISM())if(text(l->EVIDENCE()).rfind("no population covariance",0)==0)reason+="; "+text(l->EVIDENCE());if(products.count(cid(chosen)))return compose();
-  QRPT q;q.KIND=qrpKind::Request;q.SCHEMA_NAME="OCM.fbs";q.PROVIDER_ID=cfg.provider;q.SOURCE_NAME="catalog-products";q.BATCH_ID="catalog-"+digest(chosen);q.LIMIT=1;q.MAX_BYTES=8*1024*1024;
-  flatbuffers::FlatBufferBuilder b;FinishQRPBuffer(b,QRP::Pack(b,&q));phase=Phase::Lookup;return push("query","QRP",{b.GetBufferPointer(),b.GetBufferPointer()+b.GetSize()});
+  if(phase!=Phase::Annotate)return stop("Unexpected annotation.");flatbuffers::Verifier v(f->payload,f->payload_length);if(!VerifySizePrefixedOCMBuffer(v))return fail_object("Invalid annotation.",true);chosen=bytes(f);const auto* o=GetSizePrefixedOCM(chosen.data());if(o->COV_REALISM())for(const auto* l:*o->COV_REALISM())if(text(l->EVIDENCE()).rfind("no population covariance",0)==0)reason+="; "+text(l->EVIDENCE());chosen_stored=products.count(cid(chosen));if(chosen_stored)return compose();
+  lookup_batch=recovery_batch.empty()?"catalog-"+digest(chosen):recovery_batch;lookup_cursor.clear();
+  if(checked_batches.count(lookup_batch))return compose();return lookup_product();
  }
  if(const auto* f=input("compose_status")){
   if(phase!=Phase::Compose)return stop("Unexpected composition outcome.");flatbuffers::Verifier v(f->payload,f->payload_length);
   if(!VerifyQRPBuffer(v))return fail_object("Invalid composition outcome.",true);const auto* q=GetQRP(f->payload);
   if(q->STATUS()!=qrpStatus::Ok)return fail_object("compose: "+text(q->ERROR_CODE())+" "+text(q->MESSAGE()),!transient_refusal(text(q->ERROR_CODE())));
  }
- if(const auto* f=input("replacement")){if(phase!=Phase::Compose)return stop("Unexpected index replacement.");return ingest(bytes(f),true);}
+ if(const auto* f=input("replacement")){if(phase!=Phase::Compose)return stop("Unexpected index replacement.");return stage_selection(bytes(f));}
  if(const auto* f=input("stored")){
   flatbuffers::Verifier v(f->payload,f->payload_length);if(!R::VerifyIngestResultBuffer(v))return stop("Invalid storage acknowledgment.");const auto* r=R::GetIngestResult(f->payload);
-  if(phase==Phase::AttemptStored||phase==Phase::FailureStored||phase==Phase::PoisonStored||phase==Phase::SuccessStored){
+  if(phase==Phase::AttemptStored||phase==Phase::FailureStored||phase==Phase::PoisonStored||phase==Phase::SuccessStored||phase==Phase::GenerationPrepared){
    if(!text(r->REFUSED()).empty()||text(r->SCHEMA())!="NEV.fbs"||text(r->PROVIDER_ID())!=cfg.provider||text(r->SOURCE_NAME())!=state_source()||text(r->BATCH_ID())!=pending_batch||(phase!=Phase::PoisonStored&&r->INSERTED()>1))return stop("Attempt storage refused; object processing stopped.");
    if(phase==Phase::PoisonStored)return build_work();
-   if(phase==Phase::SuccessStored){++at;return next_object();}
+   if(phase==Phase::SuccessStored)return finished();
+   if(phase==Phase::GenerationPrepared)return store_generation_part();
    if(phase==Phase::AttemptStored)return start_chain();
    if(retry_fallback&&!fallback_annotation.empty()){auto framed=std::move(fallback_annotation);fallback_annotation.clear();if(push("annotate_orbit","OCM",framed)||push("annotate_seed","OMM",seeds.at(work[at]).data))return stop("Cannot queue retry fallback annotation.");phase=Phase::Annotate;return 0;}++at;return next_object();
   }
-  if((phase!=Phase::ProductStored&&phase!=Phase::IndexStored)||!text(r->REFUSED()).empty()||text(r->SCHEMA())!=pending_schema+".fbs"||text(r->PROVIDER_ID())!=cfg.provider||text(r->BATCH_ID())!=pending_batch||text(r->SOURCE_NAME())!=(phase==Phase::ProductStored?"catalog-products":"catalog-index")||r->INSERTED()>1)return storage_failure("Storage refused or did not acknowledge the complete deterministic batch.");
-  if(phase==Phase::ProductStored){products.insert(cid(chosen));return compose();}
-  allowance=std::max(allowance,2*std::chrono::duration<double,std::milli>(Clock::now()-object_start).count());index[work[at]]=pending;storage_failures=0;++done;if(retry_fallback){++at;return next_object();}attempts.erase(work[at]);return persist_events(Phase::SuccessStored);
+  if((phase!=Phase::ProductStored&&phase!=Phase::IndexStored)||!text(r->REFUSED()).empty()||text(r->SCHEMA())!=pending_schema+".fbs"||text(r->PROVIDER_ID())!=cfg.provider||text(r->BATCH_ID())!=pending_batch||text(r->SOURCE_NAME())!=(phase==Phase::ProductStored?"catalog-products":"catalog-index")||r->INSERTED()>pending_count)return stop("Storage refused or did not acknowledge the complete generation batch; prior selection preserved.");
+  if(phase==Phase::ProductStored){++product_batch_at;return store_generation_part();}
+  done=staged.size();for(const auto& item:staged)if(!item.retry)attempts.erase(item.id);return persist_events(Phase::SuccessStored);
  }
  return stop("Incomplete controller response.");
 }
