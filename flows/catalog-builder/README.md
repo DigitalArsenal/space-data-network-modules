@@ -37,7 +37,9 @@ and no population blocks.
 
 The committed CAT selection is the recovery checkpoint. An interrupted object
 is recomputed from its unchanged inputs; an exact product found in storage is
-reused. Product and index batch identifiers are content hashes. Whole-list
+reused. Product batch identifiers contain content hashes; index identifiers add
+`:complete` to declare each single-object replacement a completed generation.
+Whole-list
 replacement prevents a previous theory from surviving as a second selection.
 Tombstones remain available to consumers. The page cursor bounds a sequence
 head under append ingestion; it does not protect against concurrent deletion.
@@ -125,6 +127,9 @@ A native 256-object synthetic test completed within the ten-minute invocation
 budget, producing 256 stored products and 256 selections. Guest linear memory
 at its endpoint was 99 pages (6,488,064 bytes), excluding host and storage
 memory. The rate projection does not raise the controller's batch limit.
+These measurements exclude durable publication retention; the retained-entry
+and history limits in [publication requirements](PUBLICATION.md) also constrain
+initial builds and sustained updates.
 
 ## Partitioned services
 

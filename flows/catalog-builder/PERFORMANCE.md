@@ -1,6 +1,6 @@
 # Catalog throughput measurements
 
-The compact product averages about 9.86 KB in the fitted synthetic sample. Parallel execution increases peak CPU and process memory. A deadline failure poisons the interrupted guest and requires replacement. Publication and export costs are outside these measurements.
+The compact product averages about 9.86 KB in the fitted synthetic sample. Parallel execution increases peak CPU and process memory. A deadline failure poisons the interrupted guest and requires replacement. Publication retention and export costs are outside these measurements. The measured host did not journal pending publication bytes; the integrated durable-retention host has additional synchronous write costs.
 
 A complete 2,000-object first-build measurement is unavailable. The larger-catalog numbers below are arithmetic from 32-object samples. Eight distinct installed services passed a functional eight-object probe, which does not establish eight-service throughput.
 
@@ -33,7 +33,7 @@ At 128 changes per ten-minute tick, each service admits 18,432 changes per day. 
 
 A single service with batch 256 admits 36,864 changes per day. Two services with batch 512 each admit 147,456 with two concurrent fitting threads. These settings cover 33,000 and 100,000 respectively in scheduling arithmetic; concurrent 512-object batches and full-size scan memory are not directly measured. At two services with batch 512, an initial 33,000-object build requires 33 ten-minute slots, about 5.5 hours of slots. At eight services with batch 512 it requires nine slots, about 90 minutes, also arithmetic.
 
-Each partition scans the complete source store. The default 200,000-record bound is too small for 100,000 current objects with a seed, identity, selection and product each. Weather and retained history add further rows. Appropriate scan/memory limits and bounded retention are prerequisites for the projected daily rates.
+Each partition scans the complete source store. The default 200,000-record bound is too small for 100,000 current objects with a seed, identity, selection and product each. Weather and retained history add further rows. Appropriate scan/memory limits and bounded retention are prerequisites for the projected daily rates. The integrated publication host also limits a store to 100,000 journal entries and 200,000 indexed retained records. Separate product/index transactions exceed that entry limit for an initial 100,000-object build. A 33,000-object build consumes about 66,000 entries before further history. Service partitions share those limits; larger or sustained publication requires separate stores and a supported drain/retirement procedure. The projections establish neither full-catalog publication capacity nor the throughput of durable retention.
 
 ## Refit avoidance screen
 
