@@ -83,7 +83,7 @@ std::map<std::string,Poison> poisons;
 std::set<std::string> poison_seen;
 Bytes poison_updates;
 struct Retry {unsigned attempts=0;int64_t after=0;std::string reason;};
-struct Attempt {Bytes data;std::string signature;unsigned count=0;int64_t time=0;bool final=false;uint64_t sequence=0;std::string product_batch;size_t read_bytes=0;};
+struct Attempt {Bytes data;std::string signature;unsigned count=0;int64_t time=0;bool final=false;uint64_t sequence=0;std::string product_batch;size_t read_bytes=0;bool recovery_pin=true;};
 std::map<uint32_t,Attempt> attempts;
 std::set<uint32_t> dirty_attempts;
 std::string attempt_detail(const Attempt& a){return text(GetSizePrefixedNEV(a.data.data())->EVENTS()->Get(0)->DETAIL());}
@@ -107,7 +107,7 @@ struct Diagnostics {
 // Recovery references are pinned; all other entries share one event-sequence FIFO.
 bool protected_attempt(uint32_t id,uint64_t latest){
  const auto& a=attempts.at(id);
- return id==interruption_suspect||!a.product_batch.empty()||
+ return id==interruption_suspect||(a.recovery_pin&&!a.product_batch.empty())||
   (a.sequence==latest&&attempt_detail(a).rfind("in progress ",0)==0)||
   std::any_of(staged.begin(),staged.end(),[&](const Selection& item){return item.id==id;});
 }
@@ -117,7 +117,12 @@ void trim_state(){
   auto victim=attempts.end();auto poison=poisons.end();uint64_t oldest=UINT64_MAX;
   for(auto i=attempts.begin();i!=attempts.end();++i)if(i->second.sequence<oldest&&!protected_attempt(i->first,latest)){oldest=i->second.sequence;victim=i;}
   for(auto i=poisons.begin();i!=poisons.end();++i)if(i->second.sequence<oldest){oldest=i->second.sequence;poison=i;}
-  assert(victim!=attempts.end()||poison!=poisons.end());
+  if(victim==attempts.end()&&poison==poisons.end()){
+   // Old preparation references are hints; products are re-sent on recovery.
+   for(auto i=attempts.begin();i!=attempts.end();++i)if(i->second.sequence<oldest&&!std::any_of(staged.begin(),staged.end(),[&](const Selection& item){return item.id==i->first;})){oldest=i->second.sequence;victim=i;}
+   if(victim==attempts.end())victim=std::min_element(attempts.begin(),attempts.end(),[](const auto& a,const auto& b){return a.second.sequence<b.second.sequence;});
+   diagnostics.add("warning: oldest protected recovery entry evicted at attempt bound","bounds");
+  }
   if(poison!=poisons.end())poisons.erase(poison);else {retained-=victim->second.read_bytes;attempts.erase(victim);}
   ++diagnostics.evicted;state_evicted=true;
  }
@@ -143,7 +148,7 @@ int notice(const std::string& message,bool failed=false) {
 int stop(const std::string& message) {phase=Phase::Idle;plugin_set_error("catalog-controller",message.c_str());notice(message,true);return 1;}
 int finished() {phase=Phase::Idle;return notice("Catalog reconciliation complete for the bounded selection batch.");}
 int persist_events(Phase after);
-int finish(){return staged.empty()?persist_events(Phase::SuccessStored):flush_generation();}
+int finish(){if(scan_at<scans.size())return finished();return staged.empty()?persist_events(Phase::SuccessStored):flush_generation();}
 bool configure() {
  const auto c=sdm_piv::get_config();if(!c.ok())return false;
  cfg.provider=std::string(c.string("catalog.provider"));cfg.identity_provider=std::string(c.string("catalog.identity_provider"));cfg.identity_source=std::string(c.string("catalog.identity_source"));
@@ -363,6 +368,7 @@ int complete_reads(){
  // The latest unprepared in-progress marker is the suspect, even if its work finished.
  uint64_t latest=0,suspect_sequence=0;for(const auto& item:attempts){latest=std::max(latest,item.second.sequence);if(item.second.sequence>=suspect_sequence&&attempt_detail(item.second).find("instance-interrupted;")!=std::string::npos){suspect_sequence=item.second.sequence;interruption_suspect=item.first;}}
  for(auto& item:attempts){auto& a=item.second;const auto detail=attempt_detail(a);
+  a.recovery_pin=false; // A complete read makes prior preparation eligible for redispatch.
   if(detail.rfind("in progress ",0)==0){const bool suspect=a.sequence==latest&&detail.find("prepared-generation;")==std::string::npos;if(suspect)interruption_suspect=item.first;ready_or_suspect(a,suspect);dirty_attempts.insert(item.first);pruned=true;}
  }
  for(auto i=attempts.begin();i!=attempts.end();){const auto c=index.find(i->first);bool committed=false;
