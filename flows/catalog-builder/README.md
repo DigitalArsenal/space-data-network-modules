@@ -47,9 +47,9 @@ fitting or storage, with one clock diagnostic per tick.
 
 Before numerical dispatch or removal composition, the controller stores and awaits acknowledgment of its `$NEV` operational state. `catalog-attempts` is used for one partition; partitioned services use `catalog-attempts-<index>-of-<count>`. One serial service owns each source. Changing the partition count requires an explicit state migration or acceptance of reset backoff.
 
-State contains only in-progress or failed objects plus bounded quarantine observations. Each dispatch/failure replaces the source's current batch with one snapshot; a committed selection removes its marker, without a success event. An empty snapshot contains no events. `RECONCILE=Current` must durably ingest the whole replacement before deleting older source batches. A crash between ingestion and reconciliation can leave multiple snapshots; explicit per-event sequence numbers resolve equal-time attempts independently of page order. Matching committed selections discard stale markers. Source state must remain private to this service and outside catalog publication.
+State contains in-progress, ready or failed objects plus bounded quarantine observations. Each dispatch/failure appends one acknowledged marker with `RECONCILE=None`. Recovery reads and generation boundaries compact these markers into a snapshot with `RECONCILE=Current`; a committed selection removes its marker without a success event. An empty snapshot contains no events. `RECONCILE=Current` must durably ingest the whole replacement before deleting older source batches. A crash between ingestion and reconciliation can leave multiple snapshots; explicit per-event sequence numbers resolve equal-time attempts independently of page order. Matching committed selections discard stale markers. Source state must remain private to this service and outside catalog publication.
 
-The combined bound is 4,096 object/poison entries and an 8 MiB serialized snapshot. The operational-source read checks an 8,192-record threshold at page boundaries and fetches at most 8,192 plus twice the configured page size (10,192 at the maximum); incomplete or oversized state stops dispatch without replacing it. Each state write serializes the live entries, so persistent failures increase write cost even when unrelated objects succeed. A healthy catalog leaves one empty snapshot, independent of the number of successful updates. Preserve failed markers across restarts: deleting them resets backoff. An unfinished attempt is deferred for 20 minutes, doubling to a 24-hour ceiling; final failures await changed inputs. Failed state storage stops dispatch. A transient fit refusal stores the first SGP4 fallback, retains retry state, and upgrades after recovery. Repeated transient refusals with the same fallback update only operational state; product/index bytes remain unchanged. The changed signature format causes older selections to be recomputed once.
+The combined bound is 4,096 object/poison entries and an 8 MiB serialized snapshot. The operational-source read checks an 8,193-record threshold at page boundaries and fetches at most 8,193 plus twice the configured page size (10,193 at the maximum); incomplete or oversized state stops dispatch without replacing it. Each dispatch/failure write serializes one object, independent of staged selections and earlier failures. Boundary snapshots serialize the bounded live entries. A healthy catalog leaves one empty snapshot, independent of the number of successful updates. Preserve failed markers across restarts: deleting them resets backoff. Only the last unprepared dispatch from an interrupted run enters the 20-minute backoff, doubling to a 24-hour ceiling; earlier staged selections and prepared generations are ready on the following run. A run flushes staged selections before dispatching a suspect again; final failures await changed inputs. Failed state storage stops dispatch. A transient fit refusal stores the first SGP4 fallback, retains retry state, and upgrades after recovery. Repeated transient refusals with the same fallback update only operational state; product/index bytes remain unchanged. The changed signature format causes older selections to be recomputed once.
 
 Malformed records are counted and skipped. Bounded `$NEV` warnings record up
 to three observations per source/digest across instance replacement. The first
@@ -74,34 +74,37 @@ object therefore does not slow an otherwise healthy timer.
 
 Product lookup refusals are isolated per object. Three consecutive lookup
 failures stop dispatch for the tick; a staged selection resets that count.
-A refused product or index generation batch stops the invocation and preserves
-the previous committed selection. Durable attempts retain prepared batch references
-for recovery after backoff. Annotation/composer refusals return typed outcomes. Transport
+A refused product or index generation batch stops the invocation. The last complete
+published generation remains the consumer selection; a refused terminal write can
+already be present in the live index. Durable attempts retain prepared batch references
+for recovery. Annotation/composer refusals return typed outcomes. Transport
 corruption and failed source-page queries stop the scan.
 
 A matching committed selection avoids any OCM read. After recomputation,
 recovery checks only the prepared product batches named in durable attempt state,
-reusing identical stored records after interruption, including when the retry's
-object grouping changes. Legacy single-product batch identifiers remain readable.
+then re-sends every selected product into the publication journal, including identical
+bytes and products whose grouping changes. Only metadata-only selections omit products. Legacy single-product batch identifiers remain readable.
 The controller stages successful selections; a failed object retains its attempt
 state and does not prevent the others from committing. Product batches are bounded
 to 4 MiB and 1,000 records; the single terminal index batch is bounded to 4 MiB,
 and staged output to 32 MiB. These output buffers are additional to resident-input
 accounting. A 256-object tick with products fitting in 4 MiB uses one product batch
 and one index batch, rather than 512 publication batches. Operational snapshots
-remain separate writes: one before each dispatch, one before generation storage,
-and one after the index acknowledgment, plus failures or quarantine updates.
+remain separate writes: one marker before each dispatch or on failure, a compacting
+snapshot after recovery reads with multiple records, one before generation storage,
+and one after the index acknowledgment, plus quarantine updates.
 
 Products precede the index write; only the terminal batch identifier ends in
-`:complete`. A kill between them leaves the prior selection visible. The retry
-obeys durable attempt backoff, reuses stored products, and commits the complete
-replacement. A refused product or index batch aborts generation storage; successful
-objects retain their attempts for recovery. A byte-bound stop flushes staged
+`:complete`. A kill between them leaves the prior complete selection visible. The retry
+re-sends product bytes before the complete replacement, because live-store presence
+does not imply that the publication journal retains those products. Recovered prepared
+generations are ready without suspect backoff. A refused product or index batch stops
+generation storage; successful objects retain their attempts for recovery. A byte-bound stop flushes staged
 objects and defers the object that did not fit. No tick publishes an intermediate
 index generation.
 The host must preserve referenced products and expose its live index through
-complete pages. The controller does not scan retained OCM history or depend
-on publication-journal internals. Seed/identity/index paging remains proportional
+complete pages. Recovery requires the host to journal duplicate product submissions
+as fresh entries. The controller does not scan retained OCM history. Seed/identity/index paging remains proportional
 to those live sources; selection compaction occurs in memory.
 
 ## Consumer rules and covariance
@@ -187,6 +190,10 @@ Configure `execution_timeout: 10m` with the 540-second controller budget and
 `release_after_run: true` so an interrupted instance is discarded. A host must
 replace a poisoned invocation before reuse; keeping an interrupted instance
 is unsupported. Durable attempt events preserve failure backoff across that replacement.
+The controller budget covers scanning and dispatch; the final state/product/index/state
+flush runs outside it. The 600-second host timeout leaves about 60 seconds for
+that flush, with more writes when product streams split. Slow writes can exhaust
+this margin and require generation recovery.
 
 ## Operator configuration: 33,000 objects on four services
 
@@ -194,7 +201,9 @@ Build the unsigned bundle with `CATALOG_FLOW_PARTITIONS=4`, install the four
 `dist/flow/partitions/0` through `dist/flow/partitions/3` bundles under their
 program IDs below, and prime their native compiled artifacts through the host's
 flow installation/prewarm path. The host needs indexed storage pages, threaded
-flow execution, typed timer input and paired catalog publication. This example
+flow execution, typed timer input and paired catalog publication. Use node main
+with the paired publication change, including `storage.index_page` and the
+per-service `execution_timeout` support. This example
 is a host configuration fragment; JSON is also valid YAML. Merge it into the
 node configuration, preserving other required services and publication rules.
 
@@ -413,8 +422,10 @@ first ingestion; keep effective series-retention overrides at zero.
 
 This starts four independent modulo partitions, with 256 successful objects per
 tick and a ten-minute timer, a 540-second controller budget and ten-minute host
-timeout. The one-minute retrieval debounce admits each scheduled tick; failures
-still back off. Each instance has 4,096 memory pages (256 MiB), so four service
+timeout. A run that uses its 540-second budget plus its final flush can leave
+less than the one-minute retrieval debounce before the following scheduled tick.
+That tick can be delayed or skipped; failures also back off. The example retains
+the 540-second budget and makes no guarantee that every timer slot is admitted. Each instance has 4,096 memory pages (256 MiB), so four service
 limits sum to 1 GiB of guest linear memory, excluding host, runtime and publication
 memory. Distinct program IDs and empty exclusive groups permit four services;
 the memory and CPU cost remains operator provisioned.
@@ -429,7 +440,15 @@ All four services contribute eight such batches per round. Larger products can
 require additional 4 MiB product batches, still followed by one index batch.
 
 The first consumer follows whole paired snapshots at the configured 24-hour
-interval. Both signed snapshot announcements are needed: products and index at
+interval. The first snapshot is cut after an early completed generation, not after
+the entire initial build: one 256-object run from each service covers at most
+1,024 objects. The following scheduled snapshot is 24 hours after that publication.
+After all four services finish the initial build, publish a full paired snapshot
+as a launch step from the node host: POST to
+`/api/v1/admin/dataset-updates/publish` with
+`{"schema":"CAT.fbs","providerId":"catalog-producer","sourceName":"catalog-index","fullCatalog":true}`.
+This uses the paired capture path; replace the provider ID consistently.
+Both signed snapshot announcements are needed: products and index at
 the same cutoff. The five-minute batch rules retain and drain changed batches
 through the host's publication path; they do not change that consumer policy.
 Inspect publication backlog and errors before increasing batch size or cadence.

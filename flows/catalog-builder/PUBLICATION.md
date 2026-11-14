@@ -1,6 +1,7 @@
 # Catalog publication requirements
 
-Durable publication adds retained SDS copies and synchronous writes. Attempt
+Recovery re-sends the selected product bytes, even when identical bytes remain in
+live storage. Durable publication adds retained SDS copies and synchronous writes. Attempt
 state adds separate operational writes before numerical work. Snapshot export
 and reclamation consume storage and memory. Sustained capacity is unmeasured.
 
@@ -17,10 +18,16 @@ guarantees reference closure for the tick's successful objects, not completion
 of the entire input catalog.
 
 Prepared product batch identities are written to durable attempt state before
-product ingestion. Recovery queries those batches, reuses matching records even
-when the retry groups objects differently, and preserves attempt backoff. A
-product or terminal-index refusal aborts the generation without clearing those
-attempts. The previous complete selection remains visible.
+product ingestion. Recovery queries those batches and re-sends every selected
+product before the terminal index, including byte-identical records and changed
+groupings. The host journals duplicates as fresh entries: a live record alone
+does not close a publication generation after journal reclamation. Metadata-only
+selections omit product writes. Prepared generations and earlier staged objects
+are ready on the following run; only the interrupted dispatch enters suspect
+backoff. Staged selections are committed before retrying that suspect. A product
+or terminal-index refusal stops generation storage. The previous complete
+published selection remains visible; refused terminal rows can exist in the live
+index and require host-side quarantine cleanup.
 The host must retain exact pending batch bytes durably before CAT replacement,
 recover them after restart, defer publication across rate limits, and acknowledge
 completion only after successful publication. A product-only interruption leaves
@@ -90,7 +97,7 @@ of operational events before fitting. Older export-fixture byte counts and
 throughput readings do not describe this controller.
 
 Operational `catalog-attempts` state (or the partition-specific source) are not selected products and are not part
-of paired catalog snapshots or announcements. Live failed/in-progress entries must survive restart; current-source batch reconciliation removes completed markers. A host retention policy that deletes it removes failure
+of paired catalog snapshots or announcements. Live failed/in-progress entries must survive restart. Single-object dispatch/failure markers are appended; boundary snapshots use current-source batch reconciliation to compact them and remove completed markers. A host retention policy that deletes it removes failure
 backoff. Reclamation must preserve pending publication bytes and active product
 references; live expiry alone does not prove safe journal reclamation.
 
@@ -105,3 +112,9 @@ A consumer needs the publisher's authenticated signing public key and explicit p
 Verify the PNM with the pinned provider key, resolve its content-addressed DPM, verify the DPM signature with that same key, and verify each asset's CID/hash and declared size before import. Resolve product references before exposing the index generation. The client helper `verifySignedPnm` accepts an optional public key: omitting it validates envelope fields without checking the signature. A trusted catalog consumer must supply the key and perform manifest/asset verification as well.
 
 The inspected host's anonymous-read allow-list includes `CAT.fbs` and excludes `OCM.fbs`. CAT metadata is anonymously readable through the standard public record/sync surface; OCM needs private-read authorization there. The list is schema-wide, so adding OCM affects the standard's records across sources. Publication pins and schema authorization are separate: an exposed public content gateway can serve pinned bytes to a reader with their CID. No allow-list, authorization or deployment setting is changed by this flow.
+
+The operator example requires node main with the paired publication change. The
+first scheduled snapshot follows an early completed generation and can contain
+only a small part of the input catalog. The operator publishes a full paired
+snapshot through the local admin publication route after the initial build;
+24-hour automatic snapshots do not track completion of that build.
