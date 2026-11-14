@@ -5,7 +5,7 @@
 // the coefficient approximation budget, not independent numerical orbit truth.
 // The direct R resonant blocks operate below the class-0 wide-grid switch at
 // e=0.05. --wide also probes the separate wide-grid output, which has inherited
-// exact-root refusals on U and R. That diagnostic does not certify finite output.
+// exact-root refusals in released 0.6.59, U and R. This diagnostic does not certify finite output.
 import assert from 'node:assert/strict';
 import {createStandaloneHarness} from 'space-data-module-sdk/testing/isomorphic';
 import {buildDiagnostic} from './lib/ap-diagnostic.mjs';

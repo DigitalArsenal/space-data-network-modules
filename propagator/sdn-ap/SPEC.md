@@ -2185,8 +2185,6 @@ Fifteen measured neighborhoods straddle the thresholds and the zero-drag branch.
 
 The direct R resonant blocks are tested at 105 shifted commensurabilities under gravity caps 31 and 70, including 14:1 and 15:1. All 10,878 tested states are finite; the largest distance from state-exact coefficients is 0.003882637 m and the largest adjacent approximation residual is 0.002951175 m. All 42 sampled decaying order cases cross their commensurability. These blocks operate below the class-0 wide-grid eccentricity switch at 0.05.
 
-The separate wide-grid output refuses four synthetic exact-root cases at eccentricities 0.123–0.173 under both U and R. Removing the selected m-daily and short-period coefficient families does not remove the refusal; omitting the wide-grid correction does. The unchanged wide-grid behavior is not covered by the finite-output result above. `test/coefficient-resonance.e2e.mjs --wide` retains the failing diagnostic.
-
 **States and boundaries.** Committed synthetic OCM fixtures, TEME meters, common 300 s samples over 0–120 h. A boundary jump is the difference between cubic fits at every measured bake boundary and bracket node, using 0.1 s samples over 8 s on each side and excluding the central half second. Unsupported states are excluded. Direct state-element evaluation is the reference for coefficient approximation, not an independent physical truth.
 
 | Synthetic class | Form | Largest exact distance m | Largest jump m | Largest movement from U m | Unchanged/common states |
@@ -6437,7 +6435,7 @@ The candidate forced-U build was compared with the committed 0.6.59 binary in pa
 
 Transfer and deep-resonance quartile ranges are close to the acceptance limit; these measurements do not establish a small speed gain or loss.
 
-Forced U isolates the U path for geosynchronous and deep-resonant inputs, which otherwise select a compressed form. These timings do not certify the four separately documented wide-grid exact-root refusals.
+Forced U isolates the U path for geosynchronous and deep-resonant inputs, which otherwise select a compressed form.
 
 The forced-U non-AP cell measured a 2.64% median slowdown, with both quartiles above 1.0. This is a measured cost in that comparison. The production/default non-AP follow-ups are retained separately:
 
