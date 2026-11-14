@@ -263,6 +263,15 @@ for (const fail of [1, 2, 3, 4]) {
   x.sdnap_test_fail_at(fail); assert.equal(x.plugin_init_omm(omm, 3), -4); x.sdnap_test_fail_at(0);
   assert.equal(x.plugin_entity_count(), 3); assert.deepEqual(state(0).bytes, activeRows);
 }
+const ommInput = {portId: 'omm', typeRef: T('OMM'), payload: builder.asUint8Array()};
+x.sdnap_test_fail_at(0); ok(await call('ingest_omm', [ommInput]));
+const ingestAllocations = x.sdnap_test_alloc_count();
+for (let fail = 1; fail <= ingestAllocations; ++fail) {
+  new Uint8Array(mem(), omm, data.length).set(data); assert.equal(x.plugin_init_omm(omm, 3), 3);
+  const saved = state(0).bytes;
+  x.sdnap_test_fail_at(fail); const r = await call('ingest_omm', [ommInput]); x.sdnap_test_fail_at(0);
+  refusal(r, 'out-of-memory'); assert.equal(x.plugin_entity_count(), 3); assert.deepEqual(state(0).bytes, saved);
+}
 // A row pool failure must block release even when the epoch store has no dead flag.
 x.sdnap_test_plugin_active(1); x.plugin_destroy();
 assert.equal(x.plugin_entity_count(), 3); assert.equal(x.plugin_init_omm(0, 0), -4);
