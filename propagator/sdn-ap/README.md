@@ -633,8 +633,9 @@ and the count read 122 KB. Its nominal is the record's own set, so the store's c
 bit where both hold the same time (`test/store-covariance.e2e.mjs`). Through 0.6.55 the nominal was rebuilt from the
 parameter vector, and the store's covariance could differ from `propagate`'s by more than the matrix's largest element.
 
-A wide AP set uses exact-key grid descriptors and a shared bounded payload cache. The branch requires
-nonzero tesseral terms and eccentricity above 0.05 in resonance class 0, or above 0.3 in a resonance class.
+A wide AP set uses exact-key grid descriptors and a shared bounded payload cache. With AP gravity selected, the wide flag requires
+eccentricity above 0.05 in resonance class 0, or above 0.3 in a resonance class. Grid payloads are
+constructed only when the tesseral degree is at least 2.
 A degree-12 payload occupies 5,069,496 accounting bytes. Holding more sets than fit in the payload budget
 causes reconstruction on subsequent requests; it does not impose a catalog-size refusal threshold.
 

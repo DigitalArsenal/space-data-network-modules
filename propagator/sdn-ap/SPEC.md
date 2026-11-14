@@ -1724,8 +1724,9 @@ The pool's threads change no state. The epoch store's state-only `sdnap_epochs_a
 16 series. One thread owns both slots of each series through selection, initialization, flight and
 replacement. Wide series participate in the same dispatch. Their exact-key descriptors retain
 ownership independently of evictable payloads; an output pins at most two payloads while reading them.
-A wide set is an AP set with nonzero tesseral terms and eccentricity greater than 0.05 in resonance
-class 0, or greater than 0.3 in classes 1–4 (`tess::wide_set`, 16.11). Calls requesting covariance
+With AP gravity selected (positive zonal or tesseral degree), the wide flag requires eccentricity
+greater than 0.05 in resonance class 0, or greater than 0.3 in classes 1–4 (`tess::wide_set`, 16.11).
+Grid payload construction additionally requires tesseral degree at least 2. Calls requesting covariance
 remain serial. Atmosphere bindings, construction buffers and mutable evaluation caches are per-thread.
 Constant drag, gravity and leap-second tables are initialized before the batch. Capacity and allocation
 failures are counted, so a failed initialization is retryable. The budget changes reconstruction work,
