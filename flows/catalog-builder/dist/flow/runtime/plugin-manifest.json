@@ -987,6 +987,32 @@
         "opaque": false,
         "routePolicy": "canonical-only"
       }
+    },
+    {
+      "edgeId": "control-state-records-ingest-nev-records",
+      "fromNodeId": "control",
+      "fromPortId": "state_records",
+      "toNodeId": "ingest",
+      "toPortId": "nev_records",
+      "contract": {
+        "canonicalType": {
+          "schemaName": "NEV.fbs",
+          "fileIdentifier": "$NEV",
+          "schemaVersion": null,
+          "schemaHash": [],
+          "acceptsAnyFlatbuffer": false,
+          "wireFormat": "flatbuffer",
+          "rootTypeName": "NEV",
+          "fixedStringLength": 0,
+          "byteLength": 0,
+          "requiredAlignment": 0
+        },
+        "alignedType": null,
+        "canonicalFallbackAvailable": true,
+        "alignedEligible": false,
+        "opaque": false,
+        "routePolicy": "canonical-only"
+      }
     }
   ],
   "flowTriggers": [

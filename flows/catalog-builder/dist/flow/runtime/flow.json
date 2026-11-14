@@ -315,6 +315,15 @@
       "toPortId": "annotation_status",
       "backpressurePolicy": "queue",
       "queueDepth": 2
+    },
+    {
+      "edgeId": "control-state-records-ingest-nev-records",
+      "fromNodeId": "control",
+      "fromPortId": "state_records",
+      "toNodeId": "ingest",
+      "toPortId": "nev_records",
+      "backpressurePolicy": "queue",
+      "queueDepth": 2
     }
   ],
   "triggers": [

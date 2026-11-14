@@ -184,6 +184,15 @@ try{
  console.log('PASS lookup isolation and three-refusal storage circuit breaker');
  await reset();cfg['catalog.invocation_budget_ms']=3000;pageDelay=1150;control.destroy();control=await createControl();const scanBudget=await tick(now);assert.equal(scanBudget.pages,1,'elapsed scan time consumes budget; a frozen clock fails this assertion');assert.equal(scanBudget.fits+scanBudget.fallbacks,0);assert.equal(scanBudget.notice.kind,'unchanged');pageDelay=0;delete cfg['catalog.invocation_budget_ms'];
  console.log('PASS elapsed monotonic scan budget');
+ await reset();const subms=OMM.getRootAsOMM(new fb.ByteBuffer(ommBytes)).unpack();subms.EPOCH=subms.EPOCH.replace('.000','.000499');
+ store.set(key('OMM.fbs','synthetic','primary'),ids.map(id=>pack(Object.assign(OMM.getRootAsOMM(new fb.ByteBuffer(ommBytes)).unpack(),subms,{NORAD_CAT_ID:id}),'OMM')));
+ assert.equal((await tick(now)).fits,2);assert.ok([...current().values()].every(c=>c.PRODUCTS[0].KIND===C.catalogProductKind.ApElements),'submillisecond seed epochs share the one-millisecond acceptance tolerance');
+ await reset();cfg['catalog.nonresonant_max_e']=0;control.destroy();control=await createControl();assert.equal((await tick(now)).fallbacks,2);
+ const revised=SPW.getSizePrefixedRootAsSPW(new fb.ByteBuffer(records('SPW.fbs','synthetic','weather')[45])).unpack();revised.F107_OBS+=10;records('SPW.fbs','synthetic','weather').push(pack(revised,'SPW'));
+ const unusedWeather=await tick(now+1000);assert.equal(unusedWeather.fits+unusedWeather.products+unusedWeather.indexes,0,'excluded fallback never hashes unused weather');
+ const agedFallback=await tick(now+6*86400000);assert.equal(agedFallback.indexes,2);assert.ok([...current().values()].every(c=>c.PRODUCTS[0].SELECTION_REASON.startsWith('old-span fallback')));delete cfg['catalog.nonresonant_max_e'];
+ console.log('PASS submillisecond epoch, unused fallback weather and fallback aging');
+
  cfg['catalog.partition_count']=2;
  cfg['catalog.partition_index']=2;control.destroy();control=await createControl();
  await assert.rejects(()=>tick(now+6*86400000+3000));
