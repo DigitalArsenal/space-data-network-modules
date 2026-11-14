@@ -86,6 +86,8 @@ struct Retry {unsigned attempts=0;int64_t after=0;std::string reason;};
 struct Attempt {Bytes data;std::string signature;unsigned count=0;int64_t time=0;bool final=false;uint64_t sequence=0;std::string product_batch;size_t read_bytes=0;bool recovery_pin=true;};
 std::map<uint32_t,Attempt> attempts;
 std::set<uint32_t> dirty_attempts;
+std::map<std::string,uint64_t> removed_entries;
+void record_removal(const std::string& subject){removed_entries[subject]=++state_sequence;}
 std::string attempt_detail(const Attempt& a){return text(GetSizePrefixedNEV(a.data.data())->EVENTS()->Get(0)->DETAIL());}
 void ready_or_suspect(Attempt& a,bool suspect){
  auto log=std::unique_ptr<NEVT>(GetSizePrefixedNEV(a.data.data())->UnPack());auto& detail=log->EVENTS[0]->DETAIL;
@@ -123,7 +125,7 @@ void trim_state(){
    if(victim==attempts.end())victim=std::min_element(attempts.begin(),attempts.end(),[](const auto& a,const auto& b){return a.second.sequence<b.second.sequence;});
    diagnostics.add("warning: oldest protected recovery entry evicted at attempt bound","bounds");
   }
-  if(poison!=poisons.end())poisons.erase(poison);else {retained-=victim->second.read_bytes;attempts.erase(victim);}
+  if(poison!=poisons.end()){if(scan_at>=scans.size())record_removal(poison->first);poisons.erase(poison);}else {if(scan_at>=scans.size())record_removal("catalog-object/"+std::to_string(victim->first));retained-=victim->second.read_bytes;dirty_attempts.erase(victim->first);attempts.erase(victim);}
   ++diagnostics.evicted;state_evicted=true;
  }
 }
@@ -182,6 +184,14 @@ bool retain(const uint8_t* p,size_t n) {
   if(!log->EVENTS())return true;
   for(const auto* e:*log->EVENTS()){
    const auto subject=text(e->SUBJECT());
+   const auto removal=text(e->DETAIL());
+   if(removal.rfind("removed; sequence=",0)==0){
+    char* end=nullptr;const auto seq=std::strtoull(removal.c_str()+18,&end,10);
+    if(end==removal.c_str()+18||*end!=';')return false;state_sequence=std::max(state_sequence,uint64_t(seq));
+    if(subject.rfind("catalog-invalid/",0)==0){const auto i=poisons.find(subject);if(i!=poisons.end()&&i->second.sequence<=seq)poisons.erase(i);}
+    else {unsigned id=0;char tail=0;if(std::sscanf(subject.c_str(),"catalog-object/%u%c",&id,&tail)!=1||!id)return false;const auto i=attempts.find(id);if(i!=attempts.end()&&i->second.sequence<=seq){retained-=i->second.read_bytes;attempts.erase(i);if(interruption_suspect==id)interruption_suspect=0;}}
+    continue;
+   }
    if(subject.rfind("catalog-invalid/",0)==0){
     const auto detail=text(e->DETAIL());const auto seq_at=detail.find("; sequence=");uint64_t seq=0;
     if(seq_at!=std::string::npos){char* end=nullptr;seq=std::strtoull(detail.c_str()+seq_at+11,&end,10);if(end==detail.c_str()+seq_at+11||*end!=';')return false;}
@@ -303,13 +313,14 @@ int ingest(const Bytes& data,bool is_index) {
  phase=is_index?Phase::IndexStored:Phase::ProductStored;return 0;
 }
 // Markers and preparation deltas append; one terminal snapshot compacts the run.
-// Replay applies the same FIFO to earlier snapshots and their later appends.
+// Explicit removals precede admissions so replay preserves the retained entries.
 int persist_events(Phase after) {
  if(!state_complete)return stop("Operational state incomplete; no replacement or dispatch is safe.");
- if(after==Phase::SuccessStored&&state_compacted&&dirty_attempts.empty()&&poison_updates.empty())return finished();
+ if(after==Phase::SuccessStored&&state_compacted&&dirty_attempts.empty()&&poison_updates.empty()&&removed_entries.empty())return finished();
  const bool compact=!state_compacted&&(after==Phase::SuccessStored||(after==Phase::PoisonStored&&state_rows>2*state_limit+1));
  const bool single=after==Phase::AttemptStored||after==Phase::FailureStored;
  NEVT log;log.NODE_ID=cfg.provider;log.GENERATED_AT_MS=now;
+ if(!compact)for(const auto& item:removed_entries){auto e=std::make_unique<NEVEventT>();e->TIME_MS=now;e->KIND=nevEventKind::Other;e->SUBJECT=item.first;e->DETAIL="removed; sequence="+std::to_string(item.second)+";";log.EVENTS.push_back(std::move(e));}
  auto add_attempt=[&](uint32_t id){const auto i=attempts.find(id);if(i!=attempts.end())log.EVENTS.emplace_back(GetSizePrefixedNEV(i->second.data.data())->EVENTS()->Get(0)->UnPack());};
  if(single)add_attempt(work[at]);
  else if(compact)for(const auto& item:attempts)add_attempt(item.first);
@@ -322,7 +333,7 @@ int persist_events(Phase after) {
  R::IngestRequestT request;request.SCHEMA="NEV.fbs";request.RECONCILE=compact?R::reconcileMode_Current:R::reconcileMode_None;request.TAGS=std::make_unique<R::SourceTagsT>();request.TAGS->PROVIDER_ID=cfg.provider;request.TAGS->SOURCE_NAME=state_source();request.TAGS->BATCH_ID=pending_batch;request.TAGS->CONTENT_KEY_ID="public";
  b.Clear();R::FinishIngestRequestBuffer(b,R::IngestRequest::Pack(b,&request));
  if(plugin_push_output_ex("meta","IngestRequest.fbs","INGQ",PLUGIN_PAYLOAD_WIRE_FORMAT_FLATBUFFER,"IngestRequest",0,0,b.GetBufferPointer(),b.GetSize())<0||push("state_records","NEV",pending))return stop("Cannot persist operational state.");
- if(single)dirty_attempts.erase(work[at]);else {dirty_attempts.clear();poison_updates.clear();}
+ removed_entries.clear();if(single)dirty_attempts.erase(work[at]);else {dirty_attempts.clear();poison_updates.clear();}
  if(compact)state_compacted=true;state_appends=compact?0:state_appends+1;state_evicted=false;phase=after;return 0;
 }
 int store_generation_part(){
@@ -377,7 +388,7 @@ int complete_reads(){
  for(auto i=attempts.begin();i!=attempts.end();){const auto c=index.find(i->first);bool committed=false;
   if(c!=index.end()){const auto* row=GetSizePrefixedCAT(c->second.data());if(row->PRODUCTS())for(const auto* product:*row->PRODUCTS())if(text(product->SELECTION_REASON()).find("catalog-input="+i->second.signature+";")!=std::string::npos&&text(product->SELECTION_REASON()).find("retry-fit;")==std::string::npos)committed=true;}
   const bool orphan=complete_scan&&identity_complete&&index_complete&&!identities.count(i->first)&&!index.count(i->first)&&!protected_attempt(i->first,state_sequence);
-  if(committed||orphan){retained-=i->second.read_bytes;i=attempts.erase(i);pruned=true;}else ++i;
+  if(committed||orphan){record_removal("catalog-object/"+std::to_string(i->first));dirty_attempts.erase(i->first);retained-=i->second.read_bytes;i=attempts.erase(i);pruned=true;}else ++i;
  }
  if(poison_updates.empty()&&!pruned&&!state_evicted&&state_rows<=1)return build_work();return persist_events(Phase::PoisonStored);
 }
@@ -505,7 +516,7 @@ int storage_failure(const std::string& message){if(++storage_failures>=3)return 
 int advance() {
  if(input("tick")){
   if(!configure())return stop("Invalid catalog ModuleConfig.");const auto* f=input("tick");flatbuffers::Verifier v(f->payload,f->payload_length);if(!R::VerifyTimerTickBuffer(v))return stop("Invalid timer tick.");now=R::GetTimerTick(f->payload)->FIRED_MS();if(now<=0)return stop("Timer requires a positive UTC time.");
-  dispatches=built_dispatches=new_dispatches=initial_work_size=0;unbuilt_work=false;staged.clear();product_batches.clear();generation_index.clear();staged_bytes=product_batch_at=pending_count=0;checked_batches.clear();lookup_cursor.clear();fallback_annotation.clear();diagnostics=Diagnostics{};state_complete=true;scan_exhausted=false;state_rows=state_appends=0;state_history_oversized=false;state_sequence=0;state_evicted=false;state_compacted=false;interruption_suspect=0;storage_failures=0;clock_reported=false;tick_start=Clock::now();allowance=cfg.allowance_ms;complete_scan=true;capacity_limited=false;seed_complete=identity_complete=index_complete=weather_complete=true;removal_guard=false;index_defects=false;poisons.clear();poison_seen.clear();poison_updates.clear();dropped.clear();seeds.clear();identities.clear();index.clear();weather.clear();products.clear();attempts.clear();dirty_attempts.clear();scans={{"NEV",cfg.provider,state_source()},{"CAT",cfg.provider,"catalog-index"}};scans.insert(scans.end(),cfg.seeds.begin(),cfg.seeds.end());scans.push_back({"CAT",cfg.identity_provider,cfg.identity_source});scans.push_back({"SPW",cfg.weather_provider,cfg.weather_source});scan_at=pages=seen=retained=done=at=0;cursor.clear();return query();
+  dispatches=built_dispatches=new_dispatches=initial_work_size=0;unbuilt_work=false;staged.clear();product_batches.clear();generation_index.clear();staged_bytes=product_batch_at=pending_count=0;checked_batches.clear();lookup_cursor.clear();fallback_annotation.clear();diagnostics=Diagnostics{};state_complete=true;scan_exhausted=false;state_rows=state_appends=0;state_history_oversized=false;state_sequence=0;state_evicted=false;state_compacted=false;interruption_suspect=0;storage_failures=0;clock_reported=false;tick_start=Clock::now();allowance=cfg.allowance_ms;complete_scan=true;capacity_limited=false;seed_complete=identity_complete=index_complete=weather_complete=true;removal_guard=false;index_defects=false;poisons.clear();poison_seen.clear();poison_updates.clear();dropped.clear();seeds.clear();identities.clear();index.clear();weather.clear();products.clear();attempts.clear();dirty_attempts.clear();removed_entries.clear();scans={{"NEV",cfg.provider,state_source()},{"CAT",cfg.provider,"catalog-index"}};scans.insert(scans.end(),cfg.seeds.begin(),cfg.seeds.end());scans.push_back({"CAT",cfg.identity_provider,cfg.identity_source});scans.push_back({"SPW",cfg.weather_provider,cfg.weather_source});scan_at=pages=seen=retained=done=at=0;cursor.clear();return query();
  }
  if(const auto* f=input("query_status")){flatbuffers::Verifier v(f->payload,f->payload_length);if(!VerifyQRPBuffer(v)||GetQRP(f->payload)->KIND()==qrpKind::Error){if(phase==Phase::Lookup)return storage_failure("Product lookup host failure.");return stop("Complete read failed; no partial sweep is committed.");}}
  if(const auto* f=input("page")){
@@ -547,7 +558,7 @@ int advance() {
   }
   if((phase!=Phase::ProductStored&&phase!=Phase::IndexStored)||!text(r->REFUSED()).empty()||text(r->SCHEMA())!=pending_schema+".fbs"||text(r->PROVIDER_ID())!=cfg.provider||text(r->BATCH_ID())!=pending_batch||text(r->SOURCE_NAME())!=(phase==Phase::ProductStored?"catalog-products":"catalog-index")||r->INSERTED()>pending_count)return stop("Storage refused or did not acknowledge the complete generation batch; prior selection preserved.");
   if(phase==Phase::ProductStored){++product_batch_at;return store_generation_part();}
-  done=staged.size();for(const auto& item:staged){if(!item.retry)attempts.erase(item.id);else mark_product_batch(item.id,"");}return persist_events(Phase::SuccessStored);
+  done=staged.size();for(const auto& item:staged){if(!item.retry){record_removal("catalog-object/"+std::to_string(item.id));const auto i=attempts.find(item.id);if(i!=attempts.end()){retained-=i->second.read_bytes;attempts.erase(i);}dirty_attempts.erase(item.id);}else mark_product_batch(item.id,"");}return persist_events(Phase::SuccessStored);
  }
  return stop("Incomplete controller response.");
 }
