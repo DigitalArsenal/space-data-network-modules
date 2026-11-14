@@ -198,7 +198,7 @@ trust and signed-out reads are excluded.
 ## Chain refusal classification
 
 `control.cpp::transient_refusal` is the classification boundary. Only
-`out-of-memory`, `pool-dead`, `output-failed`, and `host-failed` are transient:
+`out-of-memory`, `pool-dead`, `output-failed`, `output`, and `host-failed` are transient:
 resource availability or delivery can change without a different seed. They
 publish no product or selection. All other codes are final for the input
 signature, including unknown codes; changing the recipe revision permits a
@@ -252,6 +252,6 @@ becoming a periodic product rewrite.
 
 ### Downstream refusal classification
 
-Annotation errors `invalid-input`, `invalid-ocm`, `invalid-elements`, `unsupported-ocm`, `seed-mismatch`, `seed-epoch-mismatch`, `already-annotated`, and `invalid-models`, composer `invalid-replacement`, and malformed chain/fit/annotation/composition results are final for the same numerical signature. Resource, output and storage failures remain retryable. A recipe revision permits retry after a software or embedded-model correction.
+Annotation errors `invalid-input`, `invalid-ocm`, `invalid-elements`, `unsupported-ocm`, `seed-mismatch`, `seed-epoch-mismatch`, `already-annotated`, `invalid-output`, and `invalid-models`, composer `invalid-replacement`, and malformed chain/fit/annotation/composition results are final for the same numerical signature. Resource, output and storage failures remain retryable. A recipe revision permits retry after a software or embedded-model correction.
 
 The controller and population annotator share `common/catalog_epoch.hpp`: comparisons use unrounded UTC seconds and the same strict one-millisecond bound. AP annotation embeds the original fit buffer unchanged. SGP4 fallback annotation unpacks and repacks the input to append its reason comment: FlatBuffer layout, offsets and padding can differ. Tests prove equality of every preexisting decoded field and bit-identical propagated states and formal covariance; they do not claim original SGP4 wire-byte identity.
