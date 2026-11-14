@@ -16,8 +16,9 @@
 //    selects AP's terms: tesseral 31, zonal 20), 128 MiB, at two instants half a day apart: no trap, the limit reached. A
 //    threaded batch of the same size runs first, while the memory is free, so that the batch's list of deferred rows (a
 //    std::vector, which SPEC 1.6 names among what still traps) has its room.
-// 4. SGP4XP sets without AP's terms (6,000 stock records at 500 km, 80 MiB, sdnap_epochs_set_at): every set the build this
-//    change was made on answered (0.6.55, modules 3c14c974: 2,480 of them) is answered, each state its state (an SGP4XP flight
+// 4. SGP4XP sets without AP's terms (6,000 stock records at 500 km, 80 MiB, sdnap_epochs_set_at): 0.6.55 (modules 3c14c974) answered
+//    2,480 of them, and so did 0.6.56 to 0.6.58; from 0.6.59 each set's drag-pass cache also holds the upper node's time, 16 bytes
+//    a set, and 2,473 fit. The count is exact, every set answered is a set 0.6.55 answered, each state its state (an SGP4XP flight
 //    makes only the caches it reads, as that build did). 0.6.54 answered 2,329 there and 0.6.52 2,335, before 0.6.55's load.
 // JS moves bytes and compares numbers the module produced.
 //   node test/memory-limit.e2e.mjs
@@ -191,9 +192,15 @@ async function open(file, { max = 0, threads = 0 } = {}) {
   }
   const [old, now] = flown;
   const oldAnswered = old.filter(Array.isArray).length, nowAnswered = now.filter(Array.isArray).length;
+  // Each set's drag-pass cache also holds the upper node's time (16 bytes a set, 0.6.59), so NOW_ANSWERED sets fit in the 80 MiB where 0.6.55's 2,480
+  // did (and 0.6.56 to 0.6.58's): the exact count, not a margin; every set both builds answer is the same state, bit for bit, and every set this build
+  // answers is a set 0.6.55 answered.
+  const NOW_ANSWERED = 2473;
+  console.log(`part 4 (SGP4XP without AP's terms, 80 MiB): 0.6.55 answered ${oldAnswered} of ${COUNT}, this build ${nowAnswered}`);
   for (let k = 0; k < COUNT; k++)
-    if (Array.isArray(old[k])) assert.ok(Array.isArray(now[k]) && same(now[k], old[k]), `part 4, set ${k}: 0.6.55 answered it; this build ${Array.isArray(now[k]) ? "differs" : `refused it (${now[k]})`}`);
+    if (Array.isArray(now[k])) assert.ok(Array.isArray(old[k]) && same(now[k], old[k]), `part 4, set ${k}: this build answered it; 0.6.55 ${Array.isArray(old[k]) ? "differs" : `refused it (${old[k]})`}`);
   assert.ok(oldAnswered < COUNT, "part 4: the limit not reached");
-  console.log(`part 4 (SGP4XP without AP's terms, 80 MiB): 0.6.55 answered ${oldAnswered} of ${COUNT}, this build ${nowAnswered}; every one 0.6.55 answered is answered, bit for bit`);
+  assert.equal(nowAnswered, NOW_ANSWERED, `part 4: this build answers ${nowAnswered} sets in 80 MiB, expected ${NOW_ANSWERED}`);
+  console.log(`part 4: ${nowAnswered} sets answered, each 0.6.55's state bit for bit`);
 }
 process.exit(0);
