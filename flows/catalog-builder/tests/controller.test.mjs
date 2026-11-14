@@ -32,8 +32,8 @@ async function tick(time,kill=false){
   assert.equal(response.statusCode,0,response.errorMessage);const out=Object.fromEntries(response.outputs.map(f=>[f.portId,f]));let input=[];
   if(out.notice){counters.notice=decodeFlowNotice(out.notice.payload);evidence.stages.push(counters);return counters;}
   if(out.query){
-   ++counters.pages;const q=Q.QRP.getRootAsQRP(new fb.ByteBuffer(out.query.payload)).unpack();const data=records(q.SCHEMA_NAME,q.PROVIDER_ID,q.SOURCE_NAME);const [offset,head]=q.CURSOR?q.CURSOR.split(':').map(Number):[0,data.length];const page=data.slice(offset,Math.min(head,offset+q.LIMIT));const end=offset+page.length;
-   const header=Object.assign(new Q.QRPT(),{KIND:Q.qrpKind.Page,STATUS:Q.qrpStatus.Ok,SCHEMA_NAME:q.SCHEMA_NAME,PROVIDER_ID:q.PROVIDER_ID,SOURCE_NAME:q.SOURCE_NAME,RECORD_COUNT:page.length,TOTAL_COUNT:BigInt(head),NEXT_CURSOR:end<head?end+':'+head:null});
+   ++counters.pages;const q=Q.QRP.getRootAsQRP(new fb.ByteBuffer(out.query.payload)).unpack();const data=records(q.SCHEMA_NAME,q.PROVIDER_ID,q.SOURCE_NAME).filter(b=>!q.BATCH_ID||q.BATCH_ID==='catalog-'+hash(b));const [offset,head]=q.CURSOR?q.CURSOR.split(':').map(Number):[0,data.length];const page=data.slice(offset,Math.min(head,offset+q.LIMIT));const end=offset+page.length;
+   const header=Object.assign(new Q.QRPT(),{KIND:Q.qrpKind.Page,STATUS:Q.qrpStatus.Ok,SCHEMA_NAME:q.SCHEMA_NAME,PROVIDER_ID:q.PROVIDER_ID,SOURCE_NAME:q.SOURCE_NAME,BATCH_ID:q.BATCH_ID,RECORD_COUNT:page.length,TOTAL_COUNT:BigInt(head),NEXT_CURSOR:end<head?end+':'+head:null});
    input=[frame('page','QRP',Buffer.concat([pack(header,'QRP'),...page])),frame('query_status','QRP',out.query.payload)];
   }else if(out.seed||out.fallback_seed){
    const fit=!!out.seed;fit?counters.fits++:counters.fallbacks++;
@@ -86,7 +86,7 @@ try{
  records('SPW.fbs','synthetic','weather').push(pack(badWeather,'SPW'));
  records('OCM.fbs','synthetic-node','catalog-products').push(pack(new C.CATT(),'CAT'));
  records('OMM.fbs','synthetic','primary').push(...ids.map(id=>seed(id,.4)));
- const poisoned=await tick(now+6*86400000+3000);assert.equal(poisoned.indexes,2);assert.match(poisoned.notice.reason,/invalid=5/);assert.equal(poisoned.notice.kind,'skipped');
+ const poisoned=await tick(now+6*86400000+3000);assert.equal(poisoned.indexes,2);assert.match(poisoned.notice.reason,/invalid=4/);assert.equal(poisoned.notice.kind,'skipped');
  // An ingestion failure between two healthy identifiers cannot starve the last.
  const three=[999996,999997,999998];
  store.set(key('CAT.fbs','synthetic','identities'),three.map(id=>pack(Object.assign(new C.CATT(),{NORAD_CAT_ID:id,OBJECT_NAME:'SYNTHETIC'}),'CAT')));
