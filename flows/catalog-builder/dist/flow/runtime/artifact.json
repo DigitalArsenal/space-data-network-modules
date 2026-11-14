@@ -176,7 +176,7 @@
       "dependencyId": "com.digitalarsenal.hostcap.storage-ingest",
       "pluginId": "com.digitalarsenal.hostcap.storage-ingest",
       "version": "0.6.1",
-      "sha256": "ab7d2261bea741c0757bb9c014c3226cf78eb1dba88a131076cab7bd9594492b",
+      "sha256": "a3551289f338ca9faee641b2bd3f719df656d3ab3f1992040209b0488ba15157",
       "dispatchModel": "linked-direct",
       "artifactPath": null,
       "publisher": null,
