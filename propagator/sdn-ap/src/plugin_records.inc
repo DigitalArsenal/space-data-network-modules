@@ -6,14 +6,14 @@ bool plugin_can_release() {
 }
 
 void plugin_epochs_cleared() { frames::release_state(frames::state()); }
-void plugin_records_selected() { plugin_records = true; }
-void plugin_rows_selected() { plugin_records = false; }
+void plugin_records_selected() { plugin_source = PluginSource::Records; }
+void plugin_rows_selected() { plugin_source = PluginSource::PluginRows; }
 void plugin_release() {
   if (!plugin_can_release()) return;
   epochs::resident_build().drop();
   epochs::clear(epochs::resident());
   epochs::resident().pool_dead = 0;
-  plugin_rows_selected();
+  plugin_source = PluginSource::NativeRows;
   store_free();
 }
 uint32_t plugin_record_count() { return static_cast<uint32_t>(epochs::resident().series.size()); }
@@ -97,16 +97,16 @@ int32_t plugin_record_batch(double jd, OrbProStateVector* out, uint32_t count) {
 SDNAP_EXPORT("plugin_propagate_all_positions")
 int32_t plugin_propagate_all_positions(double jd, double* out, uint32_t max) {
   using namespace sdnap;
-  const uint32_t n = std::min(max, plugin_records ? plugin_record_count() : store().count);
+  const uint32_t n = std::min(max, plugin_uses_records() ? plugin_record_count() : store().count);
   if (n == 0) return 0;
   if (out == nullptr) return ORBPRO_PROP_NULL_OUTPUT;
   if (!std::isfinite(jd)) return ORBPRO_PROP_BAD_INPUT;
   const PluginTime time(jd);
-  const xpt::Bodies shared = plugin_records ? xpt::Bodies{} : xpt::bodies_at((time.whole - kJd1950) + time.frac);
+  const xpt::Bodies shared = plugin_uses_records() ? xpt::Bodies{} : xpt::bodies_at((time.whole - kJd1950) + time.frac);
   const double theta = gmst(time.whole, time.frac);
   for (uint32_t i = 0; i < n; ++i) {
     OrbProStateVector state;
-    const int32_t rc = plugin_records ? plugin_record_read(time, jd, i, &state, true) :
+    const int32_t rc = plugin_uses_records() ? plugin_record_read(time, jd, i, &state, true) :
         write_state(i, time.whole, time.frac, &state, &shared, &theta);
     for (int a = 0; a < 3; ++a) out[3 * i + a] = rc == 0 ? state.position[a] : __builtin_nan("");
   }
@@ -119,7 +119,7 @@ int32_t plugin_propagate_path(uint32_t index, double start_jd, double step_days,
   using namespace sdnap;
   if (count == 0) return 0;
   if (out == nullptr) return ORBPRO_PROP_NULL_OUTPUT;
-  const uint32_t n = plugin_records ? plugin_record_count() : store().count;
+  const uint32_t n = plugin_uses_records() ? plugin_record_count() : store().count;
   if (n == 0) return ORBPRO_PROP_NOT_INITIALIZED;
   if (index >= n) return ORBPRO_PROP_BAD_ENTITY_INDEX;
   constexpr uint32_t kMaxPathSamples = 1000000;
@@ -129,19 +129,19 @@ int32_t plugin_propagate_path(uint32_t index, double start_jd, double step_days,
   for (uint32_t i = 0; i < count; ++i)
     if (!std::isfinite(start_jd + i * step_days)) return ORBPRO_PROP_BAD_INPUT;
   auto& st = epochs::resident();
-  if (plugin_records && st.pool_dead != 0) return ORBPRO_PROP_UNPHYSICAL;
-  const uint32_t raw = plugin_records ? st.plugin_series_index(index) : 0;
+  if (plugin_uses_records() && st.pool_dead != 0) return ORBPRO_PROP_UNPHYSICAL;
+  const uint32_t raw = plugin_uses_records() ? st.plugin_series_index(index) : 0;
   for (uint32_t i = 0; i < count; ++i) {
     const double jd = start_jd + i * step_days;
     double whole, frac;
     split_jd(jd, whole, frac);
     OrbProStateVector state;
     plugin_invalid(jd, &state);
-    const int32_t rc = plugin_records ? plugin_direct_state(raw, whole, frac, &state) : write_state(index, whole, frac, &state);
+    const int32_t rc = plugin_uses_records() ? plugin_direct_state(raw, whole, frac, &state) : write_state(index, whole, frac, &state);
     for (int a = 0; a < 3; ++a) out[3 * i + a] = rc == 0 ? state.position[a] : __builtin_nan("");
   }
   // A focused path releases only its entity's direct caches, leaving all frame cells intact.
-  if (plugin_records) {
+  if (plugin_uses_records()) {
     auto& series = st.series[raw];
     for (auto& slot : series.slots) epochs::release(slot);
     series.next = 0;
@@ -151,7 +151,7 @@ int32_t plugin_propagate_path(uint32_t index, double start_jd, double step_days,
 
 namespace sdnap {
 inline bool plugin_metadata(uint32_t index, double& period, double& eccentricity) {
-  if (plugin_records) {
+  if (plugin_uses_records()) {
     auto& st = epochs::resident();
     if (index >= st.series.size() || st.pool_dead != 0) return false;
     const auto& s = st.series[st.plugin_series_index(index)];
@@ -205,7 +205,7 @@ inline bool plugin_same_atmosphere(const atm::Atmosphere& a, const atm::Atmosphe
 inline int plugin_replace_record() {
   plugin_reset_output_state();
   auto& st = epochs::resident();
-  if (!plugin_records || epochs::resident_build().open || st.series.empty())
+  if (!plugin_uses_records() || epochs::resident_build().open || st.series.empty())
     return ocm::refuse("records-not-loaded", "Replacement requires a closed, nonempty record catalog.");
   if (st.pool_dead != 0) return ocm::refuse("pool-dead", "Replacement cannot read an epoch store after a failed thread pool batch.");
   uint32_t frames = 0;

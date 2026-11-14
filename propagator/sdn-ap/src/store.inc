@@ -69,6 +69,7 @@ inline void store_free(Store& st) {
 inline void store_free() { store_free(store()); }
 
 bool plugin_can_release();
+bool plugin_rows_active();
 
 inline Elements elements_of(const ElementRow& row) {
   Elements e{};
@@ -177,10 +178,14 @@ inline int32_t store_prepare(Store& st, const ElementRow* rows, uint32_t count, 
 }
 
 /// Prepare before replacing so a failed store allocation preserves the previous rows and plugin source.
-/// Native row initialization holds individual refused sets; plugin and stream loads require every allocation.
+/// Native rows retain their original replacement lifetime unless explicit plugin OMM selection needs preservation.
 inline int32_t store_init(const ElementRow* rows, uint32_t count, const uint8_t* refused = nullptr,
                           bool require_all_allocations = true) {
   if (!plugin_can_release()) return -1;
+  if (!require_all_allocations && !plugin_rows_active()) {
+    store_free();
+    return store_prepare(store(), rows, count, refused);
+  }
   Store prepared;
   const uint32_t failures = mem::failures();
   const int32_t held = store_prepare(prepared, rows, count, refused);

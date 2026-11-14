@@ -274,6 +274,11 @@ for (const fail of [1, 2, 3, 4]) {
   x.sdnap_test_fail_at(fail); assert.equal(x.plugin_init_omm(omm, 3), -4); x.sdnap_test_fail_at(0);
   assert.equal(x.plugin_entity_count(), 3); assert.deepEqual(state(0).bytes, activeRows);
 }
+// Explicit plugin OMM selection preserves its rows through a refused native replacement.
+new Uint8Array(mem(), omm, nativeRows.length).set(nativeRows);
+x.sdnap_test_fail_at(1); assert.equal(x.sdnap_init_elements(omm, 1), -4); x.sdnap_test_fail_at(0);
+assert.equal(x.plugin_entity_count(), 3); assert.deepEqual(state(0).bytes, activeRows);
+new Uint8Array(mem(), omm, data.length).set(data);
 const ommInput = {portId: 'omm', typeRef: T('OMM'), payload: builder.asUint8Array()};
 x.sdnap_test_fail_at(0); ok(await call('ingest_omm', [ommInput]));
 const ingestAllocations = x.sdnap_test_alloc_count();
