@@ -102,7 +102,7 @@ try{
  records('CAT.fbs','synthetic','identities').pop();await tick(now+1300);
 
  records('OMM.fbs','synthetic','primary').push(seed(ids[0],.1));const corrected=await tick(now+2000);assert.equal(corrected.fits,1);assert.equal(corrected.indexes,1);
- records('OMM.fbs','synthetic','primary').push(...ids.map(id=>seed(id,.2)));const beforeKill=current();const killed=await tick(now+3000,true);assert.equal(killed.products,2);assert.equal(killed.productBatches,1);assert.deepEqual(current(),beforeKill,'multi-object product batch cannot expose a partial selection');const deferred=await tick(now+4000);assert.equal(deferred.products+deferred.indexes,0);now+=1200000;const resumed=await tick(now+4000);assert.equal(resumed.fits,2);assert.equal(resumed.products,2);assert.equal(resumed.duplicateProducts,2);assert.equal(resumed.indexes,2);assert.equal(resumed.productBatches,1);assert.equal(resumed.indexBatches,1);assert.equal(generations.at(-1).length,2);console.log("PASS reclaimed-journal recovery resends every product in one complete generation");
+ records('OMM.fbs','synthetic','primary').push(...ids.map(id=>seed(id,.2)));const beforeKill=current();const killed=await tick(now+3000,true);assert.equal(killed.products,2);assert.equal(killed.productBatches,1);assert.deepEqual(current(),beforeKill,'multi-object product batch cannot expose a partial selection');const resumed=await tick(now+4000);now+=1200000;assert.equal(resumed.fits,2);assert.equal(resumed.products,2);assert.equal(resumed.duplicateProducts,2);assert.equal(resumed.indexes,2);assert.equal(resumed.productBatches,1);assert.equal(resumed.indexBatches,1);assert.equal(generations.at(-1).length,2);console.log("PASS reclaimed-journal recovery resends every product in one complete generation");
  cfg['catalog.weather_source']='missing-weather';control.destroy();control=await createControl();const refused=await tick(now+5000);assert.equal(refused.fits,2);assert.ok([...current().values()].every(c=>c.PRODUCTS[0].KIND===C.catalogProductKind.Sgp4Elements&&/weather/.test(c.PRODUCTS[0].SELECTION_REASON)));
  const noRetry=await tick(now+6000);assert.equal(noRetry.fits+noRetry.products,0);
  cfg['catalog.weather_source']='weather';control.destroy();control=await createControl();const restored=await tick(now+7000);assert.equal(restored.fits,2);
@@ -188,6 +188,19 @@ try{
  const afterTrap=await tick(now+600000);assert.equal(afterTrap.fits,1,'fresh guest sets aside the trapped first object and reaches the later object');assert.match(afterTrap.notice.reason,/in-progress attempt deferred/);
  control.destroy();control=await createControl();assert.equal((await tick(now+1200001)).fits,1,'durable attempt becomes retryable after backoff');
  console.log('PASS durable attempt acknowledgment, Wasm trap, fresh-instance progress and backoff');
+ await reset([999994,999995,999996]);trapObject=999996;
+ await assert.rejects(()=>tick(now),WebAssembly.RuntimeError);assert.equal(current().size,0);
+ control.destroy();control=await createControl();
+ const stagedRecovery=await tick(now+600000);assert.equal(stagedRecovery.products,2);assert.equal(stagedRecovery.indexes,2);assert.equal(stagedRecovery.indexBatches,1);assert.equal(current().size,2);assert.match(stagedRecovery.notice.reason,/in-progress attempt deferred/);
+ records('OMM.fbs','synthetic','primary').push(seed(999992),seed(999993));records('CAT.fbs','synthetic','identities').push(...[999992,999993].map(id=>pack(Object.assign(new C.CATT(),{NORAD_CAT_ID:id,OBJECT_NAME:'SYNTHETIC'}),'CAT')));
+ control.destroy();control=await createControl();
+ const beforeSuspect=await tick(now+1200001);assert.equal(beforeSuspect.indexes,2);assert.match(beforeSuspect.notice.reason,/staged selections committed before interrupted object retry/);
+ assert.equal(generations.at(-1).length,2);
+ await assert.rejects(()=>tick(now+1200002),WebAssembly.RuntimeError);control.destroy();control=await createControl();
+ const suspectBackoff=await tick(now+1800000);assert.equal(suspectBackoff.indexes,0);assert.match(suspectBackoff.notice.reason,/in-progress attempt deferred/);assert.equal(current().size,4);trapObject=undefined;
+ console.log('PASS staged selections recover independently and flush before a repeated trap');
+ await reset();await tick(now);
+
  // A weather defect does not prevent a known decay removal or make a source absence unknown.
  records('SPW.fbs','synthetic','weather').push(pack(badWeather,'SPW'));
  const decay=C.CAT.getSizePrefixedRootAsCAT(new fb.ByteBuffer(records('CAT.fbs','synthetic','identities')[0])).unpack();decay.DECAY_DATE=new Date(now).toISOString().slice(0,10);records('CAT.fbs','synthetic','identities').push(pack(decay,'CAT'));

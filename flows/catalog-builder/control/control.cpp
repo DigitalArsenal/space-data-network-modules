@@ -82,6 +82,13 @@ Bytes poison_updates;
 struct Retry {unsigned attempts=0;int64_t after=0;std::string reason;};
 struct Attempt {Bytes data;std::string signature;unsigned count=0;int64_t time=0;bool final=false;uint64_t sequence=0;std::string product_batch;};
 std::map<uint32_t,Attempt> attempts;
+std::string attempt_detail(const Attempt& a){return text(GetSizePrefixedNEV(a.data.data())->EVENTS()->Get(0)->DETAIL());}
+void ready_or_suspect(Attempt& a,bool suspect){
+ auto log=std::unique_ptr<NEVT>(GetSizePrefixedNEV(a.data.data())->UnPack());auto& detail=log->EVENTS[0]->DETAIL;
+ detail.replace(0,std::string("in progress ").size(),suspect?"retry ":"ready ");
+ if(suspect)detail+=" instance-interrupted;";
+ flatbuffers::FlatBufferBuilder b;FinishSizePrefixedNEVBuffer(b,NEV::Pack(b,log.get()));a.data.assign(b.GetBufferPointer(),b.GetBufferPointer()+b.GetSize());
+}
 bool transient_refusal(const std::string& code);
 int save_attempt(bool final=false,const std::string& failure="");
 int start_chain();
@@ -271,7 +278,7 @@ void mark_product_batch(uint32_t id,const std::string& batch){
  auto& a=attempts.at(id);a.product_batch=batch;
  auto log=std::unique_ptr<NEVT>(GetSizePrefixedNEV(a.data.data())->UnPack());
  auto& detail=log->EVENTS[0]->DETAIL;const auto pos=detail.find(" product-batch=");if(pos!=std::string::npos)detail.erase(pos);
- detail+=" product-batch="+batch+";";
+ detail+=" product-batch="+batch+"; prepared-generation;";
  // Preparation is newer than the dispatch snapshot, even at the same UTC time.
  const auto seq=detail.find("sequence="),end=detail.find(';',seq);a.sequence=++state_sequence;
  detail.replace(seq+9,end-seq-9,std::to_string(a.sequence));
@@ -306,6 +313,11 @@ int lookup_product(){
 int complete_reads(){
  if(!state_complete)return stop("Operational state incomplete; retry the bounded source read.");
  bool pruned=false;
+ // Only the last dispatched operation can have interrupted an unprepared run.
+ uint64_t latest=0;for(const auto& item:attempts)latest=std::max(latest,item.second.sequence);
+ for(auto& item:attempts){auto& a=item.second;const auto detail=attempt_detail(a);
+  if(detail.rfind("in progress ",0)==0){ready_or_suspect(a,a.sequence==latest&&detail.find("prepared-generation;")==std::string::npos);pruned=true;}
+ }
  for(auto i=attempts.begin();i!=attempts.end();){const auto c=index.find(i->first);bool committed=false;
   if(c!=index.end()){const auto* row=GetSizePrefixedCAT(c->second.data());if(row->PRODUCTS())for(const auto* product:*row->PRODUCTS())if(text(product->SELECTION_REASON()).find("catalog-input="+i->second.signature+";")!=std::string::npos&&text(product->SELECTION_REASON()).find("retry-fit;")==std::string::npos)committed=true;}
   if(committed){i=attempts.erase(i);pruned=true;}else ++i;
@@ -314,7 +326,8 @@ int complete_reads(){
 }
 int save_attempt(bool final,const std::string& failure) {
  const auto id=work[at];const auto old=attempts.find(id);const bool starting=failure.empty();
- if(old==attempts.end()&&attempts.size()+poisons.size()>=state_limit)return stop("Operational state capacity reached; dispatch deferred.");
+ if(starting&&!staged.empty()&&old!=attempts.end()&&attempt_detail(old->second).find("instance-interrupted;")!=std::string::npos){++diagnostics.deferred;diagnostics.add("staged selections committed before interrupted object retry");return finish();}
+ if(old==attempts.end()&&attempts.size()+poisons.size()>=state_limit){++diagnostics.deferred;diagnostics.add("Operational state capacity reached; dispatch deferred.");return finish();}
  const unsigned count=old!=attempts.end()&&old->second.signature==signature?std::min(old->second.count+(starting?1:0),8u):1;
  NEVT log;log.NODE_ID=cfg.provider;log.GENERATED_AT_MS=now;
  auto e=std::make_unique<NEVEventT>();e->TIME_MS=now;e->KIND=starting?nevEventKind::Other:nevEventKind::Failure;
@@ -343,7 +356,7 @@ std::string weather_signature(){
 bool attempt_deferred(){const auto id=work[at];
   const auto attempt=attempts.find(id);
   if(attempt!=attempts.end()&&attempt->second.signature==signature){const auto& a=attempt->second;const auto after=a.time+std::min<int64_t>(86400000,1200000LL*(1LL<<(std::max(1u,a.count)-1)));
-   if(a.final||now<after){++diagnostics.deferred;diagnostics.add(a.final?"unchanged final failure":"in-progress attempt deferred after instance interruption");return true;}}
+   if(a.final||(attempt_detail(a).rfind("ready ",0)!=0&&now<after)){++diagnostics.deferred;diagnostics.add(a.final?"unchanged final failure":"in-progress attempt deferred after instance interruption");return true;}}
  return false;
 }
 int next_object() {
