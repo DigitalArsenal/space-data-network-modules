@@ -17,7 +17,7 @@ const manifest = JSON.parse(await fs.readFile(path.join(root, 'plugin-manifest.j
 // The SDS headers are generated from the standards' schema files, every family the module reads or writes at one
 // release, with internal linkage (scripts/lib/sds-cpp-headers.mjs). $XMT (with the $OIL, $CVR, $MNV and $PRW it
 // includes) carries the recipes, requests and reports; SPACE_DATA_STANDARDS_ROOT names the standards tree that holds it.
-const sds = await generateSdsHeaders(['CAT', 'OEM', 'OPM', 'NCD', 'OMM', 'OCM', 'MNV', 'XMT'], import.meta.url);
+const sds = await generateSdsHeaders(['CAT', 'OEM', 'OPM', 'NCD', 'OMM', 'OCM', 'MNV', 'XMT', 'QRP'], import.meta.url);
 // The $XMT JavaScript binding (from the standards' TypeScript) for the editor and the tests: dist/sds/xmt.mjs.
 await bundleXmt(process.env.SPACE_DATA_STANDARDS_ROOT, path.join(root, 'dist/sds/xmt.mjs'));
 const headers = [sds.header];
@@ -32,7 +32,7 @@ const json = await fs.readFile(path.join(repo, 'propagator/sgp4/src/cpp/include/
 // The module's sources in dependency order, one translation unit: composition, matching, epoch fitting, then the integrator
 // (records, maneuvers, selection, identity, and the method that calls them).
 const implementation = (await Promise.all(['catalog_composer.cpp', 'catalog_match.cpp', 'epoch_fit.cpp', 'integrator_records.cpp', 'integrator_maneuvers.cpp',
-  'integrator_selection.cpp', 'integrator_identity.cpp', 'catalog_integrator.cpp'].map((file) => fs.readFile(path.join(root, 'src', file), 'utf8')))).join('\n\n');
+  'integrator_selection.cpp', 'integrator_identity.cpp', 'catalog_integrator.cpp', 'replace_products.cpp'].map((file) => fs.readFile(path.join(root, 'src', file), 'utf8')))).join('\n\n');
 const outputPath = path.join(root, 'dist/isomorphic/module.wasm');
 await fs.mkdir(path.dirname(outputPath), { recursive: true });
 const result = await compileModuleFromSource({
