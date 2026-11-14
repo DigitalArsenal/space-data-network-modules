@@ -24,7 +24,7 @@ for(const threads of [0,3,14,16]){
 const h=await open(file);
 try{
  const min=h.x.sdnap_test_grid_min();assert.equal(h.budget(min).rc,0);await h.load([rs[0]]);
- assert.equal(h.x.sdnap_test_hold_grids(34),0);assert.notEqual(h.one(0,days).rc,0);
+ assert.equal(h.x.sdnap_test_hold_grids(34),0);assert.equal(h.one(0,days).rc,91);assert.deepEqual(h.batch(days).status,[91]);
  assert.equal(h.x.sdnap_test_hold_grids(0),0);assert.deepEqual(h.one(0,days),{rc:0,state:truth[0]});
 }finally{await h.close();}
 const template=ocmOf(fs.readFileSync(new URL('./fixtures/ap-fit-0.6.42.ocm',import.meta.url)));

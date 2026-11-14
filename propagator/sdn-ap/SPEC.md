@@ -6658,3 +6658,14 @@ empty state list and retains the requested time span. Input validation and outpu
 remain method-level errors. Propagation refusals return method status 3 with `partial-ephemeris`,
 or `out-of-memory` if an allocation failed, after all object series have been attempted. The method
 is serial; epoch-store state-only batch dispatch supplies pool parallelism.
+
+### Epoch resource retry status
+
+| Entry | Status | Meaning |
+|---|---:|---|
+| `sdnap_epochs_at` per-row status; `sdnap_epochs_set_at` return | 91 | Resources unavailable; retry this row after room becomes available. |
+
+Status 91 is distinct from invalid elements, decay, missing weather rows and a dead pool.
+It reports a counted resource failure during a refused state request. A successful retry
+returns 0 and the same state as an isolated request. The batch return remains 0 when
+individual rows refuse; the host reads the row statuses.

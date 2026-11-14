@@ -628,6 +628,7 @@ inline int build(Store& st, const Config& cfg) {
 
 /// The code a set's state takes when its rows do not hold a day the request flies it through (Store::short_day).
 constexpr int32_t kRowsShort = 90;
+constexpr int32_t kResourcesRetry = 91;
 
 /// 0, or kRowsShort with st.short_day the first missing day: set k of series s flown from its epoch to t (minutes from
 /// J2000) reads the rows of every UTC day between, and the day before the first.
@@ -1463,8 +1464,10 @@ inline void write_series(Store& st, double jd_whole, double jd_frac, uint32_t fi
     double r[3], v[3], P[36];
     bool have_p = false;
     const double jd[2] = {jd_whole, jd_frac};
+    const uint32_t resource_mark = sdnap::mem::thread_failures();
     const int32_t e = sdnap::epochs::at(st, st.series[first + k], t, r, v, cov != nullptr ? P : nullptr, have_p, jd);
-    if (status != nullptr) status[k] = e;
+    const int32_t row_status = e != sdnap::kPropOk && sdnap::mem::thread_failures() != resource_mark ? kResourcesRetry : e;
+    if (status != nullptr) status[k] = row_status;
     double ro[3] = {r[0], r[1], r[2]}, vo[3] = {v[0], v[1], v[2]};
     if (e == sdnap::kPropOk && frame == 3) sdnap::teme_to_ecef_m(theta, r, v, ro, vo);
     for (int c = 0; c < 3; ++c) {
@@ -1663,5 +1666,7 @@ int32_t sdnap_epochs_set_at(uint32_t i, uint32_t k, double jd_whole, double jd_f
   if (st.pool_dead != 0) return sdnap::pool::kRowPoolDead;  // after a dead batch over the store (Store::pool_dead)
   bool have_p = false;
   const double jd[2] = {jd_whole, jd_frac};
-  return sdnap::epochs::state_of(st, st.series[i], k, sdnap::epochs::minutes_of(jd_whole, jd_frac), out, out + 3, nullptr, have_p, jd);
+  const uint32_t resource_mark = sdnap::mem::thread_failures();
+  const int32_t rc = sdnap::epochs::state_of(st, st.series[i], k, sdnap::epochs::minutes_of(jd_whole, jd_frac), out, out + 3, nullptr, have_p, jd);
+  return rc != sdnap::kPropOk && sdnap::mem::thread_failures() != resource_mark ? sdnap::epochs::kResourcesRetry : rc;
 }

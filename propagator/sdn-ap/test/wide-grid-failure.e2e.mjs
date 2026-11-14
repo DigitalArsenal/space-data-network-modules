@@ -21,7 +21,7 @@ const rs=records(21),cases=[];
 for(const k of [0,10]){
  const base=await open(file);await base.load([rs[k]]);base.x.sdnap_test_grid_fail(0);const truth=base.one();assert.equal(truth.rc,0);const count=base.x.sdnap_test_grid_calls();assert.ok(count>=12);await base.close();
  for(let at=1;at<=count;++at){
-  const h=await open(file);try{await h.load([rs[k]]);h.x.sdnap_test_grid_fail(at);const failed=h.one();assert.notEqual(failed.rc,0,'allocation '+at);h.x.sdnap_test_grid_fail(0);assert.deepEqual(h.one(),truth,'retry '+at);assert.ok(h.budget().out[1]<=h.budget().out[0]);}finally{await h.close();}
+  const h=await open(file);try{await h.load([rs[k]]);h.x.sdnap_test_grid_fail(at);const failed=h.one();assert.equal(failed.rc,91,'retryable allocation '+at);h.x.sdnap_test_grid_fail(0);assert.deepEqual(h.one(),truth,'retry '+at);assert.ok(h.budget().out[1]<=h.budget().out[0]);}finally{await h.close();}
  }
  cases.push({class:k===0?'transfer':'eccentric-low',allocationSites:count});
 }
