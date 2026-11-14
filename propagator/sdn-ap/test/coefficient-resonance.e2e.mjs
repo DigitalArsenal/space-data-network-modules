@@ -24,12 +24,13 @@ SDNAP_EXPORT("sdnap_test_res_state") int sdnap_test_res_state(double t,double* o
  using namespace sdnap::xpt;const int rc=xp_propagate(*test_res_sat,t,out,out+3,nullptr);double y[6];
  out[6]=mean_at(*test_res_sat,t,y)?y[kN]:0;out[7]=test_res_sat->ctx.continuity_form;
  out[8]=test_res_sat->ctx.sp_comb_count;out[9]=test_res_sat->ctx.branch.wide_tess;
- out[10]=tess::sp_thread_cache().grouped_ok;out[11]=tess::sp_thread_cache().n_res_blks;return rc;
+ out[10]=tess::sp_thread_cache().grouped_ok;out[11]=tess::sp_thread_cache().n_res_blks;out[12]=std::hypot(y[kAf],y[kAg]);
+ const double t2=y[kChi]*y[kChi]+y[kPsi]*y[kPsi];out[13]=(1-t2)/(1+t2);return rc;
 }
 `;
 const candidate=process.env.COEFFICIENT_RESONANCE_WASM??buildDiagnostic('coefficient-resonance',extra),exact=process.env.COEFFICIENT_RESONANCE_EXACT??buildDiagnostic('coefficient-resonance-exact',extra,s=>s,{'tesseral.inc':s=>'#define SDNAP_CONTINUITY_RULE 0\n'+s,'coefficient_evaluation.inc':exactCoefficients});
 const ke=.074366859954178854,re=6378.1363,j2=.0010826266835531513,omega=.00437526908801129966,ci=Math.cos(55*Math.PI/180);
-const rate=(n,e,m,j,w)=>{const a=(ke/n)**(2/3),eta=Math.sqrt(1-e*e),p=a*eta*eta,z=1.5*j2/(p*p);return w*.5*z*n*(5*ci*ci-1)+j*(n+.5*z*n*eta*(3*ci*ci-1))+m*(-z*n*ci-omega);};
+const rate=(n,e,m,j,w,ciNow=ci)=>{const ci=ciNow;const a=(ke/n)**(2/3),eta=Math.sqrt(1-e*e),p=a*eta*eta,z=1.5*j2/(p*p);return w*.5*z*n*(5*ci*ci-1)+j*(n+.5*z*n*eta*(3*ci*ci-1))+m*(-z*n*ci-omega);};
 const gcd=(a,b)=>b?gcd(b,a%b):a;
 const roots=[],wide=process.argv.includes('--wide');
 // All primitive m:j orders through the carried degree 70 with j <= 6 whose
@@ -43,7 +44,7 @@ for(let j=1;j<=6;j++)for(let m=1;m<=70;m++)if(gcd(m,j)===1){
  }
 }
 assert(roots.some(r=>r.m===14&&r.j===1));assert(roots.some(r=>r.m===15&&r.j===1));
-async function open(file){const h=await createStandaloneHarness('browser',file,{surface:'direct',maxThreads:1,enableBrowserWasiThreads:false}),x=h.instance.exports,p=x.sdnap_alloc(96);return {x,close:()=>h.close?.(),init(n,e,b){assert.equal(x.sdnap_test_res_init(n,e,b),0);},st(t){const status=x.sdnap_test_res_state(t,p);const v=Array.from(new Float64Array(h.memory.buffer,p,12));if(status!==0)console.log(JSON.stringify({refusedBuild:file.includes('-exact')?'exact':'R',timeMinutes:t,status}));assert.equal(status,0);assert(v.every(Number.isFinite));return v;}};}
+async function open(file){const h=await createStandaloneHarness('browser',file,{surface:'direct',maxThreads:1,enableBrowserWasiThreads:false}),x=h.instance.exports,p=x.sdnap_alloc(112);return {x,close:()=>h.close?.(),init(n,e,b){assert.equal(x.sdnap_test_res_init(n,e,b),0);},st(t){const status=x.sdnap_test_res_state(t,p);const v=Array.from(new Float64Array(h.memory.buffer,p,14));if(status!==0)console.log(JSON.stringify({refusedBuild:file.includes('-exact')?'exact':'R',timeMinutes:t,status}));assert.equal(status,0);assert(v.every(Number.isFinite));return v;}};}
 const a=await open(candidate),b=await open(exact);let states=0,maxExactM=0,maxResidualJumpM=0,crossings=0;
 for(const degree of [31,70])for(const root of roots){
  a.x.sdnap_test_res_degree(degree);b.x.sdnap_test_res_degree(degree);
@@ -56,11 +57,20 @@ for(const degree of [31,70])for(const root of roots){
  // The q=0 member also decays through its commensurability over five days.
  if(root.w===root.j){
   a.init(root.n*(1-1e-9),root.e,.1);b.init(root.n*(1-1e-9),root.e,.1);let before=rate(root.n*(1-1e-9),root.e,root.m,root.j,root.w);prior=null;
-  let crossed=false;
-  for(let t=0;t<=7200;t+=30){const va=a.st(t),vb=b.st(t),after=rate(va[6],root.e,root.m,root.j,root.w);if(after*before<=0)crossed=true;before=after;
+  let crossed=false,previousTime=0;
+  for(let t=0;t<=7200;t+=30){const va=a.st(t),vb=b.st(t),after=rate(va[6],va[12],root.m,root.j,root.w,va[13]);
+   if(!crossed && t>0 && after*before<=0){
+    crossed=true;let lo=previousTime,hi=t,flo=before;
+    for(let q=0;q<40;q++){const mid=(lo+hi)/2,v=a.st(mid),f=rate(v[6],v[12],root.m,root.j,root.w,v[13]);if(f*flo>0){lo=mid;flo=f;}else hi=mid;}
+    let sideResidual;
+    for(const dt of [-1e-5,0,1e-5]){const va=a.st((lo+hi)/2+dt),vb=b.st((lo+hi)/2+dt),r=va.slice(0,3).map((v,k)=>1000*(v-vb[k]));
+     maxExactM=Math.max(maxExactM,Math.hypot(...r));if(sideResidual)maxResidualJumpM=Math.max(maxResidualJumpM,Math.hypot(...r.map((v,k)=>v-sideResidual[k])));sideResidual=r;states++;
+    }
+   }
+   before=after;previousTime=t;
    const residual=va.slice(0,3).map((v,k)=>1000*(v-vb[k]));maxExactM=Math.max(maxExactM,Math.hypot(...residual));if(prior)maxResidualJumpM=Math.max(maxResidualJumpM,Math.hypot(...residual.map((v,k)=>v-prior[k])));prior=residual;states++;
   }
-  if(crossed)crossings++;else console.log(JSON.stringify({degree,uncrossed:[root.m,root.j]}));
+  assert(crossed,`order ${root.m}:${root.j} did not cross`);crossings++;
  }
  console.log(JSON.stringify({degree,order:[root.m,root.j,root.w],states,maxExactM,maxResidualJumpM,crossings}));
 }
