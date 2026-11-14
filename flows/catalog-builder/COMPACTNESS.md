@@ -22,7 +22,7 @@ the chain's own raw output and the stored product. Repeated chain and annotation
 invocations produce identical bytes. A separate signed-axis permutation checks
 covariance rotation against a hand-computed result with zero tolerance.
 
-Indexes, operational attempt history, retained publication copies, sidecars and
+Indexes, bounded operational state, retained publication copies, sidecars and
 transport overhead add bytes. No compression or catalog-size projection is
 attached to this encoding. The ingestion-only SGP4 path repacks to add its
 stable reason comment; compiled tests compare every original field and

@@ -19,13 +19,12 @@ by durable selection time, with unserved objects first. Repeated changes to a
 recently served object do not precede an older unserved selection.
 
 The numerical seed fields read by ingestion, weather drivers read by fitting,
-recipe/acceptance settings and latest identity form the change signature.
+recipe/acceptance settings form the numerical change signature. Identity has a separate signature.
 Element metadata alone does not cause a refit. Seed object identifiers, name,
 originator and provenance copied into the product remain those of its last
 numerical rebuild; a metadata-only seed reissue deliberately leaves them stale.
 The CAT selection uses the latest identity. Consumers use CAT for display
-identity and the product for the seed/provenance of its numerical state. Identity changes cause a fresh
-composition and recomputation. Weather revisions affect objects whose carried
+identity and the product for the seed/provenance of its numerical state. Identity-only changes replace CAT while preserving its selected product without a refit. Weather revisions affect objects whose carried
 weather interval includes the revised date; changes outside that interval and
 to unused weather fields cause no refit. A revision inside many overlapping
 intervals can require a catalog-wide refit. No forecast-distance reuse rule is
@@ -36,7 +35,7 @@ The SGP4 flight samples GCRF states from seed epoch minus 2.5 days to plus
 5 days at 300-second spacing. The fit uses NRLMSISE00, supplied weather, gravity
 degree 20, a 30-day weather horizon from its epoch, and tesseral degree 31 at
 eccentricity at most 0.048. Acceptance requires 2,161 states, the exact interval,
-within one millisecond, and configured RMS/maximum error limits. These are selection limits, not an
+with an absolute interval difference strictly below one millisecond, and configured RMS/maximum error limits. These are selection limits, not an
 accuracy certification. Weather rows span the day before the flight starts
 through the fit epoch plus 30 days, inclusive.
 
@@ -46,27 +45,19 @@ relabeled `old-span fallback` when its seed expires. Deterministic refusals
 wait for input changes. A backward clock defers affected selections before
 fitting or storage, with one clock diagnostic per tick.
 
-Before numerical dispatch or removal composition, the controller stores and awaits acknowledgment of an `$NEV`
-operational event in `catalog-attempts`. Its subject identifies the object,
-its detail identifies the input signature and outcome, and its count records
-attempts for those inputs. These events are separate from product/index
-publication. A fresh instance reads the latest event per object. An unfinished
-attempt is deferred for 20 minutes, doubling to a 24-hour ceiling on repeated
-attempts; final failures await changed inputs. A committed matching selection
-supersedes its attempt marker. Failed state storage stops dispatch. Preserve
-these events across instance replacement; retention that removes an object's
-latest event also removes its crash backoff. Event history adds storage and
-scan cost. The flow does not compact operational event history. The changed
-signature format causes older selections to be recomputed once.
+Before numerical dispatch or removal composition, the controller stores and awaits acknowledgment of its `$NEV` operational state. `catalog-attempts` is used for one partition; partitioned services use `catalog-attempts-<index>-of-<count>`. One serial service owns each source. Changing the partition count requires an explicit state migration or acceptance of reset backoff.
+
+State contains only in-progress or failed objects plus bounded quarantine observations. Each dispatch/failure replaces the source's current batch with one snapshot; a committed selection removes its marker, without a success event. An empty snapshot contains no events. `RECONCILE=Current` must durably ingest the whole replacement before deleting older source batches. A crash between ingestion and reconciliation can leave multiple snapshots; explicit per-event sequence numbers resolve equal-time attempts independently of page order. Matching committed selections discard stale markers. Source state must remain private to this service and outside catalog publication.
+
+The combined bound is 4,096 object/poison entries and an 8 MiB serialized snapshot. The operational-source read stops above 8,192 records; incomplete or oversized state stops dispatch without replacing it. Each state write serializes the live entries, so persistent failures increase write cost even when unrelated objects succeed. A healthy catalog leaves one empty snapshot, independent of the number of successful updates. Preserve failed markers across restarts: deleting them resets backoff. An unfinished attempt is deferred for 20 minutes, doubling to a 24-hour ceiling; final failures await changed inputs. Failed state storage stops dispatch. A transient fit refusal stores the first SGP4 fallback, retains retry state, and upgrades after recovery. The changed signature format causes older selections to be recomputed once.
 
 Malformed records are counted and skipped. Bounded `$NEV` warnings record up
 to three observations per source/digest across instance replacement. The first
 observation supplies an example; repetitions only increase the invalid count.
-After three observations a malformed seed/identity row is quarantined and no
+After three observations a malformed seed, identity or index row is quarantined and no
 longer makes that source incomplete. Quarantine can permit a missing-source
-removal; the mass-removal guard still applies. At most 4,096 quarantine keys
-are retained; excess unknown defects remain conservative for absence decisions.
-Weather defects do not disable removals. A known decay needs only that object's
+removal; the mass-removal guard still applies. Quarantine shares the 4,096-entry operational-state bound; excess unknown defects remain conservative for absence decisions.
+Operational-source defects are recorded in the same quarantine state and removed by source compaction. Incomplete index scans are retried on each tick and explicitly defer unselected objects. Weather defects do not disable removals. Incomplete weather scans defer all fits, preserving existing AP selections; ingestion-only fallbacks and independently decidable decays remain available. A known decay needs only that object's
 valid identity and retained selection. Missing-source removal needs complete
 seed and identity sources; unknown or dropped selection rows are never new work.
 
@@ -74,7 +65,7 @@ Notice examples have separate four-example quotas for invalid records,
 failures, bounds, removals, clock and general information. Removal proposals
 have an aggregate count; their reasons are sampled, not a durable per-object
 removal log. Successful changed ticks use `Info`; bounded ticks without changes
-use `Unchanged`, including backoff and quarantine. Diagnostics distinguish
+use `Unchanged`, including backoff and quarantine. Exhausting the scan budget uses `Missing` and identifies scan exhaustion even when no object was processed. Diagnostics distinguish
 these outcomes in `REASON`. Fatal scan/storage errors use `Missing` and fail
 the invocation. The node timer recognizes only `Unchanged` as a successful
 no-batch result. `Info`, `Skipped`, `Missing` and `Expired` without a batch do
@@ -124,7 +115,7 @@ CVR rules `SourceModel`/`PooledModel` identify these priors; `EMPIRICAL` is the
 standard's most specific applicable block basis. Each block is uncalibrated.
 A consumer chooses the closest age block; `sdn-ap` does not propagate these
 blocks. Unsupported/nonfinite cases carry labeled absence. The seed epoch
-must match ingestion or the exact-W fit interval within one millisecond, which
+must match ingestion or the exact-W fit interval with an absolute interval difference strictly below one millisecond, which
 covers element-epoch rounding. `COV_UNITS` lists diagonal standard-deviation
 units, `km km km km/s km/s km/s`; matrix entries therefore have units km²,
 km²/s and km²/s². [Encoding details](COMPACTNESS.md).
@@ -156,9 +147,9 @@ and parallel arrays `catalog.seed_providers` and `catalog.seed_sources` (1–16)
 The resonance rule uses mean motion greater than 0.0035003818 and at most
 0.015751718 radians/minute. Resident accounting includes bytes plus 256 bytes
 per retained entry and replaces superseded entries. Other partitions' records
-are validated but not retained. Quarantine bookkeeping is separately bounded at 4,096 keys. A bounded partial scan reports read count and
+are validated but not retained. Operational-state bookkeeping has the combined 4,096-entry bound above. A bounded partial scan reports read count and
 settings and processes only objects with retained seed, identity and selection
-when capacity is exceeded. Selection state is scanned first. Any dropped
+when capacity is exceeded. The removal guard counts known decays and absences proved by complete sources; capacity-dropped identities do not count as absent. Operational state is scanned before selections so index quarantine is available; selections precede seeds, identities and weather. Any dropped
 replacement makes that object ineligible for work. A partial scan suppresses
 absence removals; a known decay remains independently decidable. Increase a binding
 setting within its bounds or add partitions. Accounting is not total heap use;
@@ -258,3 +249,9 @@ Dynamic final codes are `user-defined-parameters:<count>`,
 unrecognized codes are final contract failures. The inventory and the
 final-by-default classifier prevent a new deterministic code from silently
 becoming a periodic product rewrite.
+
+### Downstream refusal classification
+
+Annotation errors `invalid-input`, `invalid-ocm`, `invalid-elements`, `unsupported-ocm`, `seed-mismatch`, `seed-epoch-mismatch`, `already-annotated`, and `invalid-models`, composer `invalid-replacement`, and malformed chain/fit/annotation/composition results are final for the same numerical signature. Resource, output and storage failures remain retryable. A recipe revision permits retry after a software or embedded-model correction.
+
+The controller and population annotator share `common/catalog_epoch.hpp`: comparisons use unrounded UTC seconds and the same strict one-millisecond bound. AP annotation embeds the original fit buffer unchanged. SGP4 fallback annotation unpacks and repacks the input to append its reason comment: FlatBuffer layout, offsets and padding can differ. Tests prove equality of every preexisting decoded field and bit-identical propagated states and formal covariance; they do not claim original SGP4 wire-byte identity.
