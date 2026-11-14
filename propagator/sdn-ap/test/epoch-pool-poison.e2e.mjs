@@ -19,7 +19,7 @@ assert.ok(Number.isInteger(count) && count >= 96);
 const test = fileURLToPath(new URL('./epoch-pool.e2e.mjs', import.meta.url));
 const root = path.join(scratchRoot, 'epoch-pool-results');
 ensureBuilt();
-const diagnostic = arg('--diagnostic', null) ?? execFileSync(process.execPath, [test, '--build-only'], { encoding: 'utf8' }).trim().split('\n').at(-1);
+const diagnostic = arg('--diagnostic', null) ?? execFileSync(process.execPath, [test, '--build-only', '--diagnostic-name', 'epoch-pool-poison-repeat'], { encoding: 'utf8' }).trim().split('\n').at(-1);
 function run(label, wasm, threads, extra = []) {
   const text = execFileSync(process.execPath, [test, '--case', '--label', label, '--wasm', wasm,
     '--threads', String(threads), '--count', String(count), '--seed', String(seed), ...extra], { encoding: 'utf8' });

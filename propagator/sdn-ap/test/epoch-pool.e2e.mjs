@@ -285,7 +285,7 @@ const once = (text, from, to) => { assert.equal(text.split(from).length, 2, `the
 // counters, per thread: 0 rows of a batch, 1 the wide pre-pass, 2 slots replaced, 3 and 4 NRLMSISE-00 evaluations at or
 // under 325 km and over it (over it also each lane of the batched high-altitude evaluation), 5 6 7 states flown per family
 const declare = 'void sdnap_test_count(int k);\n';
-const diagnostic = arg('--diagnostic', null) ?? buildDiagnostic('epoch-pool-poison', extra, (s) => s, {
+const diagnostic = arg('--diagnostic', null) ?? buildDiagnostic(arg('--diagnostic-name', 'epoch-pool-poison'), extra, (s) => s, {
   'epoch_store.inc': (t) => once(once(once(once(once('void sdnap_test_deferred(uint32_t k);\n' + declare + t,
     '    std::sort(deferred, deferred + n);\n', '    std::sort(deferred, deferred + n);\n    for (int32_t q = 0; q < n; ++q) sdnap_test_deferred(a + deferred[q]);\n'),
     '  const uint32_t next = s.next;\n', '  const uint32_t next = s.next;\n  sdnap_test_count(0);\n'),
