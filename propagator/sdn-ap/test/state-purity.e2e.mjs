@@ -1,0 +1,559 @@
+#!/usr/bin/env node
+// E2E: an AP state is a function of its set and its time alone, whatever the set was asked before and wherever its caches
+// live. The reference is a COLD set asked exactly once: a fresh module instance, the record loaded, one state (so no cache,
+// set's or thread's, holds anything of an earlier ask); every reference is asserted to be a state (status 0, finite
+// numbers). The same states are then asked on a fresh instance of the set after other asks, and every double and status
+// compared with Object.is:
+// - this checkout's sources built here (the set's own caches) and a test build at a 1 MB cache budget with forty other sets flown first
+//   (the set has no room: it flies on the thread's caches), the sets of the pool-less epoch store (sdnap_epochs_set_at);
+// - orders: ascending, descending, two shuffles, the negative side then the positive, the positive then the negative;
+// - mirrored pairs at fractions q of the first bracket on both sides of the epoch (-qH then +qH, +qH then -qH), at node
+//   times (+-H, +-2H), at the epoch and one millisecond either side of it;
+// - the store's blend of two sets of one series (sdnap_epochs_at), asked in orders, against the same asked once cold;
+// - a time-ordered flight across the epoch (300 states from one first bracket before it to one after it, in time order) of every set, each state
+//   after the crossing against its cold state;
+// - the pool: the sets and forty-seven others in one store on four pool threads, asked in one call at each time of a flight across the epoch and then
+//   shuffled, with room reserved and with every growth inside a batch refused (a series refused on its lane and flown again on the calling thread: counted,
+//   asserted), each set's state against the cold set;
+// - fifty medium-orbit objects asked at three times, at eight others and at the first three again, at 1 MB and at the default budget;
+// - the decaying set past its decay crossing: refused with status 4 (decayed), cold and after other asks;
+// - the two mechanisms of the defect this test was written for, each put back in a build of this checkout's sources (OLD_ID,
+//   OLD_DRAG_KEY): the bracket's id and the drag-pass segment's key. Each build must fail the mirrored pairs and the
+//   time-ordered flight of the sets named for it (the id: 500 km, half-day class e 0.005, e 0.1, the transfer orbit; the key:
+//   Molniya, the transfer orbit), and the id build must give the two first brackets one id where this checkout's sources give
+//   two. The id build must also fail the pool block and the fifty-object case. The sets that cannot discriminate under the old
+//   id (geosynchronous with and without tesseral terms, Molniya) are not negative controls for it.
+// Sets: 500 and 830 km, half-day class at e 0.005 and 0.02, the 8 h and 16 h classes, geosynchronous with and without
+// tesseral 31, e 0.1 and 0.25, a transfer orbit, a Molniya orbit, a decaying set. H is the first bracket's length on
+// each side of the epoch (a test-build probe reads it). The caches' purity is a property of the module's sources, so
+// the builds are made from this checkout. The test-build probe also counts the calls of drag_pass_rates and those whose
+// window did not hold the time just bracketed (one thread flies a set at a time, so none): a guard on determinism, not a
+// proof of the key; it is read on the single-thread builds and on the pool build, and the calls are asserted above zero for
+// the sets above e 0.3.
+// A full run builds 7 modules (about 12 s each) and opens 3,635 module instances (a fresh instance takes
+// milliseconds); it measured 92 s on one busy core.
+//   node test/state-purity.e2e.mjs
+// STATE_PURITY_AS_0_6_56=1 runs it on this checkout's sources with the two mechanisms put back (this checkout with OLD_ID and
+// OLD_DRAG_KEY, which is the behavior of these two keys through 0.6.58; it fails, printing for each set how far the second state of a
+// pair is from the cold set: the sizes by class of the defect); STATE_PURITY_DECAY_BTERM=b sets the decaying set's BTERM (its
+// size follows the drag).
+// Control and partial runs: STATE_PURITY_PATCH names a module whose default export maps source file names to text
+// transforms (a control build: one mechanism changed at a time), applied to every build; STATE_PURITY_SETS=a,b limits the
+// sets to those names (a substring each); STATE_PURITY_QUICK=1 asks fewer fractions. Such a run is partial: it says so and
+// exits 1 unless STATE_PURITY_PARTIAL=1 is set.
+import { createStandaloneHarness } from "space-data-module-sdk/testing/isomorphic";
+import { F107DataType } from "spacedatastandards.org/lib/js/OCM/F107DataType.js";
+import { buildDiagnostic } from "./lib/ap-diagnostic.mjs";
+import { T, seedOcm, rowsThrough } from "./lib/ocm.mjs";
+import { pathToFileURL } from "node:url";
+import path from "node:path";
+
+const failures = [];
+const check = (ok, what) => { if (!ok) failures.push(what); };
+// STATE_PURITY_JSON=file: every run's outcome (set, mode, what was asked, states differing, of how many, the largest in meters)
+const runs = [];
+const note = (set, mode, label, differ, of, maxM) => runs.push({ set, mode, label, differ, of, maxM: maxM === Infinity ? "status" : maxM });
+const DAY = 86400000, MIN = 60000, EPOCH = Date.parse("2026-06-15T00:00:00Z"), MU = 398600.4418, RE = 6378.137;
+const iso = (ms) => new Date(ms).toISOString().replace("Z", "");
+const revPerDay = (a) => (Math.sqrt(MU / a ** 3) * 86400) / (2 * Math.PI);
+const ROWS = Array.from({ length: 60 }, (_, k) => ({ DATE: iso(EPOCH + (k - 5) * DAY).slice(0, 10), F107_OBS: 70, F107_OBS_CENTER81: 72, AP_AVG: 4, F107_DATA_TYPE: F107DataType.OBS }));
+const QUICK = !!process.env.STATE_PURITY_QUICK;
+const ORBITS = {
+  "500 km": { n: revPerDay(RE + 500), e: 0.001, i: 97.4, bterm: 3.8e-3, tesseral: 31 },
+  "830 km": { n: revPerDay(RE + 830), e: 0.001, i: 98.7, bterm: 1.27e-3, tesseral: 31 },
+  "half-day e 0.005": { n: 2.0056, e: 0.005, i: 55, bterm: 0.001, tesseral: 31 },
+  "half-day e 0.02": { n: 2.0056, e: 0.02, i: 55, bterm: 0.001, tesseral: 31 },
+  "8 h class": { n: 3.0, e: 0.01, i: 55, bterm: 0.001, tesseral: 31 },
+  "16 h class": { n: 1.5, e: 0.01, i: 55, bterm: 0.001, tesseral: 31 },
+  "GEO, tesseral 31": { n: 1.0027, e: 0.0003, i: 0.05, bterm: 0.001, tesseral: 31 },
+  "GEO, no tesseral": { n: 1.0027, e: 0.0003, i: 0.05, bterm: 0.001, tesseral: 0 },
+  "e 0.1": { n: revPerDay((RE + 600) / 0.9), e: 0.1, i: 65, bterm: 1.27e-3, tesseral: 31 },
+  "e 0.25": { n: revPerDay((RE + 600) / 0.75), e: 0.25, i: 65, bterm: 1.27e-3, tesseral: 31 },
+  "transfer orbit": { n: 2.26, e: 0.72, i: 27, bterm: 1.27e-3, tesseral: 31 },
+  Molniya: { n: 2.006, e: 0.74, i: 63.4, bterm: 1.27e-3, tesseral: 0 },
+  // perigee 200 km, BTERM 0.01: its crossing is days out; the asks here are hours either side of the epoch
+  "decaying set": { n: revPerDay((RE + 200) / (1 - 0.001)), e: 0.001, i: 55, bterm: Number(process.env.STATE_PURITY_DECAY_BTERM ?? 0.01), tesseral: 31 },
+};
+const recordOf = (o, k, opts) => seedOcm({ epoch: iso(opts?.epochMs ?? EPOCH), n: o.n, e: o.e, i: o.i, raan: (60 + 3.3 * k) % 360, argp: 90, ma: (10 + 7.1 * k) % 360,
+  bterm: o.bterm, agom: 0.01, norad: opts?.norad ?? 80000 + k, name: `P${opts?.norad ?? 80000 + k}`, msis: o.jxx !== true, records: o.jxx !== true, rows: rowsThrough(ROWS), tesseral: o.tesseral, zonal: o.zonal ?? 20 });
+const prefixed = (u) => { const b = Buffer.alloc(4 + u.length); b.writeUInt32LE(u.length, 0); Buffer.from(u).copy(b, 4); return b; };
+const jd = (ms) => { const d = ms / DAY; return [Math.floor(d) + 2440587.5, d - Math.floor(d)]; };
+const same = (a, b) => a.length === b.length && a.every((v, q) => Object.is(v, b[q]));
+let seed = 20261113;
+const rand = () => { seed = (seed * 1103515245 + 12345) % 2147483648; return seed / 2147483648; };
+const shuffle = (a) => { const s = a.slice(); for (let i = s.length - 1; i > 0; --i) { const j = Math.floor(rand() * (i + 1)); [s[i], s[j]] = [s[j], s[i]]; } return s; };
+
+const swap = (from, to) => (t) => { const at = t.indexOf(from); if (at < 0 || t.indexOf(from, at + 1) >= 0) throw new Error(`patch: not exactly once: ${from.slice(0, 80)}`); return t.replace(from, () => to); };
+// the two mechanisms as they were before the fix: the bracket's id from the lower node's index alone, and the drag-pass segment
+// found by the lower node's time alone
+const OLD_ID = swap("static_cast<uint32_t>(std::min(lo.index, hi.index));", "static_cast<uint32_t>(lo.index);");
+const OLD_DRAG_KEY = swap("c.node_t[q] == lo.t && c.hi_t[q] == hi.t &&", "c.node_t[q] == lo.t &&");
+// STATE_PURITY_AS_0_6_56=1: this checkout's sources with both put back (this checkout with OLD_ID and OLD_DRAG_KEY: the two keys as they were through 0.6.58): the test then fails
+// and prints, per set, how far a state asked after another on the other side of the epoch is from the cold set
+const PATCH = process.env.STATE_PURITY_AS_0_6_56 ? { "xp_theory.inc": (t) => OLD_DRAG_KEY(OLD_ID(t)) }
+  : process.env.STATE_PURITY_PATCH ? (await import(pathToFileURL(path.resolve(process.env.STATE_PURITY_PATCH)).href)).default : {};
+const patchTheory = PATCH["xp_theory.inc"] ?? ((s) => s);
+const patchOthers = Object.fromEntries(Object.entries(PATCH).filter(([f]) => f !== "xp_theory.inc"));
+// the module as it ships (the checkout's dist, or this checkout's sources with the patch) and a test build that adds the
+// cache budget setter and a read-only probe of the tesseral anchor
+// (always built here: the checkout's dist is the last release's artifact, which a source change does not rebuild)
+const shippedFile = buildDiagnostic("state-purity-ship", "", patchTheory, patchOthers);
+// the probe: the last bracket the module anchored the tesseral caches on (its nodes' indexes and times), as set_sp_anchor
+// is called with it (the state's own output scope restores the anchor before the call returns)
+// ([5] is the low 32 bits of the id the build computed for the bracket: the set's context is the high part, the same for both)
+const probeSeam = (text) => {
+  const head = "inline void set_sp_anchor(const XpSat& s, const Node& lo, const Node& hi) {\n";
+  if (!text.includes(head)) throw new Error("set_sp_anchor not found for the test probe");
+  const withHead = text.replace(head, `inline thread_local double g_test_anchor[6] = {};\n${head}  g_test_anchor[0] = 1; g_test_anchor[1] = lo.index; g_test_anchor[2] = hi.index; g_test_anchor[3] = lo.t; g_test_anchor[4] = hi.t;\n`);
+  const idLine = /(  const uint64_t id = [^;]*;\n)/;
+  if (!idLine.test(withHead)) throw new Error("the anchor's id line not found for the test probe");
+  return withHead.replace(idLine, "$1  g_test_anchor[5] = static_cast<double>(static_cast<uint32_t>(id));\n");
+};
+const PROBE_EXPORTS =
+  'SDNAP_EXPORT("sdnap_test_cache_budget") uint32_t sdnap_test_cache_budget(uint32_t mb) { return sdnap::xpt::cache_budget_mb(mb); }\n' +
+  'SDNAP_EXPORT("sdnap_test_anchor") void sdnap_test_anchor(double* o) { for (int k = 0; k < 6; ++k) o[k] = sdnap::xpt::g_test_anchor[k]; }\n' +
+  'SDNAP_EXPORT("sdnap_test_drag_pass_misses") double sdnap_test_drag_pass_misses() { return static_cast<double>(__atomic_load_n(&sdnap::xpt::g_drag_pass_window_misses, __ATOMIC_RELAXED)); }\n' +
+  'SDNAP_EXPORT("sdnap_test_drag_pass_calls") double sdnap_test_drag_pass_calls() { return static_cast<double>(__atomic_load_n(&sdnap::xpt::g_drag_pass_calls, __ATOMIC_RELAXED)); }\n';
+const probeFile = buildDiagnostic("state-purity-probe", PROBE_EXPORTS, (s) => probeSeam(patchTheory(s)), patchOthers);
+let instances = 0;
+const startedAt = Date.now();
+
+async function open(file, { budgetMb = 0 } = {}) {
+  ++instances;
+  const h = await createStandaloneHarness("browser", file, { surface: "direct", maxThreads: 1, enableBrowserWasiThreads: false });
+  const x = h.instance.exports;
+  const out = x.sdnap_alloc(48 * 4), probe = x.sdnap_alloc(48);
+  const mem = () => new Float64Array((h.memory ?? x.memory).buffer);
+  if (budgetMb > 0) x.sdnap_test_cache_budget(budgetMb);
+  return {
+    h, x,
+    load: async (records) => {
+      const r = await h.invoke({ methodId: "load_epochs", inputs: [{ portId: "ocm", typeRef: T("OCM"), payload: Buffer.concat(records.map(prefixed)) }] });
+      if (r.statusCode !== 0) throw new Error(`load_epochs ${r.errorCode}: ${r.errorMessage}`);
+    },
+    // a state of set k of series i: the status then the six doubles
+    at: (i, k, ms) => { const [w, f] = jd(ms); const rc = x.sdnap_epochs_set_at(i, k, w, f, out); return [rc, ...Array.from(mem().subarray(out / 8, out / 8 + 6))]; },
+    // the store's selection and blend of series i
+    blend: (i, ms) => { const [w, f] = jd(ms); const st = x.sdnap_alloc(4); const rc = x.sdnap_epochs_at(w, f, i, 1, 0, out, st, 0); const s = new Int32Array((h.memory ?? x.memory).buffer, st, 1)[0]; x.sdnap_free(st);
+      const o = mem(); return [rc, s, ...[0, 1, 2, 3, 4, 5].map((c) => o[out / 8 + c])]; },
+    // sdnap_cache_stats: [0] budget, [1] bytes held, [2] sets with caches, [3] with tesseral caches, [4] reclaimed, [5] and [6] asks refused room (flown on the thread's)
+    stats: () => { const p = x.sdnap_alloc(64); x.sdnap_cache_stats(p); const o = Array.from(mem().subarray(p / 8, p / 8 + 8)); x.sdnap_free(p); return o; },
+    anchor: () => { x.sdnap_test_anchor?.(probe); return Array.from(mem().subarray(probe / 8, probe / 8 + 6)); },
+    misses: () => (x.sdnap_test_drag_pass_misses ? x.sdnap_test_drag_pass_misses() : null),
+    calls: () => (x.sdnap_test_drag_pass_calls ? x.sdnap_test_drag_pass_calls() : null),
+    series: (i) => { const p = x.sdnap_alloc(24); x.sdnap_epochs_series(i, p, 0, 0); const o = Array.from(mem().subarray(p / 8, p / 8 + 3)); x.sdnap_free(p); return o; },
+  };
+}
+const asked = async (file, records, fn, opts) => { const m = await open(file, opts); await m.load(records); return fn(m); };
+const cold = (file, records, i, k, ms) => asked(file, records, (m) => m.at(i, k, ms));
+const coldBlend = (file, records, i, ms) => asked(file, records, (m) => m.blend(i, ms));
+// a reference is a state: set_at's status 0 and six finite doubles; the blend's call status 0 and series status 0 and six finite doubles
+const isState = (a) => a[0] === 0 && a.slice(1).every(Number.isFinite);
+const isBlend = (a) => a[0] === 0 && a[1] === 0 && a.slice(2).every(Number.isFinite);
+const sizeM = (a, b) => (a[0] !== b[0] ? Infinity : Math.max(...[1, 2, 3].map((c) => Math.abs(a[c] - b[c]))) * 1000);
+const fmt = (m) => (m === Infinity ? "status" : m >= 1 ? `${m.toFixed(1)} m` : `${(m * 1e6).toFixed(1)} um`);
+
+const filter = (process.env.STATE_PURITY_SETS ?? "").split(",").filter(Boolean);
+const names = Object.keys(ORBITS).filter((n) => !filter.length || filter.some((f) => n.includes(f)));
+const FRACTIONS = QUICK ? [0.1, 0.5, 0.9] : [0.02, 0.1, 0.25, 0.5, 0.75, 0.98];
+const summary = [];
+const kept = new Map();
+const compared = new Map();  // per set, the states compared with their cold reference
+
+for (const name of names) {
+  const o = ORBITS[name];
+  const rec = recordOf(o, 0);
+  // the first bracket on each side of the epoch (minutes), by the anchor the module leaves after a state a minute out
+  // (the nodes of the first bracket start at the epoch: asked at a few minutes, then farther out, until the module's
+  // anchor names a bracket whose first time is the epoch's)
+  const pm = await asked(probeFile, [rec], (m) => {
+    const side = (dir) => { for (const min of [10, 30, 60, 120, 300, 600, 1200, 2400]) { m.at(0, 0, EPOCH + dir * min * MIN); const a = m.anchor(); if (a[0] === 1 && a[3] === 0) return a; } return [0, 0, 0, 0, 0]; };
+    return { f: side(1), b: side(-1) };
+  });
+  const Hf = Math.abs(pm.f[4] - pm.f[3]), Hb = Math.abs(pm.b[4] - pm.b[3]);
+  // the bracket before and the bracket after the epoch have the epoch as their lower node (index 0 both); the ids this build
+  // computes for them (low 32 bits): two on the fixed sources, one in the control build that puts the lower node's index back
+  const idAfter = pm.f[5], idBefore = pm.b[5];
+  check(pm.f[1] === 0 && pm.b[1] === 0, `${name}: the first brackets' lower nodes are not the epoch (indexes ${pm.f[1]} and ${pm.b[1]})`);
+  if (!Object.keys(PATCH).length) check(idAfter !== idBefore, `${name}: the brackets after and before the epoch have one id (${idAfter})`);
+  const ms = (min) => EPOCH + Math.round(min * MIN);
+  const times = [];
+  const pairs = [];
+  for (const q of FRACTIONS) { times.push(ms(-q * Hb), ms(q * Hf)); pairs.push([ms(-q * Hb), ms(q * Hf)]); }
+  for (const k of QUICK ? [1] : [1, 2]) { times.push(ms(-k * Hb), ms(k * Hf)); pairs.push([ms(-k * Hb), ms(k * Hf)]); }
+  times.push(EPOCH, EPOCH + 1, EPOCH - 1); pairs.push([EPOCH - 1, EPOCH + 1], [EPOCH, EPOCH + 1], [EPOCH + 1, EPOCH]);
+  const uniq = [...new Set(times)];
+  // the reference: each time asked once on a cold instance
+  const ref = new Map();
+  for (const t of uniq) ref.set(t, await cold(shippedFile, [rec], 0, 0, t));
+  check([...ref.values()].every(isState), `${name}: a cold reference is not a state (status 0 and six finite numbers)`);
+  check(Hf > 0 && Hb > 0, `${name}: the probe found no first bracket on one side of the epoch (${Hf} min after, ${Hb} min before)`);
+  check(uniq.length >= 10, `${name}: ${uniq.length} distinct times asked`);
+  kept.set(name, { rec, ref, probeMin: Math.min(Hf, Hb) / 2, mirrored: FRACTIONS.filter((q) => q === 0.1 || q === 0.5).flatMap((q) => [ms(-q * Hb), ms(q * Hf)]).concat([EPOCH - 1, EPOCH + 1]) });
+  // a time-ordered flight across the epoch (what a catalog set asked at a clock time before and then past its epoch does): 300 states
+  // from one first bracket before the epoch to one after it, in time order; every 12th state after the crossing is compared with its cold state
+  const flight = Array.from({ length: 300 }, (_, k) => ms(-Hb + (k + 0.5) * (Hb + Hf) / 300));
+  const flightSamples = flight.filter((t, k) => t > EPOCH && k % 12 === 0);
+  kept.get(name).flight = flight;
+  for (const t of flightSamples) if (!ref.has(t)) { ref.set(t, await cold(shippedFile, [rec], 0, 0, t)); check(isState(ref.get(t)), `${name}: a cold reference of the flight is not a state`); }
+  check(flightSamples.length >= 10, `${name}: ${flightSamples.length} states of the flight compared after the crossing`);
+  const orders = {
+    "flight across the epoch, every state in time order": flight,
+    ascending: [...uniq].sort((p, q) => p - q), descending: [...uniq].sort((p, q) => q - p), "shuffled 1": shuffle(uniq), "shuffled 2": shuffle(uniq),
+    "negative side then positive": [...uniq].sort((p, q) => (p < EPOCH) !== (q < EPOCH) ? (p < EPOCH ? -1 : 1) : p - q),
+    "positive side then negative": [...uniq].sort((p, q) => (p < EPOCH) !== (q < EPOCH) ? (p < EPOCH ? 1 : -1) : q - p),
+  };
+  const report = { shipped: {}, thread: {} };
+  const worst = { shipped: 0, thread: 0 };
+  // the thread's caches: a 1 MB budget with forty other sets flown first, which hold all the room; set 0 is asked after
+  const fillers = Array.from({ length: 40 }, (_, k) => recordOf(ORBITS["500 km"], 100 + k));
+  const modes = [["shipped", shippedFile, 0, []], ["thread", probeFile, 1, fillers]];
+  for (const [mode, file, budgetMb, others] of modes) {
+    const run = async (label, times_) => {
+      const m = await open(file, { budgetMb });
+      await m.load([rec, ...others]);
+      // the target is the series with the smallest NORAD (80000); the fillers' NORADs are 80100 and up
+      let idx = 0;
+      for (let i = 0; i < others.length + 1; ++i) if (m.series(i)[0] === 80000) idx = i;
+      for (let j = 0; j < others.length + 1; ++j) if (j !== idx) m.at(j, 0, EPOCH + DAY);
+      let differ = 0, maxM = 0;
+      let nCompared = 0;
+      for (const t of times_) { const got = m.at(idx, 0, t), r = ref.get(t); check(isState(got), `${name}, ${mode} caches, ${label}: a state asked is not a state (status ${got[0]})`); if (r === undefined) continue; ++nCompared; if (!same(got, r)) { ++differ; maxM = Math.max(maxM, sizeM(got, r)); } }
+      compared.set(name, (compared.get(name) ?? 0) + nCompared);
+      const missed = m.misses(), called = m.calls();
+      if (missed !== null) {
+        check(missed === 0, `${name}, ${mode} caches, ${label}: ${missed} calls of drag_pass_rates whose window did not hold the time just bracketed (one thread flies a set at a time: 0 expected)`);
+        // the zero is not a function never reached: a set above e 0.3 reaches drag_pass_rates (its flights here are on both sides of the epoch)
+        if (o.e > 0.3 && label.startsWith("flight")) check(called > 0, `${name}, ${mode} caches, ${label}: drag_pass_rates was called ${called} times (above 0 expected for a set above e 0.3)`);
+      }
+      report[mode][label] = { differ, of: times_.length, maxM };
+      // the mode is what it says: with room the set's asks use its own caches (none refused), at 1 MB behind forty other sets some are on the thread's
+      const refused = m.stats()[5] + m.stats()[6];
+      check(mode === "thread" ? refused > 0 : refused === 0, `${name}, ${mode} caches, ${label}: ${refused} asks on the thread's caches (${mode === "thread" ? "some" : "none"} expected)`);
+      note(name, mode, label, differ, times_.length, maxM);
+      worst[mode] = Math.max(worst[mode], maxM);
+      check(differ === 0, `${name}, ${mode} caches, ${label}: ${differ} of ${times_.length} states differ from the cold set asked once (largest ${fmt(maxM)})`);
+    };
+    for (const [label, order] of Object.entries(orders)) await run(label, order);
+    for (const [a, b] of pairs) {
+      const rel = (t) => ((t - EPOCH) / MIN).toFixed(3);
+      await run(`pair ${rel(a)} then ${rel(b)} min`, [a, b]);
+      await run(`pair ${rel(b)} then ${rel(a)} min`, [b, a]);
+    }
+  }
+  // the store's blend of two sets of one series: the second set is one day later, so its switch (the midpoint of the epochs) is
+  // twelve hours out and the blend, half an hour either side of it, asks the later set twelve hours before its own epoch
+  const second = recordOf({ ...o }, 1, { epochMs: EPOCH + DAY, norad: 80000 });
+  const blendTimes = [11.5, 11.9, 12, 12.1, 12.5, 18, 24, 24.2, 30, 35].map((h) => EPOCH + Math.round(h * 60 * MIN));
+  const blendRef = new Map();
+  for (const t of blendTimes) blendRef.set(t, await coldBlend(shippedFile, [rec, second], 0, t));
+  check([...blendRef.values()].every(isBlend), `${name}: a cold blend reference is not a state (call and series status 0, six finite numbers)`);
+  const blendOrders = { ascending: [...blendTimes].sort((p, q) => p - q), descending: [...blendTimes].sort((p, q) => q - p), shuffled: shuffle(blendTimes) };
+  let blendWorst = 0;
+  for (const [mode, file, budgetMb, others] of modes) {
+    for (const [label, order] of Object.entries(blendOrders)) {
+      const m = await open(file, { budgetMb });
+      await m.load([rec, second, ...others]);
+      let idx = 0;
+      for (let i = 0; i < others.length + 1; ++i) if (m.series(i)[0] === 80000) idx = i;
+      for (let j = 0; j < others.length + 1; ++j) if (j !== idx) m.at(j, 0, EPOCH + DAY);
+      let differ = 0, maxM = 0;
+      for (const t of order) { const got = m.blend(idx, t), r = blendRef.get(t); check(isBlend(got), `${name}, ${mode} caches, blend ${label}: a state asked is not a state`); compared.set(name, (compared.get(name) ?? 0) + 1); if (!same(got, r)) { ++differ; maxM = Math.max(maxM, got[0] !== r[0] || got[1] !== r[1] ? Infinity : Math.max(...[2, 3, 4].map((c) => Math.abs(got[c] - r[c]))) * 1000); } }
+      blendWorst = Math.max(blendWorst, maxM);
+      note(name, mode, `blend ${label}`, differ, order.length, maxM);
+      check(differ === 0, `${name}, ${mode} caches, the store's blend of two sets, ${label}: ${differ} of ${order.length} states differ from the cold store asked once (largest ${fmt(maxM)})`);
+    }
+  }
+  const fails = (mode) => Object.values(report[mode]).filter((r) => r.differ > 0).length, total = (mode) => Object.keys(report[mode]).length;
+  summary.push({ name, Hf, Hb, idAfter, idBefore, shipped: `${fails("shipped")}/${total("shipped")} runs differ, largest ${fmt(worst.shipped)}`, thread: `${fails("thread")}/${total("thread")} runs differ, largest ${fmt(worst.thread)}`, blend: fmt(blendWorst) });
+  console.log(`${name}: first bracket ${Hf.toFixed(1)} min after the epoch and ${Hb.toFixed(1)} min before (both start at the epoch; ids ${idAfter} and ${idBefore}); ${compared.get(name)} states compared; own caches ${summary.at(-1).shipped}; thread caches ${summary.at(-1).thread}; blend largest ${summary.at(-1).blend}`);
+}
+
+if (names.includes("decaying set")) {
+  // a set past its decay crossing is refused by name (status 4, decayed), cold and after other asks, on both kinds of caches
+  const rec = recordOf(ORBITS["decaying set"], 0), late = EPOCH + 200 * 60 * MIN;
+  const coldLate = await cold(shippedFile, [rec], 0, 0, late);
+  check(coldLate[0] === 4, `decaying set at 200 h, cold: status ${coldLate[0]}, expected 4 (decayed)`);
+  for (const [mode, file, budgetMb, others] of [["own", shippedFile, 0, []], ["thread", probeFile, 1, Array.from({ length: 40 }, (_, k) => recordOf(ORBITS["500 km"], 100 + k))]]) {
+    const m = await open(file, { budgetMb }); await m.load([rec, ...others]);
+    let idx = 0; for (let i = 0; i < others.length + 1; ++i) if (m.series(i)[0] === 80000) idx = i;
+    const before = m.at(idx, 0, EPOCH + 2 * 60 * MIN), refused = m.at(idx, 0, late), after = m.at(idx, 0, EPOCH - 2 * 60 * MIN);
+    check(isState(before) && isState(after), `decaying set, ${mode} caches: the states before and after the crossing's ask are not states`);
+    check(refused[0] === 4, `decaying set at 200 h after other asks, ${mode} caches: status ${refused[0]}, expected 4 (decayed)`);
+    check(same(before, await cold(shippedFile, [rec], 0, 0, EPOCH + 2 * 60 * MIN)) && same(after, await cold(shippedFile, [rec], 0, 0, EPOCH - 2 * 60 * MIN)), `decaying set, ${mode} caches: a state asked around the refused ask differs from the cold state`);
+  }
+  console.log("decaying set past its crossing: refused with status 4 cold and after other asks, own and thread caches; the states asked around the refusal equal their cold states");
+}
+if (!Object.keys(PATCH).length) {
+  // the control builds: each of the two mechanisms of the fix put back as it was through 0.6.58, one at a time, in a build of this
+  // checkout's sources. Each must fail this test where it is the cause: the mirrored pairs (the first bracket's 0.1 and 0.5 on both sides,
+  // either order) of the sets named, against the cold references made on the fixed build above
+  const controls = [
+    ["the bracket id of 0.6.58 (the lower node's index: one id for the brackets before and after the epoch)", OLD_ID, ["500 km", "half-day e 0.005", "e 0.1", "transfer orbit"]],
+    ["the drag-pass key of 0.6.58 (the lower node's time alone)", OLD_DRAG_KEY, ["Molniya", "transfer orbit"]],
+  ];
+  let controlRuns = 0, flightDiffer = 0;
+  for (const [what, transform, setNames] of controls) {
+    const file = buildDiagnostic("state-purity-control", PROBE_EXPORTS, (s) => probeSeam(transform(s)));
+    for (const name of setNames) {
+      const k = kept.get(name);
+      if (!k) continue;
+      ++controlRuns;
+      let differ = 0;
+      if (what.startsWith("the bracket id")) {
+        // the control build gives the two first brackets one id (the fixed sources gave two: asserted above)
+        const ids = await asked(file, [k.rec], (m) => { const side = (dir) => { m.at(0, 0, EPOCH + dir * k.probeMin * MIN); return m.anchor()[5]; }; return [side(1), side(-1)]; });
+        check(ids[0] === ids[1], `control build, ${what}: ${name}: the brackets after and before the epoch have ids ${ids[0]} and ${ids[1]}, expected one`);
+      }
+      const [a, b, c, d, e, f] = k.mirrored;
+      for (const order of [[a, b], [b, a], [c, d], [d, c], [e, f], [f, e]]) {
+        const m = await open(file); await m.load([k.rec]);
+        for (const t of order) if (!same(m.at(0, 0, t), k.ref.get(t))) ++differ;
+      }
+      check(differ > 0, `control build, ${what}: ${name}'s mirrored pairs all equal the cold set, so this test does not see the mechanism`);
+      console.log(`control, ${what}: ${name}: ${differ} of 12 states of the mirrored pairs differ from the cold set`);
+      // the time-ordered flight across the epoch, in the same control build: its states after the crossing against the cold set
+      const fm = await open(file); await fm.load([k.rec]);
+      for (const t of k.flight) { const got = fm.at(0, 0, t), r = k.ref.get(t); if (r !== undefined && !same(got, r)) ++flightDiffer; }
+    }
+    check(flightDiffer > 0, `control build, ${what}: the time-ordered flights of ${setNames.join(", ")} all equal the cold sets, so the flight does not see the mechanism`);
+    console.log(`control, ${what}: ${flightDiffer} states of the time-ordered flights differ from the cold sets`);
+    flightDiffer = 0;
+  }
+  check(controlRuns === 6, `${controlRuns} control runs, expected 6 (four sets on the id build, two on the drag-pass build)`);
+}
+{
+  // the cache budget (a measurement once reported medium-orbit series moving at 18 h and 30 h at a 1 MB budget): a hundred series of two sets
+  // of the half-day class, 36 hours apart (the switch is 18 h out, the blend's midpoint), asked at 18 h then 30 h, series by series, in a
+  // store at the default budget and in one at 1 MB; each against the other and against the series alone in a cold store
+  const N = QUICK ? 24 : 100;
+  let bs = 20261113;
+  const br = () => ((bs = (bs * 1664525 + 1013904223) >>> 0) / 4294967296);
+  const shapes = Array.from({ length: N }, () => ({ n: 1.9 + 0.35 * br(), e: 0.001 + 0.05 * br() ** 2, i: 30 + 50 * br(), bterm: 0.001, tesseral: 31 }));
+  const orbit = (k) => shapes[k];
+  const first = (k) => recordOf(orbit(k), k, { norad: 90000 + k }), later = (k) => recordOf(orbit(k), k + 1, { epochMs: EPOCH + 36 * 60 * MIN, norad: 90000 + k });
+  const records = Array.from({ length: N }, (_, k) => [first(k), later(k)]).flat();
+  const asks = [EPOCH + 18 * 60 * MIN, EPOCH + 30 * 60 * MIN];
+  const flyAll = async (file, budgetMb) => {
+    const m = await open(file, { budgetMb });
+    await m.load(records);
+    const index = new Map(); for (let i = 0; i < N; ++i) index.set(m.series(i)[0], i);
+    const out = [];
+    for (let k = 0; k < N; ++k) out.push(asks.map((t) => m.blend(index.get(90000 + k), t)));
+    return out;
+  };
+  const wide = await flyAll(shippedFile, 0), narrow = await flyAll(probeFile, 1);
+  let budgetDiffer = 0, wideCold = 0, narrowCold = 0, worstBudget = 0, worstCold = 0;
+  for (let k = 0; k < N; ++k) {
+    const coldSeries = asks.map((t) => null);
+    for (let a = 0; a < asks.length; ++a) {
+      const m = await open(shippedFile); await m.load([first(k), later(k)]);
+      coldSeries[a] = m.blend(0, asks[a]);
+      check(isBlend(coldSeries[a]) && isBlend(wide[k][a]) && isBlend(narrow[k][a]), `two-set series ${k} at ask ${a}: a state asked is not a state`);
+      if (!same(wide[k][a], narrow[k][a])) { ++budgetDiffer; worstBudget = Math.max(worstBudget, Math.max(...[2, 3, 4].map((c) => Math.abs(wide[k][a][c] - narrow[k][a][c]))) * 1000); }
+      if (!same(wide[k][a], coldSeries[a])) { ++wideCold; worstCold = Math.max(worstCold, Math.max(...[2, 3, 4].map((c) => Math.abs(wide[k][a][c] - coldSeries[a][c]))) * 1000); }
+      if (!same(narrow[k][a], coldSeries[a])) ++narrowCold;
+    }
+  }
+  check(budgetDiffer === 0, `${N} two-set half-day series at 18 h and 30 h: ${budgetDiffer} of ${2 * N} states differ between a 1 MB budget and the default (largest ${fmt(worstBudget)})`);
+  check(wideCold === 0 && narrowCold === 0, `${N} two-set half-day series at 18 h and 30 h: ${wideCold} (default budget) and ${narrowCold} (1 MB) of ${2 * N} states differ from the series alone in a cold store (largest at the default ${fmt(worstCold)})`);
+  note("budget series", "both", "18 h and 30 h", budgetDiffer, 2 * N, worstBudget);
+  console.log(`budget: ${N} two-set half-day series, ${budgetDiffer} of ${2 * N} states differ between 1 MB and the default budget (largest ${fmt(worstBudget)}); against the series alone: ${wideCold} at the default, ${narrowCold} at 1 MB`);
+}
+{
+  // the same, as the issue states it: two hundred single-set series of one medium-orbit shape (n 2.0056 rev/day, e 0.005, 55 degrees, the
+  // phases and the mean motion varying a little), each asked at 18 h and 30 h from its epoch, series by series and then time by time
+  // (every series at 18 h, then every series at 30 h); the default budget and 1 MB; each against the set alone in a cold store
+  const N = QUICK ? 40 : 200;
+  let bs = 20261114;
+  const br = () => ((bs = (bs * 1664525 + 1013904223) >>> 0) / 4294967296);
+  const variant = process.env.STATE_PURITY_VARIANT ? JSON.parse(process.env.STATE_PURITY_VARIANT) : {};
+  const shapes = Array.from({ length: N }, () => ({ n: 2.0056 + 0.002 * (br() - 0.5), e: 0.005 + 0.002 * (br() - 0.5), i: 55 + 2 * (br() - 0.5), bterm: 0.001, tesseral: 31, ...variant }));
+  const records = shapes.map((o, k) => recordOf(o, k, { norad: 91000 + k }));
+  const asks = [EPOCH + 18 * 60 * MIN, EPOCH + 30 * 60 * MIN];
+  const fly = async (file, budgetMb, timeMajor) => {
+    const m = await open(file, { budgetMb });
+    await m.load(records);
+    const index = new Map(); for (let i = 0; i < N; ++i) index.set(m.series(i)[0], i);
+    const out = Array.from({ length: N }, () => []);
+    if (timeMajor) for (const t of asks) for (let k = 0; k < N; ++k) out[k].push(m.at(index.get(91000 + k), 0, t));
+    else for (let k = 0; k < N; ++k) for (const t of asks) out[k].push(m.at(index.get(91000 + k), 0, t));
+    return out;
+  };
+  const cold = [];
+  for (let k = 0; k < N; ++k) { cold.push([]); for (const t of asks) cold[k].push(await asked(shippedFile, [records[k]], (m) => m.at(0, 0, t))); }
+  check(cold.flat().every(isState), "a cold single-set reference of the medium-orbit series is not a state");
+  for (const [label, file, mb] of [["default budget", shippedFile, 0], ["1 MB", probeFile, 1]]) for (const timeMajor of [false, true]) {
+    const got = await fly(file, mb, timeMajor);
+    check(got.flat().every(isState), `${label}: a state asked of the medium-orbit series is not a state`);
+    let differ = 0, series = 0, worst = 0;
+    for (let k = 0; k < N; ++k) { let any = false; got[k].forEach((g, a) => { if (!same(g, cold[k][a])) { ++differ; any = true; worst = Math.max(worst, sizeM(g, cold[k][a])); } }); if (any) ++series; }
+    check(differ === 0, `${N} medium-orbit series at ${label}, asked ${timeMajor ? "time by time" : "series by series"} at 18 h and 30 h: ${differ} states of ${series} series differ from the set alone in a cold store (largest ${fmt(worst)})`);
+    note("medium-orbit series", label, timeMajor ? "time by time" : "series by series", differ, 2 * N, worst);
+    console.log(`${N} medium-orbit series, ${label}, ${timeMajor ? "time by time" : "series by series"}: ${differ} states of ${series} series differ from the set alone (largest ${fmt(worst)})`);
+  }
+}
+{
+  // the pool (SPEC 9): the thirteen sets and forty-seven others as one store on four pool threads, every series asked in one call at each time of a
+  // time-ordered flight across the epoch (240 calls from one and a half first brackets before the epoch to as many after), then the same times
+  // shuffled; the sets' states against the cold set asked once. Run twice: with the room the batches need reserved, and with every growth of the
+  // memory inside a batch refused (a series that needed one is refused on its lane and flown again on the calling thread, which must be counted)
+  const POOL_EXPORTS =
+    "static uint32_t g_test_deferred_n = 0, g_test_deferred_at[4096];\n" +
+    "void sdnap_test_deferred(uint32_t k) { if (g_test_deferred_n < 4096) g_test_deferred_at[g_test_deferred_n] = k; ++g_test_deferred_n; }\n" +
+    'SDNAP_EXPORT("sdnap_test_pool_mode") void sdnap_test_pool_mode(int32_t refuse) { sdnap::pool::g_reserve_off = refuse != 0; }\n' +
+    // the row hook marks the first `n` rows of every slice refused growth, so those series are flown again on the calling thread whichever thread would have been refused
+    "static uint32_t g_test_force_rows = 0;\n" +
+    "static void sdnap_test_force_row(uint32_t row, bool) { if (row < g_test_force_rows) sdnap::xpt::g_alloc_refused = 1; }\n" +
+    'SDNAP_EXPORT("sdnap_test_force_rows") void sdnap_test_force_rows(uint32_t n) { g_test_force_rows = n; sdnap::pool::g_row_hook = n != 0 ? sdnap_test_force_row : nullptr; }\n' +
+    'SDNAP_EXPORT("sdnap_test_deferred_count") uint32_t sdnap_test_deferred_count() { return g_test_deferred_n; }\n' +
+    'SDNAP_EXPORT("sdnap_test_deferred_series") uint32_t sdnap_test_deferred_series(uint32_t* out) { const uint32_t n = g_test_deferred_n < 4096 ? g_test_deferred_n : 4096; for (uint32_t q = 0; q < n; ++q) out[q] = g_test_deferred_at[q]; return n; }\n' +
+    'SDNAP_EXPORT("sdnap_test_drag_pass_misses") double sdnap_test_drag_pass_misses() { return static_cast<double>(__atomic_load_n(&sdnap::xpt::g_drag_pass_window_misses, __ATOMIC_RELAXED)); }\n' +
+    'SDNAP_EXPORT("sdnap_test_drag_pass_calls") double sdnap_test_drag_pass_calls() { return static_cast<double>(__atomic_load_n(&sdnap::xpt::g_drag_pass_calls, __ATOMIC_RELAXED)); }\n';
+  const sortLine = "    std::sort(deferred, deferred + n);\n";
+  const epochStore = (t) => {
+    const at = t.indexOf(sortLine);
+    if (at < 0 || t.indexOf(sortLine, at + 1) >= 0) throw new Error("the deferral's sort line is not exactly once in epoch_store.inc");
+    return "void sdnap_test_deferred(uint32_t k);\n" + t.replace(sortLine, () => sortLine + "    for (int32_t q = 0; q < n; ++q) sdnap_test_deferred(a + deferred[q]);\n");
+  };
+  const buildPool = (name, theory) => buildDiagnostic(name, POOL_EXPORTS, theory, { ...patchOthers, "epoch_store.inc": epochStore });
+  const poolFile = buildPool("state-purity-pool", patchTheory);
+  const kinds = names.map((n) => ORBITS[n]);
+  const sets = kinds.map((o, k) => recordOf(o, k, { norad: 92000 + k }));
+  const others = Array.from({ length: 47 }, (_, k) => recordOf(ORBITS["500 km"], 200 + k, { norad: 92100 + k }));
+  const all = [...sets, ...others];
+  const Hmin = Math.min(...names.map((n) => kept.get(n).probeMin)) * 2;
+  const flight = Array.from({ length: 240 }, (_, k) => EPOCH + Math.round(Hmin * MIN * (-1.5 + (3 * (k + 0.5)) / 240)));
+  const sample = flight.filter((t, k) => k % 3 === 1);
+  const refs = sets.map(() => new Map());
+  for (let k = 0; k < sets.length; ++k) for (const t of sample) { const r = await coldBlend(shippedFile, [sets[k]], 0, t); refs[k].set(t, r.slice(1)); check(isBlend([0, ...r.slice(1)]), `pool: ${names[k]}: a cold reference is not a state`); }
+  // one pass: the store on `file` at 4 threads, the flight and the shuffled flight; returns what it counted. `control`: a build with a mechanism put back, whose states are
+  // counted and not asserted
+  const poolPass = async (file, refuse, control) => {
+    const h = await createStandaloneHarness("browser", file, { surface: "direct", maxThreads: 4, enableBrowserWasiThreads: true });
+    const x = h.instance.exports;
+    check(x.sdnap_threads(4) === 4, "pool: 4 threads not granted");
+    const r = await h.invoke({ methodId: "load_epochs", inputs: [{ portId: "ocm", typeRef: T("OCM"), payload: Buffer.concat(all.map(prefixed)) }] });
+    if (r.statusCode !== 0) throw new Error(`pool load_epochs ${r.errorCode}: ${r.errorMessage}`);
+    const count = all.length, out = x.sdnap_alloc(48 * count), status = x.sdnap_alloc(4 * count), stats = x.sdnap_alloc(128);
+    x.sdnap_test_pool_mode(refuse ? 1 : 0);
+    x.sdnap_test_force_rows(refuse ? sets.length : 0);  // with no reserve the compared sets' rows are among the series flown again, whichever thread is refused growth
+    const index = new Map(); { const p = x.sdnap_alloc(24); for (let i = 0; i < count; ++i) { x.sdnap_epochs_series(i, p, 0, 0); index.set(new Float64Array(h.memory.buffer, p, 3)[0], i); } x.sdnap_free(p); }
+    let differTotal = 0;
+    const asks = async (label, order) => {
+      let differ = 0, compared = 0, worstM = 0;
+      for (const t of order) {
+        const [w, f] = jd(t);
+        if (x.sdnap_epochs_at(w, f, 0, count, 0, out, status, 0) !== 0) throw new Error("pool: sdnap_epochs_at failed");
+        const v = new Float64Array(h.memory.buffer, out, 6 * count), c = new Int32Array(h.memory.buffer, status, count);
+        if (!sample.includes(t)) continue;
+        for (let k = 0; k < sets.length; ++k) {
+          const i = index.get(92000 + k), got = [c[i], ...[0, 1, 2, 3, 4, 5].map((q) => v[q * count + i])], ref = refs[k].get(t);
+          ++compared; if (!same(got, ref)) { ++differ; worstM = Math.max(worstM, got[0] !== ref[0] ? Infinity : Math.max(...[1, 2, 3].map((q) => Math.abs(got[q] - ref[q]))) * 1000); }
+        }
+      }
+      differTotal += differ;
+      if (!control) {
+        note("pool, 4 threads", refuse ? "no reserve" : "reserved", label, differ, compared, worstM);
+        check(differ === 0, `pool on 4 threads, ${refuse ? "every growth in a batch refused" : "room reserved"}, ${label}: ${differ} of ${compared} states differ from the cold set (largest ${fmt(worstM)})`);
+      }
+      return compared;
+    };
+    const n1 = await asks("time-ordered flight across the epoch", flight);
+    const n2 = await asks("the same times shuffled", shuffle(flight));
+    x.sdnap_pool_stats(stats, 16);
+    const pool = Array.from(new Float64Array(h.memory.buffer, stats, 16)), deferred = x.sdnap_test_deferred_count();
+    const at = x.sdnap_alloc(4 * 4096), n = x.sdnap_test_deferred_series(at), deferredSeries = new Set(Array.from(new Uint32Array(h.memory.buffer, at, n)));
+    const deferredSets = sets.map((_, k) => k).filter((k) => deferredSeries.has(index.get(92000 + k)));
+    return { n: n1 + n2, differ: differTotal, pool, deferred, deferredSets, misses: x.sdnap_test_drag_pass_misses(), calls: x.sdnap_test_drag_pass_calls() };
+  };
+  for (const refuse of [false, true]) {
+    const { n, pool, deferred, deferredSets, misses, calls } = await poolPass(poolFile, refuse, false);
+    compared.set("pool", (compared.get("pool") ?? 0) + n);
+    const which = refuse ? "no reserve" : "reserved";
+    check(pool[1] > 0 && pool[14] > 0 && pool[15] >= 2, `pool, ${which}: batches ${pool[1]}, rows on pool threads ${pool[14]}, pool threads with rows ${pool[15]} (some, and at least two threads, expected)`);
+    if (refuse) {
+      check(pool[2] > 0 && pool[3] > 0 && deferred > 0, `pool, no reserve: refusals ${pool[2]}, deferrals ${pool[3]}, series flown again on the calling thread ${deferred} (all above 0 expected)`);
+      // a deferred series is one of the compared sets, and its state is the cold set's (asserted above for every compared set); the row hook
+      // marks the compared sets' rows, so this holds on every run and does not depend on which thread is refused growth first
+      check(deferredSets.length > 0, "pool, no reserve: none of the thirteen compared sets was among the deferred series");
+    } else check(pool[2] === 0 && pool[3] === 0 && deferred === 0, `pool, room reserved: refusals ${pool[2]}, deferrals ${pool[3]}, series flown again ${deferred} (0 expected)`);
+    check(misses === 0 && calls > 0, `pool, ${which}: ${misses} calls of drag_pass_rates whose window did not hold the time, of ${calls} calls (0 of some expected)`);
+    console.log(`pool, 4 threads, ${refuse ? "every growth in a batch refused" : "room reserved"}: ${n} states of ${sets.length} sets equal to the cold set; ${pool[1]} batches, ${pool[14]} rows on ${pool[15]} pool threads, refusals ${pool[2]}, deferrals ${pool[3]}, flown again on the calling thread ${deferred} series (${deferredSets.length} of the compared sets: ${deferredSets.map((k) => names[k]).join(", ") || "none"}); drag_pass_rates ${calls} calls, ${misses} misses`);
+  }
+  if (!Object.keys(PATCH).length) {
+    // negative controls: the bracket's id of 0.6.58 put back in a build of this checkout's sources: the flight on four threads must differ from the cold sets
+    const control = await poolPass(buildPool("state-purity-pool-control", (s) => OLD_ID(patchTheory(s))), false, true);
+    check(control.differ > 0, "control build (the old bracket id): the pooled flights equal the cold sets, so the pool block does not see the mechanism");
+    console.log(`control, the old bracket id: ${control.differ} of ${control.n} pooled states differ from the cold sets`);
+  }
+}
+{
+  // fifty medium-orbit objects (the half-day, 8 h and 16 h classes, varying a little) asked at three times, then at other times, then the
+  // first three again, at a 1 MB cache budget (sets are reclaimed between) and at the default; every revisit and every state against the object alone in a cold store
+  const N = 50;
+  let bs = 20261115;
+  const br = () => ((bs = (bs * 1664525 + 1013904223) >>> 0) / 4294967296);
+  const classes = [2.0056, 3.0, 1.5];
+  const recs = Array.from({ length: N }, (_, k) => recordOf({ n: classes[k % 3] + 0.002 * (br() - 0.5), e: 0.005 + 0.004 * br(), i: 50 + 15 * br(), bterm: 0.001, tesseral: 31 }, k, { norad: 93000 + k }));
+  const first = [3, 9, 21].map((h) => EPOCH + h * 60 * MIN);
+  const others2 = [-5, -1, 0.5, 6, 14, 27, 40, 70].map((h) => EPOCH + Math.round(h * 60 * MIN));
+  const sequence = [...first, ...others2, ...first];
+  const coldOf = [];
+  for (let k = 0; k < N; ++k) { const m = new Map(); for (const t of [...first, ...others2]) m.set(t, await asked(shippedFile, [recs[k]], (q) => q.at(0, 0, t))); coldOf.push(m); }
+  check(coldOf.every((m) => [...m.values()].every(isState)), "fifty medium-orbit objects: a cold reference is not a state");
+  const fiftyRun = async (file, mb, objectMajor) => {
+    const m = await open(file, { budgetMb: mb }); await m.load(recs);
+    const index = new Map(); for (let i = 0; i < N; ++i) index.set(m.series(i)[0], i);
+    let differ = 0, worstM = 0, n = 0;
+    const one = (k, t) => { const g = m.at(index.get(93000 + k), 0, t), r = coldOf[k].get(t); ++n; if (!same(g, r)) { ++differ; worstM = Math.max(worstM, sizeM(g, r)); } };
+    if (objectMajor) for (let k = 0; k < N; ++k) for (const t of sequence) one(k, t);
+    else for (const t of sequence) for (let k = 0; k < N; ++k) one(k, t);
+    const st = m.stats();
+    return { differ, worstM, n, refused: st[4] + st[5] + st[6] };
+  };
+  for (const [label, file, mb] of [["default budget", shippedFile, 0], ["1 MB", probeFile, 1]]) for (const objectMajor of [false, true]) {
+    const { differ, worstM, n, refused } = await fiftyRun(file, mb, objectMajor);
+    note("fifty medium-orbit objects", label, objectMajor ? "object by object" : "time by time", differ, n, worstM);
+    check(differ === 0, `fifty medium-orbit objects at ${label}, ${objectMajor ? "object by object" : "time by time"} (three times, eight others, the first three again): ${differ} of ${n} states differ from the object alone in a cold store (largest ${fmt(worstM)})`);
+    // the budget is what it says: at 1 MB sets are reclaimed or refused room, at the default none
+    check(mb > 0 ? refused > 0 : refused === 0, `fifty medium-orbit objects at ${label}: ${refused} sets reclaimed or refused room (${mb > 0 ? "some" : "none"} expected)`);
+    console.log(`fifty medium-orbit objects, ${label}, ${objectMajor ? "object by object" : "time by time"}: ${differ} of ${n} states differ from the object alone (largest ${fmt(worstM)}); ${refused} reclaimed or refused room`);
+  }
+  // the asks bracket the epoch as the case says: for each class, -1 h and 0.5 h lie inside the first bracket on each side (the anchor probe)
+  for (const [q, nClass] of classes.entries()) {
+    const k = q;  // object k is of class k % 3
+    const sides = await asked(probeFile, [recs[k]], (m) => ({ before: (m.at(0, 0, EPOCH - 60 * MIN), m.anchor()), after: (m.at(0, 0, EPOCH + 30 * MIN), m.anchor()) }));
+    check(sides.before[0] === 1 && sides.before[3] === 0 && Math.abs(sides.before[4]) > 60 && sides.after[0] === 1 && sides.after[3] === 0 && sides.after[4] > 30,
+      `fifty medium-orbit objects, class n ${nClass}: -1 h and 0.5 h are not inside the first bracket on each side of the epoch (before ${sides.before.slice(3, 5)}, after ${sides.after.slice(3, 5)})`);
+  }
+  if (!Object.keys(PATCH).length) {
+    // negative control: the old bracket id in a build of this checkout's sources; the revisits must differ from the objects alone
+    const control = buildDiagnostic("state-purity-control-fifty", PROBE_EXPORTS, (s) => probeSeam(OLD_ID(s)));
+    const { differ, n } = await fiftyRun(control, 0, false);
+    check(differ > 0, "control build (the old bracket id): the fifty medium-orbit objects all equal their cold states, so the case does not see the mechanism");
+    console.log(`control, the old bracket id: ${differ} of ${n} states of the fifty objects differ from the objects alone`);
+  }
+}
+// every set was flown and compared; a partial run (a set filter, a patched build, the quick fractions) says so
+const partial = filter.length > 0 || Object.keys(PATCH).length > 0 || QUICK;
+if (!partial) {
+  check(names.length === Object.keys(ORBITS).length && summary.length === names.length, `${summary.length} of ${Object.keys(ORBITS).length} sets flown`);
+  for (const n of names) check((compared.get(n) ?? 0) >= 200, `${n}: ${compared.get(n) ?? 0} states compared, at least 200 expected`);
+}
+if (process.env.STATE_PURITY_JSON) (await import("node:fs")).writeFileSync(process.env.STATE_PURITY_JSON, JSON.stringify({ sets: summary, runs }, null, 1));
+if (failures.length) {
+  console.error(`STATE PURITY: ${failures.length} failing checks`);
+  const shown = process.env.STATE_PURITY_ALL ? failures.length : 60;
+  for (const f of failures.slice(0, shown)) console.error(`  ${f}`);
+  if (failures.length > shown) console.error(`  ... and ${failures.length - shown} more (STATE_PURITY_ALL=1 lists them all)`);
+  process.exit(1);
+}
+const total = [...compared.values()].reduce((s, n) => s + n, 0);
+const tail = `${names.length} sets, ${total} states (each equal to the cold set asked once, bit for bit) over orders, pairs, node times, thread caches and blend; ${instances} module instances, ${Math.round((Date.now() - startedAt) / 1000)} s`;
+if (partial) {
+  console.log(`STATE PURITY (PARTIAL RUN: set filter, patched build or quick fractions): ${tail}`);
+  process.exit(process.env.STATE_PURITY_PARTIAL === "1" ? 0 : 1);
+}
+console.log(`STATE PURITY: ${tail}`);
+process.exit(0);  // the pool block's threads end with the process

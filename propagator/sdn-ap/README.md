@@ -1,6 +1,6 @@
 # sdn-ap-propagator
 
-Version 0.6.58 (dist 4b7ffed8).
+Version 0.6.59 (dist 5002d012).
 
 General-perturbations propagation of whole catalogs in one isomorphic WASM module (browser and WasmEdge), with two
 theories and AP, an advanced propagator that builds on the entire history of astrodynamics ($PCF FORCES selects its drag
@@ -588,7 +588,12 @@ work grows with the time gap from the nearest preceding retained node. Checkpoin
 query work is not bounded independently of lead time.
 
 An AP state is a function of its set and its time alone. The order of requests, the call they come in, the sets flown
-between them, and whether the covariance is asked leave its bits unchanged (`test/set-caches.e2e.mjs`, nine orbits). A
+between them, and whether the covariance is asked leave its bits unchanged (`test/set-caches.e2e.mjs`, nine orbits, and
+`test/state-purity.e2e.mjs`, thirteen sets against the same state asked once on a fresh instance). Through 0.6.58 a state
+asked after another on the other side of the epoch, inside the first bracket on either side, differed from it by up to
+0.30 mm at 500 km, 1.8 mm at e 0.25 and 714 mm for a decaying set at perigee 200 km (this checkout with the two old keys put back).
+A fit that flies its set on both sides of its epoch (an arc under 24 hours on a block that is not eccentric, the hand-over fit) gives a different
+record than 0.6.58; a fit with the default epoch placement, the epoch at its first state, the catalog fit included, gives the same bytes (SPEC 9). A
 store's AP set keeps its own caches and node runs from one pool, 256 MB (the module's default; no typed configuration
 carries a budget yet), read by sdnap_cache_stats. SPEC 9 states how room is shared, the caches by part and the one
 exception: a record that carries a covariance, through `propagate`, differs by 0.39 mm.
