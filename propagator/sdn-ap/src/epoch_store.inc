@@ -1146,7 +1146,8 @@ static int load_epochs_close_call(void) {
 static int propagate_epochs_call(void);
 extern "C" int propagate_epochs(void) {
   sdnap::mem::CallMark call_mark;
-  return sdnap::mem::finish(propagate_epochs_call());
+  const int rc = propagate_epochs_call();
+  return sdnap::mem::refuse_if_out_of_memory() ? 3 : rc;
 }
 static int propagate_epochs_call(void) {
   using namespace sdnap;
@@ -1165,7 +1166,9 @@ static int propagate_epochs_call(void) {
   const std::vector<oem::Grid> grids = {oem::output_grid()};
   size_t budget = pcf::options().maximum_states;
   char text[48], start[48], stop[48], why[200];
+  size_t refused_series = 0;
   for (epochs::Series& s : st.series) {
+    bool series_failed = false;
     flatbuffers::FlatBufferBuilder fbb(1 << 16);
     std::vector<flatbuffers::Offset<ephemerisDataBlock>> blocks;
     for (const oem::Grid& g : grids) {
@@ -1191,6 +1194,8 @@ static int propagate_epochs_call(void) {
       // SPEC 16.25 (stack #564): the epochs past an AP set's decay crossing are refused by name, those before it answered
       std::vector<double> kw, kf;
       size_t past_n = 0;
+      size_t refused = 0;
+      std::string statuses;
       double cross_jd[2] = {0.0, 0.0};
       bool cross_back = false;
       for (size_t k = 0; k < tw.size(); ++k) {
@@ -1198,7 +1203,14 @@ static int propagate_epochs_call(void) {
         bool have_p = false;
         const double jd[2] = {tw[k], tf[k]};
         epochs::g_decay_seen = false;
+        const uint32_t failure_mark = mem::failures();
         const int32_t e = epochs::at(st, s, epochs::minutes_of(tw[k], tf[k]), r, v, P, have_p, jd, ub);
+        if (e != kPropOk) {
+          ++refused; series_failed = true;
+          if (!statuses.empty()) statuses += ",";
+          statuses += std::to_string(k) + ":" + std::to_string(e);
+          if (mem::failures() != failure_mark) statuses += ":out-of-memory";
+        }
         if (e == kPropDecayed && epochs::g_decay_seen) {
           if (past_n == 0) {  // the first epoch past a crossing names it (the epochs ascend)
             cross_jd[0] = epochs::g_decay_jd[0];
@@ -1208,21 +1220,11 @@ static int propagate_epochs_call(void) {
           ++past_n;
           continue;
         }
+        if (e != kPropOk) continue;
         kw.push_back(tw[k]);
         kf.push_back(tf[k]);
         if (ub[0] == ub[0] && (unblended.empty() || unblended.back().first != ub[0])) unblended.emplace_back(ub[0], ub[1]);
         oem::iso_text(tw[k], tf[k], 0.0, text, sizeof text);
-        if (e == epochs::kRowsShort) {
-          char day[16];
-          atm::date_of_mjd(st.short_day, day, sizeof day);
-          return atm::fail_day("weather-rows-short", day, "A set's SPACE_WEATHER rows do not reach a day the request flies it through.");
-        }
-        if (e != kPropOk) {
-          if (mem::refuse_if_out_of_memory()) return 3;
-          std::snprintf(why, sizeof why, "NORAD %u does not propagate to %s (code %d).", s.norad, text, static_cast<int>(e));
-          plugin_set_error("propagation-failed", why);
-          return 3;
-        }
         double axes[3][3] = {{1, 0, 0}, {0, 1, 0}, {0, 0, 1}};
         if (g.axes != oem::Axes::Teme) {
           double m[3][3];
@@ -1260,16 +1262,8 @@ static int propagate_epochs_call(void) {
       char cross_text[48] = {};
       if (past_n > 0) {
         oem::iso_text(cross_jd[0], cross_jd[1], 0.0, cross_text, sizeof cross_text);
-        if (kw.empty()) {
-          char name[80];
-          std::snprintf(name, sizeof name, "decayed:%s", cross_text);
-          std::snprintf(why, sizeof why, "NORAD %u decays at %s (SPEC 16.25): every requested epoch is past it.", s.norad, cross_text);
-          plugin_set_error(name, why);
-          return 3;
-        }
-        tw = kw;
-        tf = kf;
       }
+      if (!kw.empty()) { tw = kw; tf = kf; }
       oem::iso_text(tw.front(), tf.front(), 0.0, start, sizeof start);
       oem::iso_text(tw.back(), tf.back(), 0.0, stop, sizeof stop);
       std::string comment;
@@ -1316,16 +1310,25 @@ static int propagate_epochs_call(void) {
         std::snprintf(note, sizeof note, "decayed:%s; %zu epochs after it refused", cross_text, past_n);
         comment = comment.empty() ? std::string(note) : comment + ". " + note;
       }
+      const std::string status = "status=" + std::string(refused ? (lines.empty() ? "refused" : "partial") : "ok") +
+          "; refused=" + std::to_string(refused) + (statuses.empty() ? "" : "; request-status=" + statuses);
+      comment = comment.empty() ? status : status + ". " + comment;
       blocks.push_back(CreateephemerisDataBlockDirect(fbb, comment.empty() ? nullptr : comment.c_str(), object, "EARTH", frame, nullptr, cov_frame, timingStandard_UTC, start,
                                                       limit_start, limit_stop,
                                                       stop, nullptr, 0, g.explicit_times ? 0.0 : g.step, 6, nullptr, &lines, with_cov ? &cov_lines : nullptr));
     }
+    refused_series += series_failed;
     const auto root = CreateOEMDirect(fbb, nullptr, 3.0, nullptr, s.originator.empty() ? "SDN" : s.originator.c_str(), &blocks);
     FinishOEMBuffer(fbb, root);
     if (plugin_push_output("ephemeris", "OEM.fbs", "$OEM", fbb.GetBufferPointer(), fbb.GetSize()) < 0) {
       plugin_set_error("output-failed", "The $OEM could not be emitted.");
       return 3;
     }
+  }
+  if (refused_series) {
+    std::snprintf(why, sizeof why, "%zu object series contain refused requests; each emitted block states its status.", refused_series);
+    plugin_set_error("partial-ephemeris", why);
+    return 3;
   }
   return 0;
 }
