@@ -464,7 +464,7 @@ the schema-wide anonymous-read boundary.
 
 ## Build and validation
 
-The bundled exact-W chain is built against sdn-ap 0.6.60 with chain adapter 0.1.0.
+The bundled exact-W chain is built against sdn-ap 0.6.61 with chain adapter 0.1.0.
 Build the unsigned `sdn-ap` generated translation unit, then from this directory:
 
 ```sh
