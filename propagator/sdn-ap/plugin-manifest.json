@@ -195,7 +195,7 @@
     {
       "methodId": "load_epochs_open",
       "displayName": "Open a load of the epoch store in parts",
-      "description": "Starts a load in parts (SPEC 14.1.1): replaces any pending load and reads the optional $PCF EPOCH_STORE while preserving resident rows, records and cells. A refused open, part or close drops the pending load and preserves the resident snapshot. load-not-open and pool-dead change nothing. Refused by name: pool-dead, configuration-refused, invalid-configuration, out-of-memory.",
+      "description": "Starts a pending load with optional $PCF EPOCH_STORE. Refusals preserve resident stores and cells; load-not-open and pool-dead preserve the pending load too (SPEC 14.1.1).",
       "inputPorts": [
         {
           "portId": "configuration",
@@ -257,7 +257,7 @@
     {
       "methodId": "load_epochs_close",
       "displayName": "Close a load of the epoch store",
-      "description": "Prepares and validates the open load, then publishes its snapshot and selects records for plugin calls (SPEC 14.1.1). Publication closes the old frames and preserves rows. Every refusal preserves the resident snapshot. Refused by name: load-not-open, missing-ocm, series-forces-differ, pool-dead, out-of-memory.",
+      "description": "Publishes the pending record snapshot, selects it for plugin calls, and closes old frames. Rows survive; refusals preserve the resident snapshot (SPEC 14.1.1).",
       "inputPorts": [],
       "outputPorts": [],
       "maxBatch": 65535,
@@ -266,7 +266,7 @@
     {
       "methodId": "replace_epoch",
       "displayName": "Replace one catalog record",
-      "description": "Replaces one record of a closed catalog by its existing series identity and theory. The series must hold one set. The plugin index and every other entity remain unchanged. Only the replaced entity loses its direct caches and frame cells. Every refusal preserves the old record. Refusals include records-not-loaded, replace-one-record, replace-identity-missing, replace-multiple-sets, pool-dead, record validation errors and out-of-memory.",
+      "description": "Replaces one single-set series with the same identity and theory. Preserves its plugin index and other entities. Drops only its caches and cells. Refusals preserve the old record (SPEC 20).",
       "inputPorts": [
         {
           "portId": "ocm",
@@ -274,7 +274,7 @@
           "minStreams": 1,
           "maxStreams": 1,
           "required": true,
-          "description": "Exactly one size-prefixed $OCM record in one required stream, matching an existing single-set series identity and theory.",
+          "description": "One required stream: exactly one size-prefixed $OCM with the existing identity and theory.",
           "acceptedTypeSets": [
             {
               "setId": "sds-ocm-element-sets",
@@ -285,7 +285,7 @@
                   "rootTypeName": "OCM"
                 }
               ],
-              "description": "Ratified SDS $OCM element sets; the module decodes the FlatBuffer itself."
+              "description": "SDS $OCM element set."
             }
           ]
         }
