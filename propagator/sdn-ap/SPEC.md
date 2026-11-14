@@ -2183,6 +2183,10 @@ U retains the original bake levels and coefficient evaluation. A evaluates baked
 
 Fifteen measured neighborhoods straddle the thresholds and the zero-drag branch. Their fine-offset maximum change in approximation error is 0.016281421 m; the committed test enforces 0.063 m. An additional eccentric 1,000 km neighborhood measures 0.111527867 m. The physical separation of two nearby sets is distinct from that approximation change. The selector is not continuous in the elements, and the neighborhood experiment is not a universal bound for every possible set.
 
+The direct R resonant blocks are tested at 105 shifted commensurabilities under gravity caps 31 and 70, including 14:1 and 15:1. All 10,752 tested states are finite; the largest distance from state-exact coefficients is 0.003882637 m and the largest adjacent approximation residual is 0.002951175 m. All 42 sampled decaying order cases cross their commensurability. These blocks operate below the class-0 wide-grid eccentricity switch at 0.05.
+
+The separate wide-grid output refuses four synthetic exact-root cases at eccentricities 0.123–0.173 under both U and R. Removing the selected m-daily and short-period coefficient families does not remove the refusal; omitting the wide-grid correction does. The unchanged wide-grid behavior is not covered by the finite-output result above. `test/coefficient-resonance.e2e.mjs --wide` retains the failing diagnostic.
+
 **States and boundaries.** Committed synthetic OCM fixtures, TEME meters, common 300 s samples over 0–120 h. A boundary jump is the difference between cubic fits at every measured bake boundary and bracket node, using 0.1 s samples over 8 s on each side and excluding the central half second. Unsupported states are excluded. Direct state-element evaluation is the reference for coefficient approximation, not an independent physical truth.
 
 | Synthetic class | Form | Largest exact distance m | Largest jump m | Largest movement from U m | Unchanged/common states |
