@@ -34,6 +34,7 @@ async function loadStandard(code) {
 const FSO = await loadStandard("FSO");
 const FSB = await loadStandard("FSB");
 const QRP = await loadStandard("QRP");
+const PIV = await loadStandard("PIV");
 
 function packed(Type, fields, id) {
   const object = Object.assign(new Type(), fields);
@@ -105,10 +106,16 @@ async function harnessFor(t, answer) {
     const host = {
       ...imports.space_data_module_host,
       call(opPtr, opLen, ptr, len) {
-        const call = decodeHostCall(new Uint8Array(memory.buffer, ptr, len).slice());
+        const bytes = new Uint8Array(memory.buffer, ptr, len).slice();
+        const wire = decode(PIV, "PIV", bytes).REQUEST;
+        // The node extension uses existing PIV raw ports and StreamResult; the SDK registry is unchanged.
+        const call = wire.METHOD_ID === "storage.index_page"
+          ? { op: wire.METHOD_ID, raw: Object.fromEntries(wire.INPUTS.map((tab) =>
+              [tab.PORT_ID, Uint8Array.from(wire.PAYLOAD_ARENA.slice(tab.OFFSET, tab.OFFSET + tab.SIZE))])) }
+          : decodeHostCall(bytes);
         calls.push(call);
         try {
-          response = encodeHostCallResult({ ok: true, op: call.op, ...(answer(call.op, call) ?? {}) });
+          response = encodeHostCallResult({ ok: true, op: call.op === "storage.index_page" ? "storage.flatsql_query_stream" : call.op, ...(answer(call.op, call) ?? {}) });
         } catch (error) {
           response = encodeHostCallResult({ ok: false, error: { code: error.code ?? "failed", message: error.message } });
         }
@@ -169,7 +176,7 @@ test("hostcap/flatsql-query passes SDK compliance with one concrete type per por
       ids[`${method.methodId}.${port.portId}`] = port.acceptedTypeSets[0].allowedTypes[0].fileIdentifier;
     }
   }
-  assert.deepEqual(ids, { "query.query": "$FSO", "query.records": "$FSB", "query.status": "$FSO", "sandbox_query.query": "$QRP", "sandbox_query.surface": "$QRP", "sandbox_query.decision": "$QRP", "sandbox_query.page": "$QRP" });
+  assert.deepEqual(ids, { "query.query": "$FSO", "query.records": "$FSB", "query.status": "$FSO", "sandbox_query.query": "$QRP", "sandbox_query.surface": "$QRP", "sandbox_query.decision": "$QRP", "sandbox_query.page": "$QRP", "index_page.query": "$QRP", "index_page.decision": "$QRP", "index_page.page": "$QRP" });
 });
 
 test("hostcap/flatsql-query imports only WASI and the sync hostcall bridge", async () => {
@@ -449,4 +456,43 @@ test("sandbox_query: bytes and text of any length travel as parameters and come 
   assert.deepEqual(sqlParams(calls[0]).map(([t, v]) => [t, t === "str" ? v.length : Array.from(v)]), [["bytes", [1, 2]], ["str", 70_000]]);
   const [cell0, cell1] = page.header.ROWS[0].CELLS;
   assert.deepEqual([cell0.KIND, Array.from(cell0.BYTES_VALUE), cell1.KIND, cell1.TEXT_VALUE.length], [QRP.qrpValueKind.Bytes, [9, 8, 7], QRP.qrpValueKind.Text, 70_000]);
+});
+
+
+test("index_page: preserves request filters and the host's complete bounded page", async (t) => {
+  const records = recordStream("CAT", 2);
+  const page = Object.assign(new QRP.QRPT(), { KIND: QRP.qrpKind.Page, SCHEMA_NAME: "CAT.fbs",
+    RECORD_COUNT: 2, TOTAL_COUNT: 33000n, CURSOR: "pinned", NEXT_CURSOR: "continue", LIMIT: 2, MAX_BYTES: 4096n });
+  const b = new flatbuffers.Builder(256); b.finishSizePrefixed(page.pack(b), "$QRP");
+  const header = b.asUint8Array();
+  const stream = new Uint8Array(((header.length + 7) & ~7) + records.length);
+  stream.set(header); stream.set(records, (header.length + 7) & ~7);
+  const { harness, calls } = await harnessFor(t, () => ({ result: { ROWS: 2n }, raw: { stream } }));
+  const request = qrpFrame("query", { SCHEMA_NAME: "CAT.fbs", PROVIDER_ID: "synthetic-provider",
+    SOURCE_NAME: "synthetic-source", BATCH_ID: "synthetic-batch", CURSOR: "resume", LIMIT: 2, MAX_BYTES: 4096n });
+  const result = await harness.invoke({ methodId: "index_page", inputs: [request] });
+  const out = sandboxOutputs(result);
+  assert.deepEqual(calls.map((c) => c.op), ["storage.index_page"]);
+  assert.deepEqual(calls[0].raw.request, request.payload);
+  assert.deepEqual(out.decisionBytes, request.payload);
+  assert.deepEqual(result.outputs.find((o) => o.portId === "page").payload, stream);
+  assert.deepEqual([out.page.header.NEXT_CURSOR, Number(out.page.header.TOTAL_COUNT)], ["continue", 33000]);
+  assert.deepEqual(out.page.records, records);
+});
+
+test("index_page: a host refusal produces an error decision and no records", async (t) => {
+  const { harness } = await harnessFor(t, () => fail("not-authorized", "storage_query grant required"));
+  const out = sandboxOutputs(await harness.invoke({ methodId: "index_page", inputs: [qrpFrame("query", { SCHEMA_NAME: "OCM.fbs" })] }));
+  assert.equal(out.decision.KIND, QRP.qrpKind.Error);
+  assert.match(out.decision.MESSAGE, /storage_query/);
+  assert.equal(out.page, null);
+});
+
+test("index_page: surplus request frames are refused before a host call", async (t) => {
+  const { harness, calls } = await harnessFor(t, () => assert.fail("unexpected call"));
+  const frame = qrpFrame("query", { SCHEMA_NAME: "CAT.fbs" });
+  const out = await harness.invoke({ methodId: "index_page", inputs: [frame, frame] });
+  assert.notEqual(out.statusCode, 0);
+  assert.equal(out.errorCode, "batched-input-frames");
+  assert.equal(calls.length, 0);
 });
