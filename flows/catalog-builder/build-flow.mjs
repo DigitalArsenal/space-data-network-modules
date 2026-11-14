@@ -13,6 +13,7 @@ const read=(p)=>fs.readFile(path.join(repo,p),'utf8');
 async function compile(folder,source,codes=[],inline=[]){
  const manifest=JSON.parse(await read(folder+'/plugin-manifest.json'));
  const target=path.join(out,folder.split('/').at(-1));
+ await fs.mkdir(path.join(target,'dist/isomorphic'),{recursive:true});
  if(!manifest.sequentialJustification)manifest.sequentialJustification={kind:'caller-level-parallelism',detail:'One bounded operation per invocation; the service serializes reconciliation.'};
  const {header}=codes.length?await generateSdsHeaders(codes,import.meta.url):{header:''};
  const sourceCode=header.replace(/static_assert\(FLATBUFFERS_VERSION_MAJOR[\s\S]*?\);\n/g,'')+'\n'+await inlineSdsHeaders(source,inline,import.meta.url);
