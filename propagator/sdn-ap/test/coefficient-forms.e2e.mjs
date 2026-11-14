@@ -7,6 +7,7 @@
 // unchanged artifact (default: committed dist). No reference digest is replaced.
 import assert from 'node:assert/strict';
 import fs from 'node:fs';
+import {mixedForms} from './lib/coefficient-mixed.mjs';
 import {createStandaloneHarness} from 'space-data-module-sdk/testing/isomorphic';
 import {T} from './lib/ocm.mjs';
 import {cases,records,buildForms} from './lib/coefficient-forms.mjs';
@@ -62,5 +63,6 @@ for(const [i,r] of records().entries()){
  await Promise.all([candidate,probe,unchanged,full,exact].map(m=>m.close()));
 }
 if(process.env.COEFFICIENT_JSON)fs.writeFileSync(process.env.COEFFICIENT_JSON,JSON.stringify(summaries,null,2)+'\n');
+await mixedForms(candidateFile);
 console.log('coefficient forms: all measured bounds passed');
 process.exit(0);
