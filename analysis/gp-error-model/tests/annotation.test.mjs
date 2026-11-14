@@ -41,7 +41,7 @@ test('annotation retains the entire original buffer and every original root refe
     assert.deepEqual(b,a,'all other fields retained, including posterior and propagation block');
     // Independently follow every original pointer field: the new root must reference
     // the original copied table/vector/string, not a reconstructed equivalent.
-    const scalar=new Set([8,12,14,42,46,54,56,74]);
+    const scalar=new Set([8,12,14,42,46,54,56,76]);
     const replaced=new Set([46,64,68]);
     const v=before.bb_pos-before.bb.readInt32(before.bb_pos),n=before.bb.readUint16(v);
     for(let slot=4;slot<n;slot+=2){
