@@ -194,6 +194,7 @@ struct Store {
   Array<Series> series;
   Stats stats;
   Array<std::unique_ptr<atm::Atmosphere>> atmospheres;  ///< the distinct row series and node vectors of the load
+  uint32_t generation = 0;                                    ///< counts the store's replacements (clear, install): the frames (SPEC 19) drop their cells when it changes
   /// the day a request found no row for (weather-rows-short), written by the thread that flew that state. propagate_epochs
   /// reads it on its own store, on the calling thread, right after the state that wrote it. After a threaded
   /// sdnap_epochs_at it holds some series' missing day, not a given one (that export answers each series' status alone).
@@ -225,6 +226,7 @@ inline void clear(Store& st) {
   st.entries.release();
   st.series.release();
   st.stats = Stats{};
+  ++st.generation;
   st.atmospheres.release();
 }
 
@@ -609,6 +611,7 @@ inline int close(Store& st, Build& b) {
   while (st.atmospheres.size() > used) st.atmospheres.pop_back();
   st.stats.kept = static_cast<double>(st.entries.size());
   unwind.installed = true;
+  ++st.generation;
   return 0;
 }
 

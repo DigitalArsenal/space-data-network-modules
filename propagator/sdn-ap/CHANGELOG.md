@@ -1,5 +1,65 @@
 # Changelog
 
+## 0.6.60 — The frame path: a frame of every object from Chebyshev cells of AP's own states
+
+What gets worse: the module is 25,582 bytes larger (1,909,995 against 1,884,413) and an instance that never opens frames holds 576 bytes more static data. The 80 MiB store of
+`test/memory-limit.e2e.mjs` (part 4) answers 2,473 sets, as in 0.6.59. A cell is not served where AP's own position output steps: AP's position output steps by up to about 9 mm in strong-drag
+sets (perigee under about 500 km at BTERM 0.01, higher with larger BTERM), and a 3-minute window that holds a step above the builder's 3-D limit of 8 mm is not served (status 4); the host asks
+AP's own entries for those times. In the 100,000-object recipe of `test/frames-memory.e2e.mjs` 2 objects are in such a window at the fill's instant (steps of 9.02 and 8.90 mm), and none of the
+public catalog's 92,100 served objects. A first fill of 100,000 objects takes 133 s on one thread when their records are at the epoch, 162 s at 2 days, 217 s at 5 days and 315 s at 10 days
+(`node test/frames-cost.mjs --objects 100000 --rows 100 --skip-wide --skip-frame`; 20 rows a class give 197 to 218 s at the epoch), and a refill costs 166, 203, 270 and 395 core seconds an hour. A served state is
+within 1 cm and 1e-4 m/s (3-D) of AP's state for that record and time asked of a fresh instance, so two kinds of state exist for an object, AP's (`sdnap_epochs_at`) and the cell's
+(`sdnap_frames_at`), and they differ by up to that bound. Objects the entry does not serve (wide sets, series of several sets, records with a forecast or a hand-over, SGP4 and stock SGP4XP sets)
+answer "not served by this entry". The epoch store holds a generation counter (`Store::generation`, three lines) that its load bumps; no store export reads it.
+
+What it is: the exports `sdnap_frames_open`, `_refill`, `_at`, `_stats` and `_close` (SPEC 19; `src/frames.inc`). One cell for each served AP set, polynomials in position and velocity over a window
+of 48 minutes (halved to 3), built from the set's states at 64 Chebyshev points and checked at 96 points and the window's two ends (768 points for the sets whose output steps), within 5 mm
+and 5e-5 m/s on each axis and 8 mm and 8e-5 m/s in 3-D. `sdnap_frames_at` evaluates polynomials only. A frame of 100,000 objects costs 0.262 of SGP4's time a state in TEME (middle half of ten
+rounds 0.260 to 0.266) and 0.253 in Earth-fixed coordinates (0.251 to 0.255), load 3.9 to 5.7. The instance of 100,000 objects holds 269.7 MB with the stored load and 15 pool threads, 232.0 MB without a pool
+(263.0 and 225.2 MB for the public catalog's shares). Measured worst over 5.3 million served points: 6.4 mm and 4.5e-5 m/s, 163,911 of them against a fresh instance.
+
+What does not move, against 0.6.59's wasm (98e297f3): every state of every flight (`node test/kernel-cost.mjs --diff ... --bound 0,0`, the default list and `--tesseral 70 --slow`, 132 flights each, in time order, in reverse and
+shuffled), the 942 stored AP records flown after and before their epoch and across it (226,080 and 339,120 states a kind), and the replay of the 942 records through `propagate` with their covariance (226,736 states, 4,761,456 covariance elements)
+are equal to the bit; the conformance digests are the same (SGP4XP 72dcf600..., SGP4 control 9ecfafcd...). The frame path adds exports and changes no existing state.
+
+The module has no export that stops its pool threads: they wait for batches for the life of the instance, and a Node process that starts a pool ends when the host exits (SPEC 9; `test/pool-end.e2e.mjs`).
+
+A correction to 0.6.59's statement about fits: a fit with the default epoch placement gives the same record as 0.6.58's only where its first state lies on the 1e-8-day grid the fit rounds the epoch to (the fit takes the first
+state as the epoch and rounds the epoch's day fraction to 1e-8 day); where the rounded epoch falls after the first state, the fit flies its set across the epoch and its record differs as the other placements' records do.
+
+## 0.6.59 — An AP set's state is a function of the set and the time
+
+What gets worse: every set holds 16 more bytes, the upper node's time in its drag-pass cache (768 to 784 bytes a set, 1.6 MB at 100,000 objects). The 80 MiB store of 6,000 SGP4XP sets without AP's terms
+(`test/memory-limit.e2e.mjs`, part 4) answers 2,473 sets where 0.6.55 to 0.6.58 answered 2,480; each state it answers is the same bits.
+
+**Fits that fly their set on both sides of its epoch give different records than on 0.6.58**: different fitted elements, so different states from the record. Those are the fits whose
+epoch is not the first state of the fit interval (fit_oem.inc, the epoch placement): an arc under 24 hours on a block that is not eccentric (the epoch is the arc's last state; the arc is
+before it, the held-out and carried states after it), the hand-over fit (OUTPUT.START_TIME without STOP_TIME: the epoch is the arc's last state, the later states held out), and the diagnostic
+placements of `sdnap_fit_epoch_diagnostic` (the middle state, the last). A fit with the default placement, the epoch at the first state, flies its set forward from the epoch only and its record
+is the same bytes as 0.6.58's: the catalog fit to a forecast from the cutoff (0 to 120 h; 84 stored cases of seven classes, byte for byte), the conversion of a set's own SGP4 flight from 2.5 days
+before its epoch to 5 days after (20 sets, byte for byte), and the carried-forecast and covariance flights of such a fit. Measured on the 12 h arcs of the carried classes of `test/lib/carried.mjs`, 0.6.58
+against this build: the four AP classes change (LEO 300 km, LEO 830 km, MEO, GEO), the eight SGP4-XP classes do not; the largest element changes are 1.4e-5 degrees of mean anomaly (LEO 300 km), 3.7e-6 m²/kg of
+AGOM (LEO 830 km) and 1.3e-8 degrees of argument of perigee (GEO), and the two records' flights over the carried day differ by up to 7.3 mm (LEO 300 km), 7.1 mm (LEO 830 km), 0.16 mm (MEO) and 0.08 mm (GEO).
+No command in this repository prints these figures; the digests of `test/epoch-carried-pool.e2e.mjs` (the fitted records' bytes and the states flown from them, pinned apart) are what moved with them.
+
+What moves besides: on every release through 0.6.58, an AP set asked at a time after another time on the other side of its epoch, inside the first bracket either side, answered a state that
+differed from the same state asked once. The bracket after the epoch and the bracket before it shared one identity (the set's context and the lower node's index, 0 for both)
+in the tesseral and m-daily bake caches, and the drag-pass segment above e 0.3 was kept under the lower node's time alone, the epoch's for both. A time-ordered flight that
+crosses the epoch, which a catalog set asked at a clock time ahead of its epoch does, is such a series. Largest differences by class (this checkout with the two old keys put back; `STATE_PURITY_AS_0_6_56=1 node test/state-purity.e2e.mjs` prints them):
+a decaying set (perigee 200 km, BTERM 0.01) 714 mm, a transfer orbit 7.5 mm, e 0.25 1.8 mm, 500 km 0.30 mm, e 0.1 0.22 mm, the 8 h class 0.18 mm, 830 km 0.17 mm, half-day class 6.5 to 31 um
+(a blend of two sets 86 um), the 16 h class 31 um, Molniya 0.47 um, geosynchronous with tesseral 31 0.02 um, geosynchronous without tesseral terms none; strong-drag sets with perigee under about 350 km up to
+49.7 mm on the pooled path of 0.6.58 (no command of this repository prints the 49.7 mm). The bracket's identity is now the set's context and the smaller of its two nodes' indexes (signed by
+side), and the drag-pass segment is kept under both nodes' times and the perigee time.
+
+What does not move, against 0.6.58's committed wasm (a6095d2c): a state of a set asked only after its epoch, or only before it, is the same bits (`node test/kernel-cost.mjs --diff ... --bound 0,0`, the default
+list and `--tesseral 70 --slow`, 132 flights each, in time order, in reverse and shuffled; and the 942 stored AP records flown only after their epoch and only before it in three orders each, 226,080 states a flight kind
+and order; and the replay of the 942 records through `propagate` with their covariance, 226,736 states and 4,761,456 covariance elements; no command of this repository runs the last two). The flights that differ are the ones asking on both
+sides of their epoch: of the 942 records flown in time order from 2.5 days before the epoch to 5 days after (30 min), 237 differ (148 of 220 medium and other high-perigee records up to 1.0 mm, 55 of 62 geosynchronous-class
+up to 0.43 mm, 34 of 350 of e 0.3 and over up to 20.5 mm; none of the 310 low records, perigee up to 1,400 km, on that schedule). A state no longer depends on what the set was asked before, on the caches it flew
+with, or on the order of the calls (SPEC 9), on any number of threads while one thread flies a given set at a time (a set above e 0.3 stays on the calling thread), except the exception SPEC 9 states (a record that carries a covariance,
+flown through `propagate`).
+`test/state-purity.e2e.mjs` is the test; `test/epoch-pool.e2e.mjs` and `test/epoch-carried-pool.e2e.mjs` have the digests of this release.
+
 ## 0.6.58 — The epoch store's first pass on the pool; the memory grown in steps of 4 MiB
 
 `sdnap_epochs_at` without a covariance plane builds and flies each series' sets on the pool's threads, one thread a series, in chunks of 16 series, and every

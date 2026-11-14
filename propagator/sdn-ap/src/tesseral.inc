@@ -47,8 +47,8 @@ inline int64_t sp_cell_e(double e, double w_small, double e2_tol, double& center
 }
 
 /// The bracket of the mean-element grid a state's mean elements come from (xp_theory.inc sets it when it brackets a
-/// time): its id (the set and the lower node), its first time and length (signed, minutes), and a, e and cos i at
-/// its two nodes. The tesseral and m-daily caches bake at states on the bracket, so what they hold depends on the
+/// time): its id (the set's context and the smaller of its two nodes' indexes, one value per bracket), its first time
+/// and length (signed, minutes), and a, e and cos i at its two nodes. The tesseral and m-daily caches bake at states on the bracket, so what they hold depends on the
 /// bracket and the time alone.
 struct SpAnchor {
   bool valid = false;

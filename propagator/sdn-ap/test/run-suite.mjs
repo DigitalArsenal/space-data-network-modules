@@ -5,8 +5,11 @@
 // failing" and does not fail the suite; a listed test that passes fails it (remove it from the list); an entry naming
 // no test fails it. The site's release notes print the same file, so the page and the suite name the same defects.
 // The longest tests of the previous run start first (their times are kept in the scratch root).
+// Release checks require the browser with SDNAP_REQUIRE_BROWSER=1; optional browser skips appear as MISSING.
 //   node test/run-suite.mjs [--jobs N] [test ...]
 // --jobs N: at most N tests at once (default 14). test ...: only these (names without .e2e.mjs).
+// A test that runs longer than 30 minutes (SDNAP_TEST_TIMEOUT_MINUTES) is stopped by its own process id (SIGTERM, then SIGKILL 10 s later) and reported
+// as "timeout"; a test that finished its work and left a thread alive (a module pool's threads end with the process) is stopped the same way.
 // The E2Es need what they need alone: SDN_AP_ORACLE_ROOT for conformance.e2e.mjs, the model truth's FFM build. A
 // preflight checks the installs and the oracle before any test starts (exit 2 when one is missing).
 import { spawn } from "node:child_process";
@@ -44,7 +47,7 @@ const INSTALLS = [
   ["propagator/ffm", "flatbuffers", "the model truth's codec (propagator/ffm/tests/lib/prwCodec.mjs)"],
 ];
 const missing = [];
-for (const [rel, entry, who] of INSTALLS) {
+for (const [rel, entry, who] of (tests.every((t) => t === "browser-pool") ? INSTALLS.slice(0, 1) : INSTALLS)) {
   const dir = path.join(repoRoot, rel);
   try { createRequire(path.join(dir, "package.json")).resolve(entry); }
   catch { missing.push(`missing install: ${rel} cannot resolve ${entry} (${who}); fix: npm ci --prefix ${dir}`); }
@@ -75,6 +78,7 @@ console.log(`${tests.length} tests, ${jobs} at a time; logs in ${logs}`);
 const children = new Set();
 for (const sig of ["SIGINT", "SIGTERM"]) process.on(sig, () => { for (const c of children) c.kill(sig); process.exit(130); });
 
+const TIMEOUT_MINUTES = Number(process.env.SDNAP_TEST_TIMEOUT_MINUTES ?? 30);
 const results = new Map();
 const started = Date.now();
 function run(name) {
@@ -84,11 +88,19 @@ function run(name) {
     const child = spawn(process.execPath, [path.join(testDir, `${name}.e2e.mjs`)], { cwd: packageRoot, stdio: ["ignore", log, log] });
     fs.closeSync(log);
     children.add(child);
+    let timedOut = false;
+    const limit = setTimeout(() => {
+      timedOut = true;
+      child.kill("SIGTERM");
+      setTimeout(() => { if (child.exitCode === null && child.signalCode === null) child.kill("SIGKILL"); }, 10000).unref();
+    }, TIMEOUT_MINUTES * 60000);
     child.on("close", (code, signal) => {
+      clearTimeout(limit);
       children.delete(child);
-      const r = { code, signal, seconds: Math.round((Date.now() - t0) / 1000) };
+      const skipped = name === "browser-pool" && code === 0 && /^SKIP browser-pool:/m.test(fs.readFileSync(path.join(logs, `${name}.log`), "utf8"));
+      const r = { code: timedOut ? 124 : code, signal, skipped, timedOut, seconds: Math.round((Date.now() - t0) / 1000) };
       results.set(name, r);
-      console.log(`${name}: ${code === 0 ? "pass" : `exit ${code ?? signal}`} in ${r.seconds} s`);
+      console.log(`${name}: ${skipped ? "missing" : timedOut ? "timeout" : code === 0 ? "pass" : `exit ${code ?? signal}`} in ${r.seconds} s`);
       resolve();
     });
   });
@@ -104,11 +116,13 @@ try {
   fs.writeFileSync(timesFile, JSON.stringify(previous, null, 1));
 } catch {}
 
-let failed = 0, stillFailing = 0, passed = 0;
+let failed = 0, stillFailing = 0, passed = 0, skipped = 0;
 const rows = tests.map((name) => {
   const r = results.get(name), ok = r.code === 0, d = known.get(name);
   let result;
-  if (d && !ok) { result = `KNOWN DEFECT ${d.issue}, still failing`; stillFailing++; }
+  if (r.timedOut) { result = `timeout after ${TIMEOUT_MINUTES} minutes${d ? ` (listed as a known defect, ${d.issue})` : ""}`; failed++; }
+  else if (r.skipped) { result = "MISSING: browser prerequisite (see log)"; skipped++; }
+  else if (d && !ok) { result = `KNOWN DEFECT ${d.issue}, still failing`; stillFailing++; }
   else if (d && ok) { result = `FAIL: listed as a known defect (${d.issue}) but passes: remove it from test/known-defects.json`; failed++; }
   else if (ok) { result = "PASS"; passed++; }
   else { result = "FAIL"; failed++; }
@@ -119,6 +133,6 @@ const width = [0, 1, 2].map((j) => Math.max(...rows.map((row) => String(row[j]).
 console.log("");
 console.log(["test".padEnd(width[0]), "exit".padStart(width[1]), "time".padStart(width[2]), "result"].join("  "));
 for (const row of rows) console.log([row[0].padEnd(width[0]), String(row[1]).padStart(width[1]), row[2].padStart(width[2]), row[3]].join("  "));
-console.log(`\n${tests.length} tests: ${passed} passed, ${stillFailing} known defects still failing, ${failed} failed; wall ${wall} s; logs in ${logs}`);
+console.log(`\n${tests.length} tests: ${passed} passed, ${skipped} missing, ${stillFailing} known defects still failing, ${failed} failed; wall ${wall} s; logs in ${logs}`);
 for (const name of tests) if (results.get(name).code !== 0 && !known.has(name)) console.log(`  ${name}: ${path.join(logs, `${name}.log`)}`);
 process.exit(failed ? 1 : 0);
