@@ -6817,3 +6817,12 @@ their nominal's form. After the fit scope ends, initialization of the returned
 record selects its form from its final elements. A fit crossing a selector
 threshold can therefore return a record whose form differs from its fitting
 objective; the published threshold discontinuities also apply to that change.
+
+The fit regression covers eccentricity 0.02 and 0.2, perigee 350, 600, 1000,
+and 30000 km, and zero BTERM. All seven synthetic fits converge, every trial
+retains its seed form, and all seven returned records select the form on the
+opposite side. Removing only the fit scope fails the regression. The
+TableShareScope cache regression uses one table identity with two forms;
+removing only form freshness checks leaves five warmed cases tagged with a
+prior form. With those checks present, all twelve cold/warmed evaluations have
+the expected cache form and identical state bytes.
