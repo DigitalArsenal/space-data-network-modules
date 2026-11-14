@@ -1,6 +1,6 @@
 # sdn-ap-propagator
 
-Version 0.6.58 (dist 4b7ffed8).
+Version 0.6.60 (dist 4015f02d).
 
 General-perturbations propagation of whole catalogs in one isomorphic WASM module (browser and WasmEdge), with two
 theories and AP, an advanced propagator that builds on the entire history of astrodynamics ($PCF FORCES selects its drag
@@ -608,7 +608,12 @@ work grows with the time gap from the nearest preceding retained node. Checkpoin
 query work is not bounded independently of lead time.
 
 An AP state is a function of its set and its time alone. The order of requests, the call they come in, the sets flown
-between them, and whether the covariance is asked leave its bits unchanged (`test/set-caches.e2e.mjs`, nine orbits). A
+between them, and whether the covariance is asked leave its bits unchanged (`test/set-caches.e2e.mjs`, nine orbits, and
+`test/state-purity.e2e.mjs`, thirteen sets against the same state asked once on a fresh instance). Through 0.6.58 a state
+asked after another on the other side of the epoch, inside the first bracket on either side, differed from it by up to
+0.30 mm at 500 km, 1.8 mm at e 0.25 and 714 mm for a decaying set at perigee 200 km (this checkout with the two old keys put back).
+A fit that flies its set on both sides of its epoch (an arc under 24 hours on a block that is not eccentric, the hand-over fit) gives a different
+record than 0.6.58; a fit with the default epoch placement gives the same bytes when its first state lies on the 1e-8-day grid the fit rounds the epoch to (the epoch is then the first state; the catalog fit included), and a different record where the rounded epoch falls after the first state (SPEC 9). A
 store's AP set keeps its own caches and node runs from one pool, 256 MB (the module's default; no typed configuration
 carries a budget yet), read by sdnap_cache_stats. SPEC 9 states how room is shared, the caches by part and the one
 exception: a record that carries a covariance, through `propagate`, differs by 0.39 mm.
@@ -698,7 +703,7 @@ Without the tesseral terms it costs 0.3 to 0.4 times.
 ## Frames (SPEC 19; `sdnap_frames_*`, `test/frames.e2e.mjs`)
 
 What gets worse: a served frame state is within 1 cm and 1e-4 m/s (3-D) of AP's state for that record and time asked of a fresh
-instance, in every class, strong drag and decay included; a window that cannot meet it is not served and the host asks AP's own
+instance, in every class, strong drag and decay included; a window that cannot meet it is not served (AP's own position output steps by up to about 9 mm in strong-drag sets, and a window that holds such a step is not served: 2 of the 100,000 objects of the test recipe) and the host asks AP's own
 entries; a first fill takes about 1.2 ms an object on one thread, 120 s for 100,000 objects at the epoch (SPEC 19.5 has the figure and
 the eccentric sets above e 0.03, which cost 11 ms a row); wide sets (e above 0.05 in the zero-revolution class, above 0.3 in the resonance classes, with tesseral
 terms), series of several sets, sets with a forecast or a hand-over and SGP4 sets are answered by AP's entries (47 % of the

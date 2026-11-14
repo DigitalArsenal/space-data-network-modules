@@ -4,13 +4,14 @@
 // object's grid is anchored at its own epoch. Each catalog is loaded in parts of 1,000, the frames opened with the budget SPEC 19.6 states as a rule (850 bytes for
 // each object served, 32 bytes for each series, 1 MiB), every object filled at one instant, then the windows turned over (48 minutes in steps of one).
 // Asserted: the open grows the instance by the block and no more than 4 MiB; a full fill grows it by no more than 4 MiB (a thread's caches, made once);
-// every object the entry serves is served; no row is refused for room through the turn of the windows; the slab used stays under the stated figure; on the
+// every object the entry serves is served, or answers 4 in a window of strong drag that cannot meet the bound; no row is refused for room through the turn of the windows; the slab used stays under the stated figure; on the
 // catalog the instance, the stored load of 100,000 sets with covariance (180,486,144 bytes) plus what open and the fill added here, is under 300 MB decimal;
 // the objects not served answer 2.
 // A run with another count is PARTIAL: it prints PARTIAL and exits 2, unless FRAMES_PARTIAL=1 (exit 0, still printing PARTIAL).
 //   node test/frames-memory.e2e.mjs   (about 7 minutes, 3 GB of the host's memory)
 import assert from "node:assert/strict";
 import { T } from "./lib/ocm.mjs";
+import { endTest } from "./lib/end.mjs";
 import { population, ocmOfObject, openFrames, EPOCH_MS, STAT, STATUS } from "./lib/frame-cells.mjs";
 
 const FULL = 100000;
@@ -24,6 +25,7 @@ const plans = {
   public: (n) => { const a = share(n, 40.1), b = share(n, 33.3), c = share(n, 11.8), d = share(n, 1.6), e = share(n, 5.3); return [["leo500", a], ["leo830", b], ["ecc", c], ["meo", d], ["geo", e], ["wide", n - a - b - c - d - e]]; },
 };
 const out = {};
+const UNSERVED = { recipe: 2, public: 0 };  // the objects of each seeded catalog whose window at the fill's instant holds a step of AP's output above the bound
 // what a pool costs an instance: the same instance started with and without 15 pool threads (the stored load's 180,486,144 bytes include them)
 const POOL = await (async () => {
   const none = await openFrames({ initialMemoryBytes: 2 * MIB }), many = await openFrames({ initialMemoryBytes: 2 * MIB, threads: 15 });
@@ -66,13 +68,41 @@ for (const [name, plan] of Object.entries(plans)) {
   assert.equal(st[STAT.rowsOom], 0);
   assert.ok(afterFill - afterOpen <= 4 * MIB, `a full fill grew the instance by ${afterFill - afterOpen} B (a thread's caches and a cold set)`);
   const q = f.at(t);
+  // every object the entry serves is served, except an object whose 3-minute window holding the instant cannot meet the bound (SPEC 19.1 and 19.5): its status is 4, AP
+  // answers a state there, and the window holds a step of AP's own position output larger than the 3-D limit of the builder (8 mm), measured here from AP's states
+  // every 0.05 s over the window (the largest fourth difference of five consecutive samples is three times a step between two of them). The count is the recipe's: the sets are seeded.
+  const unserved = [];
   let nServed = 0;
   for (let i = 0; i < pop.length; i++) {
-    if (pop[i].serves) { assert.equal(q.status[i], STATUS.served, `object ${i} (${pop[i].kind}) is served`); nServed++; }
+    if (pop[i].serves) { if (q.status[i] === STATUS.served) nServed++; else unserved.push(i); }
     else assert.equal(q.status[i], STATUS.notServedHere);
   }
-  assert.equal(nServed, served);
-  out[name] = { objects: pop.length, served, budget, afterLoad, afterOpen, afterFill, slabUsed: st[STAT.used], cells: st[STAT.cells], bytesPerCell: +((st[STAT.used] - 64) / st[STAT.cells]).toFixed(1), table: st[STAT.table], fillSeconds: +fillS.toFixed(1), tombstones: st[STAT.apTombstones] + st[STAT.builderTombstones] };
+  const nTomb = unserved.length;
+  assert.equal(nServed + nTomb, served);
+  assert.equal(nTomb, UNSERVED[name], `${name}: ${nTomb} objects in a window that cannot meet the bound, expected ${UNSERVED[name]}`);
+  if (nTomb > 0) {
+    const scan = await openFrames({ initialMemoryBytes: 2 * MIB });
+    await scan.load(unserved.map((i) => pop[i]));
+    for (const [k, i] of unserved.entries()) {
+      assert.equal(q.status[i], STATUS.builderFails, `object ${i} (${pop[i].kind}): status ${q.status[i]}`);
+      assert.ok(pop[i].drag, `object ${i} (${pop[i].kind}) has no strong drag`);
+      const epoch = EPOCH_MS + pop[i].epochOffsetMs, minute = (t - epoch) / 60000, a = Math.floor(minute / 3) * 3;  // the 3-minute window of the grid anchored at the epoch
+      assert.ok(scan.apFrom(k, epoch, minute), `AP answers a state for object ${i} at the instant`);
+      const H = 0.05 / 60, row = [];
+      for (let m = -2; m <= 3600 + 2; m++) row.push(scan.apFrom(k, epoch, a + m * H));
+      let step = 0;
+      for (let m = 2; m < row.length - 2; m++) {
+        let sq = 0;
+        for (let c = 0; c < 3; c++) { const d4 = row[m - 2][c] - 4 * row[m - 1][c] + 6 * row[m][c] - 4 * row[m + 1][c] + row[m + 2][c]; sq += d4 * d4; }
+        step = Math.max(step, Math.sqrt(sq) / 3);
+      }
+      assert.ok(step * 1e6 > 8, `object ${i} (${pop[i].kind}): the window holds a step of ${(step * 1e6).toFixed(2)} mm, not more than the builder's 3-D limit of 8 mm`);
+      console.log(`${name}: object ${i} (${pop[i].kind}) is in a window of ${(a).toFixed(0)} to ${(a + 3).toFixed(0)} minutes from its epoch that holds a step of ${(step * 1e6).toFixed(2)} mm in AP's own position`);
+    }
+  }
+  console.log(`${name}: ${nServed} of the ${served} objects served at the fill's instant, ${nTomb} in a window that holds a step above the bound`);
+  out[name] = { tombstonedObjects: nTomb };
+  out[name] = { ...out[name], objects: pop.length, served, budget, afterLoad, afterOpen, afterFill, slabUsed: st[STAT.used], cells: st[STAT.cells], bytesPerCell: +((st[STAT.used] - 64) / st[STAT.cells]).toFixed(1), table: st[STAT.table], fillSeconds: +fillS.toFixed(1), tombstones: st[STAT.apTombstones] + st[STAT.builderTombstones] };
   console.log(name, JSON.stringify(out[name]));
   // the windows turn over
   for (let m = 1; m <= 48; m++) f.refill(t + m * 60000, 180, 1 << 30);
@@ -98,6 +128,8 @@ for (const [name, plan] of Object.entries(plans)) {
 console.log(JSON.stringify(out));
 if (N !== FULL) {
   console.log(`FRAMES-MEMORY PARTIAL (${N} objects, not ${FULL}): the 100,000-object figures are not verified`);
-  process.exit(process.env.FRAMES_PARTIAL === "1" ? 0 : 2);
+  await endTest(process.env.FRAMES_PARTIAL === "1" ? 0 : 2);
+} else {
+  console.log("FRAMES-MEMORY PASS");
+  await endTest(0);
 }
-console.log("FRAMES-MEMORY PASS");

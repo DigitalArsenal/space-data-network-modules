@@ -91,7 +91,8 @@ inline State& state() {
   return s;
 }
 
-alignas(8) inline uint8_t g_cell[4096];  ///< the cell under construction
+constexpr size_t kCellScratchBytes = 4096;
+inline uint8_t* g_cell = nullptr;  ///< the cell under construction: kCellScratchBytes at the end of open's block, nowhere before open (an instance that never opens frames holds none)
 
 inline bool is_tombstone(const uint8_t* c) { return c[16] == 0; }
 inline uint32_t bytes_of_cell(int np, int nv, int hp, int hv) {
@@ -191,6 +192,7 @@ inline void compact(State& s) {
 
 inline void release_state(State& s) {
   std::free(s.block);
+  g_cell = nullptr;
   s = State{};
 }
 
@@ -342,7 +344,7 @@ inline int build_window(xpt::XpSat& xp, epochs::Store& st, const epochs::Entry& 
   };
   const int hp = head_of(0, bt.np, kTailLimPos), hv = head_of(3, bt.nv, kTailLimVel);
   bytes = bytes_of_cell(bt.np, bt.nv, hp, hv);
-  if (bytes > sizeof g_cell) return 2;
+  if (bytes > kCellScratchBytes) return 2;
   std::memset(g_cell, 0, bytes);
   std::memcpy(g_cell, &mid, 8);
   std::memcpy(g_cell + 8, &half, 8);
@@ -505,12 +507,14 @@ int32_t sdnap_frames_open(double budget_bytes, uint32_t flags) {
   const double need = static_cast<double>(table) + kClassBytes + static_cast<double>(class_of(kMaxCellBytes)) * kClassBytes;
   if (budget_bytes < need) { s.needed = need; return kBudgetTooSmall; }
   const size_t total = static_cast<size_t>(budget_bytes);
-  uint8_t* block = static_cast<uint8_t*>(sdnap::mem::calloc(1, total));
+  const size_t scratch_at = (total + 63u) & ~static_cast<size_t>(63u);  // the cell scratch follows the block, outside the budget
+  uint8_t* block = static_cast<uint8_t*>(sdnap::mem::calloc(1, scratch_at + kCellScratchBytes));
   if (block == nullptr) { s.needed = budget_bytes; return kOutOfMemory; }
   const double needed = s.needed;
   release_state(s);
   s.needed = needed;
   s.block = block;
+  g_cell = block + scratch_at;
   s.obj = reinterpret_cast<Obj*>(block);
   s.block_bytes = total;
   s.table_bytes = static_cast<size_t>(n) * sizeof(Obj);
