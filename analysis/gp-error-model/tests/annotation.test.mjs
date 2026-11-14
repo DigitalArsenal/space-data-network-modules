@@ -76,7 +76,7 @@ test('seven full matrices use seed epoch and model midpoints and agree with the 
       const b=blocks[i], [epoch,...values]=b.LINES[0].split(' '), matrix=values.map(Number);
       assert.equal(matrix.length,36);assert.equal(b.COV_ORDERING,O.covarianceOrdering.FULL);
       assert.equal(b.COV_REF_FRAME,'GCRF');assert.equal(b.COV_BASIS_ID,model.MODEL.ID);
-      assert.equal(Date.parse(epoch+'Z')-Date.parse(seed.EPOCH+'Z'),ages[i]*86400000);
+      assert.equal(Date.parse(epoch.endsWith('Z')?epoch:epoch+'Z')-Date.parse(seed.EPOCH+'Z'),ages[i]*86400000);
       assert.equal(b.COV_REALISM[0].AGE_DAYS,ages[i]);assert.equal(b.COV_REALISM[0].CALIBRATION,O.covarianceCalibration.Uncalibrated);
       // Control: established population model, GCRF km/km/s, at seed UTC + age.
       // 1e-13 relative tolerance covers only its SI conversion and our full expansion.
@@ -89,7 +89,7 @@ test('seven full matrices use seed epoch and model midpoints and agree with the 
 });
 
 test('uncovered regime carries the reason and model identity with no fabricated block',async()=>{
-  const uncovered=Object.assign(OMM.getRootAsOMM(new fb.ByteBuffer(ommBytes)).unpack(),{ECCENTRICITY:0.75,MEAN_MOTION:2});
+  const uncovered=Object.assign(OMM.getRootAsOMM(new fb.ByteBuffer(ommBytes)).unpack(),{ECCENTRICITY:0.001,MEAN_MOTION:0.1});
   const raw=O.OCM.getSizePrefixedRootAsOCM(new fb.ByteBuffer(products[1])).unpack();
   const annotated=decode(await accepted(pack(raw,'OCM'),pack(uncovered,'OMM'))).unpack();
   assert.equal(annotated.COVARIANCE_BLOCKS.length,0);
