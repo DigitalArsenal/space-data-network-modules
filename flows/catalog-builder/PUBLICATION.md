@@ -22,12 +22,21 @@ product ingestion. Recovery queries those batches and re-sends every selected
 product before the terminal index, including byte-identical records and changed
 groupings. The host journals duplicates as fresh entries: a live record alone
 does not close a publication generation after journal reclamation. Metadata-only
-selections omit product writes. Prepared generations and earlier staged objects
-are ready on the following run; only the interrupted dispatch enters suspect
-backoff. Staged selections are committed before retrying that suspect. A product
+selections omit product writes. Entries with prepared products and earlier in-progress
+entries are ready on the following run. The latest attempt by sequence becomes a
+suspect if it is in progress and lacks a prepared-product marker. It can be a
+finished healthy object after interruption during a flush before preparation is
+durable, a refused marker write, or a byte-bound deferral. Identity-only and removal
+generations have no prepared-product marker. The suspect waits 20 minutes on its
+first attempt, doubling with repeated attempts to a 24-hour ceiling. Staged
+selections are committed before retrying that suspect. A product
 or terminal-index refusal stops generation storage. The previous complete
 published selection remains visible; refused terminal rows can exist in the live
-index and require host-side quarantine cleanup.
+index. The node quarantines the refused terminal entry. On recovery the flow
+accepts matching live rows as committed, drops their attempts, and sends nothing
+for unchanged inputs. Quarantine discard alone does not restore publication;
+the flow has no automatic recovery for this case. A new producer submission is
+required to restore the missing publication.
 The host must retain exact pending batch bytes durably before CAT replacement,
 recover them after restart, defer publication across rate limits, and acknowledge
 completion only after successful publication. A product-only interruption leaves

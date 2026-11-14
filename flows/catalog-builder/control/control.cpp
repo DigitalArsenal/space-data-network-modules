@@ -321,7 +321,7 @@ int lookup_product(){
 int complete_reads(){
  if(!state_complete)return stop("Operational state incomplete; retry the bounded source read.");
  bool pruned=false;
- // Only the last dispatched operation can have interrupted an unprepared run.
+ // The latest unprepared in-progress marker is the suspect, even if its work finished.
  uint64_t latest=0;for(const auto& item:attempts)latest=std::max(latest,item.second.sequence);
  for(auto& item:attempts){auto& a=item.second;const auto detail=attempt_detail(a);
   if(detail.rfind("in progress ",0)==0){ready_or_suspect(a,a.sequence==latest&&detail.find("prepared-generation;")==std::string::npos);pruned=true;}

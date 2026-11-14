@@ -47,9 +47,11 @@ fitting or storage, with one clock diagnostic per tick.
 
 Before numerical dispatch or removal composition, the controller stores and awaits acknowledgment of its `$NEV` operational state. `catalog-attempts` is used for one partition; partitioned services use `catalog-attempts-<index>-of-<count>`. One serial service owns each source. Changing the partition count requires an explicit state migration or acceptance of reset backoff.
 
-State contains in-progress, ready or failed objects plus bounded quarantine observations. Each dispatch/failure appends one acknowledged marker with `RECONCILE=None`. Recovery reads and generation boundaries compact these markers into a snapshot with `RECONCILE=Current`; a committed selection removes its marker without a success event. An empty snapshot contains no events. `RECONCILE=Current` must durably ingest the whole replacement before deleting older source batches. A crash between ingestion and reconciliation can leave multiple snapshots; explicit per-event sequence numbers resolve equal-time attempts independently of page order. Matching committed selections discard stale markers. Source state must remain private to this service and outside catalog publication.
+State contains in-progress, ready or failed objects plus bounded quarantine observations. Dispatch/failure writes append acknowledged single-object markers with `RECONCILE=None`. After 4,096 such appends, the following write replaces them with a full `RECONCILE=Current` snapshot, resetting the append count. Recovery reads and generation boundaries compact these markers into a snapshot with `RECONCILE=Current`; a committed selection removes its marker without a success event. An empty snapshot contains no events. `RECONCILE=Current` must durably ingest the whole replacement before deleting older source batches. A crash between ingestion and reconciliation can leave multiple snapshots; explicit per-event sequence numbers resolve equal-time attempts independently of page order. Matching committed selections discard stale markers. Source state must remain private to this service and outside catalog publication.
 
-The combined bound is 4,096 object/poison entries and an 8 MiB serialized snapshot. The operational-source read checks an 8,193-record threshold at page boundaries and fetches at most 8,193 plus twice the configured page size (10,193 at the maximum); incomplete or oversized state stops dispatch without replacing it. Each dispatch/failure write serializes one object, independent of staged selections and earlier failures. Boundary snapshots serialize the bounded live entries. A healthy catalog leaves one empty snapshot, independent of the number of successful updates. Preserve failed markers across restarts: deleting them resets backoff. Only the last unprepared dispatch from an interrupted run enters the 20-minute backoff, doubling to a 24-hour ceiling; earlier staged selections and prepared generations are ready on the following run. A run flushes staged selections before dispatching a suspect again; final failures await changed inputs. Failed state storage stops dispatch. A transient fit refusal stores the first SGP4 fallback, retains retry state, and upgrades after recovery. Repeated transient refusals with the same fallback update only operational state; product/index bytes remain unchanged. The changed signature format causes older selections to be recomputed once.
+The combined bound is 4,096 object/poison entries and an 8 MiB serialized snapshot. At capacity, new objects are deferred while objects with retained entries remain eligible for retry; successful retries free entries for later runs. The notice reports the deferred count. At most 4,096 single markers accumulate after a snapshot, giving at most 4,097 source records after acknowledged reconciliation. A legacy history above the 8,193-record threshold is read completely and compacted before dispatch. The state read permits 12,291 pages, including the legacy three-marker history at page size one; retained-entry, resident-byte and elapsed-time limits still apply. An incomplete read stops dispatch without replacing unread state. An oversized snapshot also stops dispatch. Boundary snapshots serialize the bounded live entries. A healthy catalog leaves one empty snapshot, independent of the number of successful updates. Preserve failed markers across restarts: deleting them resets backoff.
+
+Recovery treats the latest attempt by sequence as a suspect when its marker is in progress and lacks a prepared-product marker. It can be a finished healthy object after interruption during a flush before the prepared snapshot is durable, a refused marker write, or a byte-bound deferral. Identity-only and removal generations have no prepared-product marker. One suspect waits 20 minutes on its first attempt, doubling with repeated attempts to a 24-hour ceiling. Earlier in-progress entries and entries with prepared products are ready on the following run. A run flushes staged selections before dispatching a suspect again; final failures await changed inputs. Failed state storage stops dispatch. A transient fit refusal stores the first SGP4 fallback, retains retry state, and upgrades after recovery. Repeated transient refusals with the same fallback update only operational state; product/index bytes remain unchanged. The changed signature format causes older selections to be recomputed once.
 
 Malformed records are counted and skipped. Bounded `$NEV` warnings record up
 to three observations per source/digest across instance replacement. The first
@@ -64,19 +66,21 @@ seed and identity sources; unknown or dropped selection rows are never new work.
 Notice examples have separate four-example quotas for invalid records,
 failures, bounds, removals, clock and general information. Removal proposals
 have an aggregate count; their reasons are sampled, not a durable per-object
-removal log. Successful changed ticks use `Info`; bounded ticks without changes
-use `Unchanged`, including backoff and quarantine. Exhausting the scan budget uses `Missing` and identifies scan exhaustion even when no object was processed. Diagnostics distinguish
+removal log. Ticks with changes or deferred objects use `Info`; ticks with neither use `Unchanged`, including completed quarantine observations. Exhausting the scan budget uses `Missing` and identifies scan exhaustion even when no object was processed. Diagnostics distinguish
 these outcomes in `REASON`. Fatal scan/storage errors use `Missing` and fail
 the invocation. The node timer recognizes only `Unchanged` as a successful
 no-batch result. `Info`, `Skipped`, `Missing` and `Expired` without a batch do
-not receive that exemption and can widen retrieval backoff. One deferred
-object therefore does not slow an otherwise healthy timer.
+not receive that exemption and can widen retrieval backoff. A tick with deferred objects and no batch can therefore widen timer backoff.
 
 Product lookup refusals are isolated per object. Three consecutive lookup
 failures stop dispatch for the tick; a staged selection resets that count.
 A refused product or index generation batch stops the invocation. The last complete
 published generation remains the consumer selection; a refused terminal write can
-already be present in the live index. Durable attempts retain prepared batch references
+already be present in the live index. The node quarantines that refused terminal entry.
+Recovery treats matching live rows as committed and drops their attempts; unchanged
+inputs cause no re-send. Quarantine discard alone does not restore publication, and
+the flow has no automatic recovery for this case. Restoring publication requires
+a new producer submission. Other interrupted writes retain prepared batch references
 for recovery. Annotation/composer refusals return typed outcomes. Transport
 corruption and failed source-page queries stop the scan.
 
@@ -90,16 +94,19 @@ to 4 MiB and 1,000 records; the single terminal index batch is bounded to 4 MiB,
 and staged output to 32 MiB. These output buffers are additional to resident-input
 accounting. A 256-object tick with products fitting in 4 MiB uses one product batch
 and one index batch, rather than 512 publication batches. Operational snapshots
-remain separate writes: one marker before each dispatch or on failure, a compacting
+remain separate writes: a marker before each dispatch or on failure, a compacting
+snapshot after the append bound, a compacting
 snapshot after recovery reads with multiple records, one before generation storage,
 and one after the index acknowledgment, plus quarantine updates.
 
 Products precede the index write; only the terminal batch identifier ends in
 `:complete`. A kill between them leaves the prior complete selection visible. The retry
 re-sends product bytes before the complete replacement, because live-store presence
-does not imply that the publication journal retains those products. Recovered prepared
-generations are ready without suspect backoff. A refused product or index batch stops
-generation storage; successful objects retain their attempts for recovery. A byte-bound stop flushes staged
+does not imply that the publication journal retains those products. Entries with prepared
+products are ready without suspect backoff; the latest unprepared entry can incur
+the suspect delay described above. A refused product or index batch stops generation
+storage. Attempts support recovery except when a refused terminal write is already
+in the live index, as described above. A byte-bound stop flushes staged
 objects and defers the object that did not fit. No tick publishes an intermediate
 index generation.
 The host must preserve referenced products and expose its live index through
