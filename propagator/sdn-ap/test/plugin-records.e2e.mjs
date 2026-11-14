@@ -227,6 +227,8 @@ for (const [method, inputs] of [
 ok(await call('load_epochs_open'));
 assert.equal((await call('load_epochs_part', [input([new Uint8Array([0])])])).statusCode, 3);
 assert.equal(x.plugin_entity_count(), 3); assert.deepEqual(state(0).bytes, rowsBefore);
+ok(await call('load_epochs_open')); refusal(await call('load_epochs_close'), 'missing-ocm');
+assert.equal(x.plugin_entity_count(), 3); assert.deepEqual(state(0).bytes, rowsBefore);
 await load(); fill(); const recordsBefore = bulk();
 const nativeRows = elementRows([{epochWhole: split(jd)[0], epochFrac: 0, meanMotion: 14,
   ecc: .001, inc: 55, raan: 0, argp: 30, ma: 30, theory: 0, norad: 500001}]);
@@ -300,6 +302,10 @@ for (const [list, order] of [[[aa, gone, ...bb, an], [0, 1]], [[bb[0], an, gone,
 const decayed = repackOcm(sg, t => { t.MEAN_ELEMENTS.MEAN_MOTION = 20; });
 ok(await call('load_epochs', [input([decayed])]));
 assert.equal(state(0).flags, 4); assert.notEqual(state(0).rc, 0);
+assert.equal(x.plugin_propagate_batch(jd, structs, 1), 0);
+assert.equal(new DataView(mem()).getUint32(structs + 60, true), 4);
+assert.equal(x.plugin_propagate_all_positions(jd, positions, 1), 1);
+assert.ok(Array.from(f64(positions, 3)).every(Number.isNaN));
 await load(); fill();
 let failedAllocations = 0;
 {

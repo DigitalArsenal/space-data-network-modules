@@ -25,5 +25,7 @@ SDNAP_EXPORT("sdnap_test_plugin_init_tables") double sdnap_test_plugin_init_tabl
   return slot.xp ? sdnap::xpt::xp_bytes(*slot.xp) - sizeof(sdnap::xpt::XpSat) : 0;
 }`;
 export function buildPluginDiagnostic() {
+  process.env.SDM_MODULE_UNSIGNED_BUILD = '1';
+  delete process.env.SDM_MODULE_SIGNING_KEYPAIR_PATH;
   return buildDiagnostic('plugin-records-diagnostic', pluginProbe, s => s, failureSeam);
 }
