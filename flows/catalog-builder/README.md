@@ -4,8 +4,9 @@ The timer flow reads configured OMM sources, CAT identities, SPW weather, and
 its durable CAT/OCM outputs through `index_page`. It selects one product per
 object, stores the product before replacing the index entry, and clears the
 product list with an as-of time when an object leaves the current sources.
-The default timer interval is ten minutes. Publication and daily snapshot
-export are absent from this flow.
+The default timer interval is ten minutes. The node supplies automatic
+publication; reliable changed-batch delivery and compact daily snapshots
+require the host behavior described in [publication requirements](PUBLICATION.md).
 
 The chain adapter calls the unchanged `sdn-ap` ingestion, propagation, and
 fit methods. Recipe W samples GCRF states from seed epoch minus 2.5 days to
