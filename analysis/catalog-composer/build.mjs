@@ -43,6 +43,13 @@ const result = await compileModuleFromSource({
   threadModel: 'wasi-sequential',
 });
 if (!result.report?.ok) throw new Error(JSON.stringify(result.report?.issues));
+const linkDir = path.join(root, 'dist/guest-link');
+await fs.mkdir(linkDir, { recursive: true });
+await fs.writeFile(path.join(linkDir, 'module-link.o'), result.guestLink.objectBytes);
+const { objectBytes, ...linkMetadata } = result.guestLink;
+await fs.writeFile(path.join(linkDir, 'metadata.json'), JSON.stringify(linkMetadata, null, 2) + '\n');
+await fs.copyFile(path.join(root, 'plugin-manifest.json'), path.join(root, 'dist/plugin-manifest.json'));
+
 const canonical = await computeCanonicalModuleHash(await fs.readFile(outputPath));
 // Dependencies are loaded by the generic APP bridge with exact artifact hashes.
 const matchingModules = [];

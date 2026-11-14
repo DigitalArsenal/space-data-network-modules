@@ -26,6 +26,9 @@ extern "C" int replace_products() {
   auto record = std::unique_ptr<CATT>(GetSizePrefixedCAT(catalog->payload)->UnPack());
   if (!record->NORAD_CAT_ID) return refuse("invalid-replacement", "The catalog object requires its typed identifier.");
   const int64_t as_of = recipe->AS_OF_MS() * 1000;
+  int64_t previous = 0;
+  if (!record->PRODUCTS_AS_OF.empty() && (!parse_instant(record->PRODUCTS_AS_OF, &previous) || as_of < previous))
+    return refuse("invalid-replacement", "AS_OF_MS cannot precede the existing product selection.");
   std::string reason;
   if (decision) {
     flatbuffers::Verifier d(decision->payload, decision->payload_length);
