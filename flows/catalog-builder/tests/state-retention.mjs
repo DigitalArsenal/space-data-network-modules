@@ -86,6 +86,11 @@ export async function verifyStateRetention(mode){
    if(mode==='absent')all.forEach((e,i)=>{e.SUBJECT='catalog-object/'+(4000000+i);e.DETAIL='retry input=absent; sequence='+(i+1)+';';});
    snapshot(all);
   }
+  if(mode==='suspect'){
+   const interrupted=Object.assign(new N.NEVEventT(),{TIME_MS:BigInt(now),KIND:N.nevEventKind.Warning,SUBJECT:'catalog-object/4000000',COUNT:1n,DETAIL:'retry input=absent; sequence=1; instance-interrupted;'});
+   snapshot([interrupted,...poisonEntries(4095)]);
+   seeds.push(pack(new C.CATT(),'CAT'));
+  }
   if(mode==='poison'){
    // Overlapping histories can deliver old events after the newest snapshot.
    const stale=poisonEntries(2);stale.forEach((e,i)=>{e.SUBJECT+='-stale';e.DETAIL=e.DETAIL.replace(/sequence=\d+;/,'sequence='+(i+1)+';');});
@@ -95,6 +100,10 @@ export async function verifyStateRetention(mode){
   for(let i=0;i<3;i++){control.destroy();control=await create();runs.push(await tick(now+1000+i));}
   console.log('RETENTION_FIFO '+JSON.stringify({mode,runs:runs.map(r=>({fits:r.fits,indexes:r.indexes,kind:r.notice.kind,reason:r.notice.reason}))}));
   assert.ok(runs[0].indexes>0,'new object builds on the first run at capacity');
+  if(mode==='suspect'){
+   assert.ok(events().some(e=>e.SUBJECT==='catalog-object/4000000'&&e.DETAIL.includes('instance-interrupted;')),'source-scan eviction preserves the interruption suspect');
+   assert.match(runs[0].notice.reason,/evicted=2/);return;
+  }
   if(mode==='absent')assert.equal(events().length,0,'complete compaction frees absent entries');
   else {
    assert.equal(runs[0].notice.kind,'info');assert.match(runs[0].notice.reason,/evicted=[1-9]/);

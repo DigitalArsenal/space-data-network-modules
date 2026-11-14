@@ -299,4 +299,4 @@ import {verifyStateBounds} from './state-bounds.mjs';
 test('state marker appends and oversized recovery reads compact without losing failures',verifyStateBounds);
 
 import {verifyStateRetention} from './state-retention.mjs';
-for(const mode of ['absent','poison','final','prepared'])test('state retention '+mode,()=>verifyStateRetention(mode));
+for(const mode of ['absent','poison','final','prepared','suspect'])test('state retention '+mode,()=>verifyStateRetention(mode));
