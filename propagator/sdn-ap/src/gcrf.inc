@@ -16,8 +16,7 @@
 namespace sdnap {
 namespace frames {
 
-/// Prepare ERFA's shared leap-second lookup before parallel time conversions.
-/// Pool startup calls this while each new thread is the only active evaluator.
+/// Prepare the shared ERFA lookup before concurrent time conversion.
 inline void warm_time_tables() {
   double delta_at;
   (void)eraDat(2000, 1, 1, 0.0, &delta_at);

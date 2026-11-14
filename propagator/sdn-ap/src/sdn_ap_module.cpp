@@ -88,9 +88,20 @@
 #include "ingest_omm.inc"
 #include "propagate.inc"
 #include "epoch_store.inc"
+#include "frames.inc"
 #include "fit_oem.inc"
 #include "export_omm.inc"
 #include "events_method.inc"
+
+// Instance initialization completes before exports or pool threads can run.
+// These shared tables retain their original values and lookup paths.
+__attribute__((constructor)) static void prepare_shared_tables() {
+  sdnap::frames::warm_time_tables();
+  (void)sdnap::drag::table_heights();
+  (void)sdnap::drag::table();
+  (void)sdnap::xpt::tess::egm_tables();
+  (void)sdnap::xpt::tess::half_table();
+}
 
 // ---- Display quantities (the module's own conversions, so a tool does no physics of its own) ----------------------
 
