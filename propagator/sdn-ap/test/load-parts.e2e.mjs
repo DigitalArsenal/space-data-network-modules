@@ -337,15 +337,18 @@ for (const populated of [false, true]) {
 }
 
 // ---- 4. allocation failure in any call of a load in parts
-const seam = failureSeam, probe = failureProbe;   // test/lib/ap-diagnostic.mjs: every replace must match
-// the counted allocations per call (open, three parts, close) of the two scenarios below, measured on this build
+const seam = failureSeam, probe = failureProbe + `
+SDNAP_EXPORT("sdnap_test_load_order_map") uint32_t sdnap_test_load_order_map(void) {
+  return sdnap::epochs::resident().plugin_order ? 1u : 0u;
+}`;   // test/lib/ap-diagnostic.mjs: every replace must match
+// Core allocation pins per call (open, three parts, close); a nonidentity plugin order adds one counted map allocation.
 const MIXED_COUNTS = [0, 2, 15, 19, 8], FORECAST_COUNTS = [0, 9, 7, 0, 5];
 const seamedWasm = buildDiagnostic('load-parts-seam', probe, s => s, seam);
 {
   const seamed = seamedWasm;
   const h = await open(seamed), x = h.instance.exports, p = x.sdnap_alloc(64), residentProbe = probeOf(h);
   const stats = () => { x.sdnap_epochs_stats(p); return Array.from(new Float64Array(h.memory.buffer, p, 8)); };
-  const inject = async (label, records, sizes, expected) => {
+  const inject = async (label, records, sizes, expected, orderMap = 0) => {
   // the calls of the load, as thunks: open, three parts, close
   const calls = () => {
     const out = [() => opened(h)];
@@ -370,7 +373,9 @@ const seamedWasm = buildDiagnostic('load-parts-seam', probe, s => s, seam);
   for (let c = 0; c < ok.length; ++c) { x.sdnap_test_fail_at(0); assert.equal((await ok[c]()).statusCode, 0); counts.push(x.sdnap_test_alloc_count()); }
   assert.ok(stats()[1] > 0, `the load kept ${stats()[1]} sets`);
   // an equality, the open's count included: a count that drops is a counted site the seam no longer fails (the seam's replaces must all match, and these are measured)
-  assert.deepEqual(counts, expected, `${label}: counted allocations per call (open, parts, close)`);
+  assert.equal(x.sdnap_test_load_order_map(), orderMap, `${label}: the expected plugin order map is present`);
+  const coreCounts = counts.slice(); coreCounts[coreCounts.length - 1] -= orderMap;
+  assert.deepEqual(coreCounts, expected, `${label}: core counted allocations per call (open, parts, close)`);
   let failed = 0;
   for (const populated of [false, true]) {
   for (let c = 0; c < ok.length; ++c) {   // each counted allocation of each call
@@ -398,7 +403,7 @@ const seamedWasm = buildDiagnostic('load-parts-seam', probe, s => s, seam);
   return failed;
   };
   const mixed = [...catalog.slice(0, 6), ...catalog.slice(14, 24), ...catalog.slice(30, 34), ...catalog.slice(34, 36)];
-  await inject('a mixed catalog', mixed, evenly(mixed.length, 3), MIXED_COUNTS);
+  await inject('a mixed catalog', mixed, evenly(mixed.length, 3), MIXED_COUNTS, 1);
   // records that carry a forecast: the copy of each record out of the part's bytes, and the track's arrays, are counted allocations that refuse by name
   await inject('records carrying a forecast', withForecast, [1, 1, 2], FORECAST_COUNTS);   // a forecast record in each of the first two parts
   await h.destroy?.();
