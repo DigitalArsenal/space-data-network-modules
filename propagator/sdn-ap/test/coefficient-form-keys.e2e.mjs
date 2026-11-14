@@ -9,7 +9,7 @@ import {sigmaProbe} from './lib/coefficient-sigma.mjs';
 const replace=(s,a,b)=>{assert(s.includes(a),a);return s.replace(a,b);};
 let probe=replace(sigmaProbe,'CovBankScope bank(&sats[0]);','TableShareScope bank(&sats[0]);');
 probe=replace(probe,' out[4]=sats[1].ctx.shared_mask;',` out[6]=md_table_id(sats[0].ctx)==md_table_id(sats[1].ctx);
- out[7]=sp_table_id(sats[0].ctx)==sp_table_id(sats[1].ctx);
+ out[7]=sats[0].ctx.sp_comb==sats[1].ctx.sp_comb;
  out[4]=sats[1].ctx.shared_mask;`);
 const transforms={'sdn_ap_module.cpp':s=>replace(s,'#include "abi.inc"',probe+'\n#include "abi.inc"')};
 const omit=process.env.SDNAP_OMIT_FORM_KEY;
