@@ -221,6 +221,7 @@ inline void run_chunks() {
 inline bool warm_thread() {
   if (g_warm) return true;
   (void)atm::msis_flags();
+  frames::warm_time_tables();
   g_warm = warm_thread_xp() && xpt::tess::sp_thread_cache_make() && xpt::tess::sp_blk_c_make() && xpt::tess::sp_build_scratch_make() &&
            xpt::tess::sp_terms_scratch_make() && xpt::tess::half_day_eval_cache_make() && xpt::ap_bodies_store_make() &&
            frames::drift_node_cache_make() && frames::gcrf_node_cache_make();

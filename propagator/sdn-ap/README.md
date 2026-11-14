@@ -1006,3 +1006,8 @@ the fall-back had returned Sentinel-3A 2025-10-15 to 0.087 km at day 3 (0.4.17: 
 0.4.11 the median day-3 change is -85 % on HY-2C, -92 % on HY-2D, -73 % on Jason-3, -48 % on SWOT, -35 % on SARAL and
 +1.4 % on CryoSat-2 (stack #470). A 0.5 m/s step after the arc leaves the fit bit for bit; one inside it leaves a fit
 RMS of 28 km and BTERM undetermined (`test/drag-prior-fallback.e2e.mjs`).
+
+Shared time, atmosphere, gravity, and half-conversion tables are prepared during
+instance initialization. Startup does additional work; per-state lookup paths
+and values are unchanged. See SPEC's shared lookup initialization section for the
+held-initializer regression, conditional flight effect, and entry-path exposure.
