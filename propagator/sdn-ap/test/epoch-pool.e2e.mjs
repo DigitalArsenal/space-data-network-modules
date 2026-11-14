@@ -13,8 +13,8 @@
 // so a pool thread that read another thread's binding, weather or set would change a byte.
 // Every case writes the six planes and the statuses at the three instants:
 // - the reference: each series alone (sdnap_epochs_at, one series a call), on the calling thread;
-// - its digest equals MAIN_DIGEST, the same reference made by sdn-ap 0.6.57 (modules 6a807990), the module this change is
-//   made on: the state, theory and status of every series are 0.6.57's;
+// - its digest equals MAIN_DIGEST, the same reference made by sdn-ap 0.6.59: the state, theory and status of every series
+//   are 0.6.59's (those of 0.6.56 to 0.6.58 but for the series named at MAIN_DIGEST);
 // - the whole store a call on 0, 1, 4 and 15 pool threads; the store loaded in parts of 768 records (load_epochs_open,
 //   _part, _close) on 0, 4 and 15; on 4 and 15, whole or in parts, the pool's statistics (sdnap_pool_stats [14] and
 //   [15]) show rows run on pool threads, by at least two of them; on a test build (same sources, seams below) on 0, 1, 4 and 15
@@ -26,12 +26,10 @@
 //   series that carries a covariance answers one;
 // - on 4 with no reserve (every growth of the memory inside a batch refused; up to one step of slack is still served, and
 //   the case still refuses and defers, asserted): every status the reference's, and every state the reference's, byte for
-//   byte, except that a series deferred at an instant may instead equal, byte for byte, the dropped control there: the
-//   serial state with the series' two slots released just before its flight, which is what a deferral does. This
-//   allowance covers one defect alone: an AP set that was asked on both sides of its epoch before answers differently (one
-//   cache id for the brackets on both sides of a set's epoch in the tesseral and m-daily bake caches; the summary line
-//   prints how many deferred states took the control and the largest position difference), and the store must hold such
-//   states.
+//   byte, with no allowance: a series deferred at an instant equals the reference there to the bit, and so does the dropped
+//   control (the serial state with the series' two slots released just before its flight, which is what a deferral does).
+//   A set's state is a function of the set and the time (SPEC 9); through 0.6.58 an AP set asked on both sides of its epoch
+//   before could differ here.
 // The test build counts, per thread, what each case took, asserted: rows, slots replaced and NRLMSISE-00 evaluations on
 // each side of 325 km on the pool's threads (at least a quarter of each), more than one pool thread at 4 and 15 threads, the wide
 // branch's rows on the calling thread, states of each family (SGP4, SGP4XP, AP), every state answered; the pool's own
@@ -53,9 +51,10 @@ import { buildDiagnostic } from './lib/ap-diagnostic.mjs';
 const arg = (name, fallback) => { const i = process.argv.indexOf(name); return i < 0 ? fallback : process.argv[i + 1]; };
 const here = path.dirname(fileURLToPath(import.meta.url));
 const count = Number(arg('--count', 2048));
-// the reference's digest as sdn-ap 0.6.57 (modules 6a807990, wasm 652fa229) made it, for the default store (2,048 series);
-// 0.6.56 (85bc764c) gives the same
-const MAIN_DIGEST = '1ca816ba472e78b0b385cad6bc56c17feba3fce835b4131640e015819c6fd5e8';
+// the reference's digest as sdn-ap 0.6.59 makes it, for the default store (2,048 series). 0.6.56 to 0.6.58 made
+// 1ca816ba472e78b0b385cad6bc56c17feba3fce835b4131640e015819c6fd5e8: the states of the series whose AP sets are asked on both sides
+// of their epoch (the medium-orbit series at 18 h, a set 6 h before its epoch after 6 h after it) are the ones that differ
+const MAIN_DIGEST = 'dd03be0d6b8b411cc13015be9a6c094d6d6cb48ea984165a157291fcc1c61e0b';
 const epoch = Date.parse('2026-06-15T00:00:00Z'), day = 86400000;
 const iso = t => new Date(t).toISOString().replace('Z', '');
 const prefix = b => { const p = Buffer.alloc(b.length + 4); p.writeUInt32LE(b.length); Buffer.from(b).copy(p, 4); return p; };
@@ -289,7 +288,7 @@ function run(label, file, threads, options = []) {
   return { bytes: fs.readFileSync(path.join(root, label + '.bin')), r };
 }
 const reference = run('single', wasmPath, 0, ['--single']);
-if (count === 2048 && wide === 8) assert.equal(reference.r.digest, MAIN_DIGEST, `the reference against sdn-ap 0.6.57's (${MAIN_DIGEST})`);
+if (count === 2048 && wide === 8) assert.equal(reference.r.digest, MAIN_DIGEST, `the reference against sdn-ap 0.6.59's (${MAIN_DIGEST})`);
 // the shipped build's own statistics: rows run on pool threads ([14]) by at least two of them at 4 and 15 threads ([15]),
 // none without the pool, so a build that flew every row on the calling thread fails here
 const onPool = (c) => {
@@ -305,19 +304,15 @@ const seamed = [];
 for (const threads of [0, 1, 4, 15]) { const c = run(`poison-${threads}`, diagnostic, threads); assert.ok(c.bytes.equals(reference.bytes), `poison, ${threads} pool threads`); seamed.push(c.r); }
 const sliced = run('sliced', diagnostic, 4, ['--slice', '100']);
 assert.ok(sliced.bytes.equals(reference.bytes), 'slices of 100 series');
-// A deferred series is computed again from its records: its two slots released, its sets built again. An AP set that was
-// asked on both sides of its epoch before answers differently (one cache id for the brackets on both sides of its epoch
-// in the tesseral and m-daily bakes), so the control for a deferred series is the serial state with its slots dropped
-// just before its flight (the allowance of the header).
+// A deferred series is computed again from its records: its two slots released, its sets built again. Its state is the
+// reference's to the bit, and so is the serial state with its slots dropped just before its flight.
 const dropped = run('dropped', diagnostic, 0, ['--single', '--drop']);
 const deferred = run('deferred', diagnostic, 4, ['--refuse']);
 const deferredAt = JSON.parse(fs.readFileSync(path.join(root, 'deferred-deferred.json'), 'utf8'));
 const per = 52 * count;
 const planes = (b, n, k) => Buffer.concat(Array.from({ length: 6 }, (_, c) => b.subarray(n * per + (c * count + k) * 8, n * per + (c * count + k + 1) * 8)));
 const code = (b, n, k) => b.readInt32LE(n * per + 48 * count + 4 * k);
-let history = 0, deferredStates = 0, tookDropped = 0, largestMm = 0;
-// the position difference of a state that took the dropped control from the reference's (TEME km planes), for the summary
-const apart = (a, b) => { const p = new Float64Array(Uint8Array.from(a).buffer), q = new Float64Array(Uint8Array.from(b).buffer); return 1e6 * Math.hypot(p[0] - q[0], p[1] - q[1], p[2] - q[2]); };
+let deferredStates = 0;
 for (let n = 0; n < INSTANTS.length; ++n) {
   const late = new Set(deferredAt[n]);
   deferredStates += late.size;
@@ -325,18 +320,12 @@ for (let n = 0; n < INSTANTS.length; ++n) {
     const ref = planes(reference.bytes, n, k), drop = planes(dropped.bytes, n, k), got = planes(deferred.bytes, n, k);
     assert.equal(code(dropped.bytes, n, k), code(reference.bytes, n, k), `dropped control, series ${k} at ${INSTANTS[n]} d: status`);
     assert.equal(code(deferred.bytes, n, k), code(reference.bytes, n, k), `no reserve, series ${k} at ${INSTANTS[n]} d: status`);
-    if (!ref.equals(drop)) history += 1;
-    if (got.equals(ref)) continue;
-    assert.ok(late.has(k) && got.equals(drop), `no reserve, series ${k} at ${INSTANTS[n]} d: ` +
-      (late.has(k) ? 'deferred, but neither the reference nor the dropped control' : 'not deferred, and not the reference'));
-    tookDropped += 1;
-    largestMm = Math.max(largestMm, apart(got, ref));
+    assert.ok(drop.equals(ref), `dropped control, series ${k} at ${INSTANTS[n]} d: not the reference's, to the bit`);
+    assert.ok(got.equals(ref), `no reserve, series ${k} at ${INSTANTS[n]} d: ${late.has(k) ? 'deferred' : 'not deferred'}, not the reference's, to the bit`);
   }
 }
-// the store holds states that a set's history moves (else the rule above tests nothing), and the case deferred series
-assert.ok(history > 0, 'the store holds no state its set\'s history moves');
 assert.ok(deferredStates > 0, 'the no-reserve case deferred no series');
-console.log(JSON.stringify({ historyMoved: history, deferredStates, deferredTookDropped: tookDropped, deferredLargestMm: Number(largestMm.toFixed(3)) }));
+console.log(JSON.stringify({ deferredStates }));
 // the coverage: every path taken, on the threaded cases, and taken on the pool's threads (not only the calling thread):
 // at least a quarter of the rows, of the slots replaced and of the NRLMSISE-00 evaluations on each side of 325 km there,
 // on more than one pool thread at 4 and 15 threads; every state answered
@@ -366,7 +355,6 @@ for (const r of results.filter((q) => q.label.startsWith('threads-') || q.label.
 assert.ok(sliced.r.pool[1] >= 3 * Math.ceil(count / 100) - 3, `slices of 100: ${sliced.r.pool[1]} batches over three instants`);
 assert.ok(deferred.r.pool[3] > 0, 'the deferred case deferred series');
 fs.writeFileSync(path.join(root, 'summary.json'), JSON.stringify(results, null, 2));
-console.log(`PASS: ${count} series (${3 * count} records, ${wide} wide), three instants; the reference 0.6.57's; every case's planes and ` +
-  `statuses the reference's, byte for byte, the no-reserve case's deferred states the dropped control's where a set's history moves them ` +
-  `(${tookDropped} of ${deferredStates}; ${history} such states in the store)`);
+console.log(`PASS: ${count} series (${3 * count} records, ${wide} wide), three instants; the reference 0.6.59's; every case's planes and ` +
+  `statuses the reference's, byte for byte, the no-reserve case's ${deferredStates} deferred states included, with no allowance`);
 process.exit(0);

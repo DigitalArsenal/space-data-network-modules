@@ -1,6 +1,6 @@
 # SGP4-XP: mathematical specification (clean room, side A)
 
-Version 0.6.58 (dist 4b7ffed8).
+Version 0.6.59 (dist 5002d012).
 
 **License note.** The US Space Force Sgp4Prop library is used under the USSF open source agreement
 (`space-data-network-modules/propagator/sgp4-xp/third_party/ussf-sgp4/AGREEMENT.txt`; the 9.9 package carries the
@@ -260,7 +260,8 @@ epoch (test/memory-limit.e2e.mjs):
 The same test holds three other entries at their limits, every answer the default maximum's bit for bit:
 - the store's covariance (400 copies of a fitted record, 128 MiB): 69 covariances answered, the rest NaN or refused;
 - a threaded row-store batch (2,000 AP rows, two pool threads, 128 MiB);
-- 6,000 SGP4XP sets without AP's terms at 80 MiB: 2,480 answer, the sets 0.6.55 answers and no other.
+- 6,000 SGP4XP sets without AP's terms at 80 MiB: 2,473 answer (2,480 through 0.6.58, as 0.6.55: each set's drag-pass cache
+  holds the upper node's time since 0.6.59, 16 bytes a set); every one is a set 0.6.55 answers, the same bits.
 
 The pool's list of the sets that hold caches (SPEC 9) grows through the accounting as well. When the list cannot grow, the
 set holds no caches and flies on the thread's.
@@ -1643,7 +1644,22 @@ backward (t < 0). Node 0 is the epoch state with its rates. The step from node k
   the checkpoint stride uses that same step. Default FORCES retains the 95-minute XP grid.
 
 The grid depends only on the epoch state *[probe 9.1: the library's direct, 1-minute stepped and backward-approach requests
-agree to 0 mm]*. An AP state in this module is a function of its set and its time alone (0.6.18): the order of requests,
+agree to 0 mm]*.
+
+A fit that flies its set on both sides of its epoch gives a different record than 0.6.58 did: different fitted elements, so different
+states from the record. Those are the fits whose epoch is not the first state of the fit interval (fit_oem.inc, `epoch_placement`): an arc under
+24 hours on a block that is not eccentric (the epoch is the arc's last state, the arc before it, the held-out and carried states after it), the
+hand-over fit (OUTPUT.START_TIME without STOP_TIME: the epoch is the arc's last state, the later states held out), and the diagnostic placements of
+`sdnap_fit_epoch_diagnostic` (the middle state, the last). A fit with the default placement, the epoch at the first state, flies its set forward from
+the epoch only, and its record is the same bytes as 0.6.58's: the catalog fit to a forecast from the cutoff (0 to 120 h; 84 stored cases of seven
+classes), the conversion of a set's own SGP4 flight from 2.5 days before its epoch to 5 days after (20 sets), and, by the placement rule, the
+carried-forecast and covariance flights of such a fit. Measured on the 12 h arcs of the carried classes (`test/lib/carried.mjs`): the four AP classes
+change, the eight SGP4-XP classes do not; the largest element changes are 1.4e-5 degrees of mean anomaly (LEO 300 km), 3.7e-6 m^2/kg of AGOM (LEO
+830 km) and 1.3e-8 degrees of argument of perigee (GEO), and the two records' flights over the carried day differ by up to 7.3 mm (LEO 300 km), 7.1 mm
+(LEO 830 km), 0.16 mm (MEO) and 0.08 mm (GEO). No command in this repository prints these figures; the digests of `test/epoch-carried-pool.e2e.mjs`
+(the fitted records' bytes, and the states flown from them) are pinned apart for it.
+
+An AP state in this module is a function of its set and its time alone (0.6.18): the order of requests,
 the call they come in (one epoch, the first state of a call, a state inside a batch), the sets flown before or between
 them, whether the covariance is asked, and the path (`propagate`, `propagate_epochs`, the epoch store's exports) leave its
 bits unchanged, with one exception stated below. What makes it so:
@@ -1656,7 +1672,11 @@ bits unchanged, with one exception stated below. What makes it so:
   node's own state (before that step's corrections), never from what the step before left. The grid's nodes are the same
   whichever node an integration starts from.
 - The drag-pass segment above e 0.3 (16.12) takes its perigee time and period from its bracket's lower node, not from the
-  first state asked.
+  first state asked. A segment is kept for its bracket by both nodes' times and its revolution's perigee time: the
+  brackets after and before the epoch have the epoch as their lower node, so the lower node's time alone names both.
+- The bracket the tesseral and m-daily terms are baked on has one identity: the set's context and the smaller of its two
+  nodes' indexes (a node's index is signed by its side of the epoch: 0 for the bracket after the epoch, -1 for the one
+  before it), with its first time and length.
 - The third body's bracket tables are the bracket's own (stack #475). The bracket's lower node chooses their builder,
   rows and sub-interval count, and they are read only as far as the builder wrote.
   Through 0.6.22 two things followed the state asked first instead:
@@ -1665,6 +1685,17 @@ bits unchanged, with one exception stated below. What makes it so:
   So a state near the three mean motions where the builder changes (0.006, 0.015 and 0.035 rad/min) moved with the order
   of requests, by up to 0.285 m (0.015 rad/min, 1e-7 above). Against the earlier states asked in ascending order it is
   now at most 14.3 mm (0.015), 5.8 mm (0.006) and 2.5 mm (0.035), and unchanged elsewhere.
+  Through 0.6.58 a third thing followed the state asked first: the bracket's identity was the set and the lower node's
+  index alone, which is 0 for both the bracket after the epoch and the bracket before it, and the drag-pass segment above
+  e 0.3 was kept under the lower node's time alone, the epoch's for both. A state asked after another state on the other
+  side of the epoch inside the first bracket kept the bakes of the other bracket, so it differed from the same state of
+  the set asked once. Largest differences by class (this checkout with the two old keys put back, `STATE_PURITY_AS_0_6_56=1`
+  `node test/state-purity.e2e.mjs`; the pairs are the mirrored pairs at the first bracket's fractions): a decaying set (perigee 200 km, BTERM 0.01) 714 mm, a transfer orbit
+  7.5 mm, e 0.25 1.8 mm, 500 km 0.30 mm, e 0.1 0.22 mm, the 8 h class 0.18 mm, 830 km 0.17 mm, the half-day class 6.5 to
+  31 um, geosynchronous with tesseral 31 0.02 um; geosynchronous without tesseral terms was not affected. Every other
+  bracket (the second and later on either side) was not. `test/state-purity.e2e.mjs` asks each state of thirteen sets
+  once on a fresh instance and again after other asks (orders, mirrored pairs on both sides of the epoch, node times,
+  the thread's caches, the store's blend) and compares bit for bit, beside `test/set-caches.e2e.mjs`.
 - A record's covariance is likewise a function of the record and the time (12.3).
 - The epoch store times an AP set from the split Julian date, with the expression `propagate` uses. Minutes from J2000
   round by up to 1e-7 s at today's dates, 1 mm in low orbit. SGP4XP and SGP4 in the store keep the minutes from J2000:
@@ -1740,9 +1771,8 @@ Three more rules for the pool threads:
 - **The cache pool sorts copies.** A reclaim picks its victims from stamps read once under the pool's lock (an owner
   moves its stamp under its own cache lock alone, atomically). It orders them by stamp alone, with the comparator of
   sdn-ap 0.6.57 (which sorted the holders themselves) over the holders in its order. Equal stamps are common, since
-  consecutive cached flights share one, and a serial reclaim keeps 0.6.57's choice among them: the choice can move the
-  state of an AP set that was asked on both sides of its epoch (its bake caches use one id for the brackets on both sides
-  of the set's epoch, below).
+  consecutive cached flights share one, and a serial reclaim keeps 0.6.57's choice among them. The choice moves no state: a
+  set's state is a function of the set and the time (the bracket's identity, 9), whichever caches it flew with.
 - **The missing weather day is a note, not a result.** `Store::short_day` is written by the thread that flew the state
   that found no row. `propagate_epochs` reads it on the calling thread right after that state. After a threaded
   `sdnap_epochs_at` it names some series' missing day; each series' own status is in its status code.
@@ -1751,7 +1781,8 @@ Three more rules for the pool threads:
 of 1 and 2 (slots replaced inside the batch), then set 2 alone. The store holds SGP4, SGP4XP and AP series, AP on
 NRLMSISE-00 at node heights under and over 325 km and on Jacchia 1970, two force sets and two weather tables
 alternating, covariance on half, and eight wide series flown on the calling thread.
-- The reference is each series alone on the calling thread. Its digest is the one sdn-ap 0.6.57 gives.
+- The reference is each series alone on the calling thread. Its digest is the one sdn-ap 0.6.59 gives; it differs from
+  0.6.58's for the series flown on both sides of their epoch (the medium-orbit series at 18 h).
 - On 0, 1, 4 and 15 threads, in slices of 100 series, and with each building thread's scratch and its half-day
   evaluation cache's values poisoned before every set: every state and status byte equals the reference. Every state is
   answered.
@@ -1802,21 +1833,22 @@ The pool and the memory (stack #487). A threaded batch grows nothing, and a pool
   memory's end, moving the allocator's break (1.6): those pages were in the memory when the batch published its size,
   before any thread claimed a chunk, so every thread's view covers them. The trap (Why, below) came from pages grown
   after a thread's view was taken, and moving the break grows nothing.
-  - A set refused its caches flies on the thread's caches. The states are the same, except for an AP set that was asked
-    on both sides of its epoch before, which can differ. The cause: its bake caches use one id for the brackets on both
-    sides of the set's epoch, so what it answers depends on which caches it flew with before (pull request 86 removes
-    it).
+  - A set refused its caches flies on the thread's caches. The states are the same, to the bit.
   - A row that a refusal stopped is computed again by the calling thread after the batch, in row order. For the epoch
     store, the series' two slots are released first, keeping the slot to be replaced next, and its sets are built
-    again. The state is the same, except for an AP set that was asked on both sides of its epoch before, which can differ
-    for the same cause.
-  - The sizes measured: under a millimeter in every class measured (500 km, 830 km, medium orbit, geosynchronous,
-    eccentric: 0 to 0.13 mm) except strong drag, where one of eight sets with perigee under about 350 km differed by
-    49.7 mm (asked every second for 81,000 s across its epoch, against a fresh instance; one by 0.11 mm, six by
-    nothing). No command of this repository prints the 49.7 mm; `node test/epoch-pool.e2e.mjs` prints how many of its
-    deferred states differ and the largest difference.
-  - Which sets are refused their caches and which series are deferred depend on the threads' timing, so for such a set
-    two runs of the same calls can differ by that much. Serially the answer is the same every run for the same calls.
+    again. The state is the same, to the bit: `test/epoch-pool.e2e.mjs` compares every deferred state with the
+    reference's byte for byte.
+  - Through 0.6.58 an AP set that was asked on both sides of its epoch before could answer a different state here (its
+    bake caches used one id for the brackets on both sides of the set's epoch, 9): under a millimeter in every class
+    measured (500 km, 830 km, medium orbit, geosynchronous, eccentric: 0 to 0.13 mm) except strong drag, where one of
+    eight sets with perigee under about 350 km differed by 49.7 mm (asked every second for 81,000 s across its epoch,
+    against a fresh instance; no command of this repository prints the 49.7 mm). On a time-ordered flight of 300 states
+    across the epoch the same kind of difference is up to 0.51 mm at 500 km and 57 um for the decaying set (measured
+    on the states after the crossing, this checkout with the two old keys put back). 0.6.59 removes it.
+  - Which sets are refused their caches and which series are deferred depend on the threads' timing; no state does.
+    Two runs of the same calls give the same states, serially, on any number of threads, while one thread flies a given
+    set at a time (a set above e 0.3 stays on the calling thread: epoch_store.inc, wide_series), apart from the exception
+    above (a record that carries a covariance, through `propagate`).
 - A pool thread runs a chunk only once its own memory.size covers the size published for the batch. Its claim read the
   batch's total, which was stored after that size, so it reads that size.
 - Outside a batch only the calling thread grows the memory, so its view is its own. The one exception is a pool
@@ -1981,7 +2013,7 @@ Caches per set flown a day (a week), by part, and the sets whose caches a budget
 | Chandra-like (n 0.378, e 0.685) | 20.8 KB (44.6) | 0 | 10.0 (33.8) | 5.8 | 4.6 | 12,595 | 50,382 | 100,764 |
 | TESS-like (n 0.073, e 0.55) | 15.8 KB (30.8) | 0 | 5.0 (20.0) | 5.8 | 4.6 | 16,578 | 66,313 | 132,626 |
 
-The rest of the caches is 0.4 KB a set. Each set also carries its drag-pass segments, 0.8 KB, in the set itself. The node
+The rest of the caches is 0.4 KB a set. Each set also carries its drag-pass segments, 784 B, in the set itself. The node
 runs of a set above e 0.3 follow its long-period step (16.10). The THEMIS-like set steps 8.2 minutes, so it holds 351 nodes
 of 160 B a day and 1,402 a week. A run holds at most the checkpoint span, 8 days or about 1,405 nodes (225 KB) a direction:
 256 MB holds the week's caches of 1,129 such sets.
@@ -2019,7 +2051,8 @@ AP memoizes a, e, and cos i at the bracket's two nodes, keyed byte for byte on n
 The memo belongs to the set while its cache lock is held, and to the thread otherwise. The propagation entry
 clears the anchor; epoch calls clear it without consulting the memo. SGP4XP computes its anchor directly.
 
-Inline tesseral and m-daily checks compare the bracket identity, first time, length, and each bake level's part key
+Inline tesseral and m-daily checks compare the bracket identity (the set's context and the smaller of the bracket's two
+node indexes, one value per bracket), first time, length, and each bake level's part key
 before calling the synchronization routines. The checks use the same part-key expression as the bakes. The stored
 part counts and keys follow the cache's existing lock ownership. These shortcuts reuse values without changing
 arithmetic in the bakes or the returned states.
