@@ -20,7 +20,7 @@ SDNAP_EXPORT("sdnap_test_res_state") int sdnap_test_res_state(double t,double* o
  out[6]=mean_at(*test_res_sat,t,y)?y[kN]:0;out[7]=test_res_sat->ctx.continuity_form;return rc;
 }
 `;
-const candidate=buildDiagnostic('coefficient-resonance',extra),exact=buildDiagnostic('coefficient-resonance-exact',extra,s=>s,{'tesseral.inc':s=>'#define SDNAP_CONTINUITY_RULE 0\n'+s,'coefficient_evaluation.inc':exactCoefficients});
+const candidate=process.env.COEFFICIENT_RESONANCE_WASM??buildDiagnostic('coefficient-resonance',extra),exact=process.env.COEFFICIENT_RESONANCE_EXACT??buildDiagnostic('coefficient-resonance-exact',extra,s=>s,{'tesseral.inc':s=>'#define SDNAP_CONTINUITY_RULE 0\n'+s,'coefficient_evaluation.inc':exactCoefficients});
 const ke=.074366859954178854,re=6378.1363,j2=.0010826266835531513,omega=.00437526908801129966,ci=Math.cos(55*Math.PI/180);
 const rate=(n,e,m,j,w)=>{const a=(ke/n)**(2/3),eta=Math.sqrt(1-e*e),p=a*eta*eta,z=1.5*j2/(p*p);return w*.5*z*n*(5*ci*ci-1)+j*(n+.5*z*n*eta*(3*ci*ci-1))+m*(-z*n*ci-omega);};
 const gcd=(a,b)=>b?gcd(b,a%b):a;

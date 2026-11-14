@@ -14,7 +14,7 @@ SDNAP_EXPORT("sdnap_test_derivative_failures") int sdnap_test_derivative_failure
 SDNAP_EXPORT("sdnap_test_u_transitions") int sdnap_test_u_transitions(){return sdnap::xpt::tess::g_test_u_transitions;}
 SDNAP_EXPORT("sdnap_test_retries") int sdnap_test_retries(){return sdnap::xpt::tess::g_test_retries;}
 `;
-const file=buildDiagnostic('coefficient-allocation',extra,s=>s.replace('    if (!s.pooled ||','    if (true || !s.pooled ||'),{
+const file=process.env.COEFFICIENT_ALLOCATION_WASM??buildDiagnostic('coefficient-allocation',extra,s=>s.replace('    if (!s.pooled ||','    if (true || !s.pooled ||'),{
  'sdn_ap_module.cpp':s=>'namespace sdnap::pool { extern thread_local bool g_pool_thread; }\n'+s,
  'tesseral.inc':s=>s.replace('inline MdailyDerivatives* mdaily_derivatives() {',String.raw`
 inline int g_test_fail_derivatives=0,g_test_derivative_failures=0,g_test_u_transitions=0,g_test_retries=0;
