@@ -20,7 +20,7 @@ test.after(()=>h?.destroy());
 async function replace(cat,selected,asOf=now,extra=[]){
  const recipe=Object.assign(new X.XMTT(),{INTEGRATE_RECIPE:Object.assign(new X.XMTIntegrateRecipeT(),{AS_OF_MS:BigInt(asOf)})});
  const decision=Object.assign(new Q.QRPT(),{MESSAGE:'old-span fallback; no population covariance (OUTSIDE)'});
- return h.invoke({methodId:'replace_products',inputs:[frame('catalog','CAT',cat),frame('recipe','XMT',pack(recipe,'XMT',false)),frame('decision','QRP',pack(decision,'QRP',false)),...(selected?[frame('ocm_products','OCM',selected)]:[]),...extra]});
+ return h.invoke({methodId:'replace_products',inputs:[frame('catalog','CAT',cat),frame('recipe','XMT',pack(recipe,'XMT')),frame('decision','QRP',pack(decision,'QRP',false)),...(selected?[frame('ocm_products','OCM',selected)]:[]),...extra]});
 }
 const output=r=>{assert.equal(r.statusCode,0,r.errorMessage);return r.outputs.find(f=>f.portId==='catalog').payload;};
 
