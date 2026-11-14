@@ -79,16 +79,16 @@ export async function verifyFifoRegression(mode){
   }else if(mode==='poison'){
    badIndex=pack(new C.CATT(),'CAT');const source='CAT/synthetic-node/catalog-index';
    const present=Object.assign(new N.NEVEventT(),{TIME_MS:BigInt(now),KIND:N.nevEventKind.Warning,SUBJECT:'catalog-invalid/'+sha(badIndex)+'/'+sha(Buffer.from(source)),COUNT:3n,DETAIL:source+'; sequence=1;'});
-   snapshot([present,...poisonEntries(4095)]);const first=await tick(now);assert.equal(first.indexes,1);
+   snapshot([present,...poisonEntries(4095)]);const first=await tick(now);assert.equal(first.indexes,1);const observed=events().find(e=>e.SUBJECT===present.SUBJECT);assert.ok(observed,'an observed poison stays in the FIFO');assert.ok(Number(observed.DETAIL.match(/sequence=(\d+);/)[1])>1,'quarantined poison observations refresh their sequence');
    add(newcomer);control.destroy();control=await create();const second=await tick(now+1000);console.log('FIFO_POISON '+JSON.stringify({first,second}));assert.equal(second.indexes,1,'observed poison eviction cannot defer a new object');
    // Even a forgotten poison cannot reopen the build gate for valid inputs.
    snapshot(poisonEntries(4096));add(newcomer-1);control.destroy();control=await create();const forgotten=await tick(now+2000);assert.equal(forgotten.indexes,1,'forgotten index poison never defers valid object construction');
   }else if(mode==='fair'){
    cfg['catalog.batch_size']=128;cfg['catalog.invocation_budget_ms']=3000;
-   for(let i=0;i<1000;i++){const id=4000000+i;add(id);index.set(id,pack(Object.assign(new C.CATT(),{NORAD_CAT_ID:id,OBJECT_NAME:'SYNTHETIC',PRODUCTS_AS_OF:new Date(now-1000).toISOString()}),'CAT'));}
+   for(let i=0;i<1000;i++){const id=4000000+i;add(id);fallback.METADATA.NORAD_CAT_ID=id;const product=pack(fallback,'OCM');journal.add(cid(product));index.set(id,pack(Object.assign(new C.CATT(),{NORAD_CAT_ID:id,OBJECT_NAME:'SYNTHETIC',PRODUCTS_AS_OF:new Date(now-1000).toISOString(),PRODUCTS:[Object.assign(new C.CATProductT(),{KIND:C.catalogProductKind.Sgp4Elements,RECORD_CID:cid(product),SELECTION_REASON:'prior input'})]}),'CAT'));}
    snapshot(poisonEntries(4096));const runs=[];
    for(let i=0;i<3;i++){control.destroy();control=await create();runs.push(await tick(now+i*1000));}
-   console.log('FIFO_FAIR '+JSON.stringify(runs));for(const run of runs){assert.ok(run.healthy>0,'built objects refresh on every run despite 5000 persistent failures');assert.ok(run.fits<=128,'failures count against dispatch batch');assert.ok(run.fits-run.healthy<=64,'unbuilt objects take at most half while built objects are due');}
+   console.log('FIFO_FAIR '+JSON.stringify(runs));for(const run of runs){assert.ok(run.healthy>0,'built objects refresh on every run despite 5000 persistent failures');assert.ok(run.fits<=128,'failures count against dispatch batch');assert.ok(run.fits-run.healthy<=64,'unbuilt objects take at most half while built objects are due');}assert.equal([...fitCounts].filter(([id])=>id>=4000000).length,192,'staleness order refreshes different due built objects across three runs');
   }
  }finally{control.destroy();composer.destroy();}
 }
