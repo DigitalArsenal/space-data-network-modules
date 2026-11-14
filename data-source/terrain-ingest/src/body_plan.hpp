@@ -617,17 +617,36 @@ PolarStereo body_polar(const Body& body, const BodyProduct& p) {
 
 // Products whose isolated bad shots terrain-source removes (body_despike.hpp), and the core threshold in metres.
 // SLDEM2015 inherits single bad LOLA shots: Hadley 26.137N 3.585E stands 150 m below the flat 5 m NAC DTM there.
-double body_despike_m(const BodyProduct& p) { return std::string(p.key) == "sldem2015_512" ? 40.0 : 0.0; }
+// LDEM_512 (the LOLA-only relief poleward of SLDEM2015, stack #658) carries them too: 46-74 posts a million more than
+// 40 m off their 5x5 median at 62 S, 69 S and 78 S, each a pit or a knob that casts a black shadow at low sun.
+double body_despike_m(const BodyProduct& p) {
+    const std::string k = p.key;
+    return k == "sldem2015_512" || k == "ldem_512" ? 40.0 : 0.0;
+}
 
 // Products whose north-south track stripes terrain-source removes (body_destripe.hpp). Only SLDEM2015_512 carries
 // them: its E-W/N-S kink p90 ratio is 1.8-3.1x at Bessel, Dawes, Hadley and Mare Tranquillitatis against 0.8-1.2x in
 // SLDEM2015_256 and _128, where the filter would take real relief (it drops their ratio to 0.7-0.9x).
 bool body_destripe(const BodyProduct& p) { return std::string(p.key) == "sldem2015_512"; }
 
+// Products whose LOLA ground-track stripes terrain-source removes along the tracks (body_track_destripe.hpp, stack
+// #658): the LDEM grids, which carry the Moon's relief alone poleward of SLDEM2015 (L8 ldem_128 to 75.9375 deg, L9
+// ldem_256 to 78.75, L10 ldem_512 to 84.375). Stripe energy coherent along a track direction, over its mean over
+// directions, at 68.9 S: 11.4 points of the E-W high-pass in LDEM_512, 2.7-5.9 in LDEM_256, 2.2-5.0 in LDEM_128. The
+// value is the reach of one pass in posts, ceil(3 sigma) + ceil(|shear| * 5) + 1 at the cap's poleward edge, plus 2:
+// 52 + 2 at 84.375 deg (512 ppd), 14 + 2 at 78.75 (256), 8 + 2 at 75.9375 (128).
+long body_track_reach(const BodyProduct& p) {
+    const std::string k = p.key;
+    return k == "ldem_512" ? 54 : k == "ldem_256" ? 16 : k == "ldem_128" ? 10 : 0;
+}
+
 // The extra lines (and columns) round a filtered product's extent: terrain-source's despike radius (9) and destripe
-// radius (5 lines; it reads 3 columns), which add, plus its decoder's pad (2) and one for rounding.
+// radius (5 lines; it reads 3 columns), or the track destripe's three passes (three reaches, at least 15 lines), which
+// add, plus its decoder's pad (2) and one for rounding.
 double body_filter_lines(const BodyProduct& p) {
-    const double r = (body_despike_m(p) > 0 ? 9.0 : 0.0) + (body_destripe(p) ? 5.0 : 0.0);
+    const long t = body_track_reach(p);
+    const double r = (body_despike_m(p) > 0 ? 9.0 : 0.0) + (body_destripe(p) ? 5.0 : 0.0) +
+                     (t > 0 ? 3.0 * static_cast<double>(std::max(t, 5L)) : 0.0);
     return r > 0 ? r + 3.0 : 0.0;
 }
 

@@ -1832,6 +1832,7 @@ struct TileExtent {
 #include "body_fill.hpp"
 #include "body_despike.hpp"
 #include "body_destripe.hpp"
+#include "body_track_destripe.hpp"
 #include "body_inset_decode.hpp"
 
 struct BodyFill {
@@ -4162,22 +4163,30 @@ int tile(void) {
             // for them): the destripe reads despiked posts, so the radii add.
             const double despike_m = json_number(plan, "bodyDespikeM", 0);
             const bool destripe = json_number(plan, "bodyDestripe", 0) > 0;
+            // A track-destriped product (LOLA LDEM outside SLDEM2015, body_track_destripe.hpp): the plan states the
+            // reach of one pass in posts; three passes read three reaches (at least three times its lines) round it.
+            const long track_reach = static_cast<long>(json_number(plan, "bodyTrackDestripe", 0));
+            const long track_r = track_reach > 0 ? 3 * std::max(track_reach, kBodyTrackRows) : 0;
             const long despike_r = despike_m > 0 ? kBodyDespikeRadius : 0, destripe_r = destripe ? kBodyDestripeRows : 0;
             const double spacing = files[0].label.a_axis_m * kPolarPi / 180 / files[0].label.ppd;
-            g = decode_pds_files(files, boxes, &budget, fill.band_m + (despike_r + destripe_r) * spacing);
-            if (g.ok && g.covers && (despike_m > 0 || destripe) && g.proj == kProjLinear) {
+            g = decode_pds_files(files, boxes, &budget, fill.band_m + (despike_r + destripe_r + track_r) * spacing);
+            if (g.ok && g.covers && (despike_m > 0 || destripe || track_reach > 0) && g.proj == kProjLinear) {
                 double west = 1e300, east = -1e300;
                 for (const TileExtent& b : boxes) { west = std::min(west, b.west); east = std::max(east, b.east); }
                 // Stored column k holds global column k + off_x, centred on origin_lon + (k + off_x) * scale_lon.
                 const long c0 = static_cast<long>(std::floor((west - g.origin_lon) / g.scale_lon)) - g.off_x - 2;
                 const long c1 = static_cast<long>(std::ceil((east - g.origin_lon) / g.scale_lon)) - g.off_x + 3;
-                const long rx = destripe ? kBodyDestripeCols : 0;
+                const long rx = destripe ? kBodyDestripeCols : (track_reach > 0 ? 3 * track_reach : 0);
                 if (despike_m > 0) body_despike(&g.samples, g.width, g.height, c0 - rx, c1 + rx, despike_m, kNoData);
                 // The destripe reads only posts the despike settled (its rows and columns clear of the window edge).
                 const long W = static_cast<long>(g.width), H = static_cast<long>(g.height);
                 if (destripe)
                     body_destripe(&g.samples, g.width, g.height, c0, c1, despike_r, H - despike_r,
                                   std::max(despike_r, c0 - rx), std::min(W - despike_r, c1 + rx), kNoData);
+                if (track_reach > 0)
+                    body_track_destripe(&g.samples, g.width, g.height, c0, c1, despike_r, H - despike_r,
+                                        std::max(despike_r, c0 - rx), std::min(W - despike_r, c1 + rx), kNoData,
+                                        g.origin_lat, g.scale_lat, g.off_y, files[0].label.ppd, track_reach);
             }
         }
         if (g.budget_refused) return 413;
