@@ -5,7 +5,7 @@ import {records} from './coefficient-forms.mjs';
 import {repackOcm} from './ocm.mjs';
 import {coefficientHarness} from './coefficient-harness.mjs';
 export async function mixedForms(file){
- const all=Array.from({length:68},(_,i)=>{const r=records()[i%17];return {...r,bytes:repackOcm(r.bytes,t=>{t.METADATA.NORAD_CAT_ID=90000+i;t.METADATA.OBJECT_NAME=`SYNTHETIC-${i}`;t.COVARIANCE_DATA=[];t.COV_SIZE=0;})};});
+ const all=Array.from({length:68},(_,i)=>{const r=records()[i%17];return {...r,bytes:repackOcm(r.bytes,t=>{t.METADATA.NORAD_CAT_ID=90000+i;t.METADATA.OBJECT_DESIGNATOR=String(90000+i);t.METADATA.INTERNATIONAL_DESIGNATOR=null;t.METADATA.OBJECT_NAME=`SYNTHETIC-${i}`;t.COVARIANCE_DATA=[];t.COV_SIZE=0;})};});
  const times=[-3600,0,1,3600,21600,86400],epoch=all[0].epochMs,refs=[];
  for(const r of all){const m=await coefficientHarness(file,[r]);refs.push(times.map(t=>m.state(t+(epoch-r.epochMs)/1000)));await m.close();}
  let comparisons=0;
