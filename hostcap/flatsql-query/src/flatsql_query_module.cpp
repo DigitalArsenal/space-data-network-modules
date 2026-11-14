@@ -665,4 +665,40 @@ int sandbox_query(void) {
     return surface_frame ? serve_surface(frame, request, ctx) : serve_query(frame, request, ctx);
 }
 
+// One complete durable store page under the existing storage_query grant.
+int index_page(void) {
+    char batch_message[384];
+    if (find_batched_input_port(batch_message, sizeof(batch_message))) {
+        plugin_set_error("batched-input-frames", batch_message);
+        return 400;
+    }
+    const plugin_input_frame_t* frame = frame_for("query");
+    if (!frame || !frame->payload) {
+        plugin_set_error("missing-request-frame", "index_page takes one QRP Request on query.");
+        return 400;
+    }
+    flatbuffers::Verifier verifier(frame->payload, frame->payload_length);
+    if (!VerifyQRPBuffer(verifier) || GetQRP(frame->payload)->KIND() != qrpKind_Request) {
+        plugin_set_error("invalid-request-frame", "index_page takes a QRP Request.");
+        return 400;
+    }
+    const QRP& request = *GetQRP(frame->payload);
+    QrpContext ctx;
+    ctx.representation = request.REPRESENTATION();
+    const auto response = sdm_piv::call("storage.index_page", {
+        sdm_piv::raw("request", frame->payload, frame->payload_length)});
+    if (!response.ok()) return refuse(ctx, "host-failed", response.error_message());
+    const auto stream = response.raw("stream");
+    if (stream.size() < 12) return refuse(ctx, "host-failed", "missing durable page stream");
+    const auto* data = reinterpret_cast<const uint8_t*>(stream.data());
+    const uint32_t size = read_u32le(data);
+    if (size > stream.size() - 4) return refuse(ctx, "host-failed", "truncated durable page header");
+    flatbuffers::Verifier header_verifier(data + 4, size);
+    if (!VerifyQRPBuffer(header_verifier) || GetQRP(data + 4)->KIND() != qrpKind_Page)
+        return refuse(ctx, "host-failed", "invalid durable page header");
+    if (push_decision_verbatim(frame) != 0) return 500;
+    return plugin_push_output_ex("page", "QRP.fbs", QRPIdentifier(), PLUGIN_PAYLOAD_WIRE_FORMAT_FLATBUFFER,
+                                 "QRP", 0, 0, data, stream.size()) < 0 ? 500 : 0;
+}
+
 }  // extern "C"
