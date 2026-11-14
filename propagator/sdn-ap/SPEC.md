@@ -2183,7 +2183,7 @@ U retains the original bake levels and coefficient evaluation. A evaluates baked
 
 Fifteen measured neighborhoods straddle the thresholds and the zero-drag branch. Their fine-offset maximum change in approximation error is 0.016281421 m; the committed test enforces 0.063 m. An additional eccentric 1,000 km neighborhood measures 0.111527867 m. The physical separation of two nearby sets is distinct from that approximation change. The selector is not continuous in the elements, and the neighborhood experiment is not a universal bound for every possible set.
 
-The direct R resonant blocks are tested at 105 shifted commensurabilities under gravity caps 31 and 70, including 14:1 and 15:1. All 10,752 tested states are finite; the largest distance from state-exact coefficients is 0.003882637 m and the largest adjacent approximation residual is 0.002951175 m. All 42 sampled decaying order cases cross their commensurability. These blocks operate below the class-0 wide-grid eccentricity switch at 0.05.
+The direct R resonant blocks are tested at 105 shifted commensurabilities under gravity caps 31 and 70, including 14:1 and 15:1. All 10,878 tested states are finite; the largest distance from state-exact coefficients is 0.003882637 m and the largest adjacent approximation residual is 0.002951175 m. All 42 sampled decaying order cases cross their commensurability. These blocks operate below the class-0 wide-grid eccentricity switch at 0.05.
 
 The separate wide-grid output refuses four synthetic exact-root cases at eccentricities 0.123–0.173 under both U and R. Removing the selected m-daily and short-period coefficient families does not remove the refusal; omitting the wide-grid correction does. The unchanged wide-grid behavior is not covered by the finite-output result above. `test/coefficient-resonance.e2e.mjs --wide` retains the failing diagnostic.
 
@@ -4241,7 +4241,7 @@ output time in E by the cubic Hermite between the two nodes about E, linear in t
 e^{i(w omega + m beta)}. Each node's slope is the fourth-order central difference of its four neighbours on the periodic
 grid, computed once when the grid is built and kept in single precision beside the node's value: four reads, as before.
 The derivative grids are read by the four-point Catmull-Rom cubic. Both are continuous with their slope from one interval
-to the next. Memory per family is 16,896 bytes against 10,752 (+57 %); cost per state on the low orbits that read the
+to the next. Memory per family is 16,896 bytes against 10,878 (+57 %); cost per state on the low orbits that read the
 grid (e 0.1 and 0.2, tesseral degree 31) is that of 0.6.12 within 5 %. Through 0.6.13 it was the four-point Lagrange cubic, whose slope
 stepped at every node: kinks about 80 s apart near perigee, where the nodes pass fastest. On the transfer orbit with drag
 off the jump detector within 10 min of perigee read 0.395 m at 10 s and 0.031 m at 1 s; it now reads 0.032 m and 0.8 mm
