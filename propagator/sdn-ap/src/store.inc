@@ -176,13 +176,15 @@ inline int32_t store_prepare(Store& st, const ElementRow* rows, uint32_t count, 
   return static_cast<int32_t>(count);
 }
 
-/// Prepare before replacing so allocation refusal preserves the previous rows and plugin source.
-inline int32_t store_init(const ElementRow* rows, uint32_t count, const uint8_t* refused = nullptr) {
+/// Prepare before replacing so a failed store allocation preserves the previous rows and plugin source.
+/// Native row initialization holds individual refused sets; plugin and stream loads require every allocation.
+inline int32_t store_init(const ElementRow* rows, uint32_t count, const uint8_t* refused = nullptr,
+                          bool require_all_allocations = true) {
   if (!plugin_can_release()) return -1;
   Store prepared;
   const uint32_t failures = mem::failures();
   const int32_t held = store_prepare(prepared, rows, count, refused);
-  if (held < 0 || mem::failures() != failures) { store_free(prepared); return -1; }
+  if (held < 0 || (require_all_allocations && mem::failures() != failures)) { store_free(prepared); return -1; }
   store_free();
   store() = prepared;
   return held;

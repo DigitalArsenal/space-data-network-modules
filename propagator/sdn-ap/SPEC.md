@@ -6706,3 +6706,16 @@ replacement and lifecycle. `SDNAP_CONTROL_WASM` adds byte comparisons with an un
 allocation refusal, dead/active pool state, direct slot bytes and initialized table bytes. They are absent from production
 artifacts. Replacement-refusal, source-preservation and cache-release assertions always run. The test is an ABI comparison, not an independent
 physics calibration.
+
+
+### Native row initialization at the memory limit
+
+Preparing replacement rows holds the old and prepared stores together, reducing the room available to initialize
+individual sets at a fixed memory maximum. `sdnap_init_elements` installs the prepared rows when the store allocation
+succeeds, including sets whose initialization is refused. Its positive count includes those refused sets;
+`sdnap_init_error` and each propagation status identify them. A failed allocation of the store itself preserves the
+previous rows and returns bad-input. Plugin OMM initialization and stream ingestion also preserve the previous rows
+when an individual set allocation fails. Every answered native row uses the newly supplied set and its requested time.
+
+`test/memory-limit.e2e.mjs` compares every answered state bit for bit against an instance with the default maximum,
+including replacement of SGP4 rows by AP test rows with two pool threads at 128 MiB.

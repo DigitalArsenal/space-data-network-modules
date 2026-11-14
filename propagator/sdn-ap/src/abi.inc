@@ -283,7 +283,9 @@ int32_t sdnap_init_elements(const sdnap::ElementRow* rows, uint32_t count) {
     }
     refused[i] = 1;
   }
-  const int32_t held = sdnap::store_init(rows, count, refused);
+  // A set whose initialization runs out of memory is held with its refusal status, as at other row entries.
+  // Failure to allocate the store itself preserves the previous rows.
+  const int32_t held = sdnap::store_init(rows, count, refused, false);
   std::free(refused);
   return held < 0 ? ORBPRO_PROP_BAD_INPUT : held;
 }
