@@ -249,11 +249,17 @@ assert.equal(x.plugin_propagate_all_positions(jd, positions, 3), 3); const rowPo
 for (let i = 0; i < 3; ++i) {
   const q = state(i); assert.deepEqual(q.bytes, rowBatch.subarray(i * 64, i * 64 + 64));
   assert.deepEqual(q.bytes.subarray(8, 32), rowPositions.subarray(i * 24, i * 24 + 24));
-  assert.ok(Math.abs(x.get_orbital_period(i) - 1440 / (14 + i / 10)) < 1);
+  assert.ok(Math.abs(x.get_orbital_period(i) - 1440 / (14 + i / 10)) < 1e-10);
   assert.equal(x.get_eccentricity(i), .001);
   assert.equal(x.plugin_propagate_path(i, jd, 20 / 86400, 3, positions), 3);
   const path = bytes(positions, 72);
   for (let k = 0; k < 3; ++k) assert.deepEqual(path.subarray(k * 24, k * 24 + 24), state(i, jd + k * 20 / 86400).bytes.subarray(8, 32));
+}
+refusal(await call('replace_epoch', [input([newer])]), 'records-not-loaded');
+const activeRows = state(0).bytes;
+for (const fail of [1, 2, 3, 4]) {
+  x.sdnap_test_fail_at(fail); assert.equal(x.plugin_init_omm(omm, 3), -4); x.sdnap_test_fail_at(0);
+  assert.equal(x.plugin_entity_count(), 3); assert.deepEqual(state(0).bytes, activeRows);
 }
 // A row pool failure must block release even when the epoch store has no dead flag.
 x.sdnap_test_plugin_active(1); x.plugin_destroy();
