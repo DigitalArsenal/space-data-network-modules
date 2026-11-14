@@ -212,6 +212,17 @@ if (process.env.SDNAP_CONTROL_WASM) {
     assert.equal(ex.plugin_propagate_batch(jd, op, 3), -6);
   }
   assert.deepEqual(bytes(structs, 192), Buffer.from(new Uint8Array(control.mem(), co, 192)));
+  // Releasing display slots preserves stock-theory bits across advancing and backward query grids.
+  const stocks = [sg, xp, ...population([['geo', 1], ['meo', 1], ['wide', 1]], 20261114, 0).map(o => ocmOfObject(o, false))];
+  for (const module of [h, control.h]) ok(await module.invoke({methodId: 'load_epochs', inputs: [input(stocks)]}));
+  const rawStock = [4, 3, 0, 1, 2];
+  for (const day of [0, .04, .1, .5, 1, 2, .1, -1, 0]) for (let i = 0; i < stocks.length; ++i) {
+    const when = jd + day, q = state(i, when), [w, frac] = split(when);
+    assert.equal(cx.sdnap_epochs_at(w, frac, rawStock[i], 1, 3, co, co + 512, 0), 0);
+    assert.equal(new Int32Array(control.mem(), co + 512, 1)[0], 0);
+    assert.equal(q.rc, 0);
+    assert.deepEqual(q.bytes.subarray(8, 56), Buffer.from(new Uint8Array(control.mem(), co, 48)));
+  }
   cx.plugin_destroy(); cx.sdnap_free(ci); cx.sdnap_free(co); await control.h.destroy?.(); controlCompared = true;
 }
 // Both stores coexist; only successful plugin-visible ingestion selects the source.
