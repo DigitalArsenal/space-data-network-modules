@@ -1,30 +1,110 @@
-// Coefficient baking and evaluation share the same bracket keys.
+// Instantiated for each coefficient form. The preprocessor removes form selection from the coefficient loops.
+// U retains the original bake levels; A adds state derivatives; C and CM share coarse levels; R evaluates resonances directly.
+
+inline int64_t sp_part_key(double q, int n) {
+  int k = static_cast<int>(std::floor(q * n));
+  k = k < 0 ? 0 : (k >= n ? n - 1 : k);
+
+#if SDNAP_COEFFICIENT_FORM == 4
+return (static_cast<int64_t>(n) << 16) + k;
+#else
+return static_cast<int64_t>(n) * 64 + k;
+#endif
+
+}
+
+inline int64_t sp_anchor_point(const SpAnchor& an, double t, double tol_a, double tol_e, bool e_sq, double tol_c, double& a_c,
+                               double& e_c, double& c_c) {
+
+
+  SpAnchorLevels& L = g_sp_anchor_levels;
+  if (L.id != an.id || L.tlo != an.tlo || L.h != an.h) {
+    L.id = an.id;
+    L.tlo = an.tlo;
+    L.h = an.h;
+    L.count = 0;
+  }
+  int n = 0;
+  for (int j = 0; j < L.count; ++j)
+    if (L.lv[j].tol_a == tol_a && L.lv[j].tol_e == tol_e && L.lv[j].tol_c == tol_c && L.lv[j].e_sq == e_sq) {
+      n = L.lv[j].n;
+      break;
+    }
+  if (n == 0) {
+    const double da = std::fabs(an.a_hi - an.a_lo) / (tol_a * an.a_lo);
+    const double de = e_sq ? std::fabs(an.e_hi * an.e_hi - an.e_lo * an.e_lo) / tol_e : std::fabs(an.e_hi - an.e_lo) / tol_e;
+    const double dc = tol_c > 0.0 ? std::fabs(an.c_hi - an.c_lo) / tol_c : 0.0;
+    const double need = std::fmax(da, std::fmax(de, dc));
+
+#if SDNAP_COEFFICIENT_FORM == 4
+n = need < 1.0 ? 1 : (need >= 256.0 ? 256 : static_cast<int>(std::ceil(need)));
+#else
+n = need < 1.0 ? 1 : (need >= 64.0 ? 64 : static_cast<int>(std::ceil(need)));
+#endif
+
+    if (L.count < SpAnchorLevels::kLevels) L.lv[L.count++] = SpAnchorLevels::Level{tol_a, tol_e, tol_c, e_sq, n};
+  }
+  const int64_t key = sp_part_key((t - an.tlo) / an.h, n);
+
+#if SDNAP_COEFFICIENT_FORM == 4
+const int k = static_cast<int>(key - (static_cast<int64_t>(n) << 16));
+#else
+const int k = static_cast<int>(key - static_cast<int64_t>(n) * 64);
+#endif
+
+  const double q = (k + 0.5) / n;
+  a_c = an.a_lo + q * (an.a_hi - an.a_lo);
+  e_c = an.e_lo + q * (an.e_hi - an.e_lo);
+  c_c = an.c_lo + q * (an.c_hi - an.c_lo);
+  return key;
+}
 
 [[gnu::noinline]] inline void mdaily_sync_cache(MdailyEvalCache& mc, const float* F, int degree, double a_state, double e2_state,
                                                 double t, uint64_t table_id = 0) {
+#if SDNAP_COEFFICIENT_FORM != 0 && SDNAP_COEFFICIENT_FORM != 2
+  MdailyDerivatives* md = mdaily_derivatives();
+#endif
   double a_full, e2_full, a_part;
   int64_t kfa, kfe = 0, kpa;
   const bool anchored = sp_anchored(t);
   if (anchored) {
     double e_f, c_f, e_p, c_p;
-    kfa = sp_anchor_point(g_sp_anchor, t, 3e-5, 2e-6, true, 0.0, a_full, e_f, c_f);
+
+#if SDNAP_COEFFICIENT_FORM == 4
+kfa = sp_anchor_point(g_sp_anchor, t, 7.5e-6, 5e-7, true, 0.0, a_full, e_f, c_f);
+#else
+kfa = sp_anchor_point(g_sp_anchor, t, 3e-5, 2e-6, true, 0.0, a_full, e_f, c_f);
+#endif
+
     e2_full = e_f * e_f;
-    kpa = sp_anchor_point(g_sp_anchor, t, 2e-6, 1e30, false, 0.0, a_part, e_p, c_p);
+
+#if SDNAP_COEFFICIENT_FORM >= 2
+kpa = kfa; a_part = a_full;
+#else
+kpa = sp_anchor_point(g_sp_anchor, t, 2e-6, 1e30, false, 0.0, a_part, e_p, c_p);
+#endif
+
   } else {
     kfa = sp_cell_rel(a_state, 3e-5, a_full);
     kfe = sp_cell_abs(e2_state, 2e-6, e2_full);
-    kpa = sp_cell_rel(a_state, 2e-6, a_part);
+
+#if SDNAP_COEFFICIENT_FORM >= 2
+kpa = kfa; a_part = a_full;
+#else
+kpa = sp_cell_rel(a_state, 2e-6, a_part);
+#endif
+
   }
   const uint64_t aid = anchored ? g_sp_anchor.id : 0;
   const bool full = table_id == 0 || mc.table_id != table_id || mc.F != F || mc.degree != degree || mc.f0 != F[0] ||
                     mc.f1 != F[1] || !mc.keys_valid || mc.anchor_id != aid || kfa != mc.kf_a || kfe != mc.kf_e;
-  // what md_keys_hold compares with: the keys below are the cache's when this call returns (kept, or baked now)
+
   mc.on_bracket = anchored;
   if (anchored) {
     mc.kb_tlo = g_sp_anchor.tlo;
     mc.kb_h = g_sp_anchor.h;
-    mc.n_full = static_cast<int32_t>(kfa >> 6);
-    mc.n_part = static_cast<int32_t>(kpa >> 6);
+    mc.n_full = static_cast<int32_t>(kfa >> (SDNAP_COEFFICIENT_FORM == 4 ? 16 : 6));
+    mc.n_part = static_cast<int32_t>(kpa >> (SDNAP_COEFFICIENT_FORM == 4 ? 16 : 6));
   }
   if (!full && kpa == mc.kp_a) return;
   const double a = full ? a_full : a_part, e2 = e2_full;
@@ -41,12 +121,30 @@
         mc.s20_f[idx] = static_cast<float>(mc.s_pair2[m][0]);
         mc.c21_f[idx] = static_cast<float>(mc.c_pair2[m][1]);
         mc.s21_f[idx] = static_cast<float>(mc.s_pair2[m][1]);
+#if SDNAP_COEFFICIENT_FORM != 0 && SDNAP_COEFFICIENT_FORM != 2
+if (md != nullptr) {
+        md->dc10_f[idx] = static_cast<float>(mc.dc_pair1[m][0]);
+        md->ds10_f[idx] = static_cast<float>(mc.ds_pair1[m][0]);
+        md->dc11_f[idx] = static_cast<float>(mc.dc_pair1[m][1]);
+        md->ds11_f[idx] = static_cast<float>(mc.ds_pair1[m][1]);
+        md->dc20_f[idx] = static_cast<float>(mc.dc_pair2[m][0]);
+        md->ds20_f[idx] = static_cast<float>(mc.ds_pair2[m][0]);
+        md->dc21_f[idx] = static_cast<float>(mc.dc_pair2[m][1]);
+        md->ds21_f[idx] = static_cast<float>(mc.ds_pair2[m][1]);
+}
+#endif
       }
       for (int idx = degree; idx < n_quad; ++idx) {
         mc.c10_f[idx] = mc.s10_f[idx] = 0.0f;
         mc.c11_f[idx] = mc.s11_f[idx] = 0.0f;
         mc.c20_f[idx] = mc.s20_f[idx] = 0.0f;
         mc.c21_f[idx] = mc.s21_f[idx] = 0.0f;
+#if SDNAP_COEFFICIENT_FORM != 0 && SDNAP_COEFFICIENT_FORM != 2
+if (md != nullptr) {
+        md->dc10_f[idx] = md->ds10_f[idx] = md->dc11_f[idx] = md->ds11_f[idx] = 0.0f;
+        md->dc20_f[idx] = md->ds20_f[idx] = md->dc21_f[idx] = md->ds21_f[idx] = 0.0f;
+}
+#endif
       }
     }
   };
@@ -183,6 +281,9 @@
     const double* sb_in = nullptr, const double* cb_in = nullptr, uint64_t table_id = 0) {
   const double a = k.a, e = k.e, e2 = e * e;
   MdailyEvalCache& mc = mdaily_eval_cache();
+#if SDNAP_COEFFICIENT_FORM != 0 && SDNAP_COEFFICIENT_FORM != 2
+  MdailyDerivatives* md = mdaily_derivatives();
+#endif
   if (!md_keys_hold(mc, F, degree, t, table_id)) mdaily_sync_cache(mc, F, degree, a, e2, t, table_id);
   double sb, cb;
   if (sb_in != nullptr && cb_in != nullptr) {
@@ -210,6 +311,10 @@
     const v128_t v_s4 = wasm_f32x4_splat(static_cast<float>(s4));
     v128_t a10 = wasm_f32x4_splat(0.0f), a11 = wasm_f32x4_splat(0.0f);
     v128_t a20 = wasm_f32x4_splat(0.0f), a21 = wasm_f32x4_splat(0.0f);
+#if SDNAP_COEFFICIENT_FORM != 0 && SDNAP_COEFFICIENT_FORM != 2
+    v128_t b10 = wasm_f32x4_splat(0.0f), b11 = wasm_f32x4_splat(0.0f);
+    v128_t b20 = wasm_f32x4_splat(0.0f), b21 = wasm_f32x4_splat(0.0f);
+#endif
     for (int idx = 0;;) {
       if (cm_f32_out != nullptr) {
         wasm_v128_store(cm_f32_out + idx, v_cm);
@@ -223,6 +328,16 @@
                                                wasm_f32x4_mul(wasm_v128_load(mc.s20_f + idx), v_sm)));
       a21 = wasm_f32x4_add(a21, wasm_f32x4_add(wasm_f32x4_mul(wasm_v128_load(mc.c21_f + idx), v_cm),
                                                wasm_f32x4_mul(wasm_v128_load(mc.s21_f + idx), v_sm)));
+#if SDNAP_COEFFICIENT_FORM != 0 && SDNAP_COEFFICIENT_FORM != 2
+      b10 = wasm_f32x4_add(b10, wasm_f32x4_add(wasm_f32x4_mul(mdaily_derivative_vector(md == nullptr ? nullptr : md->dc10_f, mc.dc_pair1, 0, idx, degree), v_cm),
+                                               wasm_f32x4_mul(mdaily_derivative_vector(md == nullptr ? nullptr : md->ds10_f, mc.ds_pair1, 0, idx, degree), v_sm)));
+      b11 = wasm_f32x4_add(b11, wasm_f32x4_add(wasm_f32x4_mul(mdaily_derivative_vector(md == nullptr ? nullptr : md->dc11_f, mc.dc_pair1, 1, idx, degree), v_cm),
+                                               wasm_f32x4_mul(mdaily_derivative_vector(md == nullptr ? nullptr : md->ds11_f, mc.ds_pair1, 1, idx, degree), v_sm)));
+      b20 = wasm_f32x4_add(b20, wasm_f32x4_add(wasm_f32x4_mul(mdaily_derivative_vector(md == nullptr ? nullptr : md->dc20_f, mc.dc_pair2, 0, idx, degree), v_cm),
+                                               wasm_f32x4_mul(mdaily_derivative_vector(md == nullptr ? nullptr : md->ds20_f, mc.ds_pair2, 0, idx, degree), v_sm)));
+      b21 = wasm_f32x4_add(b21, wasm_f32x4_add(wasm_f32x4_mul(mdaily_derivative_vector(md == nullptr ? nullptr : md->dc21_f, mc.dc_pair2, 1, idx, degree), v_cm),
+                                               wasm_f32x4_mul(mdaily_derivative_vector(md == nullptr ? nullptr : md->ds21_f, mc.ds_pair2, 1, idx, degree), v_sm)));
+#endif
       idx += 4;
       if (idx >= n_quad) break;
       const v128_t ncm = wasm_f32x4_sub(wasm_f32x4_mul(v_cm, v_c4), wasm_f32x4_mul(v_sm, v_s4));
@@ -244,6 +359,19 @@
     s_afg_l1 = wasm_f32x4_extract_lane(sums, 1);
     s_adfg = wasm_f32x4_extract_lane(sums, 2);
     s_afdg_oe = wasm_f32x4_extract_lane(sums, 3);
+#if SDNAP_COEFFICIENT_FORM != 0 && SDNAP_COEFFICIENT_FORM != 2
+    {
+
+      const double du = mc.a / a - mc.a / mc.a_bake;
+      const v128_t d10_11 = wasm_f32x4_add(wasm_i32x4_shuffle(b10, b11, 0, 1, 4, 5), wasm_i32x4_shuffle(b10, b11, 2, 3, 6, 7));
+      const v128_t d20_21 = wasm_f32x4_add(wasm_i32x4_shuffle(b20, b21, 0, 1, 4, 5), wasm_i32x4_shuffle(b20, b21, 2, 3, 6, 7));
+      const v128_t dsums = wasm_f32x4_add(wasm_i32x4_shuffle(d10_11, d20_21, 0, 2, 4, 6), wasm_i32x4_shuffle(d10_11, d20_21, 1, 3, 5, 7));
+      s_afg_psi += du * wasm_f32x4_extract_lane(dsums, 0);
+      s_afg_l1 += du * wasm_f32x4_extract_lane(dsums, 1);
+      s_adfg += du * wasm_f32x4_extract_lane(dsums, 2);
+      s_afdg_oe += du * wasm_f32x4_extract_lane(dsums, 3);
+    }
+#endif
   } else {
     v128_t acc1 = wasm_f64x2_splat(0.0);
     v128_t acc2 = wasm_f64x2_splat(0.0);
@@ -352,6 +480,17 @@
   const v128_t v_alpha = wasm_f32x4_splat(static_cast<float>(alpha_A));
   const v128_t v_nalpha = wasm_f32x4_splat(static_cast<float>(-alpha_A));
   const v128_t v_beta_L = wasm_f32x4_splat(static_cast<float>(beta_L));
+#if (SDNAP_COEFFICIENT_FORM != 0)
+
+
+  const double inv_1pda = 1.0 / (1.0 + da);
+  const v128_t v_dwdot_f = wasm_f32x4_splat(static_cast<float>(3.5 * wdot * inv_1pda));
+  const v128_t v_dmdot_f = wasm_f32x4_splat(static_cast<float>((1.5 * n + 3.5 * (mdot - n)) * inv_1pda));
+  const v128_t v_dnoder_f = wasm_f32x4_splat(static_cast<float>(3.5 * node_rate * inv_1pda));
+  const v128_t v_dalpha = wasm_f32x4_splat(static_cast<float>(0.5 * alpha_A * inv_1pda));
+  const v128_t v_dbeta_L = wasm_f32x4_splat(static_cast<float>(2.0 * beta_L * inv_1pda));
+  const v128_t v_back = wasm_f32x4_splat(static_cast<float>(a0 * ia - a0 / sc.a_bake));
+#endif
   for (int rk = 0; rk < sc.n_res_blks; ++rk) {
     const int bi = sc.res_blk[rk];
     const int lane_off = bi * 4;
@@ -404,14 +543,50 @@
       lc_b_ip = wasm_f32x4_add(lc_b_ip, wasm_f32x4_mul(pe8, v_de_pe_diff));
       ls_b_ip = wasm_f32x4_add(ls_b_ip, wasm_f32x4_mul(pe12, v_de_pe_diff));
     }
+#if SDNAP_COEFFICIENT_FORM != 0 && SDNAP_COEFFICIENT_FORM != 4
+    {
+      const v128_t v_dpr = wasm_f32x4_mul(
+          wasm_f32x4_add(wasm_f32x4_add(wasm_f32x4_mul(v_wf, v_dwdot_f), wasm_f32x4_mul(v_jf, v_dmdot_f)), wasm_f32x4_mul(v_mf, v_dnoder_f)),
+          v_ip);
+      float* const pa = sc.blk_a + bi * 32;
+      const v128_t dc_ip = wasm_f32x4_mul(dc_b, v_ip), ds_ip = wasm_f32x4_mul(ds_b, v_ip);
+      const v128_t uc_ip2 = wasm_f32x4_mul(uc_b_ip, v_ip), us_ip2 = wasm_f32x4_mul(us_b_ip, v_ip);
+      const v128_t dbj = wasm_f32x4_mul(v_dbeta_L, v_jf);
+      const v128_t duc_ip = wasm_f32x4_sub(wasm_f32x4_mul(duc_dda, v_ip), wasm_f32x4_mul(uc_b_ip, v_dpr));
+      const v128_t dus_ip = wasm_f32x4_sub(wasm_f32x4_mul(dus_dda, v_ip), wasm_f32x4_mul(us_b_ip, v_dpr));
+      const v128_t ddc_ip = wasm_f32x4_sub(wasm_f32x4_mul(wasm_f32x4_add(dc0, dca), v_ip), wasm_f32x4_mul(dc_ip, v_dpr));
+      const v128_t dds_ip = wasm_f32x4_sub(wasm_f32x4_mul(wasm_f32x4_add(ds0, dsa), v_ip), wasm_f32x4_mul(ds_ip, v_dpr));
+      const v128_t d[8] = {
+          wasm_f32x4_sub(wasm_f32x4_mul(eca, v_ip), wasm_f32x4_mul(ec_ip, v_dpr)),
+          wasm_f32x4_sub(wasm_f32x4_mul(esa, v_ip), wasm_f32x4_mul(es_ip, v_dpr)),
+          duc_ip,
+          dus_ip,
+          wasm_f32x4_sub(wasm_f32x4_mul(ica, v_ip), wasm_f32x4_mul(ic_b_ip, v_dpr)),
+          wasm_f32x4_sub(wasm_f32x4_mul(isa, v_ip), wasm_f32x4_mul(is_b_ip, v_dpr)),
+          wasm_f32x4_sub(wasm_f32x4_sub(wasm_f32x4_add(wasm_f32x4_mul(v_dalpha, dc_ip), wasm_f32x4_mul(v_alpha, ddc_ip)), wasm_f32x4_mul(dbj, uc_ip2)),
+                         wasm_f32x4_mul(v_bj, wasm_f32x4_mul(wasm_f32x4_sub(duc_ip, wasm_f32x4_mul(uc_b_ip, v_dpr)), v_ip))),
+          wasm_f32x4_sub(wasm_f32x4_sub(wasm_f32x4_add(wasm_f32x4_mul(v_dalpha, ds_ip), wasm_f32x4_mul(v_alpha, dds_ip)), wasm_f32x4_mul(dbj, us_ip2)),
+                         wasm_f32x4_mul(v_bj, wasm_f32x4_mul(wasm_f32x4_sub(dus_ip, wasm_f32x4_mul(us_b_ip, v_dpr)), v_ip)))};
+      const v128_t h[8] = {ec_ip, es_ip, uc_b_ip, us_b_ip, ic_b_ip, is_b_ip, lc_b_ip, ls_b_ip};
+      float* const dst[8] = {pec + 0, pec + 4, pu + 0, pu + 4, pu + 8, pu + 12, pu + 16, pu + 20};
+      for (int k = 0; k < 8; ++k) {
+        wasm_v128_store(pa + 4 * k, d[k]);
+        wasm_v128_store(dst[k], wasm_f32x4_sub(h[k], wasm_f32x4_mul(d[k], v_back)));
+      }
+    }
+#else
     wasm_v128_store(pec + 0, ec_ip);  wasm_v128_store(pec + 4, es_ip);
     wasm_v128_store(pu + 0, uc_b_ip); wasm_v128_store(pu + 4, us_b_ip);
     wasm_v128_store(pu + 8, ic_b_ip); wasm_v128_store(pu + 12, is_b_ip);
     wasm_v128_store(pu + 16, lc_b_ip); wasm_v128_store(pu + 20, ls_b_ip);
+#endif
     wasm_v128_store(pe + 0, pe0);
     wasm_v128_store(pe + 4, pe4);
     wasm_v128_store(pe + 8, pe8);
     wasm_v128_store(pe + 12, pe12);
+#if SDNAP_COEFFICIENT_FORM == 4
+    for (int j = 0; j < 32; j += 4) wasm_v128_store(sc.blk_a + bi * 32 + j, wasm_f32x4_splat(0.0f));
+#endif
   }
 #else
   for (int rk = 0; rk < sc.n_res_blks; ++rk) {
@@ -457,7 +632,8 @@ template <bool kNeedD2>
                                                 double eta, double eta_m1, double ci_p0, double sin_i, double ci,
                                                 double ia, double inv_1peta, const float* cswq_c, const float* cswq_s,
                                                 const float* cm_f32, const float* sm_f32,
-                                                double* six, double* dsix_dlam, double* d2six_dlam2) {
+                                                double* six, double* dsix_dlam, double* d2six_dlam2, float da_f32 = 0.0f) {
+  (void)da_f32;
   const int nblks = sc.total_blks, b_contig_end = sc.b_contig_end;
   double sM = 0.0, s1_num = 0.0, s2_num = 0.0, sE = 0.0, sI = 0.0, sL = 0.0;
   double dsM = 0.0, ds1_num = 0.0, ds2_num = 0.0, dsE = 0.0, dsI = 0.0, dsL = 0.0;
@@ -477,6 +653,15 @@ template <bool kNeedD2>
   v128_t vd2_sE = wasm_f32x4_splat(0.0f), vd2_sI = wasm_f32x4_splat(0.0f), vd2_sL = wasm_f32x4_splat(0.0f);
   const v128_t* vhot = reinterpret_cast<const v128_t*>(sc.blk_hot);
   const v128_t* vpe = reinterpret_cast<const v128_t*>(sc.blk_e);
+#if (SDNAP_COEFFICIENT_FORM != 0)
+  const v128_t v_da = wasm_f32x4_splat(da_f32);
+  const v128_t* vpa = reinterpret_cast<const v128_t*>(sc.blk_a);
+#define DH(k) wasm_f32x4_add(vhot[k], wasm_f32x4_mul(vpa[k], v_da))
+#define DH_ADV , vpa += 8
+#else
+#define DH(k) vhot[k]
+#define DH_ADV
+#endif
   const v128_t* const vmseq_base = reinterpret_cast<const v128_t*>(kSpMSeq);
   const int nrows = sc.n_rows;
   int bi = 0;
@@ -493,17 +678,17 @@ template <bool kNeedD2>
     v128_t vr_m_idS = wasm_f32x4_splat(0.0f), vr_m_didS_u = wasm_f32x4_splat(0.0f);
     v128_t vr_sE = wasm_f32x4_splat(0.0f), vr_sI = wasm_f32x4_splat(0.0f), vr_sL = wasm_f32x4_splat(0.0f);
     v128_t vr_dsE = wasm_f32x4_splat(0.0f), vr_dsI = wasm_f32x4_splat(0.0f), vr_dsL = wasm_f32x4_splat(0.0f);
-    for (; bi < bend; ++bi, vhot += 8, vpe += 4, pcm += 4, psm += 4, ++pmf) {
+    for (; bi < bend; ++bi, vhot += 8, vpe += 4, pcm += 4, psm += 4, ++pmf DH_ADV) {
       const v128_t v_cm = wasm_v128_load(pcm), v_sm = wasm_v128_load(psm);
       const v128_t v_cp = wasm_f32x4_sub(wasm_f32x4_mul(cw, v_cm), wasm_f32x4_mul(sw, v_sm));
       const v128_t v_sp = wasm_f32x4_add(wasm_f32x4_mul(sw, v_cm), wasm_f32x4_mul(cw, v_sm));
-      const v128_t v_ec = vhot[0], v_es = vhot[1];
-      const v128_t v_uc = wasm_f32x4_add(vhot[2], wasm_f32x4_mul(v_ec, v_de));
-      const v128_t v_us = wasm_f32x4_add(vhot[3], wasm_f32x4_mul(v_es, v_de));
-      const v128_t v_ic = wasm_f32x4_add(vhot[4], wasm_f32x4_mul(vpe[0], v_de));
-      const v128_t v_is = wasm_f32x4_add(vhot[5], wasm_f32x4_mul(vpe[1], v_de));
-      const v128_t v_lc = wasm_f32x4_add(vhot[6], wasm_f32x4_mul(vpe[2], v_de));
-      const v128_t v_ls = wasm_f32x4_add(vhot[7], wasm_f32x4_mul(vpe[3], v_de));
+      const v128_t v_ec = DH(0), v_es = DH(1);
+      const v128_t v_uc = wasm_f32x4_add(DH(2), wasm_f32x4_mul(v_ec, v_de));
+      const v128_t v_us = wasm_f32x4_add(DH(3), wasm_f32x4_mul(v_es, v_de));
+      const v128_t v_ic = wasm_f32x4_add(DH(4), wasm_f32x4_mul(vpe[0], v_de));
+      const v128_t v_is = wasm_f32x4_add(DH(5), wasm_f32x4_mul(vpe[1], v_de));
+      const v128_t v_lc = wasm_f32x4_add(DH(6), wasm_f32x4_mul(vpe[2], v_de));
+      const v128_t v_ls = wasm_f32x4_add(DH(7), wasm_f32x4_mul(vpe[3], v_de));
       const v128_t v_mf = *pmf;
       const v128_t idS_b = wasm_f32x4_add(wasm_f32x4_mul(v_uc, v_cp), wasm_f32x4_mul(v_us, v_sp));
       const v128_t didS_u = wasm_f32x4_sub(wasm_f32x4_mul(v_us, v_cp), wasm_f32x4_mul(v_uc, v_sp));
@@ -546,7 +731,7 @@ template <bool kNeedD2>
     }
   }
   (void)b_contig_end;
-  for (; bi < nblks; ++bi, vhot += 8, vpe += 4) {
+  for (; bi < nblks; ++bi, vhot += 8, vpe += 4 DH_ADV) {
     const int lo = bi * 4;
     const uint8_t* wqp = sc.blk_wq + lo;
     const uint8_t* mp = sc.blk_mlane + lo;
@@ -556,13 +741,13 @@ template <bool kNeedD2>
     const v128_t v_sm  = wasm_f32x4_make(sm_f32[mp[0]],  sm_f32[mp[1]],  sm_f32[mp[2]],  sm_f32[mp[3]]);
     const v128_t v_cp = wasm_f32x4_sub(wasm_f32x4_mul(v_cwj, v_cm), wasm_f32x4_mul(v_swj, v_sm));
     const v128_t v_sp = wasm_f32x4_add(wasm_f32x4_mul(v_swj, v_cm), wasm_f32x4_mul(v_cwj, v_sm));
-    const v128_t v_ec = vhot[0], v_es = vhot[1];
-    const v128_t v_uc = wasm_f32x4_add(vhot[2], wasm_f32x4_mul(v_ec, v_de));
-    const v128_t v_us = wasm_f32x4_add(vhot[3], wasm_f32x4_mul(v_es, v_de));
-    const v128_t v_ic = wasm_f32x4_add(vhot[4], wasm_f32x4_mul(vpe[0], v_de));
-    const v128_t v_is = wasm_f32x4_add(vhot[5], wasm_f32x4_mul(vpe[1], v_de));
-    const v128_t v_lc = wasm_f32x4_add(vhot[6], wasm_f32x4_mul(vpe[2], v_de));
-    const v128_t v_ls = wasm_f32x4_add(vhot[7], wasm_f32x4_mul(vpe[3], v_de));
+    const v128_t v_ec = DH(0), v_es = DH(1);
+    const v128_t v_uc = wasm_f32x4_add(DH(2), wasm_f32x4_mul(v_ec, v_de));
+    const v128_t v_us = wasm_f32x4_add(DH(3), wasm_f32x4_mul(v_es, v_de));
+    const v128_t v_ic = wasm_f32x4_add(DH(4), wasm_f32x4_mul(vpe[0], v_de));
+    const v128_t v_is = wasm_f32x4_add(DH(5), wasm_f32x4_mul(vpe[1], v_de));
+    const v128_t v_lc = wasm_f32x4_add(DH(6), wasm_f32x4_mul(vpe[2], v_de));
+    const v128_t v_ls = wasm_f32x4_add(DH(7), wasm_f32x4_mul(vpe[3], v_de));
     const v128_t v_wf = wasm_v128_load(sc.blk_w + lo);
     const v128_t v_qf = wasm_v128_load(sc.blk_q + lo);
     const v128_t v_jf = wasm_f32x4_add(v_wf, v_qf);
@@ -615,6 +800,8 @@ template <bool kNeedD2>
     d2s1_num = eta * d2sum_q + eta_m1 * d2sum_w;
     d2s2_num = ci_p0 * d2sum_w - d2midS;
   }
+#undef DH
+#undef DH_ADV
 #else
   (void)b_contig_end;
   double sum_w = 0.0, sum_q = 0.0, midS = 0.0;
@@ -710,13 +897,13 @@ inline void sp_six_deriv(const SpEvalCache& sc, float de_f32, double a, double e
                          double eta, double eta_m1, double ci_p0, double sin_i, double ci,
                          double ia, double inv_1peta, const float* cswq_c, const float* cswq_s,
                          const float* cm_f32, const float* sm_f32,
-                         double* six, double* dsix_dlam, double* d2six_dlam2) {
+                         double* six, double* dsix_dlam, double* d2six_dlam2, float da_f32 = 0.0f) {
   if (d2six_dlam2 != nullptr) {
     sp_six_deriv_impl<true>(sc, de_f32, a, e, n, eta, eta_m1, ci_p0, sin_i, ci, ia, inv_1peta,
-                            cswq_c, cswq_s, cm_f32, sm_f32, six, dsix_dlam, d2six_dlam2);
+                            cswq_c, cswq_s, cm_f32, sm_f32, six, dsix_dlam, d2six_dlam2, da_f32);
   } else {
     sp_six_deriv_impl<false>(sc, de_f32, a, e, n, eta, eta_m1, ci_p0, sin_i, ci, ia, inv_1peta,
-                             cswq_c, cswq_s, cm_f32, sm_f32, six, dsix_dlam, nullptr);
+                             cswq_c, cswq_s, cm_f32, sm_f32, six, dsix_dlam, nullptr, da_f32);
   }
 }
 
@@ -729,27 +916,51 @@ inline void sp_six_deriv(const SpEvalCache& sc, float de_f32, double a, double e
   double a_b, e_b, ci_b, a_ae, e_ae, c_ae, e_pe = 0.0, a_pe, c_pe;
   int64_t kba, kbe = 0, kbc = 0, kaa, kae = 0, kpe = kSpPeAtBake;
   if (anchored) {
-    kba = sp_anchor_point(an, t, 3e-5, 2e-5, true, ctol, a_b, e_b, ci_b);
-    kaa = sp_anchor_point(an, t, 1.8e-6, 2e-5, false, 0.0, a_ae, e_ae, c_ae);
+
+#if SDNAP_COEFFICIENT_FORM == 4
+kba = sp_anchor_point(an, t, 7.5e-6, 5e-6, true, 0.25 * ctol, a_b, e_b, ci_b);
+#else
+kba = sp_anchor_point(an, t, 3e-5, 2e-5, true, ctol, a_b, e_b, ci_b);
+#endif
+
+
+#if SDNAP_COEFFICIENT_FORM >= 2
+kaa = kba; a_ae = a_b; e_ae = e_b;
+#else
+kaa = sp_anchor_point(an, t, 1.8e-6, 2e-5, false, 0.0, a_ae, e_ae, c_ae);
+#endif
+
     if (!derivative && sc.n_pe_blks > 0) kpe = sp_anchor_point(an, t, 1e30, sc.de_pe_thresh, false, 0.0, a_pe, e_pe, c_pe);
   } else {
     kba = sp_cell_rel(a, 3e-5, a_b);
     kbe = sp_cell_e(e, 2.5e-4, 2e-5, e_b);
     kbc = sp_cell_abs(ci, ctol, ci_b);
-    kaa = sp_cell_rel(a, 1.8e-6, a_ae);
+
+#if SDNAP_COEFFICIENT_FORM >= 2
+kaa = kba; kae = kbe; a_ae = a_b; e_ae = e_b;
+#else
+kaa = sp_cell_rel(a, 1.8e-6, a_ae);
     kae = sp_cell_abs(e, 2e-5, e_ae);
+#endif
+
     if (!derivative && sc.n_pe_blks > 0) kpe = sp_cell_abs(e, sc.de_pe_thresh, e_pe);
   }
   const bool fresh = !sc.keys_valid || sc.anchor_id != aid;
   const bool base = fresh || kba != sc.kb_a || kbe != sc.kb_e || kbc != sc.kb_c;
   bool ae = base || kaa != sc.kae_a || kae != sc.kae_e;
   const bool pe = ae || kpe != sc.kpe;
-  if (pe && !ae && sc.e_pe_bake != sc.e_bake) ae = true;  // the pe blocks back to the ae bake's e: the ae bake again
+  if (pe && !ae && sc.e_pe_bake != sc.e_bake) ae = true;
   double a_r = 0.0, ci_r = 0.0, e_r = 0.0;
   int64_t kra = 0, krc = 0, kre = 0;
   auto res_point = [&]() {
     if (anchored) {
-      kra = sp_anchor_point(an, t, 2e-7, 1e-5, true, 1e-6, a_r, e_r, ci_r);
+
+#if SDNAP_COEFFICIENT_FORM == 4
+kra = sp_anchor_point(an, t, 5e-8, 2.5e-6, true, 2.5e-7, a_r, e_r, ci_r);
+#else
+kra = sp_anchor_point(an, t, 2e-7, 1e-5, true, 1e-6, a_r, e_r, ci_r);
+#endif
+
     } else {
       kra = sp_cell_rel(a, 2e-7, a_r);
       krc = sp_cell_abs(ci, 1e-6, ci_r);
@@ -759,18 +970,24 @@ inline void sp_six_deriv(const SpEvalCache& sc, float de_f32, double a, double e
   bool res = false;
   if (!base && sc.n_res_blks > 0) {
     res_point();
-    res = pe || kra != sc.kr_a || krc != sc.kr_c || kre != sc.kr_e;
+
+#if SDNAP_COEFFICIENT_FORM == 4
+res = true;
+#else
+res = pe || kra != sc.kr_a || krc != sc.kr_c || kre != sc.kr_e;
+#endif
+
   }
-  // what sp_keys_hold compares with: the keys the cache holds when this call returns (kept, or baked now)
+
   auto note_keys = [&]() {
     sc.on_bracket = anchored;
     if (!anchored) return;
     sc.kb_tlo = an.tlo;
     sc.kb_h = an.h;
-    sc.n_base = static_cast<int32_t>(kba >> 6);
-    sc.n_ae = static_cast<int32_t>(kaa >> 6);
-    sc.n_pe = kpe != kSpPeAtBake ? static_cast<int32_t>(kpe >> 6) : 0;
-    sc.n_res = sc.n_res_blks > 0 ? static_cast<int32_t>(kra >> 6) : 0;
+    sc.n_base = static_cast<int32_t>(kba >> (SDNAP_COEFFICIENT_FORM == 4 ? 16 : 6));
+    sc.n_ae = static_cast<int32_t>(kaa >> (SDNAP_COEFFICIENT_FORM == 4 ? 16 : 6));
+    sc.n_pe = kpe != kSpPeAtBake ? static_cast<int32_t>(kpe >> (SDNAP_COEFFICIENT_FORM == 4 ? 16 : 6)) : 0;
+    sc.n_res = sc.n_res_blks > 0 ? static_cast<int32_t>(kra >> (SDNAP_COEFFICIENT_FORM == 4 ? 16 : 6)) : 0;
   };
   if (!base && !ae && !pe && !res) {
     note_keys();
@@ -789,8 +1006,12 @@ inline void sp_six_deriv(const SpEvalCache& sc, float de_f32, double a, double e
   if (ae) sp_rebake_ae(sc, a0, a_ae, e_ae, 1.0 / a_ae, true);
   if (pe && kpe != kSpPeAtBake) sp_rebake_pe_fast(sc, e_pe);
   if (res) {
-    // a resonant bake alone reads the resonant blocks' coefficients only
+
     if (sc.compact && sc.blk_c == nullptr) sc.blk_c = sp_compact_blk_c(sc, sc.res_blk, sc.n_res_blks);
+
+#if SDNAP_COEFFICIENT_FORM == 4
+    a_r = a; e_r = e; ci_r = ci;
+#endif
     const double n_r = kKe / (a_r * std::sqrt(a_r));
     sp_rebake_res(sc, a0, e0, a_r, e_r, n_r, std::sqrt(1.0 - e_r * e_r), ci_r, 1.0 / a_r);
     sc.kr_a = kra;
@@ -810,6 +1031,10 @@ inline void sp_six_deriv(const SpEvalCache& sc, float de_f32, double a, double e
 }
 
 [[gnu::always_inline]] inline bool sp_keys_hold(const SpEvalCache& sc, double t, bool derivative) {
+
+#if SDNAP_COEFFICIENT_FORM == 4
+  if (sc.n_res_blks > 0) return false;
+#endif
   const SpAnchor& an = g_sp_anchor;
   if (!sc.on_bracket || !sc.keys_valid || !an.valid || an.h == 0.0 || an.id != sc.anchor_id || an.tlo != sc.kb_tlo ||
       an.h != sc.kb_h)
@@ -827,7 +1052,7 @@ inline void sp_six_deriv(const SpEvalCache& sc, float de_f32, double a, double e
 }
 
 #ifdef __wasm_simd128__
-[[gnu::always_inline]] inline void sp_eval_simd_kernel(const SpEvalCache& sc, float de_f32, double out6[6]) {
+[[gnu::always_inline]] inline void sp_eval_simd_kernel(const SpEvalCache& sc, float de_f32, double out6[6], float da_f32 = 0.0f) {
   auto hsum_f32x4 = [](v128_t v) -> double {
     const v128_t d = wasm_f64x2_add(wasm_f64x2_promote_low_f32x4(v),
                                     wasm_f64x2_promote_low_f32x4(wasm_i64x2_shuffle(v, v, 1, 0)));
@@ -850,6 +1075,20 @@ inline void sp_six_deriv(const SpEvalCache& sc, float de_f32, double a, double e
   const int nrows = sc.n_rows;
   const int nblks = sc.total_blks;
   const v128_t* vhot = reinterpret_cast<const v128_t*>(sc.blk_hot);
+#if (SDNAP_COEFFICIENT_FORM != 0)
+
+  const v128_t v_da = wasm_f32x4_splat(da_f32);
+  const v128_t* vpa = reinterpret_cast<const v128_t*>(sc.blk_a);
+  const v128_t* vpe = reinterpret_cast<const v128_t*>(sc.blk_e);
+#define SP_HOT(k) wasm_f32x4_add(vhot[k], wasm_f32x4_mul(vpa[k], v_da))
+#define SP_HOTE(k, j) wasm_f32x4_add(wasm_f32x4_add(vhot[k], wasm_f32x4_mul(vpa[k], v_da)), wasm_f32x4_mul(vpe[j], v_de))
+#define SP_ADV vpa += 8, vpe += 4
+#else
+  (void)da_f32;
+#define SP_HOT(k) vhot[k]
+#define SP_HOTE(k, j) vhot[k]
+#define SP_ADV (void)0
+#endif
 
   for (int ri = 0; ri < nrows; ++ri) {
     const SpRow& row = sc.rows[ri];
@@ -861,25 +1100,25 @@ inline void sp_six_deriv(const SpEvalCache& sc, float de_f32, double a, double e
     const v128_t* psm = vsm_base + row.c_start;
     const v128_t* pmf = vmseq_base + row.c_start;
     v128_t vr_idS = wasm_f32x4_splat(0.0f);
-    for (; bi < bend; ++bi, vhot += 8, ++pcm, ++psm, ++pmf) {
+    for (; bi < bend; ++bi, vhot += 8, ++pcm, ++psm, ++pmf, SP_ADV) {
       const v128_t cm_ = *pcm, sm_ = *psm;
       const v128_t cp_ = wasm_f32x4_sub(wasm_f32x4_mul(cw, cm_), wasm_f32x4_mul(sw, sm_));
       const v128_t sp_ = wasm_f32x4_add(wasm_f32x4_mul(sw, cm_), wasm_f32x4_mul(cw, sm_));
-      const v128_t ec_ = vhot[0], es_ = vhot[1];
-      const v128_t uc_ = wasm_f32x4_add(vhot[2], wasm_f32x4_mul(ec_, v_de));
-      const v128_t us_ = wasm_f32x4_add(vhot[3], wasm_f32x4_mul(es_, v_de));
+      const v128_t ec_ = SP_HOT(0), es_ = SP_HOT(1);
+      const v128_t uc_ = wasm_f32x4_add(SP_HOT(2), wasm_f32x4_mul(ec_, v_de));
+      const v128_t us_ = wasm_f32x4_add(SP_HOT(3), wasm_f32x4_mul(es_, v_de));
       const v128_t idS_ = wasm_f32x4_add(wasm_f32x4_mul(uc_, cp_), wasm_f32x4_mul(us_, sp_));
       vr_idS = wasm_f32x4_add(vr_idS, idS_);
       vg_midS = wasm_f32x4_add(vg_midS, wasm_f32x4_mul(*pmf, idS_));
       vg_sE = wasm_f32x4_add(vg_sE, wasm_f32x4_sub(wasm_f32x4_mul(ec_, sp_), wasm_f32x4_mul(es_, cp_)));
-      vg_sI = wasm_f32x4_add(vg_sI, wasm_f32x4_sub(wasm_f32x4_mul(vhot[4], sp_), wasm_f32x4_mul(vhot[5], cp_)));
-      vg_sL = wasm_f32x4_add(vg_sL, wasm_f32x4_sub(wasm_f32x4_mul(vhot[6], sp_), wasm_f32x4_mul(vhot[7], cp_)));
+      vg_sI = wasm_f32x4_add(vg_sI, wasm_f32x4_sub(wasm_f32x4_mul(SP_HOTE(4, 0), sp_), wasm_f32x4_mul(SP_HOTE(5, 1), cp_)));
+      vg_sL = wasm_f32x4_add(vg_sL, wasm_f32x4_sub(wasm_f32x4_mul(SP_HOTE(6, 2), sp_), wasm_f32x4_mul(SP_HOTE(7, 3), cp_)));
     }
     vg_w = wasm_f32x4_add(vg_w, wasm_f32x4_mul(wasm_v128_load32_splat(&row.wf), vr_idS));
     vg_q = wasm_f32x4_add(vg_q, wasm_f32x4_mul(wasm_v128_load32_splat(&row.qf), vr_idS));
   }
 
-  for (; bi < nblks; ++bi, vhot += 8) {
+  for (; bi < nblks; ++bi, vhot += 8, SP_ADV) {
     const int lo = bi * 4;
     const uint8_t* wqp = sc.blk_wq + lo;
     const uint8_t* mp = sc.blk_mlane + lo;
@@ -889,17 +1128,20 @@ inline void sp_six_deriv(const SpEvalCache& sc, float de_f32, double a, double e
     const v128_t v_sm  = wasm_f32x4_make(sm_f32[mp[0]],  sm_f32[mp[1]],  sm_f32[mp[2]],  sm_f32[mp[3]]);
     const v128_t v_cp = wasm_f32x4_sub(wasm_f32x4_mul(v_cwj, v_cm), wasm_f32x4_mul(v_swj, v_sm));
     const v128_t v_sp = wasm_f32x4_add(wasm_f32x4_mul(v_swj, v_cm), wasm_f32x4_mul(v_cwj, v_sm));
-    const v128_t v_ec = vhot[0], v_es = vhot[1];
-    const v128_t v_uc = wasm_f32x4_add(vhot[2], wasm_f32x4_mul(v_ec, v_de));
-    const v128_t v_us = wasm_f32x4_add(vhot[3], wasm_f32x4_mul(v_es, v_de));
+    const v128_t v_ec = SP_HOT(0), v_es = SP_HOT(1);
+    const v128_t v_uc = wasm_f32x4_add(SP_HOT(2), wasm_f32x4_mul(v_ec, v_de));
+    const v128_t v_us = wasm_f32x4_add(SP_HOT(3), wasm_f32x4_mul(v_es, v_de));
     const v128_t v_idS = wasm_f32x4_add(wasm_f32x4_mul(v_uc, v_cp), wasm_f32x4_mul(v_us, v_sp));
     vg_w = wasm_f32x4_add(vg_w, wasm_f32x4_mul(wasm_v128_load(sc.blk_w + lo), v_idS));
     vg_q = wasm_f32x4_add(vg_q, wasm_f32x4_mul(wasm_v128_load(sc.blk_q + lo), v_idS));
     vg_midS = wasm_f32x4_add(vg_midS, wasm_f32x4_mul(wasm_v128_load(sc.blk_mf + lo), v_idS));
     vg_sE = wasm_f32x4_add(vg_sE, wasm_f32x4_sub(wasm_f32x4_mul(v_ec, v_sp), wasm_f32x4_mul(v_es, v_cp)));
-    vg_sI = wasm_f32x4_add(vg_sI, wasm_f32x4_sub(wasm_f32x4_mul(vhot[4], v_sp), wasm_f32x4_mul(vhot[5], v_cp)));
-    vg_sL = wasm_f32x4_add(vg_sL, wasm_f32x4_sub(wasm_f32x4_mul(vhot[6], v_sp), wasm_f32x4_mul(vhot[7], v_cp)));
+    vg_sI = wasm_f32x4_add(vg_sI, wasm_f32x4_sub(wasm_f32x4_mul(SP_HOTE(4, 0), v_sp), wasm_f32x4_mul(SP_HOTE(5, 1), v_cp)));
+    vg_sL = wasm_f32x4_add(vg_sL, wasm_f32x4_sub(wasm_f32x4_mul(SP_HOTE(6, 2), v_sp), wasm_f32x4_mul(SP_HOTE(7, 3), v_cp)));
   }
+#undef SP_HOT
+#undef SP_HOTE
+#undef SP_ADV
   out6[0] = hsum_f32x4(vg_w);
   out6[1] = hsum_f32x4(vg_q);
   out6[2] = hsum_f32x4(vg_midS);
@@ -977,12 +1219,14 @@ inline void sp_six_deriv(const SpEvalCache& sc, float de_f32, double a, double e
   sp_fill_trig(sc, cb, sb, cu1, su1, cM1, sM1, cm_f32, sm_f32,
                cm_f32_io != nullptr ? cm_in_count : 0, cm_last, sm_last, cm_f32_io != nullptr);
   const float de_f32 = static_cast<float>(e - sc.e_bake);
+
+  const float da_f32 = (SDNAP_COEFFICIENT_FORM != 0) ? static_cast<float>(a0 / a - a0 / sc.a_bake) : 0.0f;
   const double eta_m1 = -(kp.e * kp.e) * inv_1peta;
   const double ci_p0 = (ci >= 0.0 ? -(si * si) / (1.0 + ci) : (ci - 1.0)) + 1.0;
 #ifdef __wasm_simd128__
   if (__builtin_expect(dsix_dlam == nullptr && d2six_dlam2 == nullptr && cm_f32_io == nullptr, 0)) {
     double out6[6];
-    sp_eval_simd_kernel(sc, de_f32, out6);
+    sp_eval_simd_kernel(sc, de_f32, out6, da_f32);
     const double sum_w = out6[0], sum_q = out6[1], sum_m = out6[2];
     const double sE = out6[3], sI = out6[4], sL = out6[5];
     const double na2 = n * a * a;
@@ -1004,7 +1248,7 @@ inline void sp_six_deriv(const SpEvalCache& sc, float de_f32, double a, double e
   }
 #endif
   sp_six_deriv(sc, de_f32, a, e, n, eta, eta_m1, ci_p0, sin_i, ci, ia, inv_1peta,
-               sc.cswq_c, sc.cswq_s, cm_f32, sm_f32, six, dsix_dlam, d2six_dlam2);
+               sc.cswq_c, sc.cswq_s, cm_f32, sm_f32, six, dsix_dlam, d2six_dlam2, da_f32);
 }
 
 [[gnu::noinline]] inline void sp_six_val(
@@ -1044,17 +1288,20 @@ inline void sp_six_deriv(const SpEvalCache& sc, float de_f32, double a, double e
     scp = sp_claim(slot, th, F, count, tag, a0, e0);
   }
   SpEvalCache& sc = *scp;
-  if (!sp_keys_hold(sc, t, false)) sp_sync(sc, a0, e0, a, e, ci, t, false);
+
+
+  if (!sp_keys_hold(sc, t, (SDNAP_COEFFICIENT_FORM != 0) != 0)) sp_sync(sc, a0, e0, a, e, ci, t, (SDNAP_COEFFICIENT_FORM != 0) != 0);
 
   float* const cm_f32 = sp_trig_cm();
   float* const sm_f32 = sp_trig_sm();
   sp_fill_trig(sc, cb, sb, cu1, su1, cM1, sM1, cm_f32, sm_f32,
                has_ext_cm ? cm_in_count : 0, cm_last, sm_last, has_ext_cm);
   const float de_f32 = static_cast<float>(e - sc.e_bake);
+  const float da_f32 = (SDNAP_COEFFICIENT_FORM != 0) ? static_cast<float>(a0 / a - a0 / sc.a_bake) : 0.0f;
 
 #ifdef __wasm_simd128__
   double out6[6];
-  sp_eval_simd_kernel(sc, de_f32, out6);
+  sp_eval_simd_kernel(sc, de_f32, out6, da_f32);
   const double sum_w = out6[0], sum_q = out6[1], sum_m = out6[2];
   const double sE = out6[3], sI = out6[4], sL = out6[5];
   const double na2 = n * a * a;

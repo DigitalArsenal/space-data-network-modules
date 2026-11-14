@@ -1829,6 +1829,7 @@ struct RateContext {
   double bterm, agom;
   double rad_y0;        ///< AP: the radiation term Y0 beside the sphere, m/s^2 (SPEC 16.13); 0: none
   uint8_t solid_tides;  ///< AP: the solid Earth tide in the rates (SPEC 16.14)
+  uint8_t continuity_form = 0;  ///< selected once from the epoch elements
   double tide_k1[2];    ///< AP: step 2's diurnal band at the epoch, the tensor's xz and yz (ER^5/min^2; SPEC 16.14)
   uint8_t long_period;  ///< epoch period >= 1100 min (SPEC 5, 9)
   int8_t resonance;     ///< SPEC 6 class at the epoch (0 none, 1 one-day, 2 half-day, 3 eight-hour, 4 sixteen-hour), held
@@ -5223,13 +5224,13 @@ inline int32_t output_impl(const RateContext& ctx, double t, const double* ym, d
         double six_sp[6] = {0, 0, 0, 0, 0, 0}, dsix_sp[6] = {0, 0, 0, 0, 0, 0}, d2six_sp[6] = {0, 0, 0, 0, 0, 0};
         double sb_t = sb_pre, cb_t = cb_pre;
         if (has_md) {
-          tess::mdaily_six(ctx.mdaily, ctx.mdaily_degree, t, km, ym[kN], etam, agm.si, agm.ci, ctx.theta_g0, six_sp, &sb_t, &cb_t,
+          tess::mdaily_six_selected(ctx.continuity_form, ctx.mdaily, ctx.mdaily_degree, t, km, ym[kN], etam, agm.si, agm.ci, ctx.theta_g0, six_sp, &sb_t, &cb_t,
                            has_sp ? cm_f32_buf : nullptr, has_sp ? sm_f32_buf : nullptr,
                            has_sp ? &cm_cnt : nullptr, has_sp ? &cm_last : nullptr, has_sp ? &sm_last : nullptr,
                            &sb_pre, &cb_pre, mdt_id);
         }
         if (has_sp) {
-          tess::sp_six_with_deriv(ctx.sp_comb, ctx.sp_comb_count, ctx.a0, ctx.e0, t, km, ym[kN], etam, agm.si, agm.ci, ctx.sp_ci0, ctx.theta_g0,
+          tess::sp_six_with_deriv_selected(ctx.continuity_form, ctx.sp_comb, ctx.sp_comb_count, ctx.a0, ctx.e0, t, km, ym[kN], etam, agm.si, agm.ci, ctx.sp_ci0, ctx.theta_g0,
                                   six_sp, dsix_sp, d2_sp_dlam2_out != nullptr ? d2six_sp : nullptr,
                                   &sb_t, &cb_t,
                                   has_md ? cm_f32_buf : nullptr, has_md ? sm_f32_buf : nullptr, cm_cnt, cm_last, sm_last,
@@ -5274,13 +5275,13 @@ inline int32_t output_impl(const RateContext& ctx, double t, const double* ym, d
         double six[6] = {0, 0, 0, 0, 0, 0};
         double sb_t = sb_pre, cb_t = cb_pre;
         if (has_md)
-          tess::mdaily_six(ctx.mdaily, ctx.mdaily_degree, t, km, ym[kN], etam, agm.si, agm.ci,
+          tess::mdaily_six_selected(ctx.continuity_form, ctx.mdaily, ctx.mdaily_degree, t, km, ym[kN], etam, agm.si, agm.ci,
                            ctx.theta_g0, six, &sb_t, &cb_t,
                            has_sp ? cm_f32_buf : nullptr, has_sp ? sm_f32_buf : nullptr,
                            has_sp ? &cm_cnt : nullptr, has_sp ? &cm_last : nullptr, has_sp ? &sm_last : nullptr,
                            &sb_pre, &cb_pre, mdt_id);
         if (has_sp)
-          tess::sp_six_val(ctx.sp_comb, ctx.sp_comb_count, ctx.a0, ctx.e0, t, km.a, km.e, ym[kN], etam, agm.si, agm.ci, ctx.sp_ci0, six,
+          tess::sp_six_val_selected(ctx.continuity_form, ctx.sp_comb, ctx.sp_comb_count, ctx.a0, ctx.e0, t, km.a, km.e, ym[kN], etam, agm.si, agm.ci, ctx.sp_ci0, six,
                            sb_t, cb_t, su1_pre, cu1_pre, sM1_pre, cM1_pre, cm_cnt, cm_last, sm_last, has_md);
         else if (has_sp_custom)
           tess::sp_six(ctx.sp, ctx.sp_count, t, km, ym[kN], etam, agm.si, agm.ci, ctx.theta_g0, six);
@@ -5309,13 +5310,13 @@ inline int32_t output_impl(const RateContext& ctx, double t, const double* ym, d
       double six[6] = {0, 0, 0, 0, 0, 0};
       double sb_t = sb_pre, cb_t = cb_pre;
       if (has_md)
-        tess::mdaily_six(ctx.mdaily, ctx.mdaily_degree, t, km, ym[kN], etam, agm.si, agm.ci,
+        tess::mdaily_six_selected(ctx.continuity_form, ctx.mdaily, ctx.mdaily_degree, t, km, ym[kN], etam, agm.si, agm.ci,
                          ctx.theta_g0, six, &sb_t, &cb_t,
                          has_sp ? cm_f32_buf : nullptr, has_sp ? sm_f32_buf : nullptr,
                          has_sp ? &cm_cnt : nullptr, has_sp ? &cm_last : nullptr, has_sp ? &sm_last : nullptr,
                          &sb_pre, &cb_pre, mdt_id);
       if (has_sp)
-        tess::sp_six_val(ctx.sp_comb, ctx.sp_comb_count, ctx.a0, ctx.e0, t, km.a, km.e, ym[kN], etam, agm.si, agm.ci, ctx.sp_ci0, six,
+        tess::sp_six_val_selected(ctx.continuity_form, ctx.sp_comb, ctx.sp_comb_count, ctx.a0, ctx.e0, t, km.a, km.e, ym[kN], etam, agm.si, agm.ci, ctx.sp_ci0, six,
                          sb_t, cb_t, su1_pre, cu1_pre, sM1_pre, cM1_pre, cm_cnt, cm_last, sm_last, has_md);
       else if (has_sp_custom)
         tess::sp_six(ctx.sp, ctx.sp_count, t, km, ym[kN], etam, agm.si, agm.ci, ctx.theta_g0, six);
@@ -5767,6 +5768,14 @@ struct SetCaches {
   uint64_t bytes = 0;  ///< what the pool counts for it (with the node runs)
 };
 
+/// Additional rows are allocated with the set only when its fixed form uses them.
+struct SetCachesWithDerivatives {
+  SetCaches base;
+  tess::MdailyDerivatives derivatives;
+};
+static_assert(offsetof(SetCachesWithDerivatives, base) == 0);
+static_assert(sizeof(SetCachesWithDerivatives) == sizeof(SetCaches) + 768);
+
 struct XpSat {
   uint32_t norad;
   int32_t init_error;
@@ -6165,6 +6174,7 @@ inline int32_t xp_init(const Elements& e, XpSat& s) {
   }
   const double n0 = e.xno;  // Brouwer (SPEC 1.1)
   s.ctx.selected_terms = tess::active();
+  s.ctx.continuity_form = tess::continuity_form(n0, e.eo, e.bterm, s.ctx.selected_terms.tesseral > 0 || s.ctx.selected_terms.zonal > 0);
   // SPEC 1.6 (stack #600): the thread's caches the set's theory reads (AP's terms selected: all nine; otherwise the step
   // cache), before its first table; a thread that cannot make them refuses the set (the failure counted: a method refuses as
   // out-of-memory, an epoch-store slot initializes again at its next state)
@@ -6576,7 +6586,8 @@ inline void pool_drop_locked(CachePool& p, XpSat& s) {
   p.holders[static_cast<size_t>(i)] = last;
   last->pool_index = i;
   p.holders.pop_back();
-  delete c;
+  if (tess::continuity_derivatives(s.ctx.continuity_form)) delete reinterpret_cast<SetCachesWithDerivatives*>(c);
+  else delete c;
   s.caches = nullptr;
   s.pool_index = -1;
 }
@@ -6652,7 +6663,8 @@ inline uint32_t cache_budget_mb(uint32_t megabytes) {
 inline SetCaches* pool_caches_for(XpSat& s) {
   if (s.caches != nullptr) return s.caches;
   CachePool& p = cache_pool();
-  const uint64_t need = sizeof(SetCaches);
+  const bool derivatives = tess::continuity_derivatives(s.ctx.continuity_form);
+  const uint64_t need = derivatives ? sizeof(SetCachesWithDerivatives) : sizeof(SetCaches);
   const uint64_t tick = __atomic_add_fetch(&p.clock, 1, __ATOMIC_RELAXED);
   const uint64_t before = pool_asked_again(p, s) ? 0 : s.asked;
   s.asked = tick;
@@ -6666,7 +6678,12 @@ inline SetCaches* pool_caches_for(XpSat& s) {
   // the counted allocator (stack #600: one that cannot be had is no caches, never a trap); no room, no caches
   const size_t grown = p.holders.capacity() < 64 ? 64 : 2 * p.holders.capacity();
   const bool listed = p.holders.size() < p.holders.capacity() || (!batch_running() && p.holders.reserve(grown));
-  if (listed && pool_reclaim_locked(p, need, &s, before)) c = sdnap::mem::counted(new (std::nothrow) SetCaches{});
+  if (listed && pool_reclaim_locked(p, need, &s, before)) {
+    if (derivatives) {
+      auto* extended = sdnap::mem::counted(new (std::nothrow) SetCachesWithDerivatives{});
+      if (extended != nullptr) c = &extended->base;
+    } else c = sdnap::mem::counted(new (std::nothrow) SetCaches{});
+  }
   if (c != nullptr) {
     c->bytes = need;
     // SetScope moves the stamp to prev as the flight starts: the set's previous ask (0: none), so the tesseral cache and
@@ -6746,12 +6763,14 @@ inline void pool_release(XpSat& s) {
 struct SetScope {
   ActiveBracket* ab = g_active_bracket_set;
   tess::MdailyEvalCache* md = tess::g_mdaily_set_cache;
+  tess::MdailyDerivatives* md_derivatives = tess::g_mdaily_set_derivatives;
   tess::SpSetSlot* sp = tess::g_sp_set_slot;
   XpSat* flown = g_flown_set;
   XpSat* held = nullptr;
   explicit SetScope(XpSat& s) {
     g_active_bracket_set = nullptr;
     tess::g_mdaily_set_cache = nullptr;
+    tess::g_mdaily_set_derivatives = nullptr;
     tess::g_sp_set_slot = nullptr;
     g_flown_set = nullptr;
     if (!s.pooled || s.ctx.is_cov_sigma != 0 || !try_lock(&s.cache_lock)) return;
@@ -6766,12 +6785,15 @@ struct SetScope {
     __atomic_store_n(&c->stamp, __atomic_load_n(&cache_pool().clock, __ATOMIC_RELAXED), __ATOMIC_RELAXED);
     g_active_bracket_set = &c->ab;
     tess::g_mdaily_set_cache = &c->md;
+    if (tess::continuity_derivatives(s.ctx.continuity_form))
+      tess::g_mdaily_set_derivatives = &reinterpret_cast<SetCachesWithDerivatives*>(c)->derivatives;
     tess::g_sp_set_slot = &c->sp;
     g_flown_set = &s;
   }
   ~SetScope() {
     g_active_bracket_set = ab;
     tess::g_mdaily_set_cache = md;
+    tess::g_mdaily_set_derivatives = md_derivatives;
     tess::g_sp_set_slot = sp;
     g_flown_set = flown;
     if (held != nullptr) unlock(&held->cache_lock);

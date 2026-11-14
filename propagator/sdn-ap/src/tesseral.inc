@@ -544,6 +544,33 @@ struct MdailyEvalCache {
 static_assert(kMdailyCap < 20, "MdailyEvalCache's per-order rows hold orders 1 to kMdailyCap");
 static_assert(((kMdailyCap + 3) & ~3) <= 24, "MdailyEvalCache's single-precision rows hold kMdailyCap orders padded to quads");
 static_assert(kMdailyCap + 1 < 72, "mdaily_terms' inclination functions hold degrees to kMdailyCap");
+/// Float derivative rows exist only for forms A, CM, and R.
+struct MdailyDerivatives {
+  alignas(16) float dc10_f[24]{}, ds10_f[24]{}, dc11_f[24]{}, ds11_f[24]{};
+  alignas(16) float dc20_f[24]{}, ds20_f[24]{}, dc21_f[24]{}, ds21_f[24]{};
+};
+static_assert(sizeof(MdailyDerivatives) == 768);
+inline thread_local MdailyDerivatives* g_mdaily_set_derivatives = nullptr;
+struct MdailyThreadDerivatives {
+  MdailyDerivatives* rows = nullptr;
+  ~MdailyThreadDerivatives() { delete rows; }
+};
+inline thread_local MdailyThreadDerivatives g_mdaily_thread_derivatives{};
+inline MdailyDerivatives* mdaily_derivatives() {
+  if (g_mdaily_set_derivatives != nullptr) return g_mdaily_set_derivatives;
+  auto& rows = g_mdaily_thread_derivatives.rows;
+  if (rows == nullptr) rows = sdnap::mem::counted(new (std::nothrow) MdailyDerivatives{});
+  return rows;
+}
+#ifdef __wasm_simd128__
+/// An allocation failure uses the double rows with the same float rounding.
+inline v128_t mdaily_derivative_vector(const float* rows, const double pair[20][2], int col, int idx, int degree) {
+  if (rows != nullptr) return wasm_v128_load(rows + idx);
+  auto at = [&](int j) { return j < degree ? static_cast<float>(pair[j + 1][col]) : 0.0f; };
+  return wasm_f32x4_make(at(idx), at(idx + 1), at(idx + 2), at(idx + 3));
+}
+#endif
+
 inline thread_local MdailyEvalCache g_mdaily_eval_cache{};
 /// The set being flown keeps its own (xp_theory.inc SetCaches); nullptr: the thread's.
 inline thread_local MdailyEvalCache* g_mdaily_set_cache = nullptr;
@@ -5153,5 +5180,78 @@ inline void wide_six(const WideGrid& g, double t, const Kepler& kp, double theta
   }
 }
 
+#define SDNAP_COEFFICIENT_FORM 0
+namespace form_u {
 #include "coefficient_evaluation.inc"
+}
+#undef SDNAP_COEFFICIENT_FORM
+#define SDNAP_COEFFICIENT_FORM 1
+namespace form_a {
+#include "coefficient_evaluation.inc"
+}
+#undef SDNAP_COEFFICIENT_FORM
+#define SDNAP_COEFFICIENT_FORM 2
+namespace form_c {
+#include "coefficient_evaluation.inc"
+}
+#undef SDNAP_COEFFICIENT_FORM
+#define SDNAP_COEFFICIENT_FORM 3
+namespace form_cm {
+#include "coefficient_evaluation.inc"
+}
+#undef SDNAP_COEFFICIENT_FORM
+#define SDNAP_COEFFICIENT_FORM 4
+namespace form_r {
+#include "coefficient_evaluation.inc"
+}
+#undef SDNAP_COEFFICIENT_FORM
+using form_u::mdaily_six;
+template<class... Args> [[gnu::always_inline]] inline void mdaily_six_selected(uint8_t form, Args&&... args) {
+  switch (form) {
+    case 0: form_u::mdaily_six(static_cast<Args&&>(args)...); return;
+    case 1: form_a::mdaily_six(static_cast<Args&&>(args)...); return;
+    case 2: form_c::mdaily_six(static_cast<Args&&>(args)...); return;
+    case 3: form_cm::mdaily_six(static_cast<Args&&>(args)...); return;
+    case 4: form_r::mdaily_six(static_cast<Args&&>(args)...); return;
+    default: form_u::mdaily_six(static_cast<Args&&>(args)...); return;
+  }
+}
+using form_u::sp_six_val;
+template<class... Args> [[gnu::always_inline]] inline void sp_six_val_selected(uint8_t form, Args&&... args) {
+  switch (form) {
+    case 0: form_u::sp_six_val(static_cast<Args&&>(args)...); return;
+    case 1: form_a::sp_six_val(static_cast<Args&&>(args)...); return;
+    case 2: form_c::sp_six_val(static_cast<Args&&>(args)...); return;
+    case 3: form_cm::sp_six_val(static_cast<Args&&>(args)...); return;
+    case 4: form_r::sp_six_val(static_cast<Args&&>(args)...); return;
+    default: form_u::sp_six_val(static_cast<Args&&>(args)...); return;
+  }
+}
+using form_u::sp_six_with_deriv;
+template<class... Args> [[gnu::always_inline]] inline void sp_six_with_deriv_selected(uint8_t form, Args&&... args) {
+  switch (form) {
+    case 0: form_u::sp_six_with_deriv(static_cast<Args&&>(args)...); return;
+    case 1: form_a::sp_six_with_deriv(static_cast<Args&&>(args)...); return;
+    case 2: form_c::sp_six_with_deriv(static_cast<Args&&>(args)...); return;
+    case 3: form_cm::sp_six_with_deriv(static_cast<Args&&>(args)...); return;
+    case 4: form_r::sp_six_with_deriv(static_cast<Args&&>(args)...); return;
+    default: form_u::sp_six_with_deriv(static_cast<Args&&>(args)...); return;
+  }
+}
+inline uint8_t continuity_form(double n, double e, double bterm, bool ap) {
+#if defined(SDNAP_CONTINUITY_RULE) && !SDNAP_CONTINUITY_RULE
+  (void)n; (void)e; (void)bterm; (void)ap;
+  return 0;
+#else
+  if (!ap) return 0;
+  const double hp = (std::pow(kKe / n, 2.0 / 3.0) * (1.0 - e) - 1.0) * kRe;
+  if (hp >= 30000.0 && e < 0.02) return 2;
+  if (hp >= 1000.0) return 0;
+  if (e >= 0.02) return e < 0.2 && hp >= 350.0 ? 4 : 1;
+  if (hp < 600.0) return bterm == 0.0 ? 1 : 3;
+  return 2;
+#endif
+}
+
+inline bool continuity_derivatives(uint8_t form) { return form == 1 || form == 3 || form == 4; }
 }  // namespace tess
