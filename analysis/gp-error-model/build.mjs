@@ -45,6 +45,7 @@ for (const part of ['sgp4_core.inc', 'model.inc']) {
   sgp4 = sgp4.replace(line, () => text);
 }
 const json = await fs.readFile(jsonHeader, 'utf8');
+const catalogEpoch = await fs.readFile(path.resolve(root, '../../common/catalog_epoch.hpp'), 'utf8');
 const sha256 = await fs.readFile(path.resolve(root, '../../files/orbit-products/src/sha256.hpp'), 'utf8');
 // The module's sources in dependency order (one translation unit), and the
 // Lambert kernel analysis/lambert-izzo and analysis/maneuver compile.
@@ -61,7 +62,7 @@ const result = await compileModuleFromSource({
     // The SGP4 base has internal linkage: the flow compiler links this module's object with others that compile their
     // own copy (analysis/epoch-state, analysis/maneuver-detection). The standard headers it includes come first,
     // outside the namespace.
-    '#include <cmath>\n#include <cstdint>\nnamespace {', sgp4, '}  // namespace', lambert, sha256, bridge, ...sources].join('\n\n'),
+    '#include <cmath>\n#include <cstdint>\nnamespace {', sgp4, '}  // namespace', lambert, sha256, catalogEpoch, bridge, ...sources].join('\n\n'),
   language: 'c++',
   outputPath,
   threadModel: 'wasi-sequential',

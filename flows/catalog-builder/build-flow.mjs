@@ -26,7 +26,7 @@ async function compile(folder,source,codes=[],inline=[]){
  const resolved=(await resolveFlowDependencies({depsPath:target})).get(manifest.pluginId);
  return {...resolved,manifest,wasmPath:result.outputPath,guestLink:{objectBytes:result.guestLink.objectBytes,metadata:result.guestLink}};
 }
-const source=await read('files/orbit-products/src/sha256.hpp')+'\n'+await read('common/sds_cid.hpp')+'\n'+await read('flows/catalog-builder/control/control.cpp');
+const source=await read('common/catalog_epoch.hpp')+'\n'+await read('files/orbit-products/src/sha256.hpp')+'\n'+await read('common/sds_cid.hpp')+'\n'+await read('flows/catalog-builder/control/control.cpp');
 const control=await compile('flows/catalog-builder/control',source,['OMM','OCM','SPW','PCF','CAT','XMT','QRP','NEV']);
 if(process.argv.includes('--control-only'))process.exit(0);
 const dependencies=new Map([[control.manifest.pluginId,control]]);

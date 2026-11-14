@@ -173,8 +173,8 @@ extern "C" int annotate_population() {
     if(orbit->MEAN_ELEMENTS()->MEAN_ELEMENT_THEORY()==meanElementSource::AP){
       const auto* stats=orbit->ORBIT_DETERMINATION()?orbit->ORBIT_DETERMINATION()->FIT_STATISTICS():nullptr;Instant start,stop;
       epoch_matches=stats&&parse_instant(stats->FIT_START(),&start)&&parse_instant(stats->FIT_STOP(),&stop)&&
-        std::abs(seconds_between(seed_epoch,start)+216000)<.001&&std::abs(seconds_between(seed_epoch,stop)-432000)<.001;
-    }else epoch_matches=parse_instant(orbit->MEAN_ELEMENTS()->EPOCH(),&record_epoch)&&std::abs(seconds_between(seed_epoch,record_epoch))<.001;
+        catalog_epoch::matches(omm->EPOCH()->str(),stats->FIT_START()->str(),-216000)&&catalog_epoch::matches(omm->EPOCH()->str(),stats->FIT_STOP()->str(),432000);
+    }else epoch_matches=parse_instant(orbit->MEAN_ELEMENTS()->EPOCH(),&record_epoch)&&catalog_epoch::matches(omm->EPOCH()->str(),orbit->MEAN_ELEMENTS()->EPOCH()->str(),0);
   }
   if(!epoch_matches)return annotation_fail("seed-epoch-mismatch","The seed epoch must match the ingested epoch or the exact-W fit interval.");
   if (orbit->COVARIANCE_BLOCKS()) for (const auto* block : *orbit->COVARIANCE_BLOCKS())

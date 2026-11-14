@@ -339,7 +339,7 @@ int chain() {
  flatbuffers::Verifier qv(decision->payload,decision->payload_length);if(!VerifyQRPBuffer(qv))return fail_object("Invalid chain outcome.",true);const auto* q=GetQRP(decision->payload);if(!fallback)return fail_object("chain: "+text(q->ERROR_CODE())+" "+text(q->MESSAGE()),!transient_refusal(text(q->ERROR_CODE())));
  const auto& seed=seeds.at(work[at]);const plugin_input_frame_t* use=fallback;
  if(run_fit&&candidate&&q->STATUS()==qrpStatus::Ok){flatbuffers::Verifier v(candidate->payload,candidate->payload_length);if(!VerifyOCMBuffer(v))return fail_object("Invalid fit record.",true);const auto* o=GetOCM(candidate->payload);const auto* stats=o->ORBIT_DETERMINATION()?o->ORBIT_DETERMINATION()->FIT_STATISTICS():nullptr;
-  if(stats&&stats->FIT_STATES()==2161&&std::isfinite(stats->FIT_RMS_KM())&&stats->FIT_RMS_KM()<=cfg.max_rms&&std::isfinite(stats->FIT_MAX_KM())&&stats->FIT_MAX_KM()<=cfg.max_error&&std::llabs(instant(text(stats->FIT_START()))-(seed.epoch-216000000))<=1&&std::llabs(instant(text(stats->FIT_STOP()))-(seed.epoch+432000000))<=1)use=candidate;else reason="fit-statistics refusal fallback";
+  if(stats&&stats->FIT_STATES()==2161&&std::isfinite(stats->FIT_RMS_KM())&&stats->FIT_RMS_KM()<=cfg.max_rms&&std::isfinite(stats->FIT_MAX_KM())&&stats->FIT_MAX_KM()<=cfg.max_error&&catalog_epoch::matches(text(GetSizePrefixedOMM(seed.data.data())->EPOCH()),text(stats->FIT_START()),-216000)&&catalog_epoch::matches(text(GetSizePrefixedOMM(seed.data.data())->EPOCH()),text(stats->FIT_STOP()),432000))use=candidate;else reason="fit-statistics refusal fallback";
  }else if(run_fit){const auto code=text(q->ERROR_CODE());reason="fit refusal fallback: "+code;
   if(transient_refusal(code)){retry_fallback=true;reason+="; retry-fit;";}
  }
