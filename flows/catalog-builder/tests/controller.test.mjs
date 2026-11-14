@@ -165,6 +165,11 @@ try{
  const reset=async (objectIds=ids)=>{store.clear();cfg['catalog.max_removal_fraction']=1;cfg['catalog.batch_size']=4;cfg['catalog.partition_count']=1;cfg['catalog.partition_index']=0;
   records('CAT.fbs','synthetic','identities').push(...objectIds.map(id=>pack(Object.assign(new C.CATT(),{NORAD_CAT_ID:id,OBJECT_NAME:'SYNTHETIC'}),'CAT')));
   records('OMM.fbs','synthetic','primary').push(...objectIds.map(id=>seed(id)));records('SPW.fbs','synthetic','weather').push(...split(Buffer.from(weather)));control.destroy();control=await createControl();};
+ await reset();await tick(now);records('OMM.fbs','synthetic','primary').push(...ids.map(id=>seed(id,.2)));
+ cfg['catalog.max_records']=12;control.destroy();control=await createControl();const cutWeather=await tick(now+1000);
+ assert.equal(cutWeather.fits+cutWeather.fallbacks+cutWeather.products+cutWeather.indexes,0,'partial weather never downgrades existing AP selections');assert.match(cutWeather.notice.reason,/weather scan incomplete/);
+ delete cfg['catalog.max_records'];control.destroy();control=await createControl();assert.equal((await tick(now+2000)).fits,2,'complete weather resumes fitting');
+ console.log('PASS incomplete weather defers fitting without replacing AP');
  await reset();await tick(now);trapComposeObject=Math.min(...ids);store.set(key('CAT.fbs','synthetic','identities'),records('CAT.fbs','synthetic','identities').filter(b=>C.CAT.getSizePrefixedRootAsCAT(new fb.ByteBuffer(b)).NORAD_CAT_ID()!==trapComposeObject));
  const newerSelection=current().get(Math.max(...ids));newerSelection.PRODUCTS_AS_OF=new Date(now+1).toISOString();records('CAT.fbs','synthetic-node','catalog-index').push(pack(newerSelection,'CAT'));
  records('OMM.fbs','synthetic','primary').push(seed(Math.max(...ids),.31));await assert.rejects(()=>tick(now+1000),WebAssembly.RuntimeError);trapComposeObject=undefined;control.destroy();control=await createControl();
