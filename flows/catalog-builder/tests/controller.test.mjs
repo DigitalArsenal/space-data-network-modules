@@ -66,6 +66,17 @@ try{
  const stale=await tick(now+6*86400000);assert.equal(stale.fits,0);assert.equal(stale.fallbacks,2);assert.ok([...current().values()].every(c=>c.PRODUCTS[0].KIND===C.catalogProductKind.Sgp4Elements));
  records('CAT.fbs','synthetic','identities').splice(0,1);const removed=await tick(now+6*86400000+1000);assert.equal(removed.indexes,1);assert.equal(current().get(ids[0]).PRODUCTS.length,0);
  const consumer=new Map();for(const b of records('CAT.fbs','synthetic-node','catalog-index')){const c=C.CAT.getSizePrefixedRootAsCAT(new fb.ByteBuffer(b)).unpack();const old=consumer.get(c.NORAD_CAT_ID);if(!old||old.PRODUCTS_AS_OF<=c.PRODUCTS_AS_OF)consumer.set(c.NORAD_CAT_ID,c);}assert.deepEqual(consumer,current());evidence.consumerMapEqual=true;
+ // Both services read shared sources and own disjoint updates, including fallback.
+ cfg['catalog.partition_count']=2;
+ records('CAT.fbs','synthetic','identities').splice(0,Infinity,...ids.map(id=>pack(Object.assign(new C.CATT(),{NORAD_CAT_ID:id,OBJECT_NAME:'SYNTHETIC'}),'CAT')));
+ records('OMM.fbs','synthetic','primary').push(...ids.map(id=>seed(id,.3)));
+ for(let partition=0;partition<2;partition++){
+  cfg['catalog.partition_index']=partition;control.destroy();control=await createControl();
+  const part=await tick(now+6*86400000+2000);assert.equal(part.products,1);assert.equal(part.indexes,1);assert.equal(part.fits,0);
+ }
+ assert.equal([...current().values()].filter(c=>c.PRODUCTS.length===1).length,2);
+ cfg['catalog.partition_index']=2;control.destroy();control=await createControl();
+ await assert.rejects(()=>tick(now+6*86400000+3000));
  evidence.passed=true;
 }catch(e){evidence.failure=e.stack;throw e;}finally{control.destroy();chain.destroy();gp.destroy();composer.destroy();}
 
