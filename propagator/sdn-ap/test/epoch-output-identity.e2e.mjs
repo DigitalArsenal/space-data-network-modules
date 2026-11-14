@@ -8,6 +8,7 @@ import {execFileSync} from 'node:child_process';
 import {createStandaloneHarness} from 'space-data-module-sdk/testing/isomorphic';
 import {PPEPositionRecordT} from 'spacedatastandards.org/lib/js/OCM/PPEPositionRecord.js';
 import {OCMTrajectoryBlockT} from 'spacedatastandards.org/lib/js/OCM/OCMTrajectoryBlock.js';
+import {pcfWeatherSource} from 'spacedatastandards.org/lib/js/PCF/pcfWeatherSource.js';
 import {pcfOutputFrame} from 'spacedatastandards.org/lib/js/PCF/pcfOutputFrame.js';
 import {OEM} from 'spacedatastandards.org/lib/js/OEM/OEM.js';
 import * as fb from 'flatbuffers';
@@ -21,7 +22,7 @@ fs.writeFileSync(baseFile,execFileSync('git',['show','6eeff4b6:propagator/sdn-ap
 const epoch='2026-10-29T00:00:00.000',start=Date.parse(epoch+'Z'),iso=s=>new Date(start+s*1000).toISOString().slice(0,-1);
 const rows=rowsThrough(JSON.parse(spwConstantText()));
 const seed=(norad,extra={})=>seedOcm({epoch,n:14.8,e:.001,i:55,raan:40,argp:90,ma:0,norad,...extra});
-const xp=seed(910001),sgp4=repackOcm(seed(910002),o=>{o.ORB_AVERAGING="KOZAI";o.MEAN_ELEMENTS.MEAN_ELEMENT_THEORY=0;o.MEAN_ELEMENTS.BSTAR=0;});
+const xp=seed(910001),sgp4=repackOcm(seed(910002),o=>{o.ORB_AVERAGING="KOZAI";o.MEAN_ELEMENTS.MEAN_ELEMENT_THEORY=0;o.MEAN_ELEMENTS.BSTAR=0;o.PERTURBATIONS.ATMOSPHERIC_MODEL=null;o.PERTURBATIONS.WEATHER_SOURCE=pcfWeatherSource.NONE;});
 const ap=seed(910003,{tesseral:12,zonal:6});
 const carry=repackOcm(seed(910004,{tesseral:12,zonal:6}),o=>{
  o.TRAJ_TYPE=2;o.TRAJ_BASIS='PREDICTED';o.STATE_DATA=[];o.METADATA.START_TIME=iso(0);o.METADATA.STOP_TIME=iso(86400);
