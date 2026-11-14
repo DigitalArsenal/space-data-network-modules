@@ -212,7 +212,7 @@ try{
  console.log('PASS deterministic downstream refusals and transient fallback recovery');
  await reset();records('CAT.fbs','synthetic-node','catalog-index').push(pack(new C.CATT(),'CAT'));
  for(let i=0;i<3;i++){control.destroy();control=await createControl();const observation=await tick(now+i*1000);assert.equal(observation.indexes,i===2?2:0);}
- control.destroy();control=await createControl();const quarantined=await tick(now+4000);assert.equal(quarantined.fits+quarantined.indexes,0);assert.doesNotMatch(quarantined.notice.reason,/invalid record-sha256/);
+ control.destroy();control=await createControl();const indexQuarantined=await tick(now+4000);assert.equal(indexQuarantined.fits+indexQuarantined.indexes,0);assert.doesNotMatch(indexQuarantined.notice.reason,/invalid record-sha256/);
  records('NEV.fbs','synthetic-node','catalog-attempts').unshift(pack(new C.CATT(),'CAT'));control.destroy();control=await createControl();await tick(now+5000);
  assert.equal(records('NEV.fbs','synthetic-node','catalog-attempts').length,1,'state compaction removes its malformed historical row');
  console.log('PASS index and operational-source quarantine');
