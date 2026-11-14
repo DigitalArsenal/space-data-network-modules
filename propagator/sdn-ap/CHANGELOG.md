@@ -1,11 +1,3 @@
-## Shared table initialization
-
-Instance startup evaluates the shared leap-second, atmosphere, gravity, and
-half-precision tables before exports or pool threads run. This adds startup
-work without changing state formulas or per-state lookup paths. The leap-table
-publication race could expose a nonzero count with a null pointer; serialized
-pool preparation also prepares the time table.
-
 # Changelog
 
 ## Unreleased — Bounded wide-grid payloads
@@ -23,6 +15,14 @@ Exact-key descriptors retain set ownership while payloads are evicted when unpin
 The 10,000-record regression matches isolated 0.6.60 states in fixed-record ascending, descending and shuffled request order on 1, 4 and 15 total threads. Minimum-budget blending is checked through 17 threads, covariance matches the control, and allocation failures and fully pinned-budget shortages recover on retry. No approximation budget is spent.
 
 The direct epoch API still reaches the 2 GiB instance limit on a 100,000-record synthetic catalog: 63,760 states succeed and 36,240 refuse with 10% wide records, while resident grids remain below 192 MiB. An all-nonwide control also reaches that limit in both 0.6.60 and this build. The grid budget does not bound the retained initialized propagators. This capacity failure blocks a claim that the direct API serves the full 100,000-record catalog. The frame-cell memory figures below describe a different path.
+
+### Shared table initialization
+
+Instance startup evaluates the shared leap-second, atmosphere, gravity, and
+half-precision tables before exports or pool threads run. This adds startup
+work without changing state formulas or per-state lookup paths. The leap-table
+publication race could expose a nonzero count with a null pointer; serialized
+pool preparation also prepares the time table.
 
 ## 0.6.60 — The frame path: a frame of every object from Chebyshev cells of AP's own states
 
