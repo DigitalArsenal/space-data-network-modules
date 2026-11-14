@@ -16,6 +16,13 @@
 namespace sdnap {
 namespace frames {
 
+/// Prepare ERFA's shared leap-second lookup before parallel time conversions.
+/// Pool startup calls this while each new thread is the only active evaluator.
+inline void warm_time_tables() {
+  double delta_at;
+  (void)eraDat(2000, 1, 1, 0.0, &delta_at);
+}
+
 /// The GCRF -> TEME matrix at the UTC Julian date whole + frac. Returns ERFA's
 /// status: 0 ok, 1 a date beyond ERFA's leap-second table (dubious), -1 refused.
 inline int gcrf_to_teme(double whole, double frac, double m[3][3]) {
