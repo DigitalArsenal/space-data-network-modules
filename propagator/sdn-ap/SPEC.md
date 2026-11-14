@@ -2158,6 +2158,107 @@ node values are returned unchanged.
 short-period terms (section 8); position and velocity (section 10). Failure codes: mean motion not positive,
 eccentricity at or above 1, or an angle beyond 1e10 rad; a negative interpolated eccentricity is set to 0.
 
+
+### Epoch-selected AP coefficient forms
+
+Four of 942 synthetic fitted records end farther from their numerical flight by more than 1 cm; the largest increase is 0.152457 m. The forced-U non-AP control comparison also measures a 2.64% median cost increase, ratio 1.026425 [1.014825, 1.038268]; the larger production/default non-AP comparison measures 1.68%, ratio 1.016801 [1.000626, 1.051224]. The five-class table and production diagnostics are in SPEC. Strong drag has a median cost 0.260% higher, ratio 1.002597 [0.998698, 1.004848]; eccentric has a median cost 0.773% higher, ratio 1.007726 [0.991527, 1.024483]; high eccentric has a median cost 0.824% higher, ratio 1.008237 [1.001407, 1.023386]; deep resonance has a median cost 0.767% higher, ratio 1.007674 [0.990502, 1.023074]. Forms A, CM, and R add 768 B per cache-holding set and per thread that needs their m-daily derivative rows. U and C add no derivative-row storage. The fifteen tested threshold neighborhoods have a maximum switch residual of 0.016281421 m and a regression bound of 0.063 m. A separate eccentric neighborhood reaches 0.111527867 m; neither figure is a global bound. Selection is fixed for the entire flight.
+
+The selection is a function of the record's epoch mean motion n (rad/min), eccentricity e, BTERM, and the AP gravity selection in force during initialization. Perigee height in kilometers is `h = ((kKe / n)^(2/3) * (1 - e) - 1) * kRe`, using the theory's constants. `RateContext.continuity_form` is assigned once by initialization. A covariance sigma set inherits its nominal's form, so the covariance columns difference one function. Both coefficient caches include that form in their freshness checks. NaN mean motion or eccentricity is refused before selection. NaN BTERM is accepted as CM in the tested low-orbit AP case and as U without AP gravity; changing the ambient selection after initialization does not change the stored form. Query time, cache history, and thread identity do not enter it. The covariance nominal retains its original perigee-drag rate source.
+
+The rules apply in the listed order:
+
+| Condition | Form | Measurements defining the region |
+|---|---|---|
+| No AP gravity terms | U | SGP4 and SGP4XP state comparisons have zero difference. |
+| h >= 30000 and e < 0.02 | C | The geosynchronous class favors C; its measured error and jump appear below. |
+| h >= 1000 | U | Medium-orbit correction costs exceed U in the form comparison; higher-perigee stored records pass the error bound with U. |
+| e >= 0.02, e < 0.2, h >= 350 | R | The 500 km, e 0.1 deep-resonance case favors direct resonant evaluation under the accuracy tie rule. |
+| Remaining e >= 0.02 | A | Strong drag at 200 km and eccentricity 0.05–0.7 retain the first-order correction. |
+| Remaining h < 600 and BTERM == 0 | A | The zero-drag 500 km comparison favors first-order evaluation within the two-percent cost tie. |
+| Remaining h < 600 | CM | The 300 and 500 km near-circular comparisons favor the coarse form with the m-daily derivative correction. |
+| Remaining sets | C | The 650 and 800 km near-circular measurements bound the coarse form without that correction. |
+
+The 350 km boundary separates the measured strong-drag and deep-resonance regions; 600 km lies between the measured 500 and 650 km near-circular cases; 1000 and 30000 km separate those low-orbit, medium-orbit, and geosynchronous regions. Eccentricity 0.02 separates the measured near-circular 0.001–0.01 cases from the 0.05–0.1 cases; 0.2 separates the 0.1 resonance case from the 0.3 and higher cases. These are measured operating regions, not a proof that every orbit within one region has the same cost or error.
+
+U retains the original bake levels and coefficient evaluation. A evaluates baked coefficients to first order in the state's own semimajor axis and eccentricity, with resonant derivatives taken at their resonant bake. C and CM reuse the base tesseral and full m-daily bake points; C omits the m-daily SIMD derivative correction and CM retains it. R evaluates resonant blocks at each state, uses four-times-finer anchored base and m-daily tolerances, and raises the part cap to 256. Other forms retain the cap of 64. `coefficient_evaluation.inc` supplies all five specializations; preprocessing removes form choices from their inner loops.
+
+`SDNAP_CONTINUITY_RULE=0` is a **diagnostic compile definition** selecting U. It preserves the original coefficient states bit for bit; it is not a runtime configuration field. The derivative arrays are a separate 768 B allocation within a corrected set's cache allocation. A thread allocates its rows only when a corrected form needs them. An allocation failure converts the existing double derivative rows with the same float rounding. If a pool thread first needs these rows while growth is refused, its series is retried on the caller with identical states; that pass is slower. The selector occupies existing context padding; a static assertion keeps `sizeof(RateContext)` at 344 bytes.
+
+Fifteen measured neighborhoods straddle the thresholds and the zero-drag branch. Their fine-offset maximum change in approximation error is 0.016281421 m; the committed test enforces 0.063 m. An additional eccentric 1,000 km neighborhood measures 0.111527867 m. The physical separation of two nearby sets is distinct from that approximation change. The selector is not continuous in the elements, and the neighborhood experiment is not a universal bound for every possible set.
+
+The direct R resonant blocks are tested at 105 shifted commensurabilities under gravity caps 31 and 70, including 14:1 and 15:1. All 10,878 tested states are finite; the largest distance from state-exact coefficients is 0.003882637 m and the largest adjacent approximation residual is 0.002951175 m. All 42 sampled decaying order cases cross their commensurability. These blocks operate below the class-0 wide-grid eccentricity switch at 0.05.
+
+**States and boundaries.** Committed synthetic OCM fixtures, TEME meters, common 300 s samples over 0–120 h. A boundary jump is the difference between cubic fits at every measured bake boundary and bracket node, using 0.1 s samples over 8 s on each side and excluding the central half second. Unsupported states are excluded. Direct state-element evaluation is the reference for coefficient approximation, not an independent physical truth.
+
+| Synthetic class | Form | Largest exact distance m | Largest jump m | Largest movement from U m | Unchanged/common states |
+|---|---|---:|---:|---:|---:|
+| near-circular 190 km | CM | 0.015023 | 0.003250 | 1.571045 | 0/900 |
+| near-circular 300 km | CM | 0.017624 | 0.000263 | 0.016145 | 0/1441 |
+| near-circular 300 km e 0.001 | CM | 0.015526 | 0.000285 | 0.015598 | 0/1441 |
+| near-circular 400 km | CM | 0.010680 | 0.000183 | 0.010189 | 0/1441 |
+| near-circular 500 km | CM | 0.003148 | 0.000166 | 0.002709 | 0/1441 |
+| near-circular 650 km | C | 0.010447 | 0.000567 | 0.013432 | 0/1441 |
+| near-circular 800 km | C | 0.002376 | 0.000252 | 0.004120 | 0/1441 |
+| medium orbit | U | 0.000022 | 0.000139 | 0.000000 | 1441/1441 |
+| geosynchronous | C | 0.000120 | 0.000090 | 0.000115 | 0/1441 |
+| strong drag e 0.1 | A | 0.007565 | 0.015414 | 1.958146 | 1/1441 |
+| strong drag e 0.1 polar | A | 0.003435 | 0.006045 | 0.636945 | 1/1441 |
+| strong drag e 0.05 | A | 0.004111 | 0.008600 | 0.004193 | 1/1441 |
+| eccentric e 0.5 | A | 0.003299 | 0.005389 | 0.046751 | 1/1441 |
+| eccentric e 0.3 low | A | 0.002107 | 0.004172 | 0.002645 | 1/1441 |
+| eccentric e 0.3 | A | 0.005625 | 0.012069 | 0.105798 | 1/1441 |
+| deep resonance | R | 0.004913 | 0.008168 | 2.043831 | 0/1441 |
+| eccentric e 0.7 | A | 0.002561 | 0.001715 | 0.000898 | 1/1441 |
+
+`SDM_MODULE_UNSIGNED_BUILD=1 node test/coefficient-forms.e2e.mjs` builds the read-only probes and direct-evaluation reference and prints this table with measured per-class bounds. `SDNAP_WASM` selects the tested production artifact; `COEFFICIENT_CONTROL` selects the unchanged artifact. U states and the diagnostic U build are compared at zero tolerance. The state-purity test covers ascending, descending, shuffled, and cross-epoch queries on every form, with set and thread caches and a mixed four-thread pool.
+
+**Numerical flights.** Unchanged committed 0.6.59 against the selected forms, GCRF position distance in meters, at common 300 s samples through the available numerical flight up to 120 h. Acceptance requires each record's sampled distance from direct state-element evaluation below 1 m and no class losing a record within 100 m of its numerical flight. All 942 records satisfy these conditions; none newly crosses 100 m. The 446 records selected as U retain all 642,686 common states bit for bit.
+
+| Class | Records | U within 100 m | Selected within 100 m | Worse by >1 cm | Largest exact distance m |
+|---|---:|---:|---:|---:|---:|
+| low orbit below 700 km | 125 | 100 | 100 | 2 | 0.047561 |
+| eccentric below 1000 km | 276 | 128 | 128 | 2 | 0.018839 |
+| low orbit 700 to 2000 km | 97 | 97 | 97 | 0 | 0.030301 |
+| eccentric 1000 km and above | 295 | 272 | 272 | 0 | 0.026471 |
+| medium and high orbit | 149 | 149 | 149 | 0 | 0.001357 |
+
+Every increase over 1 cm:
+
+| Class | U worst m | Selected worst m | Direct-evaluation worst m | Increase m |
+|---|---:|---:|---:|---:|
+| eccentric below 1000 km | 321.203283 | 321.355740 | 321.354552 | 0.152457 |
+| low orbit below 700 km | 1805.721534 | 1805.739157 | 1805.739032 | 0.017623 |
+| eccentric below 1000 km | 259.070057 | 259.106117 | 259.107145 | 0.036060 |
+| low orbit below 700 km | 24.624647 | 24.638802 | 24.638792 | 0.014155 |
+
+**State cost.** Selected production build on the 0.6.59 sources divided by committed 0.6.58, paired control–candidate–candidate–control rounds. Each call uses 200 instants separated by 420 s; initialization is excluded. Ratios are medians of per-round ratios; brackets contain the interpolated middle half. Each reported spread is at most 5% of its median. Medium orbit's middle half includes 1.000. Of the classes with median cost increases, only high eccentricity has its middle half wholly above 1.000.
+
+| Class | Series | Rounds | Ratio | Middle half |
+|---|---:|---:|---:|---:|
+| 300 km | 1000 | 8 | 0.965234 | [0.959678, 0.971027] |
+| 500 km | 1000 | 8 | 0.812110 | [0.803484, 0.814213] |
+| 800 km | 1000 | 24 | 0.727526 | [0.711089, 0.740184] |
+| medium | 4000 | 8 | 0.994830 | [0.991792, 1.000829] |
+| geosynchronous | 1000 | 12 | 0.973958 | [0.963292, 1.008880] |
+| strong drag | 1000 | 8 | 1.002597 | [0.998698, 1.004848] |
+| eccentric | 100 | 8 | 1.007726 | [0.991527, 1.024483] |
+| high eccentric | 100 | 8 | 1.008237 | [1.001407, 1.023386] |
+| deep resonance | 100 | 8 | 1.007674 | [0.990502, 1.023074] |
+| no drag 500 km | 1000 | 8 | 0.691931 | [0.684149, 0.714495] |
+
+**Held cache bytes per set**, over 100 synthetic series and 20 instants:
+
+| Class | Form | U bytes | Selected bytes |
+|---|---|---:|---:|
+| near-circular 300 km | CM | 87568 | 88336 |
+| near-circular 500 km | CM | 77264 | 78032 |
+| near-circular 800 km | C | 65232 | 65232 |
+| medium orbit | U | 20496 | 20496 |
+| strong drag e 0.1 | A | 17808 | 18576 |
+| deep resonance | R | 18960 | 19728 |
+
+The former poisoned-cache refusal came from the test retaining a valid half-day table identity after replacing every value, including padded zeros, with NaNs. The corrected seam invalidates the identity and fully rebuilds the padding. A serial group reproduces the original failure; restoring only the padded zeros removes it. Released builds do not execute this seam. The four-thread state-purity check covers 14 sets and 10,192 states, including zero-drag form A, with reserved memory and with allocations refused. No pinned reference is changed.
+
 ## 10. Frames and output
 
 - Output frame: TEME (true equator, mean equinox of date), the same as legacy SGP4 (Vallado et al. 2006,
@@ -4141,7 +4242,7 @@ output time in E by the cubic Hermite between the two nodes about E, linear in t
 e^{i(w omega + m beta)}. Each node's slope is the fourth-order central difference of its four neighbours on the periodic
 grid, computed once when the grid is built and kept in single precision beside the node's value: four reads, as before.
 The derivative grids are read by the four-point Catmull-Rom cubic. Both are continuous with their slope from one interval
-to the next. Memory per family is 16,896 bytes against 10,752 (+57 %); cost per state on the low orbits that read the
+to the next. Memory per family is 16,896 bytes against 10,878 (+57 %); cost per state on the low orbits that read the
 grid (e 0.1 and 0.2, tesseral degree 31) is that of 0.6.12 within 5 %. Through 0.6.13 it was the four-point Lagrange cubic, whose slope
 stepped at every node: kinks about 80 s apart near perigee, where the nodes pass fastest. On the transfer orbit with drag
 off the jump detector within 10 min of perigee read 0.395 m at 10 s and 0.031 m at 1 s; it now reads 0.032 m and 0.8 mm
@@ -6636,3 +6737,92 @@ What a host that draws frames from a running clock needs, and what it gets.
 - Seidelmann, P. K., ed. (1992). Explanatory Supplement to the Astronomical Almanac.
 - US Space Force Astrodynamics Standards: release notes 7.7-9.9, JIRA summaries 8.2-9.9, Tle and Sgp4Prop
   interface documents (9.9 package); release notes v9.1.1.0 C Sgp4Prop WebAssembly.
+
+
+### U control cost by orbit class
+
+The build before the derivative-pointer refactor, forced to U, was compared with the committed 0.6.59 binary in paired ABBA rounds. Ratios are candidate/control propagation time, with the median and quartiles computed from the per-round ratios. Each quartet returned identical state/status digests. Each case met the 5% interquartile-spread limit; measurements used separate shared timing slots.
+
+| Synthetic orbit class | Series | Rounds | Median ratio | Q1 | Q3 |
+|---|---:|---:|---:|---:|---:|
+| medium | 4000 | 8 | 0.996357 | 0.989274 | 0.999331 |
+| geosynchronous | 1000 | 8 | 1.005135 | 0.984179 | 1.007751 |
+| transfer | 100 | 20 | 1.005525 | 0.971819 | 1.021624 |
+| deep-resonance | 100 | 8 | 0.997593 | 0.970740 | 1.018722 |
+| non-AP | 1000 | 8 | 1.026425 | 1.014825 | 1.038268 |
+
+Transfer and deep-resonance quartile ranges are close to the acceptance limit; these measurements do not establish a small speed gain or loss.
+
+Forced U isolates the U path for geosynchronous and deep-resonant inputs, which otherwise select a compressed form.
+
+The forced-U non-AP cell measured a 2.64% median slowdown, with both quartiles above 1.0. This is a measured cost in that comparison. The production/default non-AP follow-ups are retained separately:
+
+| Production non-AP series | Rounds | Median ratio | Q1 | Q3 | Spread accepted |
+|---|---:|---:|---:|---:|---|
+| 1000 | 24 | 1.024690 | 0.967722 | 1.067644 | no |
+| 10000 | 20 | 1.016801 | 1.000626 | 1.051224 | yes |
+
+The 10,000-series production/default comparison qualifies after 20 rounds and measures a 1.68% median cost increase, with its Q1 just above 1.0 and spread close to the acceptance limit. The result supports a production non-AP cost but does not identify its cause. The rejected 1,000-series spread is a diagnostic observation, not a qualified performance result.
+
+### Non-AP derivative-pointer control
+
+The propagation scope saved, cleared, and restored an optional derivative-cache pointer even for sets without AP gravity. Resolving derivative rows from the existing held-set identity removes that redundant scope state; only corrected forms request the rows. No numerical expression, cache size, lock, or form-selection threshold changes.
+
+For the same 1,000 synthetic non-AP series and 200 instants after warmup, the released binary executes 3,735,852,295 WASM instructions and the earlier candidate executes 3,738,252,295. The difference is exactly 12 instructions per state, all in the propagation wrapper. The corrected binary executes 3,735,852,295; state/status digests match. Counts include original executed opcodes except structural else/end delimiters, and exclude instrumentation. These counts identify the added work; they do not assign a wall-time percentage to it.
+
+The corrected production binary against released 0.6.59, with 10,000 non-AP series and 200 instants, measures median ratio 1.001523, middle-half range [0.990083, 1.003838], over 8 paired ABBA rounds. The middle-half range includes 1.0. All quartet state/status digests match. The earlier measurements above retain their original build attribution.
+
+Exact comparison before and after the pointer refactor preserves all 24,497 sampled states/statuses in 17 coefficient classes through 120 h. The state-purity and allocation-fallback checks pass, as does serial and repeated 4/8/15-thread cache poisoning.
+
+Released 0.6.59 has a shared leap-second table initialization race. The compiled initializer stores the entry count before the table pointer; a concurrent time conversion can read the positive count with a null pointer. In WASM, that read reaches zero-initialized memory and returns an incorrect first Delta-AT. A cached Sun/Moon node then holds the wrong time conversion. The synthetic four-thread sigma case measures a maximum position difference of 1.364243e-9 m and velocity difference of 8.881785e-13 m/s; these figures describe that case, not a global error bound. Synchronization at the actual compiled publication and read instructions reproduces the discrepancy in every one of five runs on both the original candidate and released-source control. An independent control on the committed 0.6.59 binary reproduces the exact corrupted node. Forced U and A retain the discrepancy; clearing the thread body caches removes it, and disabling set caches does not.
+
+Instance initialization prepares the shared time, drag, gravity, and half-conversion tables before exports run. AP thread preparation also prepares time and atmospheric flags. Pool startup warms each new thread serially; the calling thread prepares its caches before its first set or batch that needs them. No conversion or orbit formula changes, and no retained storage is added. The sigma regression asserts table readiness before the first batch and compares all 360 states exactly. It fails before the initialization fix and passes after it. The same forced-interleaving probe returns zero null-pointer reads and zero state differences in five fixed-build runs. Full state purity passes 10,192 states across 14 sets; the mixed-form pool passes 1,224 comparisons in three orders. All 24,497 sampled pre/post state and status records match exactly. The paired timing table above predates this one-time startup preparation; it is not a new timing measurement of initialization.
+
+### Shared lookup initialization
+
+Instance initialization performs the time, atmosphere, gravity, and half-conversion
+fills before exports or pool threads run. This adds startup work; its elapsed cost
+is unmeasured. The tables keep their original storage, contents, and per-state
+lookup expressions. AP thread preparation also prepares the time table.
+
+The time library publishes its leap-entry count before its pointer. A concurrent
+reader can capture a null pointer with a nonzero count. A deterministic test holds
+the initializer in that gap; other probes hold the atmosphere and gravity table
+fills open so that overlapping writers are observable. `node test/shared-tables.e2e.mjs`
+fails on 0.6.60 sources and passes with instance preparation. The test hook preserves
+every original instruction in the time conversion.
+
+On the committed 0.6.60 artifact, forcing one interrupted-reader capture and then
+completing the pointer publication changes a synthetic geosynchronous flight by
+at most 0.09061098147164132 m over five days at 300-second spacing. This conditional
+control is not an occurrence rate or a public pooled-path reproduction. The
+published row-store ingest selects SGP4 or SGP4XP, without AP terms; AP row-store
+tests need a diagnostic selection hook. Epoch batches prepare the time table on
+the calling thread before parallel initialization. Frames use one host thread and
+exclude concurrent pool batches. An isolated single-threaded host has no competing
+initializer. Hosts calling time-using exports concurrently require the instance
+initialization barrier.
+
+Seventeen synthetic AP fixtures, 24,497 states/statuses through five days, are
+bit-identical before and after preparation. A corrupted eight-hour body node stays
+cached through a five-day scan; a node 256 slots away replaces it, after which its
+re-evaluation agrees with the reference. The six-node interpolation window and
+integrated mean-state history can carry its effect beyond its immediate interval.
+
+### Coefficient forms during fitting
+
+A fit holds the form selected from its seed elements across all trial sets,
+finite-difference columns, and branch-settling passes. Covariance copies inherit
+their nominal's form. After the fit scope ends, initialization of the returned
+record selects its form from its final elements. A fit crossing a selector
+threshold can therefore return a record whose form differs from its fitting
+objective; the published threshold discontinuities also apply to that change.
+
+The fit regression covers eccentricity 0.02 and 0.2, perigee 350, 600, 1000,
+and 30000 km, and zero BTERM. All seven synthetic fits converge, every trial
+retains its seed form, and all seven returned records select the form on the
+opposite side. Removing only the fit scope fails the regression. The
+TableShareScope cache regression uses one table identity with two forms;
+removing only form freshness checks leaves five warmed cases tagged with a
+prior form. With those checks present, all twelve cold/warmed evaluations have
+the expected cache form and identical state bytes.

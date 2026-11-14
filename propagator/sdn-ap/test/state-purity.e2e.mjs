@@ -60,6 +60,7 @@ const ROWS = Array.from({ length: 60 }, (_, k) => ({ DATE: iso(EPOCH + (k - 5) *
 const QUICK = !!process.env.STATE_PURITY_QUICK;
 const ORBITS = {
   "500 km": { n: revPerDay(RE + 500), e: 0.001, i: 97.4, bterm: 3.8e-3, tesseral: 31 },
+  "500 km zero drag": { n: revPerDay(RE + 500), e: 0.001, i: 97.4, bterm: 0, tesseral: 31 },
   "830 km": { n: revPerDay(RE + 830), e: 0.001, i: 98.7, bterm: 1.27e-3, tesseral: 31 },
   "half-day e 0.005": { n: 2.0056, e: 0.005, i: 55, bterm: 0.001, tesseral: 31 },
   "half-day e 0.02": { n: 2.0056, e: 0.02, i: 55, bterm: 0.001, tesseral: 31 },
@@ -74,6 +75,10 @@ const ORBITS = {
   // perigee 200 km, BTERM 0.01: its crossing is days out; the asks here are hours either side of the epoch
   "decaying set": { n: revPerDay((RE + 200) / (1 - 0.001)), e: 0.001, i: 55, bterm: Number(process.env.STATE_PURITY_DECAY_BTERM ?? 0.01), tesseral: 31 },
 };
+const EXPECTED_FORMS = {"500 km":3,"500 km zero drag":1,"830 km":2,
+ "half-day e 0.005":0,"half-day e 0.02":0,"8 h class":0,"16 h class":0,
+ "GEO, tesseral 31":2,"GEO, no tesseral":2,"e 0.1":4,"e 0.25":1,
+ "transfer orbit":1,"Molniya":1,"decaying set":3};
 const recordOf = (o, k, opts) => seedOcm({ epoch: iso(opts?.epochMs ?? EPOCH), n: o.n, e: o.e, i: o.i, raan: (60 + 3.3 * k) % 360, argp: 90, ma: (10 + 7.1 * k) % 360,
   bterm: o.bterm, agom: 0.01, norad: opts?.norad ?? 80000 + k, name: `P${opts?.norad ?? 80000 + k}`, msis: o.jxx !== true, records: o.jxx !== true, rows: rowsThrough(ROWS), tesseral: o.tesseral, zonal: o.zonal ?? 20 });
 const prefixed = (u) => { const b = Buffer.alloc(4 + u.length); b.writeUInt32LE(u.length, 0); Buffer.from(u).copy(b, 4); return b; };
@@ -104,12 +109,14 @@ const shippedFile = buildDiagnostic("state-purity-ship", "", patchTheory, patchO
 const probeSeam = (text) => {
   const head = "inline void set_sp_anchor(const XpSat& s, const Node& lo, const Node& hi) {\n";
   if (!text.includes(head)) throw new Error("set_sp_anchor not found for the test probe");
-  const withHead = text.replace(head, `inline thread_local double g_test_anchor[6] = {};\n${head}  g_test_anchor[0] = 1; g_test_anchor[1] = lo.index; g_test_anchor[2] = hi.index; g_test_anchor[3] = lo.t; g_test_anchor[4] = hi.t;\n`);
+  text = text.replace("  SetScope set_scope(s);", "  g_test_form = s.ctx.continuity_form;\n  SetScope set_scope(s);");
+  const withHead = text.replace(head, `inline thread_local int g_test_form = -1;\ninline thread_local double g_test_anchor[6] = {};\n${head}  g_test_anchor[0] = 1; g_test_anchor[1] = lo.index; g_test_anchor[2] = hi.index; g_test_anchor[3] = lo.t; g_test_anchor[4] = hi.t;\n`);
   const idLine = /(  const uint64_t id = [^;]*;\n)/;
   if (!idLine.test(withHead)) throw new Error("the anchor's id line not found for the test probe");
   return withHead.replace(idLine, "$1  g_test_anchor[5] = static_cast<double>(static_cast<uint32_t>(id));\n");
 };
 const PROBE_EXPORTS =
+  'SDNAP_EXPORT("sdnap_test_form") int sdnap_test_form() { return sdnap::xpt::g_test_form; }\n' +
   'SDNAP_EXPORT("sdnap_test_cache_budget") uint32_t sdnap_test_cache_budget(uint32_t mb) { return sdnap::xpt::cache_budget_mb(mb); }\n' +
   'SDNAP_EXPORT("sdnap_test_anchor") void sdnap_test_anchor(double* o) { for (int k = 0; k < 6; ++k) o[k] = sdnap::xpt::g_test_anchor[k]; }\n' +
   'SDNAP_EXPORT("sdnap_test_drag_pass_misses") double sdnap_test_drag_pass_misses() { return static_cast<double>(__atomic_load_n(&sdnap::xpt::g_drag_pass_window_misses, __ATOMIC_RELAXED)); }\n' +
@@ -168,7 +175,9 @@ for (const name of names) {
   // anchor names a bracket whose first time is the epoch's)
   const pm = await asked(probeFile, [rec], (m) => {
     const side = (dir) => { for (const min of [10, 30, 60, 120, 300, 600, 1200, 2400]) { m.at(0, 0, EPOCH + dir * min * MIN); const a = m.anchor(); if (a[0] === 1 && a[3] === 0) return a; } return [0, 0, 0, 0, 0]; };
-    return { f: side(1), b: side(-1) };
+    const f=side(1), b=side(-1);
+    check(m.x.sdnap_test_form() === EXPECTED_FORMS[name], `${name}: coefficient form differs from expected ${EXPECTED_FORMS[name]}`);
+    return { f, b };
   });
   const Hf = Math.abs(pm.f[4] - pm.f[3]), Hb = Math.abs(pm.b[4] - pm.b[3]);
   // the bracket before and the bracket after the epoch have the epoch as their lower node (index 0 both); the ids this build

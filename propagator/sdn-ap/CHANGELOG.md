@@ -1,4 +1,22 @@
+## Shared table initialization
+
+Instance startup evaluates the shared leap-second, atmosphere, gravity, and
+half-precision tables before exports or pool threads run. This adds startup
+work without changing state formulas or per-state lookup paths. The leap-table
+publication race could expose a nonzero count with a null pointer; serialized
+pool preparation also prepares the time table.
+
 # Changelog
+
+## AP coefficient forms (source change)
+
+Four of 942 synthetic fitted records end farther from their numerical flight by more than 1 cm; the largest increase is 0.152457 m. Strong drag has a median cost 0.260% higher, ratio 1.002597 [0.998698, 1.004848]; eccentric has a median cost 0.773% higher, ratio 1.007726 [0.991527, 1.024483]; high eccentric has a median cost 0.824% higher, ratio 1.008237 [1.001407, 1.023386]; deep resonance has a median cost 0.767% higher, ratio 1.007674 [0.990502, 1.023074]. Forms A, CM, and R add 768 B per cache-holding set and per thread that needs their m-daily derivative rows. U and C add no derivative-row storage. The fifteen tested threshold neighborhoods have a maximum switch residual of 0.016281421 m and a regression bound of 0.063 m. A separate eccentric neighborhood reaches 0.111527867 m; neither figure is a global bound. Selection is fixed for the entire flight. Derivative rows resolve from the held-set identity, removing 12 unused pointer-maintenance instructions per non-AP state; the executed instruction count matches released 0.6.59. The paired timing and the shared time-table initialization proof are documented in SPEC.
+
+Instance initialization prepares the shared time, atmosphere, gravity, and half-conversion tables; AP thread startup also prepares time. The independent shared-table repair and its exposure qualifications are described in SPEC. A fit holds its seed coefficient form across all trials and derivative columns; the returned record selects its own form from its final elements. Seven crossing-threshold fits converge with one trial form. Shared-table cache tests isolate the form freshness predicates with the epoch bank's table-sharing path.
+
+The selector fixed from epoch elements and the initialization-time gravity selection preserves the old path for U and instantiates one shared coefficient implementation for U, A, C, CM, and R. The 17-class boundary and direct-evaluation test passes. All 942 numerical-flight comparisons retain the within-100 m class counts, with no new crossing. Ascending, descending, shuffled, cross-epoch, and mixed four-thread state-purity checks pass. U regimes and SGP4/SGP4XP controls remain bit for bit. The poison regression invalidates the half-day table identity before overwriting its padded rows. The former refusal was caused by the test retaining that identity, and released builds do not execute the poison function.
+
+No version or distribution artifact is changed.
 
 ## 0.6.60 — The frame path: a frame of every object from Chebyshev cells of AP's own states
 

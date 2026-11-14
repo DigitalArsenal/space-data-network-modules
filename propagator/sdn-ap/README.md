@@ -11,6 +11,17 @@ propagator that carries it (SPEC 16.14).
 An `$OMM` whose MEAN_ELEMENT_THEORY is neither SGP4 nor SGP4XP, a `$PCF` whose THEORY is not UNSPECIFIED, SGP4 or SGP4XP and an
 `ElementRow` of theory 16 are refused.
 
+## AP coefficient forms
+
+Four of 942 synthetic fitted records end farther from their numerical flight by more than 1 cm; the largest increase is 0.152457 m. Before removing redundant derivative-pointer maintenance, the forced-U non-AP comparison measured a 2.64% median cost increase and the production/default comparison measured 1.68%. The corrected production comparison measures ratio 1.001523 [0.990083, 1.003838] over 8 paired rounds; the middle-half range includes 1.0. Executed non-AP instruction counts match released 0.6.59 exactly; the timing history is in SPEC. Strong drag has a median cost 0.260% higher, ratio 1.002597 [0.998698, 1.004848]; eccentric has a median cost 0.773% higher, ratio 1.007726 [0.991527, 1.024483]; high eccentric has a median cost 0.824% higher, ratio 1.008237 [1.001407, 1.023386]; deep resonance has a median cost 0.767% higher, ratio 1.007674 [0.990502, 1.023074]. Forms A, CM, and R add 768 B per cache-holding set and per thread that needs their m-daily derivative rows. U and C add no derivative-row storage. The fifteen tested threshold neighborhoods have a maximum switch residual of 0.016281421 m and a regression bound of 0.063 m. A separate eccentric neighborhood reaches 0.111527867 m; neither figure is a global bound. Selection is fixed for the entire flight.
+
+The shared-table repair is merged from its independent branch: instance initialization completes the time, drag, gravity, and half-conversion tables before exports run. A conditional interrupted-reader control on released 0.6.60 reaches 0.09061098147164132 m over five days; this is not a public pooled-path reproduction. SPEC distinguishes the published entries and records the deterministic held-initializer tests. Fits hold their seed form for every trial; returned records select from their final elements.
+
+The rule fixed from epoch elements and the initialization-time gravity selection selects unchanged, first-order, coarse, or directly evaluated resonant coefficients. Across 942 synthetic fitted records, no record newly crosses 100 m from its numerical flight and no class loses a record within that bound. The largest sampled distance from direct state-element evaluation is 0.047561 m. The largest fitted coefficient-boundary jump among 17 measured classes is 0.015414 m. SPEC section 9 gives the selection bands, complete accuracy and cost tables, bytes, and diagnostic compile definition `SDNAP_CONTINUITY_RULE=0`.
+
+Run `SDM_MODULE_UNSIGNED_BUILD=1 node test/coefficient-forms.e2e.mjs` with `SDNAP_WASM` naming the tested build and `COEFFICIENT_CONTROL` naming the unchanged build. The four-thread state-purity checks pass. The poison regression invalidates the half-day table identity before overwriting its padded rows. The former refusal was a test defect; released builds do not execute that function. The committed version and distribution artifact describe the existing release.
+
+
 | Theory | Sets | Source |
 |---|---|---|
 | SGP4 | type 0 | SPACETRACK REPORT No. 3; Vallado et al. 2006 (AFSPC mode) |
@@ -986,3 +997,8 @@ the fall-back had returned Sentinel-3A 2025-10-15 to 0.087 km at day 3 (0.4.17: 
 0.4.11 the median day-3 change is -85 % on HY-2C, -92 % on HY-2D, -73 % on Jason-3, -48 % on SWOT, -35 % on SARAL and
 +1.4 % on CryoSat-2 (stack #470). A 0.5 m/s step after the arc leaves the fit bit for bit; one inside it leaves a fit
 RMS of 28 km and BTERM undetermined (`test/drag-prior-fallback.e2e.mjs`).
+
+Shared time, atmosphere, gravity, and half-conversion tables are prepared during
+instance initialization. Startup does additional work; per-state lookup paths
+and values are unchanged. See SPEC's shared lookup initialization section for the
+held-initializer regression, conditional flight effect, and entry-path exposure.
