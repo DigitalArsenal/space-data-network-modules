@@ -2,6 +2,8 @@
 // The primary covariance remains the fit posterior, in its original parameter layout.
 namespace population_annotation {
 using namespace objectcov;
+std::string refusal_code,refusal_message;
+int annotation_fail(const char* code,const std::string& message){refusal_code=code;refusal_message=message;return fail(code,message);}
 
 const plugin_input_frame_t* single(const char* port) {
   const plugin_input_frame_t* found = nullptr;
@@ -150,22 +152,22 @@ extern "C" int annotate_population() {
   const auto* input = single("ocm");
   const auto* seed = single("elements");
   if (!input || !seed || input->payload_length > 8 * 1024 * 1024 || seed->payload_length > 1024 * 1024)
-    return fail("invalid-input", "One bounded OCM and one seed OMM are required.");
+    return annotation_fail("invalid-input", "One bounded OCM and one seed OMM are required.");
   flatbuffers::Verifier verifier(input->payload, input->payload_length);
   if (input->payload_length < 12 || flatbuffers::ReadScalar<uint32_t>(input->payload) != input->payload_length - 4 ||
-      !VerifySizePrefixedOCMBuffer(verifier)) return fail("invalid-ocm", "Expected one size-prefixed OCM.");
+      !VerifySizePrefixedOCMBuffer(verifier)) return annotation_fail("invalid-ocm", "Expected one size-prefixed OCM.");
   flatbuffers::Verifier seed_verifier(seed->payload, seed->payload_length);
   if (seed->payload_length < 12 || flatbuffers::ReadScalar<uint32_t>(seed->payload) != seed->payload_length - 4 ||
-      !VerifySizePrefixedOMMBuffer(seed_verifier)) return fail("invalid-elements", "Expected one size-prefixed seed OMM.");
+      !VerifySizePrefixedOMMBuffer(seed_verifier)) return annotation_fail("invalid-elements", "Expected one size-prefixed seed OMM.");
   const auto* orbit = GetSizePrefixedOCM(input->payload);
   const auto* omm = GetSizePrefixedOMM(seed->payload);
   const auto* root = reinterpret_cast<const uint8_t*>(orbit);
   const auto* vt = root - flatbuffers::ReadScalar<flatbuffers::soffset_t>(root);
   if (flatbuffers::ReadScalar<flatbuffers::voffset_t>(vt) > OCM::VT_RPO_INSPECTION + 2)
-    return fail("unsupported-ocm", "The OCM root contains fields outside the pinned contract.");
+    return annotation_fail("unsupported-ocm", "The OCM root contains fields outside the pinned contract.");
   if (!orbit->MEAN_ELEMENTS() || !orbit->METADATA() || !orbit->METADATA()->NORAD_CAT_ID() ||
       orbit->METADATA()->NORAD_CAT_ID() != omm->NORAD_CAT_ID())
-    return fail("seed-mismatch", "The seed and orbit must identify the same object.");
+    return annotation_fail("seed-mismatch", "The seed and orbit must identify the same object.");
   Instant seed_epoch,record_epoch;bool epoch_matches=false;
   if(parse_instant(omm->EPOCH(),&seed_epoch)){
     if(orbit->MEAN_ELEMENTS()->MEAN_ELEMENT_THEORY()==meanElementSource::AP){
@@ -174,25 +176,25 @@ extern "C" int annotate_population() {
         std::abs(seconds_between(seed_epoch,start)+216000)<.001&&std::abs(seconds_between(seed_epoch,stop)-432000)<.001;
     }else epoch_matches=parse_instant(orbit->MEAN_ELEMENTS()->EPOCH(),&record_epoch)&&std::abs(seconds_between(seed_epoch,record_epoch))<.001;
   }
-  if(!epoch_matches)return fail("seed-epoch-mismatch","The seed epoch must match the ingested epoch or the exact-W fit interval.");
+  if(!epoch_matches)return annotation_fail("seed-epoch-mismatch","The seed epoch must match the ingested epoch or the exact-W fit interval.");
   if (orbit->COVARIANCE_BLOCKS()) for (const auto* block : *orbit->COVARIANCE_BLOCKS())
     if (block->COV_ID() && block->COV_ID()->str().rfind("population/", 0) == 0)
-      return fail("already-annotated", "Annotate the original fitted or fallback record once.");
+      return annotation_fail("already-annotated", "Annotate the original fitted or fallback record once.");
   sp::Model model; Options options; bool has_model = false;
   auto error = read_population_model(&model, &options, &has_model);
-  if (!error.empty()) return fail("invalid-models", error);
+  if (!error.empty()) return annotation_fail("invalid-models", error);
   if (!has_model || options.ages.size() != 7)
-    return fail("invalid-models", "The seven-block contract requires a model with seven age bins.");
+    return annotation_fail("invalid-models", "The seven-block contract requires a model with seven age bins.");
   std::vector<double> ages;
   for (const auto& bin : options.ages) {
     const auto age = (bin.first + bin.second) / 2;
     if (!(std::isfinite(age) && bin.first >= 0 && bin.second > bin.first))
-      return fail("invalid-models", "Population age bins must be finite, forward intervals.");
+      return annotation_fail("invalid-models", "Population age bins must be finite, forward intervals.");
     ages.push_back(age);
   }
   std::vector<ElementSet> sets; Counts counts;
   if (!load_elements(options, sets, counts, true) || sets.size() != 1)
-    return fail("invalid-elements", "Expected one usable seed element set.");
+    return annotation_fail("invalid-elements", "Expected one usable seed element set.");
   const auto& anchor = sets.front();
   std::vector<std::unique_ptr<OCMCovarianceBlockT>> blocks;
   std::vector<std::unique_ptr<CVRT>> labels;
@@ -247,7 +249,16 @@ extern "C" int annotate_population() {
   }
   const auto output = append(input->payload, input->payload_length, orbit, blocks, labels);
   flatbuffers::Verifier output_verifier(output.data(),output.size());
-  if(output.empty()||!VerifySizePrefixedOCMBuffer(output_verifier))return fail("invalid-output","Annotated orbit failed verification.");
+  if(output.empty()||!VerifySizePrefixedOCMBuffer(output_verifier))return annotation_fail("invalid-output","Annotated orbit failed verification.");
   return plugin_push_output_ex("ocm", "OCM.fbs", "$OCM", PLUGIN_PAYLOAD_WIRE_FORMAT_FLATBUFFER,
       "OCM", 0, 0, output.data(), output.size()) < 0 ? fail("output", "Cannot emit annotated orbit.") : 0;
+}
+
+// Flow-facing failures are data, allowing the controller to isolate one object.
+extern "C" int annotate_population_flow(){
+ const auto status=annotate_population();if(!status)return 0;
+ plugin_reset_output_state();
+ QRPT q;q.KIND=qrpKind::Error;q.STATUS=qrpStatus::Error;q.ERROR_CODE=population_annotation::refusal_code;q.MESSAGE=population_annotation::refusal_message;
+ flatbuffers::FlatBufferBuilder b;FinishQRPBuffer(b,QRP::Pack(b,&q));
+ return plugin_push_output_ex("decision","QRP.fbs","$QRP",PLUGIN_PAYLOAD_WIRE_FORMAT_FLATBUFFER,"QRP",0,0,b.GetBufferPointer(),b.GetSize())<0?500:0;
 }

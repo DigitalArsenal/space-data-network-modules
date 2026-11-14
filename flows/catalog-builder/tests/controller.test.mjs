@@ -41,7 +41,7 @@ async function tick(time,kill=false){
    const r=await chain.invoke({methodId:fit?'run_chain':'ingest_seed',inputs});assert.equal(r.statusCode,0,r.errorMessage);
    input=r.outputs.map(f=>({...f,portId:{fallback:'fallback',elements:'candidate',decision:'chain_status'}[f.portId]}));
   }else if(out.annotate_orbit){
-   const r=await gp.invoke({methodId:'annotate_population',inputs:[frame('ocm','OCM',out.annotate_orbit.payload),frame('elements','OMM',out.annotate_seed.payload)]});assert.equal(r.statusCode,0,r.errorMessage);input=r.outputs.map(f=>({...f,portId:'annotated'}));
+   const r=await gp.invoke({methodId:'annotate_population_flow',inputs:[frame('ocm','OCM',out.annotate_orbit.payload),frame('elements','OMM',out.annotate_seed.payload)]});assert.equal(r.statusCode,0,r.errorMessage);input=r.outputs.map(f=>({...f,portId:f.portId==='decision'?'annotation_status':'annotated'}));
   }else if(out.meta){
    const m=decodeIngestRequest(out.meta.payload);assert.match(m.tags.batchId,out.index_records?/^catalog-[0-9a-f]{64}:complete$/:/^catalog-[0-9a-f]{64}$/);const b=Buffer.from((out.product_records??out.index_records).payload);const destination=records(m.schema,m.tags.providerId,m.tags.sourceName);const exists=destination.some(x=>hash(x)===hash(b));if(!exists)destination.push(b);
    if(out.product_records){++counters.products;if(exists)++counters.duplicateProducts;if(kill){control.destroy();control=await createControl();evidence.stages.push({...counters,killedAfterProduct:true});return counters;}}

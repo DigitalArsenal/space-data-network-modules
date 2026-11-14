@@ -30,7 +30,7 @@ const defaultModelSource = `static const unsigned char kDefaultModelErm[] = {\n$
 const framesSrc = path.resolve(root, '../../foundation/frames/src');
 const sgp4Dir = path.resolve(root, '../../foundation/sgp4-str3');
 const jsonHeader = path.resolve(root, '../../propagator/sgp4/src/cpp/include/nlohmann/json.hpp');
-const { header, version, families } = await generateSdsHeaders(['OMM', 'OEM', 'OCM', 'CDM', 'PRW', 'MNV', 'ERM'], import.meta.url);
+const { header, version, families } = await generateSdsHeaders(['OMM', 'OEM', 'OCM', 'CDM', 'PRW', 'MNV', 'ERM', 'QRP'], import.meta.url);
 const erfa = await composeErfaTranslationUnit();
 const bodyModels = await fs.readFile(path.join(framesSrc, 'iau_body_models.hpp'), 'utf8');
 const axisEngine = (await fs.readFile(path.join(framesSrc, 'axis_engine.hpp'), 'utf8'))

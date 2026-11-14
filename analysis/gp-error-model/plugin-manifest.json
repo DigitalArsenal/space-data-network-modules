@@ -2050,6 +2050,120 @@
       ],
       "maxBatch": 1,
       "drainPolicy": "single-shot"
+    },
+    {
+      "methodId": "annotate_population_flow",
+      "displayName": "Annotate population with a typed outcome",
+      "invokeSurfaces": [
+        "direct"
+      ],
+      "inputPorts": [
+        {
+          "portId": "ocm",
+          "acceptedTypeSets": [
+            {
+              "setId": "sds-ocm",
+              "allowedTypes": [
+                {
+                  "schemaName": "OCM.fbs",
+                  "fileIdentifier": "$OCM",
+                  "rootTypeName": "OCM",
+                  "wireFormat": "flatbuffer"
+                }
+              ],
+              "description": "One $OCM per request entry that has a covariance, in request order, when node config names object.source: the set's GCRF state at SET_EPOCH + AGE_DAYS (km, km/s) and the covariance port's GCRF matrix (21-element lower triangle, km**2 family, COV_REF_FRAME GCRF), one CVR in COV_REALISM (EmpiricalHistoryShrunk with its HISTORY_* evidence, or SourceModel/PooledModel for the population fallback), COV_CALIBRATION and the source in PROVENANCE."
+            }
+          ],
+          "minStreams": 1,
+          "maxStreams": 1,
+          "required": true,
+          "description": "One size-prefixed orbit record. Existing orbit tables and primary covariance are retained verbatim."
+        },
+        {
+          "portId": "elements",
+          "acceptedTypeSets": [
+            {
+              "setId": "sds-omm",
+              "allowedTypes": [
+                {
+                  "schemaName": "OMM.fbs",
+                  "fileIdentifier": "$OMM",
+                  "rootTypeName": "OMM",
+                  "wireFormat": "flatbuffer"
+                }
+              ]
+            }
+          ],
+          "minStreams": 1,
+          "maxStreams": 1,
+          "required": true,
+          "description": "One size-prefixed seed OMM; its epoch anchors the seven population covariance blocks."
+        },
+        {
+          "portId": "models",
+          "acceptedTypeSets": [
+            {
+              "setId": "sds-erm",
+              "allowedTypes": [
+                {
+                  "schemaName": "ERM.fbs",
+                  "fileIdentifier": "$ERM",
+                  "rootTypeName": "ERM",
+                  "wireFormat": "flatbuffer"
+                }
+              ]
+            }
+          ],
+          "minStreams": 0,
+          "maxStreams": 16,
+          "required": false,
+          "description": "MODEL ElementSetModel records; first pooled model, else first model. Optional: with no frame, uses the frozen E14 S3-KC record compiled from data/e14-s3-kc.erm."
+        }
+      ],
+      "outputPorts": [
+        {
+          "portId": "ocm",
+          "acceptedTypeSets": [
+            {
+              "setId": "sds-ocm",
+              "allowedTypes": [
+                {
+                  "schemaName": "OCM.fbs",
+                  "fileIdentifier": "$OCM",
+                  "rootTypeName": "OCM",
+                  "wireFormat": "flatbuffer"
+                }
+              ],
+              "description": "One $OCM per request entry that has a covariance, in request order, when node config names object.source: the set's GCRF state at SET_EPOCH + AGE_DAYS (km, km/s) and the covariance port's GCRF matrix (21-element lower triangle, km**2 family, COV_REF_FRAME GCRF), one CVR in COV_REALISM (EmpiricalHistoryShrunk with its HISTORY_* evidence, or SourceModel/PooledModel for the population fallback), COV_CALIBRATION and the source in PROVENANCE."
+            }
+          ],
+          "minStreams": 1,
+          "maxStreams": 1,
+          "required": true,
+          "description": "One size-prefixed orbit record. Existing orbit tables and primary covariance are retained verbatim."
+        },
+        {
+          "portId": "decision",
+          "minStreams": 0,
+          "maxStreams": 1,
+          "required": false,
+          "acceptedTypeSets": [
+            {
+              "setId": "annotation-decision",
+              "allowedTypes": [
+                {
+                  "schemaName": "QRP.fbs",
+                  "fileIdentifier": "$QRP",
+                  "rootTypeName": "QRP",
+                  "wireFormat": "flatbuffer"
+                }
+              ]
+            }
+          ]
+        }
+      ],
+      "maxBatch": 1,
+      "drainPolicy": "single-shot"
     }
   ]
 }

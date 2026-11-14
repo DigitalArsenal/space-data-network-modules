@@ -260,6 +260,9 @@ int advance() {
  }
  if(input("query_status"))return 0;
  if(input("chain_status"))return chain();
+ if(const auto* f=input("annotation_status")){
+  if(phase!=Phase::Annotate)return stop("Unexpected annotation outcome.");flatbuffers::Verifier v(f->payload,f->payload_length);if(!VerifyQRPBuffer(v))return fail_object("Invalid annotation outcome.");const auto* q=GetQRP(f->payload);return fail_object("annotation: "+text(q->ERROR_CODE())+" "+text(q->MESSAGE()));
+ }
  if(const auto* f=input("annotated")){
   if(phase!=Phase::Annotate)return stop("Unexpected annotation.");flatbuffers::Verifier v(f->payload,f->payload_length);if(!VerifySizePrefixedOCMBuffer(v))return fail_object("Invalid annotation.");chosen=bytes(f);const auto* o=GetSizePrefixedOCM(chosen.data());if(o->COV_REALISM())for(const auto* l:*o->COV_REALISM())if(text(l->EVIDENCE()).rfind("no population covariance",0)==0)reason+="; "+text(l->EVIDENCE());if(products.count(cid(chosen)))return compose();
   QRPT q;q.KIND=qrpKind::Request;q.SCHEMA_NAME="OCM.fbs";q.PROVIDER_ID=cfg.provider;q.SOURCE_NAME="catalog-products";q.BATCH_ID="catalog-"+digest(chosen);q.LIMIT=1;q.MAX_BYTES=8*1024*1024;
@@ -273,7 +276,7 @@ int advance() {
  if(const auto* f=input("replacement")){if(phase!=Phase::Compose)return stop("Unexpected index replacement.");return ingest(bytes(f),true);}
  if(const auto* f=input("stored")){
   flatbuffers::Verifier v(f->payload,f->payload_length);if(!R::VerifyIngestResultBuffer(v))return stop("Invalid storage acknowledgment.");const auto* r=R::GetIngestResult(f->payload);
-  if((phase!=Phase::ProductStored&&phase!=Phase::IndexStored)||!text(r->REFUSED()).empty()||text(r->SCHEMA())!=pending_schema+".fbs"||text(r->PROVIDER_ID())!=cfg.provider||text(r->BATCH_ID())!=pending_batch||text(r->SOURCE_NAME())!=(phase==Phase::ProductStored?"catalog-products":"catalog-index")||r->INSERTED()>1)return stop("Storage refused or did not acknowledge the complete deterministic batch.");
+  if((phase!=Phase::ProductStored&&phase!=Phase::IndexStored)||!text(r->REFUSED()).empty()||text(r->SCHEMA())!=pending_schema+".fbs"||text(r->PROVIDER_ID())!=cfg.provider||text(r->BATCH_ID())!=pending_batch||text(r->SOURCE_NAME())!=(phase==Phase::ProductStored?"catalog-products":"catalog-index")||r->INSERTED()>1)return fail_object("Storage refused or did not acknowledge the complete deterministic batch.");
   if(phase==Phase::ProductStored){products.insert(cid(chosen));return compose();}
   allowance=std::max(allowance,2*std::chrono::duration<double,std::milli>(Clock::now()-object_start).count());index[work[at]]=pending;retries.erase(work[at]);++done;++at;return next_object();
  }
