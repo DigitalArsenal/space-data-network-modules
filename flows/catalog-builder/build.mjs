@@ -28,7 +28,15 @@ await fs.writeFile(path.join(out, 'guest-link/metadata.json'), JSON.stringify(me
 await fs.writeFile(path.join(out, 'plugin-manifest.json'), JSON.stringify(manifest, null, 2) + '\n');
 
 const require = createRequire(import.meta.url);
-const packageVersion = async name => JSON.parse(await fs.readFile(require.resolve(name + '/package.json'), 'utf8')).version;
+const packageVersion = async name => {
+  for (let dir = path.dirname(require.resolve(name)); dir !== path.dirname(dir); dir = path.dirname(dir)) {
+    try {
+      const metadata = JSON.parse(await fs.readFile(path.join(dir, 'package.json'), 'utf8'));
+      if (metadata.name === name) return metadata.version;
+    } catch (error) { if (error.code !== 'ENOENT') throw error; }
+  }
+  throw new Error('Cannot locate installed package metadata: ' + name);
+};
 const propagator = JSON.parse(await fs.readFile(path.resolve(root, '../../propagator/sdn-ap/plugin-manifest.json'), 'utf8'));
 const provenance = {
   spacedatastandards: await packageVersion('spacedatastandards.org'),
