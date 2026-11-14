@@ -119,7 +119,7 @@ The two timing slices had starting/ending system loads of 2.84/4.44 and
 The measured small-catalog rate projects to 4.21 hours of processing for
 33,000 objects, excluding growth in scan costs. It is not a full-catalog
 measurement. The default 128-object batch requires 258 ten-minute invocations
-for that first build, approximately 43 hours of scheduled slots. The maximum
+for that first build, approximately 43 hours of scheduled slots. A
 256-object setting requires 129 invocations, approximately 21.5 hours.
 A native 256-object synthetic test completed within the ten-minute invocation
 budget, producing 256 stored products and 256 selections. Guest linear memory
@@ -127,3 +127,7 @@ at its endpoint was 99 pages (6,488,064 bytes), excluding host and storage
 memory. The rate projection does not raise the controller's batch limit.
 
 Each partition scans the complete configured sources and changes only objects whose object number modulo `catalog.partition_count` equals `catalog.partition_index`. Services share one output provider and use distinct partition indexes. This also partitions expiry and removals. Increasing the batch ceiling does not guarantee completion within the host execution budget.
+
+[Covariance size accounting and compression](COMPACTNESS.md) describe the compact annotation. A 1,024-object native batch completed within a ten-minute invocation budget with 113 guest pages (7,405,568 bytes) and 627,539,968 bytes of whole-process peak RSS. A 1,280-object request reached the deadline after 1,195 complete selections. The largest fully completed tested batch is 1,024; the configured ceiling of 4,096 does not establish a safe batch at every load.
+
+Complete scans count every source record, including those owned by other partitions. A 100,000-object catalog with one seed, identity, selection and product per object exceeds the default 200,000-record scan bound even before weather or retained history. Operators must size the scan and memory limits for the entire retained source population. The 2,000-object throughput sample does not establish memory use at 100,000 objects.
