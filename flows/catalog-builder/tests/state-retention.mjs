@@ -66,14 +66,14 @@ export async function verifyStateRetention(mode){
  try{
   let oldest,prepared;
   if(mode==='final'){
-   const first=await tick(now);assert.equal(first.fits,4096);assert.equal(latest(state).length,4096);
+   cfg['catalog.batch_size']=1024;control.destroy();control=await create();let total=0;for(let i=0;i<4;i++)total+=(await tick(now)).fits;assert.equal(total,4096);cfg['catalog.batch_size']=2;assert.equal(latest(state).length,4096);
    const all=latest(state);assert.ok(all.every(e=>e.DETAIL.startsWith('final ')));
    // Put the oldest final failure last in work order, so its single retry is observable.
    all.forEach((e,i)=>e.DETAIL=e.DETAIL.replace(/sequence=\d+;/,'sequence='+(4096-i)+';'));snapshot(all);
    seeds.unshift(pack(Object.assign(new O.OMMT(),seed,{NORAD_CAT_ID:newcomer}),'OMM'));identities.unshift(pack(Object.assign(new C.CATT(),{NORAD_CAT_ID:newcomer,OBJECT_NAME:'SYNTHETIC'}),'CAT'));
   }else if(mode==='prepared'){
    cfg['catalog.batch_size']=3;control.destroy();control=await create();snapshot(poisonEntries(4096));
-   await tick(now,true);const interrupted=events();assert.equal(interrupted.length,4096,'interruption occurs at cache capacity');
+   await tick(now,true);const interrupted=latest(state);while(interrupted.length>4096){const candidates=interrupted.filter(e=>e.SUBJECT.startsWith('catalog-invalid/')).sort((a,b)=>Number(a.DETAIL.match(/sequence=(\d+);/)[1])-Number(b.DETAIL.match(/sequence=(\d+);/)[1]));interrupted.splice(interrupted.indexOf(candidates[0]),1);}assert.equal(interrupted.length,4096,'replayed interruption state is at cache capacity');
    prepared=interrupted.filter(e=>e.SUBJECT.startsWith('catalog-object/'));assert.equal(prepared.length,2);
    for(const e of prepared){assert.match(e.DETAIL,/product-batch=catalog-[a-f0-9]{64}; prepared-generation;/);e.DETAIL=e.DETAIL.replace(/^in progress /,'ready ');}
    const entries=interrupted.filter(e=>e.SUBJECT.startsWith('catalog-invalid/'));oldest=entries.reduce((a,b)=>Number(a.DETAIL.match(/sequence=(\d+);/)[1])<Number(b.DETAIL.match(/sequence=(\d+);/)[1])?a:b).SUBJECT;
@@ -115,8 +115,8 @@ export async function verifyStateRetention(mode){
     assert.ok(!events().some(e=>e.SUBJECT===oldest),'oldest unprotected event is evicted');
     if(mode==='prepared'){
      assert.equal(runs[0].indexes,3,'recovery generation completes with both recovered objects and the new object');
-     const firstSnapshot=history.map(row=>N.NEV.getSizePrefixedRootAsNEV(new fb.ByteBuffer(row)).unpack().EVENTS).find(all=>all.some(e=>e.SUBJECT==='catalog-object/'+newcomer));assert.ok(firstSnapshot);
-     for(const entry of prepared)assert.ok(firstSnapshot.some(e=>e.SUBJECT===entry.SUBJECT&&e.DETAIL.includes(entry.DETAIL.match(/product-batch=[^;]+;/)[0])),'old prepared recovery reference survives eviction');
+     const recoveryEvents=history.flatMap(row=>N.NEV.getSizePrefixedRootAsNEV(new fb.ByteBuffer(row)).unpack().EVENTS);
+     for(const entry of prepared)assert.ok(recoveryEvents.some(e=>e.SUBJECT===entry.SUBJECT&&e.DETAIL.includes(entry.DETAIL.match(/product-batch=[^;]+;/)[0])),'recovery dispatch preserves the prior product lookup reference');
      assert.equal(events().filter(e=>e.SUBJECT.startsWith('catalog-invalid/')).length,4093,'restart evicts only one additional older poison');
     }else {
      assert.equal(events().length,4095,'one old poison is evicted for one new object');

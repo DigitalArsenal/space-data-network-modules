@@ -22,7 +22,7 @@ export async function verifyStateBounds(){
  const split=b=>{const rows=[];for(let i=0;i<b.length;){const n=b.readUInt32LE(i)+4;rows.push(b.subarray(i,i+n));i+=n;}return rows;};
  const seed=O.OMM.getRootAsOMM(new fb.ByteBuffer(ommBytes)).unpack();
  const now=Date.parse(seed.EPOCH+'Z')+86400000;
- const cfg={'catalog.provider':'synthetic-node','catalog.identity_provider':'synthetic','catalog.identity_source':'identities','catalog.weather_provider':'synthetic','catalog.weather_source':'weather','catalog.seed_sources':['primary'],'catalog.seed_providers':['synthetic'],'catalog.page_size':512,'catalog.batch_size':2};
+ const cfg={'catalog.provider':'synthetic-node','catalog.identity_provider':'synthetic','catalog.identity_source':'identities','catalog.weather_provider':'synthetic','catalog.weather_source':'weather','catalog.seed_sources':['primary'],'catalog.seed_providers':['synthetic'],'catalog.page_size':512,'catalog.batch_size':1024};
  const seeds=[],identities=[];
  for(let i=0;i<4097;i++){const id=3000000+i;seeds.push(pack(Object.assign(new O.OMMT(),seed,{NORAD_CAT_ID:id}),'OMM'));identities.push(pack(Object.assign(new C.CATT(),{NORAD_CAT_ID:id,OBJECT_NAME:'SYNTHETIC'}),'CAT'));}
  const chain=await createStandaloneHarness('browser',repo+'/flows/catalog-builder/dist/isomorphic/module.wasm',{surface:'direct',enableBrowserWasiThreads:false});
@@ -53,14 +53,14 @@ export async function verifyStateBounds(){
   assert.fail('State bound test exceeded its operation cap');
  }
  try{
-  const first=await tick(now);assert.equal(first.fits,4097);assert.equal(latest(state).length,4096);
+  const runs=[];for(let i=0;i<5;i++)runs.push(await tick(now));const first={fits:runs.reduce((n,r)=>n+r.fits,0),writes:runs.reduce((n,r)=>n+r.writes,0),maxRows:Math.max(...runs.map(r=>r.maxRows)),snapshots:runs.reduce((n,r)=>n+r.snapshots,0)};assert.equal(first.fits,4097);assert.equal(latest(state).length,4096);
   console.log('STATE_BOUND_CONTROL '+JSON.stringify({objects:4097,dispatched:first.fits,writes:first.writes,maxRows:first.maxRows,retainedRows:state.length,snapshots:first.snapshots}));
   // Reconstruct the pre-compaction history, including the latest failure after the old read bound.
-  const legacy=history.slice(0,12288),expected=latest(legacy);state=legacy;history=[];seeds.pop();identities.pop();cfg['catalog.page_size']=1;
+  const legacy=history.filter(row=>N.NEV.getSizePrefixedRootAsNEV(new fb.ByteBuffer(row)).eventsLength()===1).slice(0,12288),expected=latest(legacy);state=legacy;history=[];seeds.pop();identities.pop();cfg['catalog.page_size']=1;
   control.destroy();control=await create();
   const recovered=await tick(now+1000);
   assert.equal(recovered.fits,0);assert.equal(state.length,1);assert.deepEqual(latest(state),expected,'compaction preserves every latest failure, including events beyond the old read threshold');
-  assert.ok(first.maxRows<=4097,'single-marker appends compact at the entry bound');assert.ok(first.snapshots>=2);
+  assert.ok(first.maxRows<=3074,'one run appends at most three markers per bounded dispatch plus recovery');assert.ok(runs.every(r=>r.snapshots===1),'each completed run compacts once');
   assert.match(recovered.notice.reason,/deferred=4096/);assert.notEqual(recovered.notice.kind,'unchanged');
   console.log('PASS state marker compaction '+JSON.stringify({legacyRows:legacy.length,recoveredEntries:expected.length,recoveredRows:state.length,maxRows:first.maxRows}));
  }finally{control.destroy();}
