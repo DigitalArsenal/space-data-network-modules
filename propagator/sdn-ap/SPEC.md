@@ -6442,7 +6442,9 @@ times, earlier ones after later ones, leaves the cells bit-identical to a clean 
 What it means for a host: a served state is within 1 cm (3-D) and 1e-4 m/s (3-D) of AP's state for that record and time,
 asked of a fresh instance the way the builder asks it (a cold set, flown toward the time from the epoch). That holds in every
 class, strong drag and decay included. A window that cannot meet it is not served: a tombstone, status 4 (or 3 where AP
-refuses in it), and the host asks AP's own entries for those times. The cell is a function of the record and the window, so
+refuses in it), and the host asks AP's own entries for those times. AP's own position output steps by up to about 9 mm in strong-drag sets (9.02 and
+8.90 mm in the two windows of the 100,000-object recipe of `test/frames-memory.e2e.mjs` that hold one), and a window that holds a step above the builder's 3-D limit of 8 mm is not
+served: 2 of the recipe's 100,000 objects at the fill's instant, none of the public catalog's 92,100 served objects. The cell is a function of the record and the window, so
 the reference is a fresh instance's AP state, which no order of earlier asks moves.
 
 The builder checks every window against that reference, with both limits of 19.3 at every point and at the window's two ends.
