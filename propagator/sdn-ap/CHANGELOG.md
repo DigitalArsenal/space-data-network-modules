@@ -1,5 +1,54 @@
 # Changelog
 
+## 0.6.61 — Record entities through the propagator ABI; a refused load leaves the store as it was; shared tables prepared at instance start
+
+What gets worse: an instance starts slower. It fills the shared leap-second, atmosphere, gravity and half-precision tables before any export runs, and answers its first state in 1.050 of 0.6.60's
+time in a warm process (middle half 1.032 to 1.068 of 32 rounds, 2.82 ms against 2.69 ms; load 21 to 23) and in 1.003 of it in a fresh process (0.990 to 1.029 of 16 rounds, 37.4 ms against 36.9 ms).
+Through the record entities of the propagator ABI (below) an SGP4 or SGP4XP record's theory slots are released after each entity's read, so a catalog of SGP4XP records read again pays every set's
+initialization again: `plugin_propagate_all_positions` over 33,000 and 100,000 made-up 500 km records at one hour costs 9.0 and 9.8 times the CPU of a control build that keeps each entity's slots (commit
+051c2178; eight rounds, middle half 8.86 to 9.24 and 9.64 to 9.93; 14.1 and 14.2 microseconds an object a call against 1.55 and 1.45), and it keeps no slot bytes where that control keeps 5,864 a record
+(after a read of 100,000 records the instance holds 125.0 MB against the control's 687.8 MB). The module is 13,465 bytes larger (1,923,460 against 1,909,995). A load that replaces a loaded store holds the
+resident store, the decoded records and the prepared store together until it publishes, where 0.6.60 emptied the store first (SPEC 14.1.1); a first load holds what it held. `plugin_init_omm` prepares its
+rows beside the rows the instance holds, so both are resident until it installs, where 0.6.60 freed the old rows first. A successful load releases the frame allocation and its cells: `sdnap_frames_at` and
+`sdnap_frames_refill` answer -5 (not open) until the host calls `sdnap_frames_open` again, where on 0.6.60 the frames stayed open, `sdnap_frames_at` answered -4 and a refill read the new store. An AP entity
+with no covering frame cell is not shown (NaN position, VALID clear), and no call of the ABI builds a cell or flies AP in its place; AP series of several sets and wide sets have no display state. Every call
+of a loaded catalog (load, refill, read, path, replacement) is one owning thread's.
+
+What changes for a caller: a refused load leaves the resident store exactly as it was, so a caller that relied on an empty store after a refused load now still holds its previous catalog. A load is built
+apart from the resident store and published only when every record is accepted and every counted allocation succeeded; after a refusal of `load_epochs`, `load_epochs_open`, `load_epochs_part` or
+`load_epochs_close` the store holds the series, states, bytes and frame cells it held before the call, and an empty store stays empty. On 0.6.60 a load was built in place: `load_epochs_open` emptied the
+store, accepted or refused, a refused part or close left it empty, and a `load_epochs` refused once its build had begun (a record, a failed allocation, series-forces-differ) left it empty; only a
+`load_epochs` refused before its build began (a frame of a wrong type, a bad $PCF), `load-not-open` and `pool-dead` left the store as it was, and from the open to the close the store was empty and served no
+state. A refused open, part or close now drops the pending load only; between the open and the close the store's exports answer the resident store, and the eighth statistic of `sdnap_epochs_stats` counts
+the bytes of both. `load_epochs_close` also refuses `pool-dead` while a pool thread is active, and `load_epochs` refuses it before it reads its inputs. `plugin_destroy` releases the epoch store, an open load
+and the frames as well as the rows (0.6.60 released the rows only). `plugin_init_omm` is refused whole (ORBPRO_PROP_BAD_INPUT, the previous rows kept) when an allocation of its build fails and while a pool
+thread is active, where 0.6.60 held a set that failed to initialize with its refusal and answered the count; once it has selected rows, `ingest_omm` and `sdnap_init_elements` also prepare beside the old rows
+and keep them when they are refused. Before that, `sdnap_init_elements` replaces the rows as in 0.6.60, and an `ingest_omm` refused `out-of-memory` keeps the previous rows when the allocation failed before its
+row build and holds no rows when it failed in the build (0.6.60 installed the new rows, the failed sets flagged, and refused the call). `test/load-refusal.e2e.mjs` fails each of the 65 counted allocation
+sites of a load in turn over an empty and a populated store (130 refusals, 0 changed snapshots; 21 sites and 42 refusals for records carrying a forecast) beside a control build that clears the store on a
+refusal (65 changed snapshots), and `test/load-parts.e2e.mjs` fails the 90 and 42 counted allocations of the parts and the close the same way.
+
+What it is, in two parts. Record entities through the propagator ABI (SPEC 20; `src/plugin_records.inc`): after a successful `load_epochs` or `load_epochs_close`, `plugin_entity_count`, `plugin_propagate`
+and `plugin_propagate_batch` answer the loaded records, one entity an epoch series, in the order of each series' first input record; a successful `plugin_init_omm` selects its rows again, with its 88-byte
+records and their states as in 0.6.60. New exports: `plugin_propagate_all_positions(jd, out, max)` (the whole catalog's Earth-fixed positions in meters as interleaved triples, three NaN for an entity not
+served), `plugin_propagate_path(entity, start_jd, step_days, count, out)` (one entity's positions on a time grid through the epoch store's own evaluator), `get_orbital_period(entity)` (minutes) and
+`get_eccentricity(entity)`. An AP entity's state is read from its frame cell (SPEC 19, within that entry's bounds); over 100,000 AP records with their cells filled, the whole-catalog call costs 1.06 of
+`sdnap_frames_at`'s time Earth-fixed (middle half 1.056 to 1.066 of 16 rounds, 0.073 microseconds an object). An SGP4 or SGP4XP record answers through its own theory. The stream method `replace_epoch`
+replaces one record of a loaded catalog by its series identity and theory: the entity keeps its index, only its own slots, covariance and cells are released, and every refusal keeps the old record.
+`test/plugin-records.e2e.mjs` is the test. Shared lookup tables (SPEC, shared lookup initialization): the leap-second table of the time library, the atmosphere and gravity tables and the half-precision
+table are filled at instance initialization, before any export or pool thread runs, and a pool thread's preparation also prepares the time table. The time library publishes its leap-entry count before its
+pointer, so a second thread could read a non-zero count with a null pointer while the first filled the table; `test/shared-tables.e2e.mjs` holds an initializer in that gap and fails on 0.6.60's sources. The
+tables keep their storage, contents and lookup expressions.
+
+What does not move, against 0.6.60's wasm (944e0e34): every state of every flight (`node test/kernel-cost.mjs --diff ... --bound 0,0`, the default list and `--tesseral 70 --slow`, 132 flights each, in time
+order, in reverse and shuffled), the 942 stored AP records flown after and before their epoch and across it (226,080 and 339,120 states a kind), and the replay of the 942 records through `propagate` with
+their covariance (226,736 states, 4,761,456 covariance elements) are equal to the bit; the conformance digests are the same (SGP4XP 72dcf600..., SGP4 control 9ecfafcd...). `test/memory-limit.e2e.mjs`
+answers what it answered: 3,268 row states and 704 refusals over two instants at 128 MiB, 2,473 sets of the 80 MiB store. A frame of 100,000 objects costs 0.997 of 0.6.60's time in TEME and 0.995
+Earth-fixed (middle half 0.990 to 1.000 and 0.991 to 1.002 of 16 rounds), 0.247 and 0.243 of SGP4's time a state, and SGP4 itself costs 1.004 (1.000 to 1.007); load 16 to 10. The first fill of 100,000
+objects takes 1.009, 0.994, 0.996 and 0.992 of 0.6.60's time with records at the epoch and at 2, 5 and 10 days (eight rounds, middle halves within 4.2 %), 135.5, 164.3, 221.6 and 321.0 s on one thread. The
+instance of 100,000 objects holds the same bytes as on 0.6.60, 269.7 MB with the stored load and 15 pool threads and 232.0 MB without a pool. An instance's first host allocation lies 2,288 bytes lower
+(1,199,520 against 1,201,808).
+
 ## 0.6.60 — The frame path: a frame of every object from Chebyshev cells of AP's own states
 
 What gets worse: the module is 25,582 bytes larger (1,909,995 against 1,884,413) and an instance that never opens frames holds 576 bytes more static data. The 80 MiB store of

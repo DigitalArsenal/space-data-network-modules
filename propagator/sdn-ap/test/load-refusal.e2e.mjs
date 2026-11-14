@@ -1,11 +1,7 @@
 #!/usr/bin/env node
-// A load_epochs refused for want of memory leaves NO snapshot (SPEC 1.6 and 14.1): after every refusal the store's series count, its kept count and its
-// byte count are zero, and a load that follows is answered from its own records alone. The test builds a module whose counted allocations can be made to
-// fail at the Nth one (a test-only seam in the module's own accounting: mem::malloc, mem::calloc and mem::counted), loads the same catalog once to count
-// its allocations, then loads it again failing each of them in turn. The catalog holds SGP4 and AP sets, a series of several sets (the second cache slot),
-// AP sets with a covariance (the matrix) and two distinct weather series, so the failing allocation reaches the arrays, the interned weather, the covariance
-// set and its matrix, and the second slot, with series already installed before some of them.
-// A negative control builds the same module with the clearing on refusal removed and asserts that the test would have seen a partial store.
+// Refused loads preserve the complete resident snapshot (SPEC 14.1); an empty resident stays empty.
+// Every counted allocation of mixed and forecast catalogs fails in turn with both empty and populated residents.
+// A control that clears resident records on refusal must fail the same preservation comparison.
 import assert from 'node:assert/strict';
 import fs from 'node:fs';
 import * as fb from 'flatbuffers';
@@ -31,9 +27,11 @@ const open = wasm => createStandaloneHarness('browser', wasm, {surface: 'direct'
 // the test-only seam: the Nth counted allocation of a call fails, counted as a failed allocation
 const seam = failureSeam, probe = failureProbe;   // test/lib/ap-diagnostic.mjs: every replace must match (the counted() replace stopped matching in 0.6.56 and failed no site)
 const guarded = buildDiagnostic('load-refusal', probe, s => s, seam);
-const unguarded = buildDiagnostic('load-refusal-control', probe, s => s, {...seam, 'epoch_store.inc': s => s
-  .replace('~Unwind() { if (!installed) clear(s); }', '~Unwind() {}')
-  .replace('  if (rc == 0) rc = epochs::close(st, b);\n  b.drop();\n  if (rc != 0) epochs::clear(st);\n  return rc;', '  if (rc == 0) rc = epochs::close(st, b);\n  b.drop();\n  return rc;')});
+const unguarded = buildDiagnostic('load-refusal-control', probe, s => s, {...seam, 'epoch_store.inc': s => {
+  const before = '  epochs::clear(prepared);\n  return rc;';
+  assert.equal(s.split(before).length, 2, 'the control must change exactly one publication exit');
+  return s.replace(before, '  if (rc != 0) epochs::clear(epochs::resident());\n' + before);
+}});
 
 // the catalog
 const records = [];
@@ -59,63 +57,67 @@ for (let k = 0; k < 3; ++k) {                                       // series of
 await ingest.destroy?.();
 
 const counts = async wasm => {
-  const h = await open(wasm), x = h.instance.exports, p = x.sdnap_alloc(64);
+  const h = await open(wasm), x = h.instance.exports, p = x.sdnap_alloc(128);
   const stats = () => { x.sdnap_epochs_stats(p); return Array.from(new Float64Array(h.memory.buffer, p, 8)); };
-  return {h, x, stats};
+  // The entire resident snapshot: counts, bytes, identities, epochs and exact TEME states in km and km/s.
+  // The reference is the same instance before refusal; preservation permits no numerical difference.
+  const snapshot = () => {
+    const out = [];
+    for (let i = 0; i < x.sdnap_epochs_count(); ++i) {
+      assert.equal(x.sdnap_epochs_series(i, p, 0, 0), 0);
+      const info = Array.from(new Float64Array(h.memory.buffer, p, 3)); out.push(info);
+      const ep = x.sdnap_alloc(16 * info[2]);
+      assert.equal(x.sdnap_epochs_series(i, p, ep, info[2]), 0);
+      const epochs = Array.from(new Float64Array(h.memory.buffer, ep, 2 * info[2])); out.push(epochs); x.sdnap_free(ep);
+      for (let k = 0; k < info[2]; ++k) {
+        const rc = x.sdnap_epochs_set_at(i, k, epochs[2*k], epochs[2*k+1], p);
+        out.push([rc, Buffer.from(new Uint8Array(h.memory.buffer, p, 48)).toString('hex')]);
+      }
+    }
+    return JSON.stringify([x.sdnap_epochs_count(), stats(), out]);
+  };
+  return {h, x, stats, snapshot};
 };
-const failures = [];
-for (const [name, wasm] of [['guarded', guarded], ['unguarded control', unguarded]]) {
-  const {h, x, stats} = await counts(wasm);
+const exercise = async (name, wasm, catalog, expectedAllocations, residentRecords) => {
+  const {h, x, stats, snapshot} = await counts(wasm);
   x.sdnap_test_fail_at(0);
-  assert.equal((await load(h, records)).statusCode, 0);   // the first load makes one-time allocations: count the second
+  assert.equal((await load(h, catalog)).statusCode, 0);
   x.sdnap_test_fail_at(0);
-  const ok = await load(h, records);
-  assert.equal(ok.statusCode, 0, `${name}: ${ok.errorCode}: ${ok.errorMessage}`);
-  const total = x.sdnap_test_alloc_count(), kept = stats()[1], series = x.sdnap_epochs_count();
-  assert.ok(total === CATALOG_ALLOCATIONS && kept === 6 + 8 + 9 && series === 6 + 8 + 3, `${name}: ${total} allocations (${CATALOG_ALLOCATIONS} expected), ${kept} kept, ${series} series`);
-  const bytesFull = stats()[7];
-  assert.ok(bytesFull > 0);
-  let partial = 0;
-  for (let n = 1; n <= total; ++n) {
-    x.sdnap_test_fail_at(n);
-    const r = await load(h, records);
-    assert.notEqual(r.statusCode, 0, `${name}: allocation ${n} of ${total} failed and the load was answered`);
-    assert.equal(r.errorCode, 'out-of-memory', `${name}: allocation ${n}: ${r.errorCode}`);
-    const s = stats(), left = [x.sdnap_epochs_count(), s[1], s[7]];
-    if (left.some(v => v !== 0)) { partial++; failures.push(`${name}: after allocation ${n} of ${total} failed the store held ${left.join(' series, ')} (series, kept, bytes)`); }
+  assert.equal((await load(h, catalog)).statusCode, 0);
+  const total = x.sdnap_test_alloc_count();
+  assert.equal(total, expectedAllocations, `${name}: counted allocation sites`);
+  assert.ok(stats()[1] > 0);
+  let changed = 0, checked = 0;
+  for (const resident of [false, true]) {
+    for (let n = 1; n <= total; ++n) {
+      x.sdnap_test_fail_at(0);
+      x.plugin_destroy();
+      if (resident) assert.equal((await load(h, residentRecords)).statusCode, 0);
+      const before = snapshot();
+      x.sdnap_test_fail_at(n);
+      const r = await load(h, catalog);
+      assert.notEqual(r.statusCode, 0, `${name}: allocation ${n} of ${total} failed and the load was answered`);
+      assert.equal(r.errorCode, 'out-of-memory', `${name}: allocation ${n}: ${r.errorCode}`);
+      x.sdnap_test_fail_at(0);
+      const after = snapshot();
+      if (after !== before) changed++;
+      if (name !== 'clearing control') assert.equal(after, before, `${name}: allocation ${n} of ${total}, resident ${resident}: refusal changed the resident snapshot`);
+      // A subsequent successful load publishes its records alone.
+      assert.equal((await load(h, residentRecords)).statusCode, 0);
+      assert.equal(x.sdnap_epochs_count(), residentRecords.length);
+      checked++;
+    }
   }
-  // a load after the refusals is the new snapshot alone
-  x.sdnap_test_fail_at(0);
-  assert.equal((await load(h, records.slice(0, 6))).statusCode, 0);
-  assert.equal(x.sdnap_epochs_count(), 6);
-  console.log(`${name}: ${total} counted allocations failed in turn, ${partial} left a store behind`);
-  if (name === 'guarded') assert.equal(partial, 0, failures.join('\n'));
-  else assert.ok(partial > 0, 'the control (no clearing on refusal) shows no partial store: the test would not have caught the defect');
+  if (name === 'clearing control') assert.ok(changed > 0, 'clearing resident records on refusal escaped the preservation check');
+  console.log(`${name}: ${total} allocation sites, ${checked} refusals with empty and populated residents, ${changed} changed snapshots`);
   await h.destroy?.();
-}
-// records that carry a forecast: the one-call install copies each out of the call's bytes (one counted allocation), and frees the series' second slot when
-// that copy fails; no record of the catalog above carries one
+};
+await exercise('guarded', guarded, records, CATALOG_ALLOCATIONS, records.slice(0, 6));
+await exercise('clearing control', unguarded, records, CATALOG_ALLOCATIONS, records.slice(0, 6));
 {
-  const command = await commandHarness(wasmPath);
-  const forecast = [];
+  const command = await commandHarness(wasmPath), forecast = [];
   for (const [c, norad] of [[CLASSES[1], 99301], [CLASSES[0], 99302]]) forecast.push((await carriedRecord(command, c, {norad})).ocm);
   await command.destroy?.();
-  const {h, x, stats} = await counts(guarded);
-  x.sdnap_test_fail_at(0);
-  assert.equal((await load(h, forecast)).statusCode, 0);
-  x.sdnap_test_fail_at(0);
-  assert.equal((await load(h, forecast)).statusCode, 0);
-  const total = x.sdnap_test_alloc_count();
-  assert.equal(stats()[1], 2, 'the forecast records are kept');
-  assert.equal(total, FORECAST_ALLOCATIONS, `the load of the forecast records makes ${total} counted allocations (a count that drops is a site the seam no longer fails)`);
-  for (let n = 1; n <= total; ++n) {
-    x.sdnap_test_fail_at(n);
-    const r = await load(h, forecast);
-    assert.equal(r.errorCode, 'out-of-memory', `forecast records: allocation ${n} of ${total}: ${r.errorCode}`);
-    const s = stats();
-    assert.deepEqual([x.sdnap_epochs_count(), s[1], s[7]], [0, 0, 0], `forecast records: allocation ${n} of ${total}: the store is not empty`);
-  }
-  console.log(`forecast records: ${total} counted allocations failed in turn, each refused out-of-memory with the store empty`);
-  await h.destroy?.();
+  await exercise('forecast records', guarded, forecast, FORECAST_ALLOCATIONS, records.slice(0, 6));
 }
 console.log('LOAD-REFUSAL PASS');

@@ -4,13 +4,13 @@ import fs from 'node:fs';
 import path from 'node:path';
 import {execFileSync} from 'node:child_process';
 import {fileURLToPath} from 'node:url';
-import {scratchRoot} from './scratch.mjs';
+import {scratchTemp} from './scratch.mjs';
 const moduleRoot=fileURLToPath(new URL('../../',import.meta.url));
 const modulesRoot=path.resolve(moduleRoot,'../..');
 // `others`: { 'file.inc': (text) => text } for source parts other than xp_theory.inc (a test build's own seams)
 export function buildDiagnostic(name,extra,transform=s=>s,others={}){
- // a fresh tree each time: nothing of an earlier build (sources, links, outputs) is read
- const root=path.join(scratchRoot,name);fs.rmSync(root,{recursive:true,force:true});
+ // Each build owns a unique directory, including simultaneous builds with the same name.
+ const root=scratchTemp(`${name}-`);
  const dir=path.join(root,'propagator/sdn-ap');fs.mkdirSync(dir,{recursive:true});
  const foundation=path.join(root,'foundation');fs.symlinkSync(path.join(modulesRoot,'foundation'),foundation,'dir');
  for(const f of ['build.mjs','package.json','plugin-manifest.json','LICENSE','NOTICE'])fs.copyFileSync(path.join(moduleRoot,f),path.join(dir,f));
@@ -22,7 +22,7 @@ export function buildDiagnostic(name,extra,transform=s=>s,others={}){
  fs.appendFileSync(path.join(dir,'src/sdn_ap_module.cpp'),'\n'+extra+'\n');
  const log=fs.openSync(path.join(root,'build.log'),'w');
  // a test build is never signed, whatever the caller's environment holds
- const env={...process.env,SDM_MODULE_UNSIGNED_BUILD:'1',SPACE_DATA_NETWORK_MODULES_ROOT:modulesRoot};delete env.SDM_MODULE_SIGNING_KEYPAIR_PATH;
+ const env={...process.env,SDM_MODULE_UNSIGNED_BUILD:'1',SPACE_DATA_NETWORK_MODULES_ROOT:modulesRoot};delete env.SDM_MODULE_SIGNING_KEYPAIR_PATH;delete env.SDNAP_DIST_DIR;
  try{execFileSync(process.execPath,['build.mjs'],{cwd:dir,env,stdio:['ignore',log,log]});}finally{fs.closeSync(log);}
  return path.join(dir,'dist/isomorphic/module.wasm');
 }
