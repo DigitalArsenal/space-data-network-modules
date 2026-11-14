@@ -696,6 +696,19 @@ int index_page(void) {
     flatbuffers::Verifier header_verifier(data, size + 4);
     if (!VerifySizePrefixedQRPBuffer(header_verifier) || GetSizePrefixedQRP(data)->KIND() != qrpKind_Page)
         return refuse(ctx, "host-failed", "invalid durable page header");
+    const auto* header=GetSizePrefixedQRP(data);
+    const uint64_t byte_limit=request.MAX_BYTES()?request.MAX_BYTES():8388608;
+    const uint32_t row_limit=request.LIMIT()?request.LIMIT():1000;
+    if(stream.size()>byte_limit||stream.size()>8388608||header->RECORD_COUNT()>row_limit)
+        return refuse(ctx,"host-failed","durable page exceeds requested limits");
+    size_t offset=size_t(size)+4;uint32_t count=0;
+    while(offset<stream.size()){
+        if(stream.size()-offset<4)return refuse(ctx,"host-failed","truncated durable record prefix");
+        const size_t length=size_t(read_u32le(data+offset))+4;
+        if(length<12||length>stream.size()-offset)return refuse(ctx,"host-failed","invalid durable record length");
+        offset+=length;++count;
+    }
+    if(count!=header->RECORD_COUNT())return refuse(ctx,"host-failed","durable page count mismatch");
     if (push_decision_verbatim(frame) != 0) return 500;
     return plugin_push_output_ex("page", "QRP.fbs", QRPIdentifier(), PLUGIN_PAYLOAD_WIRE_FORMAT_FLATBUFFER,
                                  "QRP", 0, 0, data, stream.size()) < 0 ? 500 : 0;

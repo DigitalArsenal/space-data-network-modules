@@ -13,7 +13,7 @@ const split=b=>{let a=[];for(let i=0;i<b.length;){const n=b.readUInt32LE(i)+4;a.
 const obj=OMM.getRootAsOMM(new fb.ByteBuffer(ommBytes)).unpack();
 const seed=(id,change=0)=>{const x=OMM.getRootAsOMM(new fb.ByteBuffer(ommBytes)).unpack();x.NORAD_CAT_ID=id;x.MEAN_ANOMALY+=change;return pack(x,'OMM');};
 const ids=[999999,999998],now=Date.parse(obj.EPOCH+'Z')+86400000;
-const cfg={'catalog.provider':'synthetic-node','catalog.identity_provider':'synthetic','catalog.identity_source':'identities','catalog.weather_provider':'synthetic','catalog.weather_source':'weather','catalog.seed_sources':['primary','secondary'],'catalog.seed_providers':['synthetic','synthetic'],'catalog.page_size':1,'catalog.batch_size':2};
+const cfg={'catalog.provider':'synthetic-node','catalog.identity_provider':'synthetic','catalog.identity_source':'identities','catalog.weather_provider':'synthetic','catalog.weather_source':'weather','catalog.seed_sources':['primary','secondary'],'catalog.seed_providers':['synthetic','synthetic'],'catalog.page_size':1,'catalog.batch_size':2,'catalog.max_removal_fraction':0.5};
 const store=new Map();const key=(schema,provider,source)=>[schema,provider,source].join('/');const records=(schema,provider,source)=>{const k=key(schema,provider,source);if(!store.has(k))store.set(k,[]);return store.get(k);};
 records('OMM.fbs','synthetic','primary').push(...ids.map(id=>seed(id)));
 records('OMM.fbs','synthetic','secondary').push(seed(ids[0],1));
@@ -32,7 +32,7 @@ async function tick(time,kill=false){
   assert.equal(response.statusCode,0,response.errorMessage);const out=Object.fromEntries(response.outputs.map(f=>[f.portId,f]));let input=[];
   if(out.notice){counters.notice=decodeFlowNotice(out.notice.payload);evidence.stages.push(counters);return counters;}
   if(out.query){
-   ++counters.pages;const q=Q.QRP.getRootAsQRP(new fb.ByteBuffer(out.query.payload)).unpack();const data=records(q.SCHEMA_NAME,q.PROVIDER_ID,q.SOURCE_NAME).filter(b=>!q.BATCH_ID||q.BATCH_ID==='catalog-'+hash(b));const [offset,head]=q.CURSOR?q.CURSOR.split(':').map(Number):[0,data.length];const page=data.slice(offset,Math.min(head,offset+q.LIMIT));const end=offset+page.length;
+   ++counters.pages;const q=Q.QRP.getRootAsQRP(new fb.ByteBuffer(out.query.payload)).unpack();if(q.SCHEMA_NAME==='OCM.fbs')assert.match(q.BATCH_ID,/^catalog-[0-9a-f]{64}$/,'only deterministic product lookup reads OCM');const data=records(q.SCHEMA_NAME,q.PROVIDER_ID,q.SOURCE_NAME).filter(b=>!q.BATCH_ID||q.BATCH_ID==='catalog-'+hash(b));const [offset,head]=q.CURSOR?q.CURSOR.split(':').map(Number):[0,data.length];const page=data.slice(offset,Math.min(head,offset+q.LIMIT));const end=offset+page.length;
    const header=Object.assign(new Q.QRPT(),{KIND:Q.qrpKind.Page,STATUS:Q.qrpStatus.Ok,SCHEMA_NAME:q.SCHEMA_NAME,PROVIDER_ID:q.PROVIDER_ID,SOURCE_NAME:q.SOURCE_NAME,BATCH_ID:q.BATCH_ID,RECORD_COUNT:page.length,TOTAL_COUNT:BigInt(head),NEXT_CURSOR:end<head?end+':'+head:null});
    input=[frame('page','QRP',Buffer.concat([pack(header,'QRP'),...page])),frame('query_status','QRP',out.query.payload)];
   }else if(out.seed||out.fallback_seed){
@@ -58,6 +58,12 @@ const current=()=>{const map=new Map();for(const b of records('CAT.fbs','synthet
 try{
  const first=await tick(now);assert.equal(first.fits,2);assert.equal(first.indexes,2);assert.ok([...current().values()].every(c=>c.PRODUCTS[0].KIND===C.catalogProductKind.ApElements));
  const unchanged=await tick(now+1000);assert.equal(unchanged.fits+unchanged.products+unchanged.indexes,0);
+ const metadata=OMM.getSizePrefixedRootAsOMM(new fb.ByteBuffer(seed(ids[0]))).unpack();metadata.OBJECT_NAME='SYNTHETIC METADATA';records('OMM.fbs','synthetic','primary').push(pack(metadata,'OMM'));
+ assert.equal((await tick(now+1100)).fits,0,'metadata-only seed reissue does not refit');
+ const renamed=C.CAT.getSizePrefixedRootAsCAT(new fb.ByteBuffer(records('CAT.fbs','synthetic','identities')[0])).unpack();renamed.OBJECT_NAME='SYNTHETIC RENAMED';renamed.OBJECT_ID='SYNTHETIC-DESIGNATOR';records('CAT.fbs','synthetic','identities').push(pack(renamed,'CAT'));
+ await tick(now+1200);assert.equal(current().get(ids[0]).OBJECT_NAME,renamed.OBJECT_NAME);assert.equal(current().get(ids[0]).OBJECT_ID,renamed.OBJECT_ID);
+ records('CAT.fbs','synthetic','identities').pop();await tick(now+1300);
+
  records('OMM.fbs','synthetic','primary').push(seed(ids[0],.1));const corrected=await tick(now+2000);assert.equal(corrected.fits,1);assert.equal(corrected.indexes,1);
  records('OMM.fbs','synthetic','primary').push(seed(ids[0],.2));await tick(now+3000,true);const resumed=await tick(now+4000);assert.equal(resumed.fits,1);assert.equal(resumed.products,0);assert.equal(resumed.duplicateProducts,0);assert.equal(resumed.indexes,1);
  cfg['catalog.weather_source']='missing-weather';control.destroy();control=await createControl();const refused=await tick(now+5000);assert.equal(refused.fits,2);assert.ok([...current().values()].every(c=>c.PRODUCTS[0].KIND===C.catalogProductKind.Sgp4Elements&&/weather/.test(c.PRODUCTS[0].SELECTION_REASON)));
@@ -94,14 +100,23 @@ try{
  store.set(key('OMM.fbs','synthetic','primary'),[seed(three[0],.5),pack(failing,'OMM'),seed(three[2],.5)]);
  cfg['catalog.batch_size']=4;control.destroy();control=await createControl();
  const isolated=await tick(now+6*86400000+4000);assert.ok(isolated.indexes>=2);assert.match(isolated.notice.reason,/failed=1/);assert.match(isolated.notice.reason,/retry=/);assert.ok(current().get(three[2]).PRODUCTS.length);
- const backoff=await tick(now+6*86400000+5000);assert.equal(backoff.fallbacks,0);assert.match(backoff.notice.reason,/deferred=1/);
+ const backoff=await tick(now+6*86400000+5000);assert.equal(backoff.fallbacks,0);assert.match(backoff.notice.reason,/deferred=[1-9]/);
  // A backward clock causes a typed composer refusal, then a healthy update.
  store.set(key('CAT.fbs','synthetic','identities'),ids.map(id=>pack(Object.assign(new C.CATT(),{NORAD_CAT_ID:id,OBJECT_NAME:'SYNTHETIC'}),'CAT')));
  store.set(key('OMM.fbs','synthetic','primary'),ids.map(id=>seed(id,.6)));
  const ahead=current().get(ids[1]);ahead.PRODUCTS_AS_OF=new Date(now+8*86400000).toISOString();records('CAT.fbs','synthetic-node','catalog-index').push(pack(ahead,'CAT'));
  control.destroy();control=await createControl();const backwards=await tick(now+6*86400000+6000);
  assert.match(backwards.notice.reason,/compose: invalid-replacement/);assert.ok(backwards.indexes>=1);
- cfg['catalog.partition_count']=2;
+ // Future seeds become eligible without a content change.
+ store.clear();records('CAT.fbs','synthetic','identities').push(...ids.map(id=>pack(Object.assign(new C.CATT(),{NORAD_CAT_ID:id,OBJECT_NAME:'SYNTHETIC'}),'CAT')));
+ records('OMM.fbs','synthetic','primary').push(...ids.map(id=>seed(id)));
+ records('SPW.fbs','synthetic','weather').push(...split(Buffer.from(weather)));
+ control.destroy();control=await createControl();const future=await tick(now-86400000-1000);assert.equal(future.fits,0);assert.equal(future.fallbacks,2);
+ const eligible=await tick(now);assert.equal(eligible.fits,2);
+ cfg['catalog.max_removal_fraction']=.25;store.set(key('OMM.fbs','synthetic','primary'),[]);control.destroy();control=await createControl();
+ const guarded=await tick(now+1000);assert.equal(guarded.indexes,0);assert.match(guarded.notice.reason,/mass-removal guard/);
+ cfg['catalog.invocation_budget_ms']=1000;control.destroy();control=await createControl();const budget=await tick(now+2000);assert.equal(budget.fits+budget.fallbacks,0);assert.equal(budget.notice.kind,'skipped');
+ delete cfg['catalog.invocation_budget_ms'];cfg['catalog.partition_count']=2;
  cfg['catalog.partition_index']=2;control.destroy();control=await createControl();
  await assert.rejects(()=>tick(now+6*86400000+3000));
  evidence.passed=true;

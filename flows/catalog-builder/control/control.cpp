@@ -41,7 +41,7 @@ struct Settings {
  std::string provider,identity_provider,identity_source,weather_provider,weather_source,recipe;
  size_t page=512,batch=128,partitions=1,partition=0,max_records=400000,max_bytes=64*1024*1024;
  size_t budget_ms=540000,allowance_ms=2000;
- double margin=0,nonres_e=.05,res_e=.3,max_rms=2,max_error=10;
+ double max_removal_fraction=.25,margin=0,nonres_e=.05,res_e=.3,max_rms=2,max_error=10;
  std::vector<Source> seeds;
 } cfg;
 enum class Phase {Idle,Scan,Lookup,Chain,Annotate,ProductStored,Compose,IndexStored};
@@ -94,8 +94,8 @@ bool configure() {
  cfg.seeds.clear();for(size_t i=0;i<sources.size();++i){if(sources[i].empty()||providers[i].empty())return false;cfg.seeds.push_back({"OMM",std::string(providers[i]),std::string(sources[i])});}
  auto bound=[&](const char* key,size_t& value,size_t low,size_t high){const double v=c.number(key,value);if(!std::isfinite(v)||v<low||v>high||std::floor(v)!=v)return false;value=size_t(v);return true;};
  if(!bound("catalog.invocation_budget_ms",cfg.budget_ms,1000,540000)||!bound("catalog.object_allowance_ms",cfg.allowance_ms,2000,60000)||!bound("catalog.page_size",cfg.page,1,1000)||!bound("catalog.batch_size",cfg.batch,1,1024)||!bound("catalog.partition_count",cfg.partitions,1,8)||!bound("catalog.partition_index",cfg.partition,0,cfg.partitions-1)||!bound("catalog.max_records",cfg.max_records,1,500000)||!bound("catalog.max_bytes",cfg.max_bytes,1024,96*1024*1024))return false;
- cfg.margin=c.number("catalog.validity_margin_seconds",0);cfg.nonres_e=c.number("catalog.nonresonant_max_e",.05);cfg.res_e=c.number("catalog.resonant_max_e",.3);cfg.max_rms=c.number("catalog.max_fit_rms_km",2);cfg.max_error=c.number("catalog.max_fit_error_km",10);
- return std::isfinite(cfg.margin)&&cfg.margin>=0&&cfg.nonres_e>=0&&cfg.nonres_e<=.05&&cfg.res_e>=0&&cfg.res_e<=.3&&std::isfinite(cfg.max_rms)&&cfg.max_rms>0&&std::isfinite(cfg.max_error)&&cfg.max_error>0;
+ cfg.max_removal_fraction=c.number("catalog.max_removal_fraction",.25);cfg.margin=c.number("catalog.validity_margin_seconds",0);cfg.nonres_e=c.number("catalog.nonresonant_max_e",.05);cfg.res_e=c.number("catalog.resonant_max_e",.3);cfg.max_rms=c.number("catalog.max_fit_rms_km",2);cfg.max_error=c.number("catalog.max_fit_error_km",10);
+ return std::isfinite(cfg.max_removal_fraction)&&cfg.max_removal_fraction>=0&&cfg.max_removal_fraction<=1&&std::isfinite(cfg.margin)&&cfg.margin>=0&&cfg.nonres_e>=0&&cfg.nonres_e<=.05&&cfg.res_e>=0&&cfg.res_e<=.3&&std::isfinite(cfg.max_rms)&&cfg.max_rms>0&&std::isfinite(cfg.max_error)&&cfg.max_error>0;
 }
 int query() {
  if(scan_at>=scans.size())return 0;if(!budget_left()){++diagnostics.deferred;return finish();}
@@ -141,6 +141,9 @@ int page(const plugin_input_frame_t* f) {
  const auto next=text(q->NEXT_CURSOR());if(!next.empty()){if(next==cursor||!count)return stop("Complete read did not advance.");cursor=next;return query();}
  cursor.clear();pages=0;++scan_at;if(scan_at<scans.size())return query();
  work.clear();for(const auto& entry:identities)work.push_back(entry.first);for(const auto& entry:index)if(!identities.count(entry.first))work.push_back(entry.first);
+ size_t active=0,removed=0;for(const auto& entry:index){const auto* c=GetSizePrefixedCAT(entry.second.data());if(!c->PRODUCTS()||!c->PRODUCTS()->size())continue;++active;
+  const auto identity=identities.find(entry.first);if(identity==identities.end()||!seeds.count(entry.first)||(GetSizePrefixedCAT(identity->second.data())->DECAY_DATE()&&text(GetSizePrefixedCAT(identity->second.data())->DECAY_DATE())<=iso(now).substr(0,10)))++removed;}
+ if(active&&double(removed)/active>cfg.max_removal_fraction){complete_scan=false;diagnostics.add("mass-removal guard: proposed="+std::to_string(removed)+" active="+std::to_string(active)+"; raise catalog.max_removal_fraction explicitly");}
  if(!complete_scan){++diagnostics.deferred;diagnostics.add("scan partial: read="+std::to_string(seen)+" retained-bytes="+std::to_string(retained)+" catalog.max_records="+std::to_string(cfg.max_records)+" catalog.max_bytes="+std::to_string(cfg.max_bytes)+"; raise the binding setting or partition the catalog; removals disabled");}
  std::stable_sort(work.begin(),work.end(),[](uint32_t a,uint32_t b){
   auto age=[](uint32_t id){const auto p=index.find(id);return p==index.end()?int64_t(0):instant(text(GetSizePrefixedCAT(p->second.data())->PRODUCTS_AS_OF()));};
@@ -192,7 +195,7 @@ int next_object() {
   const auto id=work[at];if(id%cfg.partitions!=cfg.partition)continue;const auto retry=retries.find(id);if(retry!=retries.end()&&now<retry->second.after){++diagnostics.deferred;continue;}chosen.clear();signature.clear();reason.clear();object_weather.clear();const auto s=seeds.find(id);const auto identity=identities.find(id);const auto old=index.find(id);
   const bool removed=identity==identities.end()||s==seeds.end()||(GetSizePrefixedCAT(identity->second.data())->DECAY_DATE()&&!text(GetSizePrefixedCAT(identity->second.data())->DECAY_DATE()).empty()&&text(GetSizePrefixedCAT(identity->second.data())->DECAY_DATE())<=iso(now).substr(0,10));
   const auto* previous=old==index.end()?nullptr:GetSizePrefixedCAT(old->second.data());
-  if(removed){if(!complete_scan)continue;if(!previous||!previous->PRODUCTS()||!previous->PRODUCTS()->size())continue;reason="object removed from the configured current sources";return compose();}
+  if(removed){if(!complete_scan)continue;if(!previous||!previous->PRODUCTS()||!previous->PRODUCTS()->size())continue;reason="object removed from the configured current sources";diagnostics.add("object="+std::to_string(id)+" removal: "+reason);return compose();}
   const auto* omm=GetSizePrefixedOMM(s->second.data.data());
   const auto low=iso(s->second.epoch-216000000-86400000).substr(0,10),high=iso(s->second.epoch-216000000+30LL*86400000).substr(0,10);
   for(auto i=weather.lower_bound(low);i!=weather.end()&&i->first<=high;++i)object_weather.insert(object_weather.end(),i->second.begin(),i->second.end());

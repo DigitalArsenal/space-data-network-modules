@@ -23,6 +23,7 @@ test.before(async()=>{
   try {
     const r=await chain.invoke({methodId:'run_chain',inputs:[frame('omm','OMM',ommBytes),frame('flight_config','PCF',flightPcf),frame('fit_config','PCF',fitPcf),frame('weather','SPW',weather)]});
     assert.equal(r.statusCode,0,r.errorMessage);
+    const repeat=await chain.invoke({methodId:'run_chain',inputs:[frame('omm','OMM',ommBytes),frame('flight_config','PCF',flightPcf),frame('fit_config','PCF',fitPcf),frame('weather','SPW',weather)]});assert.equal(repeat.statusCode,0);assert.deepEqual(repeat.outputs.map(f=>Buffer.from(f.payload)),r.outputs.map(f=>Buffer.from(f.payload)),'chain output is deterministic');
     products=['elements','fallback'].map(port=>{const raw=r.outputs.find(f=>f.portId===port)?.payload;assert.ok(raw,port);const framed=Buffer.alloc(raw.length+16);Buffer.from(raw).copy(framed,16);framed.writeUInt32LE(framed.length-4,0);framed.writeUInt32LE(Buffer.from(raw).readUInt32LE(0)+12,4);framed.write('$OCM',8);return framed;});
   } finally {chain.destroy();}
   ap=await createStandaloneHarness('browser',process.env.SDNAP_WASM || new URL('../../../propagator/sdn-ap/dist/isomorphic/module.wasm',import.meta.url).pathname,{surface:'direct',enableBrowserWasiThreads:false});
@@ -34,7 +35,7 @@ const fly=async record=>{const r=await ap.invoke({methodId:'propagate',inputs:[f
 
 test('annotation retains the entire original buffer and every original root reference',async()=>{
   for(const original of products){
-    const annotated=await accepted(original), before=decode(original), after=decode(annotated);
+    const annotated=await accepted(original);assert.deepEqual(Buffer.from(await accepted(original)),Buffer.from(annotated),'annotation is deterministic');const before=decode(original), after=decode(annotated);
     assert.ok(annotated.length < original.length + 6000, 'bounded annotation overhead');
     const start=Buffer.from(annotated).indexOf(Buffer.from(original));assert.ok(start>=0,'all original byte ranges retained verbatim');
     const a=before.unpack(), b=after.unpack();
