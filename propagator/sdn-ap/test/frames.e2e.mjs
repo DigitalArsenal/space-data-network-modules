@@ -739,3 +739,4 @@ const T_START = Date.now();
   finish("allocation failures", t0);
 }
 console.log(`FRAMES PASS (${((Date.now() - T_START) / 1000).toFixed(0)} s)`);
+process.exit(0);  // the pool threads of the threaded instances end with the process

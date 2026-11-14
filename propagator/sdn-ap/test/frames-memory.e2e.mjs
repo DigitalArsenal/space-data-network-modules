@@ -4,7 +4,7 @@
 // object's grid is anchored at its own epoch. Each catalog is loaded in parts of 1,000, the frames opened with the budget SPEC 19.6 states as a rule (850 bytes for
 // each object served, 32 bytes for each series, 1 MiB), every object filled at one instant, then the windows turned over (48 minutes in steps of one).
 // Asserted: the open grows the instance by the block and no more than 4 MiB; a full fill grows it by no more than 4 MiB (a thread's caches, made once);
-// every object the entry serves is served; no row is refused for room through the turn of the windows; the slab used stays under the stated figure; on the
+// every object the entry serves is served, or answers 4 in a window of strong drag that cannot meet the bound; no row is refused for room through the turn of the windows; the slab used stays under the stated figure; on the
 // catalog the instance, the stored load of 100,000 sets with covariance (180,486,144 bytes) plus what open and the fill added here, is under 300 MB decimal;
 // the objects not served answer 2.
 // A run with another count is PARTIAL: it prints PARTIAL and exits 2, unless FRAMES_PARTIAL=1 (exit 0, still printing PARTIAL).
@@ -66,13 +66,23 @@ for (const [name, plan] of Object.entries(plans)) {
   assert.equal(st[STAT.rowsOom], 0);
   assert.ok(afterFill - afterOpen <= 4 * MIB, `a full fill grew the instance by ${afterFill - afterOpen} B (a thread's caches and a cold set)`);
   const q = f.at(t);
-  let nServed = 0;
+  // every object the entry serves is served, except an object whose window at this instant cannot meet the bound (SPEC 19.1): only a strong-drag set (one whose
+  // output steps, SPEC 19.5) answers 4 (or 3), and AP itself answers a state there for the host to use
+  let nServed = 0, nTomb = 0;
   for (let i = 0; i < pop.length; i++) {
-    if (pop[i].serves) { assert.equal(q.status[i], STATUS.served, `object ${i} (${pop[i].kind}) is served`); nServed++; }
-    else assert.equal(q.status[i], STATUS.notServedHere);
+    if (pop[i].serves) {
+      if (q.status[i] === STATUS.served) nServed++;
+      else {
+        assert.ok(pop[i].drag && [STATUS.apRefuses, STATUS.builderFails].includes(q.status[i]), `object ${i} (${pop[i].kind}) answers ${q.status[i]}: only a set of strong drag has a window that cannot meet the bound`);
+        nTomb++;
+      }
+    } else assert.equal(q.status[i], STATUS.notServedHere);
   }
-  assert.equal(nServed, served);
-  out[name] = { objects: pop.length, served, budget, afterLoad, afterOpen, afterFill, slabUsed: st[STAT.used], cells: st[STAT.cells], bytesPerCell: +((st[STAT.used] - 64) / st[STAT.cells]).toFixed(1), table: st[STAT.table], fillSeconds: +fillS.toFixed(1), tombstones: st[STAT.apTombstones] + st[STAT.builderTombstones] };
+  assert.equal(nServed + nTomb, served);
+  assert.ok(nTomb <= 0.001 * served, `${nTomb} of ${served} objects in a window that cannot meet the bound: more than 0.1 %`);
+  console.log(`${name}: ${nServed} of the ${served} objects served at the fill's instant, ${nTomb} in a window that cannot meet the bound`);
+  out[name] = { tombstonedObjects: nTomb };
+  out[name] = { ...out[name], objects: pop.length, served, budget, afterLoad, afterOpen, afterFill, slabUsed: st[STAT.used], cells: st[STAT.cells], bytesPerCell: +((st[STAT.used] - 64) / st[STAT.cells]).toFixed(1), table: st[STAT.table], fillSeconds: +fillS.toFixed(1), tombstones: st[STAT.apTombstones] + st[STAT.builderTombstones] };
   console.log(name, JSON.stringify(out[name]));
   // the windows turn over
   for (let m = 1; m <= 48; m++) f.refill(t + m * 60000, 180, 1 << 30);

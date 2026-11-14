@@ -1650,8 +1650,9 @@ A fit that flies its set on both sides of its epoch gives a different record tha
 states from the record. Those are the fits whose epoch is not the first state of the fit interval (fit_oem.inc, `epoch_placement`): an arc under
 24 hours on a block that is not eccentric (the epoch is the arc's last state, the arc before it, the held-out and carried states after it), the
 hand-over fit (OUTPUT.START_TIME without STOP_TIME: the epoch is the arc's last state, the later states held out), and the diagnostic placements of
-`sdnap_fit_epoch_diagnostic` (the middle state, the last). A fit with the default placement, the epoch at the first state, flies its set forward from
-the epoch only, and its record is the same bytes as 0.6.58's: the catalog fit to a forecast from the cutoff (0 to 120 h; 84 stored cases of seven
+`sdnap_fit_epoch_diagnostic` (the middle state, the last). A fit with the default placement takes the first state as its epoch and rounds the epoch's day fraction to 1e-8 day (the two-line
+text's resolution). Where the first state lies on that grid, the epoch is the first state, the fit flies its set forward from the epoch only, and its record is the same bytes as
+0.6.58's; where the rounded epoch falls after the first state, the fit flies its set across the epoch and its record differs as those above do. On the grid: the catalog fit to a forecast from the cutoff (0 to 120 h; 84 stored cases of seven
 classes), the conversion of a set's own SGP4 flight from 2.5 days before its epoch to 5 days after (20 sets), and, by the placement rule, the
 carried-forecast and covariance flights of such a fit. Measured on the 12 h arcs of the carried classes (`test/lib/carried.mjs`): the four AP classes
 change, the eight SGP4-XP classes do not; the largest element changes are 1.4e-5 degrees of mean anomaly (LEO 300 km), 3.7e-6 m^2/kg of AGOM (LEO
@@ -6490,8 +6491,9 @@ What gets worse:
 ### 19.6 Memory
 
 One block, allocated at open, counted, of exactly the budget given: the table (32 bytes a series, padded to 64, 3.2 MB at
-100,000) and the slab. The host's rule for the budget: 850 bytes for each object served, 32 bytes for each series and 1 MiB.
-Measured by `node test/frames-memory.e2e.mjs` (about 7 minutes, 3 GB of the host's memory; it asserts that the slab holds at most 850 bytes for each object served, that no row is refused, that every served object is served, and that the instance total is under 300 MB decimal with and without a pool; the other figures below are printed)
+100,000) and the slab; the same allocation holds 4 KiB more after the block, the cell under construction, outside the budget. An instance that never opens frames holds
+no such scratch; its static data is 576 bytes larger than 0.6.59's for the frames' state. The host's rule for the budget: 850 bytes for each object served, 32 bytes for each series and 1 MiB.
+Measured by `node test/frames-memory.e2e.mjs` (about 7 minutes, 3 GB of the host's memory; it asserts that the slab holds at most 850 bytes for each object served, that no row is refused, that every object the entry serves is served except the few whose window at the fill's instant cannot meet the bound (strong drag only, at most 0.1 % of the objects served; the test prints the count), and that the instance total is under 300 MB decimal with and without a pool; the other figures below are printed)
 at 100,000 objects, seeded sets with epochs spread over one window, loaded in parts of 1,000, filled at one instant, then the
 windows turned over (48 minutes in steps of one):
 

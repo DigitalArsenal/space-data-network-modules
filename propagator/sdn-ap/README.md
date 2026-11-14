@@ -593,7 +593,7 @@ between them, and whether the covariance is asked leave its bits unchanged (`tes
 asked after another on the other side of the epoch, inside the first bracket on either side, differed from it by up to
 0.30 mm at 500 km, 1.8 mm at e 0.25 and 714 mm for a decaying set at perigee 200 km (this checkout with the two old keys put back).
 A fit that flies its set on both sides of its epoch (an arc under 24 hours on a block that is not eccentric, the hand-over fit) gives a different
-record than 0.6.58; a fit with the default epoch placement, the epoch at its first state, the catalog fit included, gives the same bytes (SPEC 9). A
+record than 0.6.58; a fit with the default epoch placement gives the same bytes when its first state lies on the 1e-8-day grid the fit rounds the epoch to (the epoch is then the first state; the catalog fit included), and a different record where the rounded epoch falls after the first state (SPEC 9). A
 store's AP set keeps its own caches and node runs from one pool, 256 MB (the module's default; no typed configuration
 carries a budget yet), read by sdnap_cache_stats. SPEC 9 states how room is shared, the caches by part and the one
 exception: a record that carries a covariance, through `propagate`, differs by 0.39 mm.
