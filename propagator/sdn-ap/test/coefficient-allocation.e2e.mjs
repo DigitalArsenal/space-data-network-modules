@@ -6,7 +6,7 @@
 import assert from 'node:assert/strict';
 import {buildDiagnostic} from './lib/ap-diagnostic.mjs';
 import {records} from './lib/coefficient-forms.mjs';
-import {repackOcm} from './lib/ocm.mjs';
+import {repackOcm,ocmOf,seedOcm} from './lib/ocm.mjs';
 import {coefficientHarness} from './lib/coefficient-harness.mjs';
 const extra=String.raw`
 SDNAP_EXPORT("sdnap_test_fail_derivatives") void sdnap_test_fail_derivatives(int mode) { sdnap::xpt::tess::g_test_fail_derivatives=mode; }
@@ -28,7 +28,7 @@ inline MdailyDerivatives* mdaily_derivatives() {
 `).replaceAll('uint8_t form, Args&&... args) {','uint8_t form, Args&&... args) {\n  if(form==0 && sdnap::pool::g_pool_thread)g_test_saw_u=true;'),
  'epoch_store.inc':s=>s.replace('    std::sort(deferred, deferred + n);','    std::sort(deferred, deferred + n);\n    sdnap::xpt::tess::g_test_retries += n;')});
 const fixtures=records(),N=128;
-const all=Array.from({length:N*2},(_,i)=>{const r=fixtures[i<N?7:4];return {...r,bytes:repackOcm(r.bytes,t=>{t.METADATA.NORAD_CAT_ID=95000+i;t.METADATA.OBJECT_DESIGNATOR=String(95000+i);t.METADATA.INTERNATIONAL_DESIGNATOR=null;t.METADATA.OBJECT_NAME=`SYNTHETIC-${i}`;t.MEAN_ELEMENTS.BTERM=0;t.COVARIANCE_DATA=[];t.COV_SIZE=0;})};});
+const all=Array.from({length:N*2},(_,i)=>{const q=ocmOf(fixtures[i<N?7:4].bytes).MEAN_ELEMENTS;return {epochMs:Date.parse('2026-06-15T00:00:00Z'),bytes:seedOcm({epoch:'2026-06-15T00:00:00',n:q.MEAN_MOTION,e:q.ECCENTRICITY,i:q.INCLINATION,raan:q.RA_OF_ASC_NODE,argp:q.ARG_OF_PERICENTER,ma:q.MEAN_ANOMALY,bterm:0,agom:0,norad:95000+i,name:`SYNTHETIC-${i}`,tesseral:31,zonal:20})};});
 // First build all sets on the caller: thread initialization and set allocation
 // cannot be mistaken for the specific derivative-row refusal being measured.
 const m=await coefficientHarness(file,all,4),epoch=all[0].epochMs;

@@ -29,7 +29,7 @@ const roots=[];
 // central perigee lies in the selected eccentricity band. q=0 and q=+-1, +-2
 // cover the distinct nearby J2-shifted angle roots for each order.
 for(let j=1;j<=6;j++)for(let m=1;m<=70;m++)if(gcd(m,j)===1){
- const n0=m*omega/j,a=(ke/n0)**(2/3),e=1-(1+675/re)/a;if(e<.02||e>=.2)continue;
+ const n0=m*omega/j,a=(ke/n0)**(2/3),e=Math.max(.020001,1-(1+675/re)/a);if(e>=.2)continue;
  for(const q of [-2,-1,0,1,2]){
   const w=j-q;let lo=n0*.98,hi=n0*1.02;for(let k=0;k<60;k++){const mid=(lo+hi)/2;if(rate(mid,e,m,j,w)>0)hi=mid;else lo=mid;}
   const n=(lo+hi)/2,hp=((ke/n)**(2/3)*(1-e)-1)*re;if(hp>=350&&hp<1000)roots.push({m,j,w,n,e,hp});

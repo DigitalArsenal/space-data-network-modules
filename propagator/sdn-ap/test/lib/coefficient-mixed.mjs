@@ -2,10 +2,11 @@
 // TEME km and km/s, exact state/status bytes at the same UTC times.
 import assert from 'node:assert/strict';
 import {records} from './coefficient-forms.mjs';
-import {repackOcm} from './ocm.mjs';
+import {repackOcm,ocmOf,seedOcm} from './ocm.mjs';
 import {coefficientHarness} from './coefficient-harness.mjs';
 export async function mixedForms(file){
- const all=Array.from({length:68},(_,i)=>{const r=records()[i%17];return {...r,bytes:repackOcm(r.bytes,t=>{t.METADATA.NORAD_CAT_ID=90000+i;t.METADATA.OBJECT_DESIGNATOR=String(90000+i);t.METADATA.INTERNATIONAL_DESIGNATOR=null;t.METADATA.OBJECT_NAME=`SYNTHETIC-${i}`;t.COVARIANCE_DATA=[];t.COV_SIZE=0;})};});
+ const epochMs=Date.parse('2026-06-15T00:00:00Z');
+ const all=Array.from({length:68},(_,i)=>{const m=ocmOf(records()[i%17].bytes).MEAN_ELEMENTS;return {epochMs,bytes:seedOcm({epoch:'2026-06-15T00:00:00',n:m.MEAN_MOTION,e:m.ECCENTRICITY,i:m.INCLINATION,raan:m.RA_OF_ASC_NODE,argp:m.ARG_OF_PERICENTER,ma:m.MEAN_ANOMALY,bterm:m.BTERM,agom:m.AGOM,norad:90000+i,name:`SYNTHETIC-${i}`,tesseral:31,zonal:20})};});
  const times=[-3600,0,1,3600,21600,86400],epoch=all[0].epochMs,refs=[];
  for(const r of all){const m=await coefficientHarness(file,[r]);refs.push(times.map(t=>m.state(t+(epoch-r.epochMs)/1000)));await m.close();}
  let comparisons=0;
