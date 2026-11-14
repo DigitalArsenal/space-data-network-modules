@@ -8,6 +8,18 @@ import {buildDiagnostic} from './lib/ap-diagnostic.mjs';
 import {records,open,repackOcm,ocmOf} from './lib/wide-catalog.mjs';
 const file=buildDiagnostic('wide-grid-pressure',`
 static sdnap::xpt::tess::WideGrid* held_grids[34]{};
+SDNAP_EXPORT("sdnap_test_grid_wait") int sdnap_test_grid_wait(int dead){
+ using namespace sdnap::xpt::tess;
+ auto* g=wide_grid_acquire(12,0,.06123,.07,.8);if(!g)return -1;
+ g->building=true;sdnap::pool::store(&sdnap::pool::job().dead,dead);
+ const auto before=sdnap::mem::thread_failures();test_short_wait=true;const bool ok=grid_pin(g);test_short_wait=false;
+ sdnap::pool::store(&sdnap::pool::job().dead,0);g->building=false;wide_grid_drop(g);
+ return !ok && sdnap::mem::thread_failures()==before+1 ? 0 : -2;
+}
+SDNAP_EXPORT("sdnap_test_bad_grid_degree") int sdnap_test_bad_grid_degree(){
+ using namespace sdnap::xpt::tess;const auto before=sdnap::mem::thread_failures();
+ return wide_grid_acquire(1,0,.06,.06,.8)==nullptr && sdnap::mem::thread_failures()==before ? 0 : -1;
+}
 SDNAP_EXPORT("sdnap_test_grid_min") double sdnap_test_grid_min(){return sdnap::xpt::tess::kGridMinimumBytes;}
 SDNAP_EXPORT("sdnap_test_hold_grids") int sdnap_test_hold_grids(int count){
  using namespace sdnap::xpt::tess;
@@ -15,7 +27,7 @@ SDNAP_EXPORT("sdnap_test_hold_grids") int sdnap_test_hold_grids(int count){
  for(int i=0;i<count;++i){auto* g=wide_grid_acquire(12,0,.06+i*.00001,.06,.8);if(!g)return -1;
  if(!grid_pin(g)){wide_grid_drop(g);return -2;}held_grids[i]=g;}
  return 0;
-}`);
+}`,s=>s,{'wide_grid_cache.inc':s=>'inline thread_local bool test_short_wait=false;\n'+s.replace('++waits >= 16777216','++waits >= (test_short_wait ? 64u : 16777216u)')});
 const rs=records(400),days=2-.1/1440,reference=releaseReference();
 const truth=[];for(const r of rs){const h=await open(reference);try{await h.load([r]);const v=h.one(0,days);assert.equal(v.rc,0);truth.push(v.state);}finally{await h.close();}}
 const outcomes=[];
@@ -24,8 +36,10 @@ for(const threads of [0,3,14,16]){
 }
 const h=await open(file);
 try{
- const min=h.x.sdnap_test_grid_min();assert.equal(h.budget(min).rc,0);await h.load([rs[0]]);
+ assert.equal(h.x.sdnap_test_grid_wait(0),0,'bounded building wait');assert.equal(h.x.sdnap_test_grid_wait(1),0,'dead-pool cancellation');assert.equal(h.x.sdnap_test_bad_grid_degree(),0,'invalid degree is not memory exhaustion');
+ const min=h.x.sdnap_test_grid_min();assert.equal(h.budget(1).rc,0);assert.equal(h.budget().out[0],min);await h.load([rs[0]]);
  assert.equal(h.x.sdnap_test_hold_grids(34),0);assert.equal(h.one(0,days).rc,91);assert.deepEqual(h.batch(days).status,[91]);
+ new Float64Array(h.h.memory.buffer,h.q,5).set([2.26,.65,55,12,.001]);assert.equal(h.x.sdnap_field_census(h.q,0,0),-2,'census resource shortage');
  assert.equal(h.x.sdnap_test_hold_grids(0),0);assert.deepEqual(h.one(0,days),{rc:0,state:truth[0]});
 }finally{await h.close();}
 const template=ocmOf(fs.readFileSync(new URL('./fixtures/ap-fit-0.6.42.ocm',import.meta.url)));
