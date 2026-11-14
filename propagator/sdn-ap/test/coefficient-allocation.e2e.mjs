@@ -15,7 +15,7 @@ SDNAP_EXPORT("sdnap_test_u_transitions") int sdnap_test_u_transitions(){return s
 SDNAP_EXPORT("sdnap_test_retries") int sdnap_test_retries(){return sdnap::xpt::tess::g_test_retries;}
 `;
 const file=process.env.COEFFICIENT_ALLOCATION_WASM??buildDiagnostic('coefficient-allocation',extra,s=>s.replace('    if (!s.pooled ||','    if (true || !s.pooled ||'),{
- 'sdn_ap_module.cpp':s=>'namespace sdnap::pool { extern thread_local bool g_pool_thread; }\n'+s,
+ 'sdn_ap_module.cpp':s=>'namespace sdnap::pool { extern thread_local bool g_pool_thread; } namespace sdnap::xpt { extern thread_local int g_alloc_refused; }\n'+s,
  'tesseral.inc':s=>s.replace('inline MdailyDerivatives* mdaily_derivatives() {',String.raw`
 inline int g_test_fail_derivatives=0,g_test_derivative_failures=0,g_test_u_transitions=0,g_test_retries=0;
 inline thread_local bool g_test_saw_u=false;
@@ -23,7 +23,7 @@ inline MdailyDerivatives* mdaily_derivatives() {
  if(g_test_fail_derivatives && (g_test_fail_derivatives==2 || sdnap::pool::g_pool_thread)){
   __atomic_fetch_add(&g_test_derivative_failures,1,__ATOMIC_RELAXED);
   if(g_test_saw_u)__atomic_fetch_add(&g_test_u_transitions,1,__ATOMIC_RELAXED);
-  sdnap::mem::note_failure(sizeof(MdailyDerivatives));return nullptr;
+  sdnap::mem::note_failure(sizeof(MdailyDerivatives));if(sdnap::pool::g_pool_thread)sdnap::xpt::g_alloc_refused=1;return nullptr;
  }
 `).replaceAll('uint8_t form, Args&&... args) {','uint8_t form, Args&&... args) {\n  if(form==0 && sdnap::pool::g_pool_thread)g_test_saw_u=true;'),
  'epoch_store.inc':s=>s.replace('    std::sort(deferred, deferred + n);','    std::sort(deferred, deferred + n);\n    sdnap::xpt::tess::g_test_retries += n;')});
