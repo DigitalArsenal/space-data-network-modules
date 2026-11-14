@@ -29,7 +29,7 @@ if(process.argv.includes('--control-only'))process.exit(0);
 const dependencies=new Map([[control.manifest.pluginId,control]]);
 const chain=await import('./build.mjs');
 const {compileCatalogComposer}=await import('../../analysis/catalog-composer/build.mjs');
-const composer=await compileCatalogComposer();
+const composer=await compileCatalogComposer({outputPath:path.join(out,'catalog-composer/dist/isomorphic/module.wasm')});
 for(const [manifest,result,folder] of [[chain.manifest,chain.built,'flows/catalog-builder'],[composer.manifest,composer,'analysis/catalog-composer']])dependencies.set(manifest.pluginId,dependency(manifest,result,path.join(repo,folder)));
 for(const [id,entry]of await resolveFlowDependencies({depsPath:path.join(repo,'analysis/gp-error-model')}))if(!dependencies.has(id))dependencies.set(id,entry);
 for(const [folder,file,inline] of [['hostcap/flatsql-query','flatsql_query_module.cpp',['FSO','FSB','QRP']],['hostcap/storage-ingest','storage_ingest_module.cpp',[]]]){

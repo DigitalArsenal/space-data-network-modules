@@ -14,7 +14,7 @@ import { bundleXmt, generateSdsHeaders } from './sds-headers.mjs';
 const root = fileURLToPath(new URL('.', import.meta.url));
 const repo = path.resolve(root, '../..');
 const manifest = JSON.parse(await fs.readFile(path.join(root, 'plugin-manifest.json'), 'utf8'));
-export async function compileCatalogComposer() {
+export async function compileCatalogComposer({outputPath = path.join(root, 'dist/isomorphic/module.wasm')} = {}) {
 // The SDS headers are generated from the standards' schema files, every family the module reads or writes at one
 // release, with internal linkage (scripts/lib/sds-cpp-headers.mjs). $XMT (with the $OIL, $CVR, $MNV and $PRW it
 // includes) carries the recipes, requests and reports; SPACE_DATA_STANDARDS_ROOT names the standards tree that holds it.
@@ -34,7 +34,6 @@ const json = await fs.readFile(path.join(repo, 'propagator/sgp4/src/cpp/include/
 // (records, maneuvers, selection, identity, and the method that calls them).
 const implementation = (await Promise.all(['catalog_composer.cpp', 'catalog_match.cpp', 'epoch_fit.cpp', 'integrator_records.cpp', 'integrator_maneuvers.cpp',
   'integrator_selection.cpp', 'integrator_identity.cpp', 'catalog_integrator.cpp', 'replace_products.cpp'].map((file) => fs.readFile(path.join(root, 'src', file), 'utf8')))).join('\n\n');
-const outputPath = path.join(root, 'dist/isomorphic/module.wasm');
 await fs.mkdir(path.dirname(outputPath), { recursive: true });
 const result = await compileModuleFromSource({
   manifest, sourceCode: [...headers, json, implementation].join('\n\n'),
