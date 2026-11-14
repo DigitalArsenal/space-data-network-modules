@@ -199,8 +199,7 @@ trust and signed-out reads are excluded.
 
 `control.cpp::transient_refusal` is the classification boundary. Only
 `out-of-memory`, `pool-dead`, `output-failed`, `output`, and `host-failed` are transient:
-resource availability or delivery can change without a different seed. They
-publish no product or selection. All other codes are final for the input
+resource availability or delivery can change without a different seed. A transient fit refusal can select its SGP4 fallback while retaining the retry marker; output/storage failures preserve the prior committed selection. All other codes are final for the input
 signature, including unknown codes; changing the recipe revision permits a
 retry after a software correction. No attempt time is included in an orbit.
 
