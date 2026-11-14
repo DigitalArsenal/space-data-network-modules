@@ -302,4 +302,4 @@ import {verifyStateRetention} from './state-retention.mjs';
 for(const mode of ['absent','poison','final','prepared','suspect'])test('state retention '+mode,()=>verifyStateRetention(mode));
 
 import {verifyFifoRegression} from './fifo-regressions.mjs';
-for(const mode of ['writes','protected','poison','fair'])test('FIFO regression '+mode,()=>verifyFifoRegression(mode));
+for(const mode of ['writes','protected','poison','fair','spare','spare-built','replay','success-removal'])test('FIFO regression '+mode,()=>verifyFifoRegression(mode));

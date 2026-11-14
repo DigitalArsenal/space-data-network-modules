@@ -157,7 +157,7 @@
       "dependencyId": "com.digitalarsenal.analysis.catalog-composer",
       "pluginId": "com.digitalarsenal.analysis.catalog-composer",
       "version": "0.7.0",
-      "sha256": "20618ffb28908878b98ed9ee3620063d993fe93d9f063304d974d8b6e60b6fae",
+      "sha256": "ce5acac529623e0097bca46a46c703c93998a4b71209a710edcb26c0ffe127fa",
       "dispatchModel": "linked-direct",
       "artifactPath": null,
       "publisher": null,
