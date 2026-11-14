@@ -556,12 +556,7 @@ struct MdailyThreadDerivatives {
   ~MdailyThreadDerivatives() { delete rows; }
 };
 inline thread_local MdailyThreadDerivatives g_mdaily_thread_derivatives{};
-inline MdailyDerivatives* mdaily_derivatives() {
-  if (g_mdaily_set_derivatives != nullptr) return g_mdaily_set_derivatives;
-  auto& rows = g_mdaily_thread_derivatives.rows;
-  if (rows == nullptr) rows = sdnap::mem::counted(new (std::nothrow) MdailyDerivatives{});
-  return rows;
-}
+
 #ifdef __wasm_simd128__
 /// An allocation failure uses the double rows with the same float rounding.
 inline v128_t mdaily_derivative_vector(const float* rows, const double pair[20][2], int col, int idx, int degree) {
@@ -575,6 +570,15 @@ inline thread_local MdailyEvalCache g_mdaily_eval_cache{};
 /// The set being flown keeps its own (xp_theory.inc SetCaches); nullptr: the thread's.
 inline thread_local MdailyEvalCache* g_mdaily_set_cache = nullptr;
 inline MdailyEvalCache& mdaily_eval_cache() { return g_mdaily_set_cache != nullptr ? *g_mdaily_set_cache : g_mdaily_eval_cache; }
+inline MdailyDerivatives* mdaily_derivatives() {
+  if (g_mdaily_set_derivatives != nullptr) return g_mdaily_set_derivatives;
+  auto& rows = g_mdaily_thread_derivatives.rows;
+  if (rows == nullptr) {
+    rows = sdnap::mem::counted(new (std::nothrow) MdailyDerivatives{});
+    if (rows != nullptr) g_mdaily_eval_cache.keys_valid = false;
+  }
+  return rows;
+}
 
 /// The m-daily corrections in the six-component set (n-dot, e-dot, i-dot,
 /// e varpi, sin i Omega, lambda order), first order, at the mean elements k;

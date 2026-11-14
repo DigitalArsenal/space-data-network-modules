@@ -1,7 +1,7 @@
 // Instantiated for each coefficient form. The preprocessor removes form selection from the coefficient loops.
 // U retains the original bake levels; A adds state derivatives; C and CM share coarse levels; R evaluates resonances directly.
 
-inline int64_t sp_part_key(double q, int n) {
+inline int64_t coefficient_part_key(double q, int n) {
   int k = static_cast<int>(std::floor(q * n));
   k = k < 0 ? 0 : (k >= n ? n - 1 : k);
 
@@ -13,7 +13,7 @@ return static_cast<int64_t>(n) * 64 + k;
 
 }
 
-inline int64_t sp_anchor_point(const SpAnchor& an, double t, double tol_a, double tol_e, bool e_sq, double tol_c, double& a_c,
+inline int64_t coefficient_anchor_point(const SpAnchor& an, double t, double tol_a, double tol_e, bool e_sq, double tol_c, double& a_c,
                                double& e_c, double& c_c) {
 
 
@@ -44,7 +44,7 @@ n = need < 1.0 ? 1 : (need >= 64.0 ? 64 : static_cast<int>(std::ceil(need)));
 
     if (L.count < SpAnchorLevels::kLevels) L.lv[L.count++] = SpAnchorLevels::Level{tol_a, tol_e, tol_c, e_sq, n};
   }
-  const int64_t key = sp_part_key((t - an.tlo) / an.h, n);
+  const int64_t key = coefficient_part_key((t - an.tlo) / an.h, n);
 
 #if SDNAP_COEFFICIENT_FORM == 4
 const int k = static_cast<int>(key - (static_cast<int64_t>(n) << 16));
@@ -71,9 +71,9 @@ const int k = static_cast<int>(key - static_cast<int64_t>(n) * 64);
     double e_f, c_f, e_p, c_p;
 
 #if SDNAP_COEFFICIENT_FORM == 4
-kfa = sp_anchor_point(g_sp_anchor, t, 7.5e-6, 5e-7, true, 0.0, a_full, e_f, c_f);
+kfa = coefficient_anchor_point(g_sp_anchor, t, 7.5e-6, 5e-7, true, 0.0, a_full, e_f, c_f);
 #else
-kfa = sp_anchor_point(g_sp_anchor, t, 3e-5, 2e-6, true, 0.0, a_full, e_f, c_f);
+kfa = coefficient_anchor_point(g_sp_anchor, t, 3e-5, 2e-6, true, 0.0, a_full, e_f, c_f);
 #endif
 
     e2_full = e_f * e_f;
@@ -81,7 +81,7 @@ kfa = sp_anchor_point(g_sp_anchor, t, 3e-5, 2e-6, true, 0.0, a_full, e_f, c_f);
 #if SDNAP_COEFFICIENT_FORM >= 2
 kpa = kfa; a_part = a_full;
 #else
-kpa = sp_anchor_point(g_sp_anchor, t, 2e-6, 1e30, false, 0.0, a_part, e_p, c_p);
+kpa = coefficient_anchor_point(g_sp_anchor, t, 2e-6, 1e30, false, 0.0, a_part, e_p, c_p);
 #endif
 
   } else {
@@ -270,7 +270,7 @@ if (md != nullptr) {
     return false;
   const double q = (t - an.tlo) / an.h;
   if (!(q >= 0.0 && q <= 1.0)) return false;
-  return sp_part_key(q, mc.n_full) == mc.kf_a && mc.kf_e == 0 && sp_part_key(q, mc.n_part) == mc.kp_a;
+  return coefficient_part_key(q, mc.n_full) == mc.kf_a && mc.kf_e == 0 && coefficient_part_key(q, mc.n_part) == mc.kp_a;
 }
 
 [[gnu::always_inline]] inline void mdaily_six(
@@ -918,19 +918,19 @@ inline void sp_six_deriv(const SpEvalCache& sc, float de_f32, double a, double e
   if (anchored) {
 
 #if SDNAP_COEFFICIENT_FORM == 4
-kba = sp_anchor_point(an, t, 7.5e-6, 5e-6, true, 0.25 * ctol, a_b, e_b, ci_b);
+kba = coefficient_anchor_point(an, t, 7.5e-6, 5e-6, true, 0.25 * ctol, a_b, e_b, ci_b);
 #else
-kba = sp_anchor_point(an, t, 3e-5, 2e-5, true, ctol, a_b, e_b, ci_b);
+kba = coefficient_anchor_point(an, t, 3e-5, 2e-5, true, ctol, a_b, e_b, ci_b);
 #endif
 
 
 #if SDNAP_COEFFICIENT_FORM >= 2
 kaa = kba; a_ae = a_b; e_ae = e_b;
 #else
-kaa = sp_anchor_point(an, t, 1.8e-6, 2e-5, false, 0.0, a_ae, e_ae, c_ae);
+kaa = coefficient_anchor_point(an, t, 1.8e-6, 2e-5, false, 0.0, a_ae, e_ae, c_ae);
 #endif
 
-    if (!derivative && sc.n_pe_blks > 0) kpe = sp_anchor_point(an, t, 1e30, sc.de_pe_thresh, false, 0.0, a_pe, e_pe, c_pe);
+    if (!derivative && sc.n_pe_blks > 0) kpe = coefficient_anchor_point(an, t, 1e30, sc.de_pe_thresh, false, 0.0, a_pe, e_pe, c_pe);
   } else {
     kba = sp_cell_rel(a, 3e-5, a_b);
     kbe = sp_cell_e(e, 2.5e-4, 2e-5, e_b);
@@ -956,9 +956,9 @@ kaa = sp_cell_rel(a, 1.8e-6, a_ae);
     if (anchored) {
 
 #if SDNAP_COEFFICIENT_FORM == 4
-kra = sp_anchor_point(an, t, 5e-8, 2.5e-6, true, 2.5e-7, a_r, e_r, ci_r);
+kra = coefficient_anchor_point(an, t, 5e-8, 2.5e-6, true, 2.5e-7, a_r, e_r, ci_r);
 #else
-kra = sp_anchor_point(an, t, 2e-7, 1e-5, true, 1e-6, a_r, e_r, ci_r);
+kra = coefficient_anchor_point(an, t, 2e-7, 1e-5, true, 1e-6, a_r, e_r, ci_r);
 #endif
 
     } else {
@@ -1041,14 +1041,14 @@ res = pe || kra != sc.kr_a || krc != sc.kr_c || kre != sc.kr_e;
     return false;
   const double q = (t - an.tlo) / an.h;
   if (!(q >= 0.0 && q <= 1.0)) return false;
-  if (sp_part_key(q, sc.n_base) != sc.kb_a || sc.kb_e != 0 || sc.kb_c != 0 || sp_part_key(q, sc.n_ae) != sc.kae_a || sc.kae_e != 0)
+  if (coefficient_part_key(q, sc.n_base) != sc.kb_a || sc.kb_e != 0 || sc.kb_c != 0 || coefficient_part_key(q, sc.n_ae) != sc.kae_a || sc.kae_e != 0)
     return false;
   if (!derivative && sc.n_pe_blks > 0) {
-    if (sc.n_pe == 0 || sp_part_key(q, sc.n_pe) != sc.kpe) return false;
+    if (sc.n_pe == 0 || coefficient_part_key(q, sc.n_pe) != sc.kpe) return false;
   } else if (sc.kpe != kSpPeAtBake) {
     return false;
   }
-  return sc.n_res_blks == 0 || (sp_part_key(q, sc.n_res) == sc.kr_a && sc.kr_c == 0 && sc.kr_e == 0);
+  return sc.n_res_blks == 0 || (coefficient_part_key(q, sc.n_res) == sc.kr_a && sc.kr_c == 0 && sc.kr_e == 0);
 }
 
 #ifdef __wasm_simd128__
