@@ -83,7 +83,7 @@ std::map<std::string,Poison> poisons;
 std::set<std::string> poison_seen;
 Bytes poison_updates;
 struct Retry {unsigned attempts=0;int64_t after=0;std::string reason;};
-struct Attempt {Bytes data;std::string signature;unsigned count=0;int64_t time=0;bool final=false;uint64_t sequence=0;std::string product_batch;};
+struct Attempt {Bytes data;std::string signature;unsigned count=0;int64_t time=0;bool final=false;uint64_t sequence=0;std::string product_batch;size_t read_bytes=0;};
 std::map<uint32_t,Attempt> attempts;
 std::string attempt_detail(const Attempt& a){return text(GetSizePrefixedNEV(a.data.data())->EVENTS()->Get(0)->DETAIL());}
 void ready_or_suspect(Attempt& a,bool suspect){
@@ -110,14 +110,14 @@ bool protected_attempt(uint32_t id,uint64_t latest){
   (a.sequence==latest&&attempt_detail(a).rfind("in progress ",0)==0)||
   std::any_of(staged.begin(),staged.end(),[&](const Selection& item){return item.id==id;});
 }
-void admit_state(){
- while(attempts.size()+poisons.size()>=state_limit){
+void trim_state(){
+ while(attempts.size()+poisons.size()>state_limit){
   uint64_t latest=0;for(const auto& item:attempts)latest=std::max(latest,item.second.sequence);
   auto victim=attempts.end();auto poison=poisons.end();uint64_t oldest=UINT64_MAX;
   for(auto i=attempts.begin();i!=attempts.end();++i)if(i->second.sequence<oldest&&!protected_attempt(i->first,latest)){oldest=i->second.sequence;victim=i;}
   for(auto i=poisons.begin();i!=poisons.end();++i)if(i->second.sequence<oldest){oldest=i->second.sequence;poison=i;}
   assert(victim!=attempts.end()||poison!=poisons.end());
-  if(poison!=poisons.end())poisons.erase(poison);else attempts.erase(victim);
+  if(poison!=poisons.end())poisons.erase(poison);else {retained-=victim->second.read_bytes;attempts.erase(victim);}
   ++diagnostics.evicted;state_evicted=true;
  }
 }
@@ -178,8 +178,8 @@ bool retain(const uint8_t* p,size_t n) {
    if(subject.rfind("catalog-invalid/",0)==0){
     const auto detail=text(e->DETAIL());const auto seq_at=detail.find("; sequence=");uint64_t seq=0;
     if(seq_at!=std::string::npos){char* end=nullptr;seq=std::strtoull(detail.c_str()+seq_at+11,&end,10);if(end==detail.c_str()+seq_at+11||*end!=';')return false;}
-    state_sequence=std::max(state_sequence,seq);if(!poisons.count(subject))admit_state();
-    auto& item=poisons[subject];if(seq>item.sequence||(seq==item.sequence&&e->COUNT()>item.count))item={unsigned(std::min<uint64_t>(e->COUNT(),3)),detail.substr(0,seq_at),seq};continue;
+    state_sequence=std::max(state_sequence,seq);
+    auto& item=poisons[subject];if(seq>item.sequence||(seq==item.sequence&&e->COUNT()>item.count))item={unsigned(std::min<uint64_t>(e->COUNT(),3)),detail.substr(0,seq_at),seq};trim_state();continue;
    }
    unsigned id=0;char tail=0;if(std::sscanf(subject.c_str(),"catalog-object/%u%c",&id,&tail)!=1||!id)return false;if(id%cfg.partitions!=cfg.partition)continue;
    const auto detail=text(e->DETAIL());const auto first=detail.find("input="),last=detail.find(';',first),seq_at=detail.find("sequence=");
@@ -187,14 +187,13 @@ bool retain(const uint8_t* p,size_t n) {
    uint64_t seq=0;if(seq_at!=std::string::npos){char* end=nullptr;seq=std::strtoull(detail.c_str()+seq_at+9,&end,10);if(end==detail.c_str()+seq_at+9||*end!=';')return false;}state_sequence=std::max(state_sequence,seq);
    auto old=attempts.find(id);
    if(old==attempts.end()||seq>old->second.sequence||(seq==old->second.sequence&&e->TIME_MS()>old->second.time)){
-    if(old==attempts.end())admit_state();
     NEVT single;single.NODE_ID=cfg.provider;single.EVENTS.emplace_back(e->UnPack());flatbuffers::FlatBufferBuilder b;FinishSizePrefixedNEVBuffer(b,NEV::Pack(b,&single));
     Bytes one(b.GetBufferPointer(),b.GetBufferPointer()+b.GetSize());const auto size=old==attempts.end()?0:old->second.data.size();
     if(retained-(size?size+256:0)+one.size()+256>cfg.max_bytes){state_complete=false;continue;}
     retained=retained-(size?size+256:0)+one.size()+256;
     const auto batch_at=detail.find("product-batch="),batch_end=detail.find(';',batch_at);
     const auto batch=batch_at==std::string::npos||batch_end==std::string::npos?std::string():detail.substr(batch_at+14,batch_end-batch_at-14);
-    attempts[id]={std::move(one),detail.substr(first+6,last-first-6),unsigned(std::min<uint64_t>(e->COUNT(),8)),e->TIME_MS(),detail.rfind("final ",0)==0,seq,batch};
+    attempts[id]={std::move(one),detail.substr(first+6,last-first-6),unsigned(std::min<uint64_t>(e->COUNT(),8)),e->TIME_MS(),detail.rfind("final ",0)==0,seq,batch};attempts.at(id).read_bytes=attempts.at(id).data.size()+256;trim_state();
    }
   }
  } else if(scan.schema=="OMM") {
@@ -246,7 +245,7 @@ int page(const plugin_input_frame_t* f) {
   ++diagnostics.invalid;const auto source=scan.schema+"/"+scan.provider+"/"+scan.name;const auto key="catalog-invalid/"+digest(Bytes(p+off,p+off+len))+"/"+digest(Bytes(source.begin(),source.end()));
   unsigned count=poisons.count(key)?poisons[key].count:0;
   if(count==0)diagnostics.add(source+" invalid record-sha256="+digest(Bytes(p+off,p+off+len)),"invalid");
-  if(count<3&&poison_seen.insert(key).second){if(!poisons.count(key))admit_state();++count;poisons[key]={count,source,++state_sequence};
+  if(count<3&&poison_seen.insert(key).second){++count;poisons[key]={count,source,++state_sequence};trim_state();
    NEVT log;log.NODE_ID=cfg.provider;log.GENERATED_AT_MS=now;auto e=std::make_unique<NEVEventT>();e->TIME_MS=now;e->KIND=nevEventKind::Warning;e->SUBJECT=key;e->COUNT=count;e->DETAIL=poison_detail(poisons.at(key));log.EVENTS.push_back(std::move(e));
    flatbuffers::FlatBufferBuilder b;FinishSizePrefixedNEVBuffer(b,NEV::Pack(b,&log));poison_updates.insert(poison_updates.end(),b.GetBufferPointer(),b.GetBufferPointer()+b.GetSize());}
   if(count<3){if(scan.schema=="OMM")seed_complete=false;if(scan.schema=="CAT"&&scan.provider==cfg.identity_provider&&scan.name==cfg.identity_source)identity_complete=false;}
@@ -364,7 +363,6 @@ int complete_reads(){
 int save_attempt(bool final,const std::string& failure) {
  const auto id=work[at];const auto old=attempts.find(id);const bool starting=failure.empty();
  if(starting&&!staged.empty()&&old!=attempts.end()&&attempt_detail(old->second).find("instance-interrupted;")!=std::string::npos){++diagnostics.deferred;diagnostics.add("staged selections committed before interrupted object retry");return finish();}
- if(old==attempts.end())admit_state();
  const unsigned count=old!=attempts.end()&&old->second.signature==signature?std::min(old->second.count+(starting?1:0),8u):1;
  NEVT log;log.NODE_ID=cfg.provider;log.GENERATED_AT_MS=now;
  auto e=std::make_unique<NEVEventT>();e->TIME_MS=now;e->KIND=starting?nevEventKind::Other:nevEventKind::Failure;
@@ -373,7 +371,8 @@ int save_attempt(bool final,const std::string& failure) {
  const auto batch=old==attempts.end()?std::string():old->second.product_batch;
  if(!batch.empty())log.EVENTS[0]->DETAIL+=" product-batch="+batch+";";
  b.Clear();FinishSizePrefixedNEVBuffer(b,NEV::Pack(b,&log));
- attempts[id]={{b.GetBufferPointer(),b.GetBufferPointer()+b.GetSize()},signature,count,now,final,state_sequence,batch};
+ const size_t read_bytes=old==attempts.end()?0:old->second.read_bytes;
+ attempts[id]={{b.GetBufferPointer(),b.GetBufferPointer()+b.GetSize()},signature,count,now,final,state_sequence,batch,read_bytes};trim_state();
  return persist_events(starting?Phase::AttemptStored:Phase::FailureStored);
 }
 // Match the numerical fields and ingestion guards read by ingest_omm.

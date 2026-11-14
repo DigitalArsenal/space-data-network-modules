@@ -72,13 +72,18 @@ export async function verifyStateRetention(mode){
    all.forEach((e,i)=>e.DETAIL=e.DETAIL.replace(/sequence=\d+;/,'sequence='+(4096-i)+';'));snapshot(all);
    seeds.unshift(pack(Object.assign(new O.OMMT(),seed,{NORAD_CAT_ID:newcomer}),'OMM'));identities.unshift(pack(Object.assign(new C.CATT(),{NORAD_CAT_ID:newcomer,OBJECT_NAME:'SYNTHETIC'}),'CAT'));
   }else if(mode==='prepared'){
-   await tick(now,true);prepared=events();assert.equal(prepared.length,1);assert.match(prepared[0].DETAIL,/product-batch=catalog-[a-f0-9]{64}; prepared-generation;/);
+   await tick(now,true);prepared=events();prepared[0].DETAIL=prepared[0].DETAIL.replace(/^in progress /,'ready ');assert.equal(prepared.length,1);assert.match(prepared[0].DETAIL,/product-batch=catalog-[a-f0-9]{64}; prepared-generation;/);
    const entries=poisonEntries(4095);oldest=entries[0].SUBJECT;snapshot([...prepared,...entries]);
    seeds.unshift(pack(Object.assign(new O.OMMT(),seed,{NORAD_CAT_ID:newcomer}),'OMM'));identities.unshift(pack(Object.assign(new C.CATT(),{NORAD_CAT_ID:newcomer,OBJECT_NAME:'SYNTHETIC'}),'CAT'));
   }else{
    const all=poisonEntries(4096);oldest=all[0].SUBJECT;
    if(mode==='absent')all.forEach((e,i)=>{e.SUBJECT='catalog-object/'+(4000000+i);e.DETAIL='retry input=absent; sequence='+(i+1)+';';});
    snapshot(all);
+  }
+  if(mode==='poison'){
+   // Overlapping histories can deliver old events after the newest snapshot.
+   const stale=poisonEntries(2);stale.forEach((e,i)=>{e.SUBJECT+='-stale';e.DETAIL=e.DETAIL.replace(/sequence=\d+;/,'sequence='+(i+1)+';');});
+   const current=state.slice();snapshot(stale);state=[...current,...state];
   }
   const runs=[];history=[];
   for(let i=0;i<3;i++){control.destroy();control=await create();runs.push(await tick(now+1000+i));}
@@ -98,7 +103,11 @@ export async function verifyStateRetention(mode){
      const firstSnapshot=history.map(row=>N.NEV.getSizePrefixedRootAsNEV(new fb.ByteBuffer(row)).unpack().EVENTS).find(all=>all.some(e=>e.SUBJECT==='catalog-object/'+newcomer));assert.ok(firstSnapshot);
      assert.ok(firstSnapshot.some(e=>e.SUBJECT===prepared[0].SUBJECT&&e.DETAIL.includes(prepared[0].DETAIL.match(/product-batch=[^;]+;/)[0])),'old prepared recovery reference survives eviction');
      assert.equal(events().filter(e=>e.SUBJECT.startsWith('catalog-invalid/')).length,4094,'only one older poison was evicted');
-    }else assert.equal(events().length,4095,'one old poison is evicted for one new object');
+    }else {
+     assert.equal(events().length,4095,'one old poison is evicted for one new object');
+     assert.ok(events().some(e=>e.SUBJECT===poisonEntries(2)[1].SUBJECT),'late stale events cannot displace newer entries');
+     assert.ok(!events().some(e=>e.SUBJECT.endsWith('-stale')));assert.match(runs[0].notice.reason,/evicted=3/);
+    }
    }
   }
  }finally{control.destroy();composer.destroy();}
