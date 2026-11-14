@@ -1202,7 +1202,15 @@ static int propagate_epochs_call(void) {
       std::vector<double> kw, kf;
       size_t past_n = 0;
       size_t refused = 0;
-      std::string statuses;
+      // Bounded refusal detail; no allocation per failed epoch.
+      char statuses[1024] = {};
+      size_t status_count = 0, status_used = 0;
+      auto add_status = [&](size_t index, int32_t code, const char* name) {
+        if (status_count++ >= 8) return;
+        const int n = std::snprintf(statuses + status_used, sizeof statuses - status_used,
+            "%s%zu:%d:%s", status_used ? "," : "", index, static_cast<int>(code), name);
+        if (n > 0) status_used += std::min(static_cast<size_t>(n), sizeof statuses - status_used - 1);
+      };
       double cross_jd[2] = {0.0, 0.0};
       bool cross_back = false;
       for (size_t k = 0; k < tw.size(); ++k) {
@@ -1238,8 +1246,7 @@ static int propagate_epochs_call(void) {
                 mem::failures() - mem::g_call_mark, static_cast<unsigned long long>(__atomic_load_n(&mem::g_largest_failed, __ATOMIC_RELAXED)));
           }
           remember_error(name, why);
-          if (!statuses.empty()) statuses += ",";
-          statuses += std::to_string(k) + ":" + std::to_string(e) + ":" + name;
+          add_status(k, e, name);
           continue;
         }
         kw.push_back(tw[k]);
@@ -1289,7 +1296,7 @@ static int propagate_epochs_call(void) {
           std::snprintf(why, sizeof why, "NORAD %u decays at %s (SPEC 16.25): every requested epoch is past it.", s.norad, cross_text);
           remember_error(name, why);
           refused = past_n;
-          statuses = name;
+          add_status(0, kPropDecayed, name);
         }
       }
       // A refused series has a status block with no state or covariance lines.
@@ -1341,14 +1348,18 @@ static int propagate_epochs_call(void) {
         std::snprintf(note, sizeof note, "decayed:%s; %zu epochs after it refused", cross_text, past_n);
         comment = comment.empty() ? std::string(note) : comment + ". " + note;
       }
+      char* refused_comment = nullptr;
       if (refused) {
-        const std::string status = "status=refused; refused=" + std::to_string(refused) +
-            (statuses.empty() ? "" : "; request-status=" + statuses);
-        comment = comment.empty() ? status : comment + ". " + status;
+        const size_t size = comment.size() + sizeof statuses + 128;
+        refused_comment = static_cast<char*>(mem::malloc(size));
+        if (!refused_comment) { mem::refuse_if_out_of_memory(); return 3; }
+        std::snprintf(refused_comment, size, "%s%sstatus=refused; refused=%zu; request-status=%s%s",
+            comment.c_str(), comment.empty() ? "" : ". ", refused, statuses, status_count > 8 ? "; detail-truncated" : "");
       }
-      blocks.push_back(CreateephemerisDataBlockDirect(fbb, comment.empty() ? nullptr : comment.c_str(), object, "EARTH", frame, nullptr, cov_frame, timingStandard_UTC, start,
+      blocks.push_back(CreateephemerisDataBlockDirect(fbb, refused_comment ? refused_comment : comment.empty() ? nullptr : comment.c_str(), object, "EARTH", frame, nullptr, cov_frame, timingStandard_UTC, start,
                                                       limit_start, limit_stop,
                                                       stop, nullptr, 0, g.explicit_times ? 0.0 : g.step, 6, nullptr, &lines, with_cov ? &cov_lines : nullptr));
+      std::free(refused_comment);
     }
     const auto root = CreateOEMDirect(fbb, nullptr, 3.0, nullptr, s.originator.empty() ? "SDN" : s.originator.c_str(), &blocks);
     FinishOEMBuffer(fbb, root);

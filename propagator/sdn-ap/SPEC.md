@@ -6649,15 +6649,18 @@ What a host that draws frames from a running clock needs, and what it gets.
 
 ### Framed epoch propagation status
 
-`propagate_epochs` emits an OEM for each object attempted. Each block COMMENT begins with
-`status=ok`, `status=partial`, or `status=refused`, followed by `refused=N`. When N is nonzero,
-`request-status=` lists comma-separated `index:code` pairs in original zero-based request order;
-a counted allocation failure adds `:out-of-memory` to its pair. Successful states remain in their
-requested order; refused states have no numeric state line. A completely refused object has an
-empty state list and retains the requested time span. Input validation and output transport failure
-remain method-level errors. Propagation refusals return method status 3 with `partial-ephemeris`,
-or `out-of-memory` if an allocation failed, after all object series have been attempted. The method
-is serial; epoch-store state-only batch dispatch supplies pool parallelism.
+`propagate_epochs` emits an OEM for each object attempted. Successful blocks retain their
+state lines, notes and SOURCES grammar. A decay crossing with answered epochs remains a
+successful block with its decay note. A fully decayed series retains its named `decayed:<time>`
+error. Any refused object emits an empty state list and a COMMENT note `status=refused;
+refused=N; request-status=...`. The detail lists at most eight original zero-based request
+indices, codes and named reasons; `detail-truncated` marks omitted entries. Refusal notes
+follow existing notes. The bounded comment buffer uses the counted allocator.
+
+After attempting all objects, the method returns status 3 with the first failing object's
+named error and message, including `weather-rows-short:<day>` or `out-of-memory`.
+Input validation and output transport failure remain method-level errors. State-only batch
+dispatch supplies pool parallelism; this method is serial.
 
 ### Epoch resource retry status
 
