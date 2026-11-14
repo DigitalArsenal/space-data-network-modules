@@ -77,7 +77,7 @@
       "dependencyId": "com.digitalarsenal.flows.catalog-builder.control",
       "pluginId": "com.digitalarsenal.flows.catalog-builder.control",
       "version": "0.1.0",
-      "sha256": "902d20717b70cee07378f1b2197956943e7b5461568429533e96737ee09254b3",
+      "sha256": "7da90e2317d158d6e50414f496299382a7153a9ee2120bd20a319faaf2b9b526",
       "dispatchModel": "linked-direct",
       "artifactPath": null,
       "publisher": null,
