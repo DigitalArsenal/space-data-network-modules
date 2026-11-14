@@ -35,6 +35,7 @@ const fly=async record=>{const r=await ap.invoke({methodId:'propagate',inputs:[f
 test('annotation retains the entire original buffer and every original root reference',async()=>{
   for(const original of products){
     const annotated=await accepted(original), before=decode(original), after=decode(annotated);
+    assert.ok(annotated.length < original.length + 6000, 'bounded annotation overhead');
     const start=Buffer.from(annotated).indexOf(Buffer.from(original));assert.ok(start>=0,'all original byte ranges retained verbatim');
     const a=before.unpack(), b=after.unpack();
     for(const key of ['COVARIANCE_BLOCKS','COV_REALISM','COV_CALIBRATION']){delete a[key];delete b[key];}
@@ -64,7 +65,7 @@ test('AP states and formal covariance rows remain bit identical at ten epochs',a
   assert.ok(labels.every(l=>l.CALIBRATION!==O.covarianceCalibration.Calibrated));
 });
 
-test('seven full matrices use seed epoch and model midpoints and agree with the established population method',async()=>{
+test('seven symmetric matrices use seed epoch and model midpoints and agree with the established population method',async()=>{
   assert.equal(ages.length,7);
   const request=Object.assign(new E.ERMT(),{CALIBRATED_COVARIANCES:Object.assign(new E.ERMCalibratedCovariancesT(),{OBJECTS:ages.map(age=>Object.assign(new E.ERMCalibrationObjectT(),{ID:'synthetic',SET_NORAD_CAT_ID:seed.NORAD_CAT_ID,SET_EPOCH:seed.EPOCH,AGE_DAYS:age}))})});
   const control=await h.invoke({methodId:'object_covariance',inputs:[frame('elements','OMM',seedBytes),frame('request','ERM',pack(request,'ERM'))]});
@@ -74,15 +75,14 @@ test('seven full matrices use seed epoch and model midpoints and agree with the 
     const blocks=decode(await accepted(original)).unpack().COVARIANCE_BLOCKS;assert.equal(blocks.length,7);
     for(let i=0;i<7;i++){
       const b=blocks[i], [epoch,...values]=b.LINES[0].split(' '), matrix=values.map(Number);
-      assert.equal(matrix.length,36);assert.equal(b.COV_ORDERING,O.covarianceOrdering.FULL);
+      assert.equal(matrix.length,21);assert.equal(b.COV_ORDERING,O.covarianceOrdering.LTM);
       assert.equal(b.COV_REF_FRAME,'GCRF');assert.equal(b.COV_BASIS_ID,model.MODEL.ID);
       assert.equal(Date.parse(epoch.endsWith('Z')?epoch:epoch+'Z')-Date.parse(seed.EPOCH+'Z'),ages[i]*86400000);
       assert.equal(b.COV_REALISM[0].AGE_DAYS,ages[i]);assert.equal(b.COV_REALISM[0].CALIBRATION,O.covarianceCalibration.Uncalibrated);
       // Control: established population model, GCRF km/km/s, at seed UTC + age.
-      // 1e-13 relative tolerance covers only its SI conversion and our full expansion.
+      // 1e-13 relative tolerance covers only its SI conversion and the decimal round trip.
       for(let row=0,k=0;row<6;row++)for(let col=0;col<=row;col++,k++){
-        const expected=c.COVARIANCE_DATA[i*21+k];assert.ok(Math.abs(matrix[6*row+col]-expected)<=1e-13*Math.max(1e-30,Math.abs(expected)));
-        assert.equal(matrix[6*row+col],matrix[6*col+row]);
+        const expected=c.COVARIANCE_DATA[i*21+k];assert.ok(Math.abs(matrix[k]-expected)<=1e-13*Math.max(1e-30,Math.abs(expected)));
       }
     }
   }

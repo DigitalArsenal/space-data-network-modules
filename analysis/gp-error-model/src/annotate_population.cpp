@@ -15,6 +15,76 @@ const plugin_input_frame_t* single(const char* port) {
   return found;
 }
 
+// Each block retains its own metadata. Equal strings share one wire allocation.
+flatbuffers::Offset<CVR> pack_realism(flatbuffers::FlatBufferBuilder& b, const CVRT& c) {
+  const auto model_id = c.MODEL_ID.empty() ? flatbuffers::Offset<flatbuffers::String>() : b.CreateSharedString(c.MODEL_ID);
+  const auto regime = c.REGIME.empty() ? flatbuffers::Offset<flatbuffers::String>() : b.CreateSharedString(c.REGIME);
+  const auto measured_lineage = c.MEASURED_LINEAGE.empty() ? flatbuffers::Offset<flatbuffers::String>() : b.CreateSharedString(c.MEASURED_LINEAGE);
+  const auto test_window = c.TEST_WINDOW.empty() ? flatbuffers::Offset<flatbuffers::String>() : b.CreateSharedString(c.TEST_WINDOW);
+  const auto evidence = c.EVIDENCE.empty() ? flatbuffers::Offset<flatbuffers::String>() : b.CreateSharedString(c.EVIDENCE);
+  const auto history_window = c.HISTORY_WINDOW.empty() ? flatbuffers::Offset<flatbuffers::String>() : b.CreateSharedString(c.HISTORY_WINDOW);
+  CVRBuilder out(b);
+  out.add_RULE(c.RULE);
+  out.add_AGE_DAYS(c.AGE_DAYS);
+  out.add_HORIZON_DAYS(c.HORIZON_DAYS);
+  out.add_MEAN_D2_OVER_3(c.MEAN_D2_OVER_3);
+  out.add_COVERAGE_95(c.COVERAGE_95);
+  out.add_SAMPLES(c.SAMPLES);
+  out.add_OBJECTS(c.OBJECTS);
+  out.add_SCALE_FACTOR(c.SCALE_FACTOR);
+  out.add_CALIBRATION(c.CALIBRATION);
+  out.add_HISTORY_SAMPLES(c.HISTORY_SAMPLES);
+  out.add_HISTORY_SETS(c.HISTORY_SETS);
+  out.add_SHRINKAGE_WEIGHT(c.SHRINKAGE_WEIGHT);
+  out.add_TRUTH_EPOCHS(c.TRUTH_EPOCHS);
+  out.add_COVERAGE_1_SIGMA_AXIS1(c.COVERAGE_1_SIGMA_AXIS1);
+  out.add_COVERAGE_1_SIGMA_AXIS2(c.COVERAGE_1_SIGMA_AXIS2);
+  out.add_COVERAGE_1_SIGMA_AXIS3(c.COVERAGE_1_SIGMA_AXIS3);
+  out.add_COVERAGE_3_SIGMA_AXIS1(c.COVERAGE_3_SIGMA_AXIS1);
+  out.add_COVERAGE_3_SIGMA_AXIS2(c.COVERAGE_3_SIGMA_AXIS2);
+  out.add_COVERAGE_3_SIGMA_AXIS3(c.COVERAGE_3_SIGMA_AXIS3);
+  out.add_MODEL_ID(model_id);
+  out.add_REGIME(regime);
+  out.add_MEASURED_LINEAGE(measured_lineage);
+  out.add_TEST_WINDOW(test_window);
+  out.add_EVIDENCE(evidence);
+  out.add_HISTORY_WINDOW(history_window);
+  return out.Finish();
+}
+
+flatbuffers::Offset<OCMCovarianceBlock> pack_block(flatbuffers::FlatBufferBuilder& b,
+    const OCMCovarianceBlockT& c) {
+  std::vector<flatbuffers::Offset<CVR>> labels;
+  for (const auto& label : c.COV_REALISM) labels.push_back(pack_realism(b, *label));
+  const auto realism = b.CreateVector(labels);
+  std::vector<flatbuffers::Offset<flatbuffers::String>> rows;
+  for (const auto& line : c.LINES) rows.push_back(b.CreateString(line));
+  const auto lines = b.CreateVector(rows);
+  const auto id = b.CreateSharedString(c.COV_ID);
+  const auto basis = b.CreateSharedString(c.COV_BASIS);
+  const auto model = b.CreateSharedString(c.COV_BASIS_ID);
+  const auto frame = b.CreateSharedString(c.COV_REF_FRAME);
+  const auto type = b.CreateSharedString(c.COV_TYPE);
+  const auto units = b.CreateSharedString(c.COV_UNITS);
+  OCMCovarianceBlockBuilder out(b);
+  out.add_COV_ID(id); out.add_COV_BASIS(basis); out.add_COV_BASIS_ID(model);
+  out.add_COV_REF_FRAME(frame); out.add_COV_TYPE(type); out.add_COV_UNITS(units);
+  out.add_COV_ORDERING(c.COV_ORDERING); out.add_LINES(lines); out.add_COV_REALISM(realism);
+  return out.Finish();
+}
+
+// Choose the shortest significant-digit spelling that round-trips exactly.
+// The standard stores covariance-block rows as text, not binary doubles.
+std::string decimal(double value) {
+  char text[40];
+  for (int digits = 1; digits <= 17; ++digits) {
+    std::snprintf(text, sizeof text, "%.*g", digits, value);
+    const double parsed = std::strtod(text, nullptr);
+    if (std::memcmp(&parsed, &value, sizeof value) == 0) break;
+  }
+  return text;
+}
+
 // FlatBuffer offsets are forward references. Retain the entire original buffer
 // verbatim, then build a new root whose original fields reference that copy.
 // Only the root offsets and the added annotation fields have a new encoding.
@@ -23,9 +93,9 @@ std::vector<uint8_t> append(const uint8_t* data, size_t size, const OCM* orbit,
     const std::vector<std::unique_ptr<CVRT>>& labels) {
   flatbuffers::FlatBufferBuilder b;
   std::vector<flatbuffers::Offset<OCMCovarianceBlock>> block_offsets;
-  for (const auto& block : blocks) block_offsets.push_back(OCMCovarianceBlock::Pack(b, block.get()));
+  for (const auto& block : blocks) block_offsets.push_back(pack_block(b, *block));
   std::vector<flatbuffers::Offset<CVR>> label_offsets;
-  for (const auto& label : labels) label_offsets.push_back(CVR::Pack(b, label.get()));
+  for (const auto& label : labels) label_offsets.push_back(pack_realism(b, *label));
   // Keep the original buffer's eight-byte alignment, including its prefix.
   b.Pad((8 - (b.GetSize() + size) % 8) % 8);
   b.PushBytes(data, size);
@@ -138,14 +208,14 @@ extern "C" int annotate_population() {
     label.calibration = "UNCALIBRATED";
     label.evidence = model.evidence + " | population prior; not calibrated for this object";
     auto block = std::make_unique<OCMCovarianceBlockT>();
-    block->COV_ID = "population/" + model.id + "/" + std::to_string(i);
-    block->COMMENT = "Select the nearest age for screening. sdn-ap does not propagate these population blocks.";
+    block->COV_ID = "population/" + std::to_string(i);
     block->COV_BASIS = "EMPIRICAL"; block->COV_BASIS_ID = model.id;
     block->COV_REF_FRAME = "GCRF"; block->COV_TYPE = "CARTPV";
-    block->COV_ORDERING = covarianceOrdering::FULL;
+    block->COV_ORDERING = covarianceOrdering::LTM;
     block->COV_UNITS = "km km km km/s km/s km/s";
     std::string line = sp::iso_micro(ffmcal::plus_seconds(anchor.epoch, age * 86400));
-    for (double value : inertial) { char text[40]; std::snprintf(text, sizeof text, " %.17g", value); line += text; }
+    for (int row = 0; row < 6; ++row)
+      for (int col = 0; col <= row; ++col) line += " " + decimal(inertial[6 * row + col]);
     block->LINES.push_back(line); block->COV_REALISM.push_back(sp::realism_of(label));
     blocks.push_back(std::move(block));
   }
