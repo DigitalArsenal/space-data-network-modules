@@ -119,7 +119,7 @@ void trim_state(){
   for(auto i=poisons.begin();i!=poisons.end();++i)if(i->second.sequence<oldest){oldest=i->second.sequence;poison=i;}
   if(victim==attempts.end()&&poison==poisons.end()){
    // Old preparation references are hints; products are re-sent on recovery.
-   for(auto i=attempts.begin();i!=attempts.end();++i)if(i->second.sequence<oldest&&!std::any_of(staged.begin(),staged.end(),[&](const Selection& item){return item.id==i->first;})){oldest=i->second.sequence;victim=i;}
+   for(auto i=attempts.begin();i!=attempts.end();++i)if(i->second.sequence<oldest&&i->first!=interruption_suspect&&!std::any_of(staged.begin(),staged.end(),[&](const Selection& item){return item.id==i->first;})){oldest=i->second.sequence;victim=i;}
    if(victim==attempts.end())victim=std::min_element(attempts.begin(),attempts.end(),[](const auto& a,const auto& b){return a.second.sequence<b.second.sequence;});
    diagnostics.add("warning: oldest protected recovery entry evicted at attempt bound","bounds");
   }
