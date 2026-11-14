@@ -221,6 +221,15 @@ try{
  console.log('PASS index and operational-source quarantine');
 
 
+ await reset();const wide=ids.map(id=>{const o=OMM.getRootAsOMM(new fb.ByteBuffer(ommBytes)).unpack();o.NORAD_CAT_ID=id;o.ECCENTRICITY=.06;return pack(o,'OMM');});store.set(key('OMM.fbs','synthetic','primary'),wide);
+ const excluded=await tick(now);assert.equal(excluded.fits,0);assert.equal(excluded.fallbacks,2);
+ assert.ok([...current().values()].every(c=>c.PRODUCTS[0].KIND===C.catalogProductKind.Sgp4Elements&&c.PRODUCTS[0].SELECTION_REASON.startsWith('outside configured AP class')));
+ console.log('PASS wide-class exclusion stores SGP4 with its configured-class reason');
+ await reset();await tick(now+6*86400000);records('OMM.fbs','synthetic','primary').push(...ids.map(id=>seed(id,.41)));
+ const beforeRegroup=current();await tick(now+6*86400000+1000,true);assert.deepEqual(current(),beforeRegroup);
+ records('OMM.fbs','synthetic','primary').push(seed(ids[0],.42));
+ const regrouped=await tick(now+6*86400000+1201001);assert.equal(regrouped.products,1,'unchanged product is reused from the earlier multi-object batch');assert.equal(regrouped.indexes,2);assert.equal(regrouped.productBatches,1);assert.equal(regrouped.indexBatches,1);
+ console.log('PASS recovery reuses identical records after product grouping changes');
  await reset(Array.from({length:256},(_,i)=>1000000+i));cfg['catalog.batch_size']=256;
  control.destroy();control=await createControl();const bulk=await tick(now+6*86400000);
  assert.equal(bulk.products,256);assert.equal(bulk.indexes,256);assert.equal(bulk.productBatches,1);assert.equal(bulk.indexBatches,1);
