@@ -6309,8 +6309,6 @@ inline int census_rows(const XpSat& s, int cap, double n, double e, double inc, 
   const int table_cap = low_table ? tess::kFastCap : tess::kSpCap;
   const int table_degree = cap > table_cap ? table_cap : cap;
   const tess::WideGrid* grid = c.wide;
-  tess::GridPin pin(grid);
-  if (!pin.ok) return -1;
   double F[72], dF[72], G[72][25], dG[72][25], amp[72];
   amp[0] = kMu / a;
   for (int l = 1; l <= 70; ++l) amp[l] = amp[l - 1] / a;  // mu / a^(l+1)
@@ -6332,8 +6330,11 @@ inline int census_rows(const XpSat& s, int cap, double n, double e, double inc, 
       const double nu = -(w * sr.argp + m * (sr.node - kOmegaE)) / sr.mdot;
       const int jlo = static_cast<int>(std::floor(nu - band / sr.mdot)) - 1, jhi = static_cast<int>(std::ceil(nu + band / sr.mdot)) + 1;
       bool on_grid = false;
-      if (grid != nullptr)
+      if (grid != nullptr) {
+        tess::GridPin pin(grid);
+        if (!pin.ok) return -1;
         for (int k = 0; k < grid->count && !on_grid; ++k) on_grid = grid->m[k] == m && grid->w[k] == w;
+      }
       for (int l = l0; l <= 70; l += 2) {
         const int p = (l - w) / 2;
         const double A = amp[l] * std::hypot(tess::kEgmC[l][m], tess::kEgmS[l][m]);
